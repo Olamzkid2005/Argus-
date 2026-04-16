@@ -1,0 +1,31 @@
+{
+  "enabled": true,
+  "name": "Code Quality Doctor",
+  "description": "Automatically analyzes code quality on file save, scoring across 7 categories: Security (25pts), Lint (20pts), Complexity (15pts), Zen (15pts), Structure (10pts), Exceptions (10pts), and Imports (5pts). Provides actionable feedback and overall score (0-100).",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.py",
+      "**/*.js",
+      "**/*.ts",
+      "**/*.jsx",
+      "**/*.tsx",
+      "**/*.java",
+      "**/*.go",
+      "**/*.rb",
+      "**/*.php",
+      "**/*.cs",
+      "**/*.cpp",
+      "**/*.c",
+      "**/*.h",
+      "**/*.rs",
+      "**/*.swift",
+      "**/*.kt"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the modified code file for quality issues across 7 weighted categories:\n\n**SCORING SYSTEM (Total: 100 points)**\n1. **Security (Weight: 5, Max Deduction: 25pts)** - SQL injection, hardcoded secrets, unsafe calls, command injection. Skip test/example/docs files.\n2. **Lint (Weight: 4, Max Deduction: 20pts)** - Unused imports, undefined names, style violations, formatting issues. Exclude docs/.\n3. **Complexity (Weight: 3, Max Deduction: 15pts)** - Cyclomatic complexity >15, cognitive complexity. Exclude test files.\n4. **Zen (Weight: 3, Max Deduction: 15pts)** - Deep nesting (>5 levels), long functions (>75 lines), too many params (>10), large classes (>15 methods).\n5. **Structure (Weight: 2, Max Deduction: 10pts)** - Large files (>1000 lines), missing type hints, poor organization.\n6. **Exceptions (Weight: 2, Max Deduction: 10pts)** - Bare except:, silently swallowed exceptions, missing error handling.\n7. **Imports (Weight: 1, Max Deduction: 5pts)** - Star imports (from x import *), circular dependencies.\n\n**ANALYSIS REQUIREMENTS:**\n- Respect .gitignore patterns (don't analyze ignored files)\n- Context-aware: adjust checks based on file type (test/example/docs)\n- Calculate deductions per category (capped at max)\n- Final Score = max(0, 100 - total_deductions)\n\n**OUTPUT FORMAT:**\n```\n🏥 CODE QUALITY ANALYSIS\nFile: [filename]\nScore: [0-100] - [Excellent/Good/Needs Work/Critical]\n\n📊 CATEGORY BREAKDOWN:\n✓/⚠/✗ Security (-Xpts): [findings or \"Clean\"]\n✓/⚠/✗ Lint (-Xpts): [findings or \"Clean\"]\n✓/⚠/✗ Complexity (-Xpts): [findings or \"Clean\"]\n✓/⚠/✗ Zen (-Xpts): [findings or \"Clean\"]\n✓/⚠/✗ Structure (-Xpts): [findings or \"Clean\"]\n✓/⚠/✗ Exceptions (-Xpts): [findings or \"Clean\"]\n✓/⚠/✗ Imports (-Xpts): [findings or \"Clean\"]\n\n🔍 PRIORITY FIXES:\n1. [Most critical issue with line number]\n2. [Second priority]\n...\n\n💡 RECOMMENDATIONS:\n[Specific, actionable suggestions]\n```\n\n**SCORE LABELS:**\n- 90-100: Excellent ✨ (Clean, production-ready)\n- 75-89: Good ✓ (Minor issues)\n- 50-74: Needs Work ⚠ (Significant issues)\n- 0-49: Critical ✗ (Major problems, would fail CI)\n\nAnalyze the file and provide the scored report."
+  }
+}
