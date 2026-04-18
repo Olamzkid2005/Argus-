@@ -11,6 +11,21 @@
 import { useState } from "react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import { WebSocketEvent } from "@/lib/websocket-events";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Activity, 
+  Terminal, 
+  ShieldAlert, 
+  RefreshCcw, 
+  Trash2, 
+  ChevronRight, 
+  Zap,
+  CheckCircle2,
+  XCircle,
+  Database,
+  Cpu,
+  Clock
+} from "lucide-react";
 
 export default function DashboardPage() {
   const [engagementId, setEngagementId] = useState<string>("");
@@ -18,12 +33,10 @@ export default function DashboardPage() {
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approveSuccess, setApproveSuccess] = useState<string | null>(null);
-
   const {
     events,
     currentState,
     isConnected: wsConnected,
-    error,
     reconnect,
     clearEvents,
   } = useEngagementEvents({
@@ -62,8 +75,7 @@ export default function DashboardPage() {
 
       setApproveSuccess("Findings approved! Scan job has been queued.");
     } catch (err) {
-      const error = err as Error;
-      setApproveError(error.message);
+      setApproveError(err instanceof Error ? err.message : "Failed to approve engagement");
     } finally {
       setIsApproving(false);
     }
@@ -98,206 +110,186 @@ export default function DashboardPage() {
     }
   };
 
-  // Get event type badge color
-  const getEventBadgeColor = (type: string): string => {
+  // Get event type badge icon/color
+  const getEventMeta = (type: string) => {
     switch (type) {
       case "finding_discovered":
-        return "bg-red-900/50 text-red-300";
+        return { icon: ShieldAlert, color: "text-argus-magenta", bg: "bg-argus-magenta/10", border: "border-argus-magenta/20" };
       case "state_transition":
-        return "bg-blue-900/50 text-blue-300";
+        return { icon: RefreshCcw, color: "text-argus-indigo", bg: "bg-argus-indigo/10", border: "border-argus-indigo/20" };
       case "rate_limit_event":
-        return "bg-yellow-900/50 text-yellow-300";
+        return { icon: Clock, color: "text-argus-cyan", bg: "bg-argus-cyan/10", border: "border-argus-cyan/20" };
       case "tool_executed":
-        return "bg-purple-900/50 text-purple-300";
+        return { icon: Cpu, color: "text-argus-indigo", bg: "bg-argus-indigo/10", border: "border-argus-indigo/20" };
       case "job_started":
-        return "bg-green-900/50 text-green-300";
+        return { icon: Zap, color: "text-argus-cyan", bg: "bg-argus-cyan/10", border: "border-argus-cyan/20" };
       case "job_completed":
-        return "bg-gray-700 text-gray-300";
+        return { icon: CheckCircle2, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" };
       case "error":
-        return "bg-red-900 text-red-200";
+        return { icon: XCircle, color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" };
       default:
-        return "bg-gray-700 text-gray-300";
+        return { icon: Activity, color: "text-muted-foreground", bg: "bg-muted/10", border: "border-border" };
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      {/* Header */}
-      <header className="border-b border-slate-700 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Argus Dashboard</h1>
-            <p className="text-slate-400 text-sm">
-              Real-Time Engagement Monitoring
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${wsConnected ? "bg-green-500" : "bg-red-500"}`}
-              />
-              <span className="text-sm text-slate-400">
-                {wsConnected ? "Connected" : "Disconnected"}
-              </span>
+    <div className="py-8 px-10">
+      <div className="max-w-7xl mx-auto flex flex-col gap-8">
+        
+        {/* Connection Header Block */}
+        <div className="prism-glass p-8 rounded-3xl flex flex-col md:flex-row gap-6 items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-3xl font-extrabold tracking-tight">Intelligence Dashboard</h1>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+              <div className={`w-2 h-2 rounded-full ${wsConnected ? "bg-argus-cyan" : "bg-red-500"} animate-pulse`} />
+              {wsConnected ? "System Online" : "System Offline"}
             </div>
-            {engagementId && (
-              <a
-                href={`/findings/${engagementId}`}
-                className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-              >
-                View Findings
-              </a>
-            )}
-            <a
-              href="/"
-              className="px-4 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-sm"
-            >
-              Home
-            </a>
           </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Connection Controls */}
-        <div className="mb-8 p-6 bg-slate-800 rounded-lg border border-slate-700">
-          <h2 className="text-lg font-semibold mb-4">Connect to Engagement</h2>
-          <div className="flex gap-4">
-            <input
-              type="text"
-              placeholder="Enter Engagement ID"
-              value={engagementId}
-              onChange={(e) => setEngagementId(e.target.value)}
-              className="flex-1 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:w-80">
+              <Database className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Enter Engagement ID..."
+                value={engagementId}
+                onChange={(e) => setEngagementId(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-secondary/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+              />
+            </div>
             <button
               onClick={() => setIsConnected(!isConnected)}
               disabled={!engagementId}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-6 py-3 rounded-xl font-bold transition-all ${
                 isConnected
-                  ? "bg-red-600 hover:bg-red-700"
-                  : "bg-blue-600 hover:bg-blue-700"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  ? "bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20"
+                  : "bg-primary text-primary-foreground hover:shadow-[0_0_20px_rgba(59,130,246,0.5)]"
+              } disabled:opacity-50 text-sm`}
             >
-              {isConnected ? "Disconnect" : "Connect"}
-            </button>
-            <button
-              onClick={reconnect}
-              disabled={!engagementId}
-              className="px-4 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Reconnect
-            </button>
-            <button
-              onClick={clearEvents}
-              disabled={events.length === 0}
-              className="px-4 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Clear
+              {isConnected ? "Halt" : "Monitor"}
             </button>
           </div>
-          {error && (
-            <p className="mt-4 text-red-400 text-sm">
-              Error: {error.message}
-            </p>
-          )}
         </div>
 
-        {/* Current State and Approve Button */}
+        {/* Action Bar */}
         {currentState && (
-          <div className="mb-6 p-4 bg-slate-800 rounded-lg border border-slate-700">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-slate-400">Current State:</span>
-                <span className="px-3 py-1 bg-blue-900/50 text-blue-300 rounded-full text-sm font-medium">
-                  {currentState}
-                </span>
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="prism-glass p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-primary/20"
+          >
+            <div className="flex items-center gap-3 ml-4">
+              <div className="prism-scanner w-8 h-8">
+                <ShieldAlert className="h-4 w-4 text-accent" />
               </div>
+              <span className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
+                Current Phase: <span className="text-foreground">{currentState.replace(/_/g, " ")}</span>
+              </span>
+            </div>
+
+            {/* Feedback Messages */}
+            <div className="flex flex-col md:flex-row items-center gap-3 md:mr-4">
+              {approveSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-medium rounded-xl"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {approveSuccess}
+                </motion.div>
+              )}
+              {approveError && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium rounded-xl"
+                >
+                  <XCircle className="h-4 w-4" />
+                  {approveError}
+                </motion.div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 md:mr-4">
               {currentState === "awaiting_approval" && (
                 <button
                   onClick={handleApprove}
                   disabled={isApproving}
-                  className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 bg-accent text-white rounded-xl font-bold text-xs hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all disabled:opacity-50"
                 >
-                  {isApproving ? "Approving..." : "Approve Findings"}
+                  {isApproving ? "Approving..." : "Authorize Execution"}
                 </button>
               )}
+              <button onClick={reconnect} className="p-2 text-muted-foreground hover:text-foreground transition-colors"><RefreshCcw className="h-4 w-4" /></button>
+              <button onClick={clearEvents} className="p-2 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="h-4 w-4" /></button>
             </div>
-            {approveSuccess && (
-              <div className="mt-3 p-3 bg-green-900/30 border border-green-700 rounded text-green-300 text-sm">
-                {approveSuccess}
-              </div>
-            )}
-            {approveError && (
-              <div className="mt-3 p-3 bg-red-900/30 border border-red-700 rounded text-red-300 text-sm">
-                {approveError}
-              </div>
-            )}
-          </div>
+          </motion.div>
         )}
 
-        {/* Event Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
-            <p className="text-slate-400 text-sm">Total Events</p>
-            <p className="text-2xl font-bold">{events.length}</p>
-          </div>
-          <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
-            <p className="text-slate-400 text-sm">Findings</p>
-            <p className="text-2xl font-bold">
-              {eventsByType["finding_discovered"]?.length || 0}
-            </p>
-          </div>
-          <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
-            <p className="text-slate-400 text-sm">State Changes</p>
-            <p className="text-2xl font-bold">
-              {eventsByType["state_transition"]?.length || 0}
-            </p>
-          </div>
-          <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
-            <p className="text-slate-400 text-sm">Tools Executed</p>
-            <p className="text-2xl font-bold">
-              {eventsByType["tool_executed"]?.length || 0}
-            </p>
-          </div>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {[
+            { label: "Detected Vectors", val: eventsByType["finding_discovered"]?.length || 0, color: "text-argus-magenta" },
+            { label: "Operational Loops", val: eventsByType["state_transition"]?.length || 0, color: "text-argus-indigo" },
+            { label: "Tool Executions", val: eventsByType["tool_executed"]?.length || 0, color: "text-argus-cyan" },
+            { label: "Network Events", val: events.length, color: "text-foreground" }
+          ].map((stat, i) => (
+            <div key={i} className="prism-glass p-6 rounded-2xl">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">{stat.label}</p>
+              <p className={`text-4xl font-extrabold tracking-tight ${stat.color}`}>{stat.val}</p>
+            </div>
+          ))}
         </div>
 
-        {/* Events List */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700">
-          <div className="px-6 py-4 border-b border-slate-700">
-            <h2 className="text-lg font-semibold">Recent Events</h2>
+        {/* Real-time Feed Block */}
+        <div className="prism-glass rounded-3xl overflow-hidden flex flex-col">
+          <div className="px-8 py-5 border-b border-border flex items-center gap-3 bg-secondary/20">
+            <Terminal className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-sm font-bold uppercase tracking-widest">Intelligence Feed</h2>
           </div>
-          <div className="divide-y divide-slate-700 max-h-[600px] overflow-y-auto">
+          
+          <div className="flex flex-col h-[500px] overflow-y-auto p-4 gap-3 bg-black/20">
             {events.length === 0 ? (
-              <div className="px-6 py-12 text-center text-slate-400">
-                {engagementId
-                  ? "No events yet. Waiting for real-time updates..."
-                  : "Enter an Engagement ID to start monitoring."}
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-4 opacity-50">
+                <Cpu className="h-12 w-12 animate-pulse" />
+                <p className="text-sm font-medium">Standalone system waiting for signal...</p>
               </div>
             ) : (
-              events.map((event, index) => (
-                <div key={`${event.type}-${index}`} className="px-6 py-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-medium ${getEventBadgeColor(event.type)}`}
-                        >
-                          {event.type.replace(/_/g, " ")}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {new Date(event.timestamp).toLocaleTimeString()}
-                        </span>
+              <AnimatePresence initial={false}>
+                {events.map((event, index) => {
+                  const meta = getEventMeta(event.type);
+                  return (
+                    <motion.div 
+                      key={`${event.type}-${index}`}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={`p-4 rounded-xl border ${meta.border} ${meta.bg} flex items-start gap-4 transition-all hover:bg-white/5 group`}
+                    >
+                      <div className={`mt-0.5 p-2 rounded-lg ${meta.bg} ${meta.color}`}>
+                        <meta.icon className="h-4 w-4" />
                       </div>
-                      <EventDetails event={event} getSeverityColor={getSeverityColor} />
-                    </div>
-                  </div>
-                </div>
-              ))
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${meta.color}`}>
+                            {event.type.replace(/_/g, " ")}
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground opacity-50">
+                            {new Date(event.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <EventDetails event={event} getSeverityColor={getSeverityColor} />
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             )}
           </div>
         </div>
-      </main>
+
+      </div>
     </div>
   );
 }

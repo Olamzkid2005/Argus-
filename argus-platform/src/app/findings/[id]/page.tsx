@@ -9,7 +9,22 @@
  */
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Filter, 
+  ShieldAlert, 
+  Target, 
+  Zap, 
+  ChevronDown, 
+  ChevronUp, 
+  Terminal, 
+  Activity,
+  History,
+  LayoutGrid,
+  FileSearch,
+  ArrowLeft
+} from "lucide-react";
 
 // Types
 interface Finding {
@@ -137,21 +152,19 @@ export default function FindingsDashboardPage() {
     "INFO",
   ];
 
-  // Get severity color
-  const getSeverityColor = (severity: string): string => {
+  // Get severity meta
+  const getSeverityMeta = (severity: string) => {
     switch (severity) {
       case "CRITICAL":
-        return "bg-red-900/50 text-red-300 border-red-700";
+        return { color: "text-argus-magenta", bg: "bg-argus-magenta/10", border: "border-argus-magenta/20" };
       case "HIGH":
-        return "bg-orange-900/50 text-orange-300 border-orange-700";
+        return { color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" };
       case "MEDIUM":
-        return "bg-yellow-900/50 text-yellow-300 border-yellow-700";
+        return { color: "text-argus-indigo", bg: "bg-argus-indigo/10", border: "border-argus-indigo/20" };
       case "LOW":
-        return "bg-blue-900/50 text-blue-300 border-blue-700";
-      case "INFO":
-        return "bg-gray-700 text-gray-300 border-gray-600";
+        return { color: "text-argus-cyan", bg: "bg-argus-cyan/10", border: "border-argus-cyan/20" };
       default:
-        return "bg-gray-700 text-gray-300 border-gray-600";
+        return { color: "text-muted-foreground", bg: "bg-muted/10", border: "border-border" };
     }
   };
 
@@ -171,192 +184,189 @@ export default function FindingsDashboardPage() {
     );
   };
 
+  const router = useRouter();
+
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      {/* Header */}
-      <header className="border-b border-slate-700 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Findings Dashboard</h1>
-            <p className="text-slate-400 text-sm">
-              Engagement: {engagementId}
+    <div className="py-8 px-10">
+      <div className="max-w-7xl mx-auto flex flex-col gap-8">
+        
+        {/* Header Block */}
+        <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-widest mb-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/dashboard')}>
+              <ArrowLeft className="h-3 w-3" />
+              Intelligence Center
+            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight">Vulnerability Report</h1>
+            <p className="text-sm text-muted-foreground font-medium flex items-center gap-2">
+              <span className="font-mono text-primary/70">{engagementId}</span>
+              <span className="opacity-30">•</span>
+              Argus Analytic Core v2.0
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            <a
-              href="/dashboard"
-              className="px-4 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-sm"
-            >
-              Real-Time Monitor
-            </a>
-            <a
-              href="/"
-              className="px-4 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors text-sm"
-            >
-              Home
-            </a>
+
+          <div className="prism-glass p-2 rounded-2xl flex gap-1">
+            <button className="px-4 py-2 bg-primary/10 text-primary rounded-xl font-bold text-xs flex items-center gap-2">
+              <LayoutGrid className="h-3.5 w-3.5" /> Sector View
+            </button>
+            <button className="px-4 py-2 text-muted-foreground hover:bg-white/5 rounded-xl font-bold text-xs flex items-center gap-2">
+              <History className="h-3.5 w-3.5" /> Timeline
+            </button>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Filters */}
-        <div className="mb-8 p-6 bg-slate-800 rounded-lg border border-slate-700">
-          <h2 className="text-lg font-semibold mb-4">Filters</h2>
-
-          {/* Severity Filter */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Severity
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {severityOrder.map((severity) => (
-                <button
-                  key={severity}
-                  onClick={() => toggleSeverity(severity)}
-                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors border ${
-                    selectedSeverities.includes(severity)
-                      ? getSeverityColor(severity)
-                      : "bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600"
-                  }`}
-                >
-                  {severity}
-                </button>
-              ))}
+        {/* Filters & Stats Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Filters Sidebar */}
+          <div className="prism-glass p-6 rounded-3xl h-fit sticky top-24">
+            <div className="flex items-center gap-2 mb-6">
+              <Filter className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-bold uppercase tracking-widest">Filters</h2>
             </div>
-          </div>
 
-          {/* Confidence Filter */}
-          <div className="mb-4">
-            <label
-              htmlFor="confidence-filter"
-              className="block text-sm font-medium text-slate-300 mb-2"
-            >
-              Minimum Confidence: {minConfidence}%
-            </label>
-            <input
-              id="confidence-filter"
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={minConfidence}
-              onChange={(e) => setMinConfidence(parseInt(e.target.value))}
-              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-            />
-          </div>
-
-          {/* Tool Filter */}
-          {availableTools.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Source Tool
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {availableTools.map((tool) => (
-                  <button
-                    key={tool}
-                    onClick={() => toggleTool(tool)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors border ${
-                      selectedTools.includes(tool)
-                        ? "bg-purple-900/50 text-purple-300 border-purple-700"
-                        : "bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600"
-                    }`}
-                  >
-                    {tool}
-                  </button>
-                ))}
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest block mb-3">Severity Threshold</label>
+                <div className="flex flex-col gap-2">
+                  {severityOrder.map((severity) => {
+                    const meta = getSeverityMeta(severity);
+                    const isActive = selectedSeverities.includes(severity);
+                    return (
+                      <button
+                        key={severity}
+                        onClick={() => toggleSeverity(severity)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                          isActive ? `${meta.bg} ${meta.color} ${meta.border}` : "bg-white/5 border-transparent text-muted-foreground hover:bg-white/10"
+                        }`}
+                      >
+                        {severity}
+                        {isActive && <Zap className="h-3 w-3" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          {severityOrder.map((severity) => (
-            <div
-              key={severity}
-              className={`p-4 rounded-lg border ${getSeverityColor(severity)}`}
-            >
-              <p className="text-sm font-medium">{severity}</p>
-              <p className="text-2xl font-bold">
-                {groupedFindings[severity]?.length || 0}
-              </p>
-            </div>
-          ))}
-        </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest block mb-4">Min. Confidence ({minConfidence}%)</label>
+                <input
+                  type="range"
+                  min="0" max="100" step="5"
+                  value={minConfidence}
+                  onChange={(e) => setMinConfidence(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+              </div>
 
-        {/* Loading State */}
-        {loading && (
-          <div className="text-center py-12">
-            <p className="text-slate-400">Loading findings...</p>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="p-4 bg-red-900/20 border border-red-700 rounded-lg mb-8">
-            <p className="text-red-300">Error: {error}</p>
-          </div>
-        )}
-
-        {/* Findings by Severity */}
-        {!loading && !error && (
-          <div className="space-y-6">
-            {severityOrder.map((severity) => {
-              const severityFindings = groupedFindings[severity] || [];
-              if (severityFindings.length === 0) return null;
-
-              return (
-                <div key={severity} className="bg-slate-800 rounded-lg border border-slate-700">
-                  <div className={`px-6 py-4 border-b border-slate-700 ${getSeverityColor(severity)}`}>
-                    <h2 className="text-lg font-semibold">
-                      {severity} ({severityFindings.length})
-                    </h2>
-                  </div>
-                  <div className="divide-y divide-slate-700">
-                    {severityFindings.map((finding) => (
-                      <FindingCard key={finding.id} finding={finding} />
+              {availableTools.length > 0 && (
+                <div>
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest block mb-3">Detection Sources</label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableTools.map((tool) => (
+                      <button
+                        key={tool}
+                        onClick={() => toggleTool(tool)}
+                        className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
+                          selectedTools.includes(tool) ? "bg-argus-indigo/20 border-argus-indigo/30 text-argus-indigo" : "bg-white/5 border-transparent text-muted-foreground"
+                        }`}
+                      >
+                        {tool}
+                      </button>
                     ))}
                   </div>
                 </div>
-              );
-            })}
+              )}
+            </div>
+          </div>
 
-            {findings.length === 0 && (
-              <div className="text-center py-12 text-slate-400">
-                No findings match the current filters.
+          {/* Main Content Area */}
+          <div className="lg:col-span-3 flex flex-col gap-8">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {severityOrder.map((severity) => {
+                const meta = getSeverityMeta(severity);
+                const count = groupedFindings[severity]?.length || 0;
+                return (count > 0 || !loading) && (
+                  <div key={severity} className={`prism-glass p-4 rounded-2xl border-l-4 ${meta.border.split(' ')[0].replace('border-', 'border-l-')}`}>
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">{severity}</p>
+                    <p className={`text-2xl font-extrabold ${meta.color}`}>{count}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Findings List */}
+            {loading ? (
+              <div className="h-64 flex flex-col items-center justify-center gap-4 opacity-50">
+                <div className="prism-scanner w-12 h-12" />
+                <p className="text-sm font-bold animate-pulse uppercase tracking-[0.2em]">Analyzing Trace Logs...</p>
+              </div>
+            ) : error ? (
+              <div className="prism-glass p-8 rounded-3xl border-red-500/20 text-center">
+                <ShieldAlert className="h-8 w-8 text-red-500 mx-auto mb-4" />
+                <h3 className="text-red-500 font-bold mb-1">Analytic Core Failure</h3>
+                <p className="text-sm text-muted-foreground">{error}</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-10">
+                {severityOrder.map((severity) => {
+                  const severityFindings = groupedFindings[severity] || [];
+                  if (severityFindings.length === 0) return null;
+                  const meta = getSeverityMeta(severity);
+
+                  return (
+                    <section key={severity}>
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className={`h-px flex-1 bg-gradient-to-r from-transparent to-border`} />
+                        <h2 className={`text-xs font-black uppercase tracking-[0.3em] ${meta.color}`}>{severity} DISCOVERY ({severityFindings.length})</h2>
+                        <div className={`h-px flex-1 bg-gradient-to-l from-transparent to-border`} />
+                      </div>
+                      <div className="grid grid-cols-1 gap-4">
+                        {severityFindings.map((finding) => (
+                          <FindingCard key={finding.id} finding={finding} />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+
+                {findings.length === 0 && (
+                  <div className="prism-glass p-12 rounded-3xl text-center opacity-60">
+                    <FileSearch className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground font-medium">No intelligence matches the filtered parameters.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Timeline Sector */}
+            {timeline.length > 0 && (
+              <div className="prism-glass rounded-3xl overflow-hidden border-primary/10">
+                 <div className="px-8 py-5 border-b border-border flex items-center justify-between bg-white/5">
+                    <div className="flex items-center gap-3">
+                      <Activity className="h-5 w-5 text-primary" />
+                      <h2 className="text-sm font-bold uppercase tracking-widest">Execution Trace</h2>
+                    </div>
+                </div>
+                <div className="p-4 grid grid-cols-1 gap-2 overflow-y-auto max-h-[400px]">
+                  {timeline.map((span, i) => (
+                    <div key={span.id} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors group">
+                      <div className="text-[10px] font-mono text-muted-foreground/40 w-8">{i + 1}.</div>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors uppercase tracking-tight">{span.span_name}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">{new Date(span.created_at).toLocaleTimeString()}</p>
+                      </div>
+                      <div className="text-[10px] font-black px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        {span.duration_ms}ms
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        )}
-
-        {/* Execution Timeline */}
-        {timeline.length > 0 && (
-          <div className="mt-8 bg-slate-800 rounded-lg border border-slate-700">
-            <div className="px-6 py-4 border-b border-slate-700">
-              <h2 className="text-lg font-semibold">Execution Timeline</h2>
-            </div>
-            <div className="divide-y divide-slate-700 max-h-96 overflow-y-auto">
-              {timeline.map((span) => (
-                <div key={span.id} className="px-6 py-3 flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-white">{span.span_name}</p>
-                    <p className="text-xs text-slate-400">
-                      {new Date(span.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-blue-300">
-                      {span.duration_ms}ms
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </main>
+        </div>
+      </div>
     </div>
   );
 }
@@ -370,92 +380,95 @@ function FindingCard({ finding }: { finding: Finding }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="px-6 py-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
+    <motion.div 
+      layout
+      className={`prism-glass rounded-2xl border-none transition-all ${expanded ? "ring-2 ring-primary/20" : "hover:bg-white/5"}`}
+    >
+      <div className="p-5 flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-2">
-            <h3 className="text-base font-semibold text-white">{finding.type}</h3>
-            <span className="px-2 py-0.5 bg-purple-900/50 text-purple-300 rounded text-xs font-medium">
+            <h3 className="text-sm font-extrabold text-foreground uppercase tracking-tight truncate">{finding.type}</h3>
+            <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-primary/10 text-primary border border-primary/20`}>
               {finding.source_tool}
-            </span>
+            </div>
           </div>
-          <p className="text-sm text-slate-300 mb-2 break-all">{finding.endpoint}</p>
-          <div className="flex items-center gap-4 text-xs text-slate-400">
-            <span>
-              Confidence:{" "}
-              <span className="text-white font-medium">
-                {(finding.confidence * 100).toFixed(0)}%
-              </span>
-            </span>
-            {finding.cvss_score && (
-              <span>
-                CVSS:{" "}
-                <span className="text-white font-medium">
-                  {finding.cvss_score.toFixed(1)}
-                </span>
-              </span>
-            )}
-            {finding.cwe_id && (
-              <span>
-                CWE:{" "}
-                <span className="text-white font-medium">{finding.cwe_id}</span>
-              </span>
-            )}
-            {finding.owasp_category && (
-              <span>
-                OWASP:{" "}
-                <span className="text-white font-medium">
-                  {finding.owasp_category}
-                </span>
-              </span>
-            )}
+          <p className="text-[11px] font-mono text-muted-foreground mb-3 break-all flex items-center gap-2">
+            <Target className="h-3 w-3 text-primary" />
+            {finding.endpoint}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+             <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-lg">
+                Confidence <span className="text-primary tracking-widest">{(finding.confidence * 100).toFixed(0)}%</span>
+             </div>
+             {finding.cvss_score && (
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-lg">
+                  CVSS <span className="text-argus-magenta tracking-widest">{finding.cvss_score.toFixed(1)}</span>
+                </div>
+             )}
+             {finding.cwe_id && (
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-lg uppercase tracking-widest">
+                  {finding.cwe_id}
+                </div>
+             )}
           </div>
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="px-3 py-1 bg-slate-700 rounded hover:bg-slate-600 transition-colors text-sm"
+          className={`flex items-center justify-center h-10 w-10 rounded-xl transition-all ${expanded ? "bg-primary text-primary-foreground" : "bg-white/5 text-muted-foreground hover:text-foreground"}`}
         >
-          {expanded ? "Hide" : "Details"}
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
       </div>
 
-      {/* Expanded Details */}
-      {expanded && (
-        <div className="mt-4 pt-4 border-t border-slate-700 space-y-3">
-          {/* Evidence */}
-          {finding.evidence && Object.keys(finding.evidence).length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-slate-300 mb-2">Evidence</h4>
-              <pre className="text-xs bg-slate-900 p-3 rounded overflow-x-auto text-slate-300">
-                {JSON.stringify(finding.evidence, null, 2)}
-              </pre>
-            </div>
-          )}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 pt-0 space-y-5 border-t border-border mt-1">
+              {/* Evidence Sector */}
+              {finding.evidence && Object.keys(finding.evidence).length > 0 && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Terminal className="h-3.5 w-3.5 text-primary" />
+                    <h4 className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Digital Evidence</h4>
+                  </div>
+                  <pre className="text-[11px] font-mono bg-black/40 p-4 rounded-xl border border-border text-muted-foreground leading-relaxed overflow-x-auto">
+                    {JSON.stringify(finding.evidence, null, 2)}
+                  </pre>
+                </div>
+              )}
 
-          {/* Reproduction Steps */}
-          {finding.repro_steps && finding.repro_steps.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium text-slate-300 mb-2">
-                Reproduction Steps
-              </h4>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-slate-300">
-                {finding.repro_steps.map((step, index) => (
-                  <li key={index}>{step}</li>
-                ))}
-              </ol>
-            </div>
-          )}
+              {/* Reproduction Sector */}
+              {finding.repro_steps && finding.repro_steps.length > 0 && (
+                <div>
+                   <div className="flex items-center gap-2 mb-3">
+                    <History className="h-3.5 w-3.5 text-primary" />
+                    <h4 className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Proof of Concept Steps</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {finding.repro_steps.map((step, index) => (
+                      <div key={index} className="flex gap-3 items-start text-xs text-muted-foreground bg-white/5 p-3 rounded-xl">
+                        <span className="text-primary font-black font-mono">{index + 1}.</span>
+                        {step}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {/* Metadata */}
-          <div className="text-xs text-slate-400">
-            <p>
-              Discovered:{" "}
-              {new Date(finding.created_at).toLocaleString()}
-            </p>
-            <p>Finding ID: {finding.id}</p>
-          </div>
-        </div>
-      )}
-    </div>
+              {/* Metadata Footer */}
+              <div className="flex items-center justify-between pt-4 border-t border-border opacity-40">
+                <p className="text-[9px] font-mono uppercase font-bold tracking-widest">Trace ID: {finding.id}</p>
+                <p className="text-[9px] font-mono uppercase font-bold tracking-widest">Timestamp: {new Date(finding.created_at).toLocaleString()}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
