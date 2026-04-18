@@ -44,7 +44,7 @@ export default function DashboardPage() {
     enabled: isConnected && !!engagementId,
     pollingInterval: 2000,
     onEvent: (event: WebSocketEvent) => {
-      console.log("Received event:", event);
+      // Handle event - no logging in production
     },
     onError: (err: Error) => {
       console.error("WebSocket error:", err);

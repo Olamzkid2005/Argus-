@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 /**
  * GET /api/engagement/[id]/explainability
@@ -51,7 +47,7 @@ export async function GET(
 
       // Get explainability traces
       let query: string;
-      let params: (string | null)[];
+      let queryParams: (string | number | null)[];
 
       if (clusterId) {
         // Get trace for specific cluster
@@ -89,10 +85,10 @@ export async function GET(
           ORDER BY t.created_at DESC
           LIMIT 100
         `;
-        params = [];
+        queryParams = [];
       }
 
-      const result = await client.query(query, params);
+      const result = await client.query(query, queryParams);
 
       // Parse trace_data JSON if it's a string
       const traces = result.rows.map((row) => ({

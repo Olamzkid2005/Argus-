@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
+import { pool } from "@/lib/db";
 
 /**
  * GET /api/engagement/[id]/timeline
- * 
+ *
  * Returns execution timeline for an engagement.
- * 
+ *
  * Requirements: 21.3, 21.4, 21.5
  */
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 export async function GET(
   req: Request,
@@ -26,9 +22,14 @@ export async function GET(
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
 
+    // Parse query parameters for pagination
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
+
     // Query execution spans ordered by timestamp
     // Note: execution_spans doesn't have engagement_id, so we join through execution_logs
-    const query = `
+    const baseQuery = `
       SELECT DISTINCT
         es.id,
         es.trace_id,
@@ -38,14 +39,26 @@ export async function GET(
       FROM execution_spans es
       INNER JOIN execution_logs el ON es.trace_id = el.trace_id
       WHERE el.engagement_id = $1
-      ORDER BY es.created_at ASC
     `;
 
-    const result = await pool.query(query, [engagementId]);
+    // Get total count
+    const countQuery = baseQuery.replace("SELECT DISTINCT es.id,", "SELECT COUNT(DISTINCT es.id)")
+      .replace("SELECT DISTINCT es.trace_id,", "SELECT COUNT(DISTINCT es.trace_id),");
+    const countResult = await pool.query(countQuery, [engagementId]);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    // Apply ordering and pagination
+    const query = baseQuery + " ORDER BY es.created_at ASC LIMIT $2 OFFSET $3";
+    const result = await pool.query(query, [engagementId, limit, offset]);
+
+    const hasMore = offset + result.rows.length < total;
 
     return NextResponse.json({
       spans: result.rows,
-      count: result.rows.length,
+      total,
+      limit,
+      offset,
+      hasMore,
     });
   } catch (error: unknown) {
     console.error("Get timeline error:", error);

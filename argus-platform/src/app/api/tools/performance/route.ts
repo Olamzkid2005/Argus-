@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 /**
  * GET /api/tools/performance

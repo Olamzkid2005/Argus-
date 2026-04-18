@@ -69,45 +69,79 @@ class AttackGraph:
         "internal": 0.4,
     }
     
+    # Severity value map for comparison (higher = more severe)
+    SEVERITY_VALUES = {
+        "CRITICAL": 5,
+        "HIGH": 4,
+        "MEDIUM": 3,
+        "LOW": 2,
+        "INFO": 1,
+    }
+
     def __init__(self, engagement_id: str):
         """
         Initialize Attack Graph
-        
+
         Args:
             engagement_id: Engagement ID
         """
         self.engagement_id = engagement_id
         self.nodes = {}  # node_id -> Node
         self.edges = []  # List of edges
-    
+
+    def _get_severity_value(self, severity) -> int:
+        """Get numeric severity value for comparison"""
+        sev = severity.value if hasattr(severity, 'value') else severity
+        return self.SEVERITY_VALUES.get(sev, 3)
+
     def add_finding(self, finding: VulnerabilityFinding) -> None:
         """
         Add finding as vulnerability node
-        
-        Creates vulnerability node and endpoint node, connects them with edge.
-        
+
+        Creates or updates vulnerability node and endpoint node, connects them with edge.
+        If same finding type+endpoint exists with higher severity, updates the node.
+
         Args:
             finding: VulnerabilityFinding instance
         """
-        # Create vulnerability node
+        # Get severity value for the new finding
+        finding_severity = finding.severity.value if hasattr(finding.severity, 'value') else finding.severity
+
+        # Create vulnerability node ID (without severity to track uniqueness)
         vuln_node_id = f"vuln_{finding.type}_{finding.endpoint}"
+
+        # Check if finding already exists
         if vuln_node_id in self.nodes:
+            existing_node = self.nodes[vuln_node_id]
+            existing_severity = existing_node.data.get("severity", "MEDIUM")
+            existing_severity_value = self._get_severity_value(existing_severity)
+            new_severity_value = self._get_severity_value(finding_severity)
+
+            # Only update if new finding has higher severity
+            if new_severity_value > existing_severity_value:
+                existing_node.data["severity"] = finding_severity
+                existing_node.data["source_tool"] = finding.source_tool
+                existing_node.cvss = finding.cvss_score or self._estimate_cvss(finding_severity)
+                # Update confidence to max of existing and new
+                if finding.confidence and finding.confidence > (existing_node.confidence or 0):
+                    existing_node.confidence = finding.confidence
             return
 
+        # Create new vulnerability node
         vuln_node = Node(
             node_id=vuln_node_id,
             node_type="vulnerability",
             data={
                 "type": finding.type,
-                "severity": finding.severity.value if hasattr(finding.severity, 'value') else finding.severity,
+                "severity": finding_severity,
                 "endpoint": finding.endpoint,
                 "source_tool": finding.source_tool,
             },
-            cvss=finding.cvss_score or self._estimate_cvss(finding.severity.value if hasattr(finding.severity, 'value') else finding.severity),
+            cvss=finding.cvss_score or self._estimate_cvss(finding_severity),
             confidence=finding.confidence,
         )
         self.nodes[vuln_node_id] = vuln_node
-        
+
         # Create endpoint node
         endpoint_node_id = f"endpoint_{finding.endpoint}"
         if endpoint_node_id not in self.nodes:
@@ -117,7 +151,7 @@ class AttackGraph:
                 data={"url": finding.endpoint},
             )
             self.nodes[endpoint_node_id] = endpoint_node
-        
+
         # Create edge connecting vulnerability to endpoint
         edge = Edge(
             from_node=vuln_node_id,

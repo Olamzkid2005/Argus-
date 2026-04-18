@@ -64,23 +64,30 @@ class DomainRateLimiter:
         self.domain = domain
         self.config = config
         self.db = db_connection
-        
+
         # Token bucket for RPS limiting
         self.current_rps = config.requests_per_second
         self.tokens = config.requests_per_second
         self.last_refill = time.time()
-        
-        # Semaphore for concurrent request limiting
-        self.semaphore = asyncio.Semaphore(config.concurrent_requests)
-        
+
+        # Semaphore for concurrent request limiting - lazy init to avoid creating outside event loop
+        self._semaphore: Optional[asyncio.Semaphore] = None
+
         # Adaptive rate limiting state
         self.consecutive_errors = 0
         self.consecutive_successes = 0
         self.circuit_breaker_open = False
         self.circuit_breaker_until = 0
-        
+
         # Backoff state
         self.backoff_until = 0
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        """Lazy initialization of semaphore to avoid creating outside event loop"""
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self.config.concurrent_requests)
+        return self._semaphore
         
         # Robots.txt crawl delay
         self.robots_crawl_delay: Optional[float] = None
@@ -272,7 +279,7 @@ class DomainRateLimiter:
             )
             
             repo = RateLimitRepository(self.db)
-            await repo.create_event(
+            repo.create_event(
                 domain=self.domain,
                 event_type=event_type.value,
                 status_code=status_code,

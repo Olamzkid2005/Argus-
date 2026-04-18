@@ -5,6 +5,7 @@ Requirements: 20.1, 20.2, 20.3
 """
 from celery_app import app
 import os
+import psycopg2
 
 from tracing import TracingManager, TraceContext
 
@@ -23,16 +24,16 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
     from distributed_lock import LockContext, DistributedLock
     from state_machine import EngagementStateMachine
 
-    db_conn = os.getenv("DATABASE_URL")
+    db_conn_string = os.getenv("DATABASE_URL")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    
+
     # Initialize tracing manager
-    tracing_manager = TracingManager(db_conn)
-    
+    tracing_manager = TracingManager(db_conn_string)
+
     # Create or use existing trace context
     if not trace_id:
         trace_id = tracing_manager.generate_trace_id()
-    
+
     # Execute with trace context
     with tracing_manager.trace_execution(engagement_id, "analyze", trace_id):
         job = {
@@ -47,7 +48,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         try:
             with LockContext(lock, engagement_id):
                 state_machine = EngagementStateMachine(
-                    engagement_id, db_conn, "analyzing"
+                    engagement_id, db_connection_string=db_conn_string, current_state="analyzing"
                 )
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
@@ -61,8 +62,10 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
 
                 return result
         except Exception as e:
+            # Query actual current state from DB before transitioning to failed
+            current_state = _get_engagement_state(engagement_id, db_conn_string)
             state_machine = EngagementStateMachine(
-                engagement_id, db_conn
+                engagement_id, db_connection_string=db_conn_string, current_state=current_state
             )
             state_machine.transition("failed", f"Analysis failed: {str(e)}")
             raise
@@ -80,20 +83,43 @@ def evaluate_findings(self, engagement_id: str, trace_id: str = None):
     from intelligence_engine import IntelligenceEngine
     from snapshot_manager import SnapshotManager
 
-    db_conn = os.getenv("DATABASE_URL")
-    
+    db_conn_string = os.getenv("DATABASE_URL")
+
     # Initialize tracing manager
-    tracing_manager = TracingManager(db_conn)
-    
+    tracing_manager = TracingManager(db_conn_string)
+
     # Create or use existing trace context
     if not trace_id:
         trace_id = tracing_manager.generate_trace_id()
-    
+
     # Execute with trace context
     with tracing_manager.trace_execution(engagement_id, "evaluate_findings", trace_id):
-        snapshot_mgr = SnapshotManager(db_conn)
+        snapshot_mgr = SnapshotManager(db_conn_string)
 
         snapshot = snapshot_mgr.create_snapshot(engagement_id)
-        engine = IntelligenceEngine(db_conn)
+        engine = IntelligenceEngine(db_conn_string)
 
         return engine.evaluate(snapshot)
+
+
+def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
+    """
+    Query the current engagement state from the database.
+
+    Args:
+        engagement_id: Engagement ID
+        db_conn_string: Database connection string
+
+    Returns:
+        Current engagement status string
+    """
+    try:
+        conn = psycopg2.connect(db_conn_string)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row[0] if row else "created"
+    except Exception:
+        return "created"

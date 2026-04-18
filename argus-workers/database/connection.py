@@ -1,8 +1,9 @@
 """
 Database connection management module
 
-Provides connection pooling and session management for PostgreSQL.
+Provides a thread-safe singleton connection pool for PostgreSQL.
 """
+import threading
 import psycopg2
 from psycopg2 import pool
 from contextlib import contextmanager
@@ -17,123 +18,147 @@ class DatabaseConnectionError(Exception):
 
 class ConnectionManager:
     """
-    Manages PostgreSQL connections with connection pooling.
+    Thread-safe singleton connection manager with PostgreSQL connection pooling.
 
-    Provides thread-safe connection pooling and context managers for
-    automatic connection cleanup.
+    Auto-initializes on first use with DATABASE_URL from environment.
     """
 
     _instance: Optional["ConnectionManager"] = None
-    _pool: Optional[pool.ThreadedConnectionPool] = None
+    _lock = threading.Lock()
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, min_connections: int = 1, max_connections: int = 10):
-        if hasattr(self, "_initialized") and self._initialized:
+    def __init__(self):
+        if self._initialized:
             return
-
         self._initialized = True
-        self.min_connections = min_connections
-        self.max_connections = max_connections
+        self._pool: Optional[pool.ThreadedConnectionPool] = None
+        self._pool_lock = threading.Lock()
+        self._min_connections = 1
+        self._max_connections = 10
 
-    def initialize(self, connection_string: Optional[str] = None):
-        """
-        Initialize the connection pool
-
-        Args:
-            connection_string: PostgreSQL connection string
-        """
-        if self._pool is not None:
-            return
-
-        conn_string = connection_string or os.getenv("DATABASE_URL")
-
+    def _get_connection_string(self) -> str:
+        """Get database connection string from environment"""
+        conn_string = os.getenv("DATABASE_URL")
         if not conn_string:
-            raise DatabaseConnectionError("No database connection string provided")
+            raise DatabaseConnectionError("DATABASE_URL environment variable not set")
+        return conn_string
 
-        try:
-            self._pool = pool.ThreadedConnectionPool(
-                self.min_connections,
-                self.max_connections,
-                conn_string
-            )
-        except psycopg2.Error as e:
-            raise DatabaseConnectionError(f"Failed to create connection pool: {e}")
+    def _ensure_pool(self) -> pool.ThreadedConnectionPool:
+        """Ensure the connection pool is initialized (thread-safe)"""
+        if self._pool is None:
+            with self._pool_lock:
+                if self._pool is None:
+                    try:
+                        conn_string = self._get_connection_string()
+                        self._pool = pool.ThreadedConnectionPool(
+                            self._min_connections,
+                            self._max_connections,
+                            conn_string
+                        )
+                    except psycopg2.Error as e:
+                        raise DatabaseConnectionError(f"Failed to create connection pool: {e}")
+        return self._pool
 
-    def close(self):
-        """Close all connections in the pool"""
-        if self._pool is not None:
-            self._pool.closeall()
-            self._pool = None
-
-    @contextmanager
     def get_connection(self):
         """
-        Get a connection from the pool
+        Get a connection from the pool (thread-safe).
 
         Yields:
             A database connection
 
-        Raises:
-            DatabaseConnectionError: If no connection is available
+        Note: Always release the connection back using conn.putconn() or use the
+        context manager below.
         """
-        if self._pool is None:
-            self.initialize()
-
+        pool_instance = self._ensure_pool()
         try:
-            conn = self._pool.getconn()
-            try:
-                yield conn
-            finally:
-                self._pool.putconn(conn)
+            conn = pool_instance.getconn()
+            return conn
         except psycopg2.Error as e:
             raise DatabaseConnectionError(f"Connection error: {e}")
 
+    def release_connection(self, conn):
+        """Release a connection back to the pool"""
+        if self._pool:
+            self._pool.putconn(conn)
+
     @contextmanager
-    def get_cursor(self, commit: bool = True):
+    def connection(self):
         """
-        Get a cursor with automatic connection management
+        Context manager for automatic connection lifecycle.
+
+        Usage:
+            with db.connection() as conn:
+                cursor = conn.cursor()
+                ...
+        """
+        conn = self.get_connection()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            self.release_connection(conn)
+
+    @contextmanager
+    def cursor(self, commit: bool = True):
+        """
+        Context manager for automatic cursor and connection lifecycle.
 
         Args:
-            commit: Whether to commit the transaction on success
+            commit: Whether to commit on success
 
-        Yields:
-            A database cursor
+        Usage:
+            with db.cursor() as cursor:
+                cursor.execute("SELECT ...")
+                rows = cursor.fetchall()
         """
-        with self.get_connection() as conn:
+        with self.connection() as conn:
             cursor = conn.cursor()
             try:
                 yield cursor
-                if commit:
-                    conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
             finally:
                 cursor.close()
 
+    def close(self):
+        """Close all connections in the pool"""
+        with self._pool_lock:
+            if self._pool is not None:
+                self._pool.closeall()
+                self._pool = None
 
-def get_connection_manager() -> ConnectionManager:
-    """
-    Get the singleton connection manager instance
 
-    Returns:
-        ConnectionManager instance
-    """
-    return ConnectionManager()
+# Singleton instance
+_db: Optional[ConnectionManager] = None
+
+
+def get_db() -> ConnectionManager:
+    """Get the singleton database connection manager"""
+    global _db
+    if _db is None:
+        _db = ConnectionManager()
+    return _db
 
 
 @contextmanager
-def get_db_connection():
-    """
-    Convenience context manager for quick database access
-
-    Yields:
-        A database connection
-    """
-    manager = get_connection_manager()
-    with manager.get_connection() as conn:
+def db_connection():
+    """Convenience context manager for database connections"""
+    manager = get_db()
+    with manager.connection() as conn:
         yield conn
+
+
+@contextmanager
+def db_cursor(commit: bool = True):
+    """Convenience context manager for database cursors"""
+    manager = get_db()
+    with manager.cursor(commit=commit) as cursor:
+        yield cursor

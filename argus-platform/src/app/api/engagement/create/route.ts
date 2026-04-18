@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob } from "@/lib/redis";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {

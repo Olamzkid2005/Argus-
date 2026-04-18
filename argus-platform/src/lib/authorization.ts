@@ -1,9 +1,5 @@
-import { Pool } from "pg";
 import { Session } from "next-auth";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 /**
  * Check if user can access an engagement

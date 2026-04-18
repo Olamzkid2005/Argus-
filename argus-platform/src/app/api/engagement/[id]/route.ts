@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 export async function GET(
   _req: Request,

@@ -326,15 +326,15 @@ Keep response under 500 tokens. Be factual and specific."""
             )
             
             repo = AIExplainabilityRepository(self.db)
-            
+
             # Store explanation
-            await repo.create_explanation(
+            repo.create_explanation(
                 cluster_id=result.cluster_id,
                 explanation=result.explanation,
                 model_version=result.model_version,
                 token_count=result.token_count
             )
-            
+
             # Store explainability trace
             trace_data = {
                 "input_cluster_ids": result.input_cluster_ids,
@@ -347,8 +347,8 @@ Keep response under 500 tokens. Be factual and specific."""
                 "output_token_count": result.token_count,
                 "reasoning_trace": result.explanation[:500],  # First 500 chars
             }
-            
-            await repo.create_trace(
+
+            repo.create_trace(
                 cluster_id=result.cluster_id,
                 trace_data=trace_data
             )

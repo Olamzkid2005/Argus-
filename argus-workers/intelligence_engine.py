@@ -207,9 +207,17 @@ class IntelligenceEngine:
         
         # Pattern: Weak authentication signals
         if self.detect_weak_auth_signals(scored_findings):
+            # Extract budget from context for auth_focused_scan
+            loop_budget = context.get("loop_budget", {})
+            budget = {
+                "max_cycles": loop_budget.get("max_cycles", 5),
+                "max_depth": loop_budget.get("max_depth", 3),
+                "max_cost": loop_budget.get("max_cost", 0.5),
+            }
             actions.append({
                 "type": "auth_focused_scan",
                 "endpoints": self.get_auth_endpoints(scored_findings),
+                "budget": budget,
                 "reason": "weak_auth_signals",
                 "description": "Weak authentication signals detected. Focusing on authentication mechanisms.",
             })

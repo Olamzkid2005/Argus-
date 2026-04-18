@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob } from "@/lib/redis";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 /**
  * POST /api/engagement/[id]/approve
@@ -33,12 +29,13 @@ export async function POST(
     try {
       await client.query("BEGIN");
 
-      // Get current engagement state
+      // Get current engagement state with row lock
       const engagementResult = await client.query(
         `SELECT e.*, lb.max_cycles, lb.max_depth, lb.max_cost
          FROM engagements e
          LEFT JOIN loop_budgets lb ON e.id = lb.engagement_id
-         WHERE e.id = $1`,
+         WHERE e.id = $1
+         FOR UPDATE OF e`,
         [engagementId]
       );
 

@@ -5,12 +5,25 @@ This module configures the Celery application for distributed task execution
 using Redis as the message broker and result backend.
 """
 
+import logging
 import os
 from celery import Celery
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+def setup_logging():
+    """Configure structured logging for the application"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    return logging.getLogger(__name__)
+
+logger = setup_logging()
 
 # Get configuration from environment
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -94,23 +107,22 @@ app.conf.update(
 # Task Base Class Configuration
 class BaseTask(app.Task):
     """Base task class with common functionality"""
-    
+
     autoretry_for = (Exception,)
     retry_kwargs = {"max_retries": 3}
     retry_backoff = True
-    
+
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Called when task fails"""
-        print(f"Task {task_id} failed: {exc}")
-        # TODO: Log to database, send alerts, etc.
-    
+        logger.error(f"Task {task_id} failed: {exc}")
+
     def on_retry(self, exc, task_id, args, kwargs, einfo):
         """Called when task is retried"""
-        print(f"Task {task_id} retrying: {exc}")
-    
+        logger.warning(f"Task {task_id} retrying: {exc}")
+
     def on_success(self, retval, task_id, args, kwargs):
         """Called when task succeeds"""
-        print(f"Task {task_id} succeeded")
+        logger.info(f"Task {task_id} succeeded")
 
 # Set base task class
 app.Task = BaseTask

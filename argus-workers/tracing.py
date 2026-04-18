@@ -9,6 +9,7 @@ Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2
 import uuid
 import time
 import json
+import threading
 from typing import Dict, Optional, Any
 from datetime import datetime, timezone
 from contextlib import contextmanager
@@ -57,32 +58,32 @@ class ExecutionContext:
 class TraceContext:
     """
     Thread-local context for trace_id propagation.
-    Allows trace_id to be accessible from any component without
-    explicit parameter passing.
+    Uses threading.local() to ensure each thread has its own context,
+    preventing race conditions in concurrent Celery workers.
     """
-    _current_context: Optional[ExecutionContext] = None
-    
+    _local = threading.local()
+
     @classmethod
     def set_context(cls, context: ExecutionContext) -> None:
         """Set the current execution context"""
-        cls._current_context = context
-    
+        cls._local.current_context = context
+
     @classmethod
     def get_context(cls) -> Optional[ExecutionContext]:
         """Get the current execution context"""
-        return cls._current_context
-    
+        return getattr(cls._local, 'current_context', None)
+
     @classmethod
     def get_trace_id(cls) -> Optional[str]:
         """Get the current trace_id"""
         context = cls.get_context()
         return context.trace_id if context else None
-    
+
     @classmethod
     def clear_context(cls) -> None:
         """Clear the current execution context"""
-        cls._current_context = None
-    
+        cls._local.current_context = None
+
     @classmethod
     @contextmanager
     def with_context(cls, context: ExecutionContext):

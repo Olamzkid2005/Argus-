@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { pool } from "@/lib/db";
 
 // Validation functions
 function isValidEmail(email: string): boolean {
@@ -16,6 +12,9 @@ function isValidEmail(email: string): boolean {
 function isValidPassword(password: string): { valid: boolean; message?: string } {
   if (password.length < 8) {
     return { valid: false, message: "Password must be at least 8 characters long" };
+  }
+  if (password.length > 128) {
+    return { valid: false, message: "Password must be at most 128 characters long" };
   }
   if (!/[A-Z]/.test(password)) {
     return { valid: false, message: "Password must contain at least one uppercase letter" };
@@ -86,8 +85,9 @@ export async function POST(request: NextRequest) {
     );
 
     if (existingUser.rows.length > 0) {
+      // Generic error message to prevent email enumeration
       return NextResponse.json(
-        { error: "An account with this email already exists" },
+        { error: "Account creation failed. Please try again." },
         { status: 409 }
       );
     }

@@ -55,11 +55,11 @@ export async function markJobComplete(idempotencyKey: string): Promise<void> {
 }
 
 /**
- * Push a job to the Redis queue
+ * Push a job to the Redis queue with atomic idempotency
  */
 export async function pushJob(job: JobMessage): Promise<string> {
   const jobId = uuidv4();
-  
+
   // Generate idempotency key
   const idempotencyKey = generateIdempotencyKey(
     job.engagement_id,
@@ -67,14 +67,15 @@ export async function pushJob(job: JobMessage): Promise<string> {
     job.target
   );
 
-  // Check if job already processed
-  if (await isJobProcessed(idempotencyKey)) {
-    console.log(`Job already processed: ${idempotencyKey}`);
-    return jobId;
-  }
+  // Use atomic SET NX (SET if Not eXists) for idempotency check-and-set
+  // This prevents race conditions where two requests could both pass the check
+  const key = `idempotency:${idempotencyKey}`;
+  const wasSet = await redis.set(key, "processing", "EX", 3600, "NX");
 
-  // Mark as processing
-  await markJobProcessing(idempotencyKey);
+  // If wasSet is null, another process already set this key - job is duplicate
+  if (!wasSet) {
+    return jobId; // Return jobId but don't push duplicate to queue
+  }
 
   const jobData = {
     ...job,
@@ -83,10 +84,9 @@ export async function pushJob(job: JobMessage): Promise<string> {
   };
 
   // Push to Celery queue format
-  // Celery expects: [args, kwargs, embed]
   const celeryMessage = JSON.stringify([
-    [], // args
-    jobData, // kwargs
+    [],
+    jobData,
     {
       callbacks: null,
       errbacks: null,
@@ -95,9 +95,8 @@ export async function pushJob(job: JobMessage): Promise<string> {
     },
   ]);
 
-  // Push to the appropriate queue based on job type
   const queueName = `celery:${job.type}`;
-  
+
   await redis.lpush(queueName, celeryMessage);
 
   return jobId;

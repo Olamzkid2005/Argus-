@@ -2,9 +2,9 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import GitHubProvider from "next-auth/providers/github";
-import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
+import { pool } from "@/lib/db";
 
 interface User {
   id: string;
@@ -27,11 +27,6 @@ interface OAuthUser {
   orgId?: string;
   role?: string;
 }
-
-// PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 export const authOptions: NextAuthOptions = {
   providers: [
