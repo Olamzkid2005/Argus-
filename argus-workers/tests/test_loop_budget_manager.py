@@ -103,7 +103,7 @@ class TestLoopBudgetManager:
         manager.consume({"type": "deep_scan", "actual_cost": 0.10})
         manager.consume({"type": "recon_expand", "actual_cost": 0.03})
         
-        assert manager.current_cost == 0.18
+        assert abs(manager.current_cost - 0.18) < 0.001
     
     def test_get_status_returns_current_and_max(self):
         """Test get_status returns current vs max values"""

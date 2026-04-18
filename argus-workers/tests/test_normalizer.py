@@ -129,7 +129,7 @@ class TestFindingNormalizer:
         finding = self.normalizer.normalize(raw_finding, "nuclei")
         
         assert finding.type == "SQL_INJECTION"
-        assert finding.severity == Severity.HIGH
+        assert finding.severity.value == "HIGH"
         assert finding.endpoint == "https://example.com/api"
         assert finding.source_tool == "nuclei"
         assert finding.confidence == 0.8

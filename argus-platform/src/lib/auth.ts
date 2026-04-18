@@ -3,6 +3,19 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 
+interface User {
+  id: string;
+  email: string;
+  orgId: string;
+  role: string;
+}
+
+interface JWTtoken {
+  id?: string;
+  orgId?: string;
+  role?: string;
+}
+
 // PostgreSQL connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -50,7 +63,7 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             orgId: user.org_id,
             role: user.role,
-          };
+          } as User;
         } catch (error) {
           console.error("Authentication error:", error);
           return null;
@@ -64,20 +77,20 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
-      // Add user info to token on sign in
       if (user) {
-        token.id = user.id;
-        token.orgId = (user as any).orgId;
-        token.role = (user as any).role;
+        const u = user as User;
+        token.id = u.id;
+        token.orgId = u.orgId;
+        token.role = u.role;
       }
       return token;
     },
     async session({ session, token }) {
-      // Add user info to session
       if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).orgId = token.orgId;
-        (session.user as any).role = token.role;
+        const t = token as JWTtoken;
+        (session.user as { id?: string; orgId?: string; role?: string }).id = t.id;
+        (session.user as { id?: string; orgId?: string; role?: string }).orgId = t.orgId;
+        (session.user as { id?: string; orgId?: string; role?: string }).role = t.role;
       }
       return session;
     },

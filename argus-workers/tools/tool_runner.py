@@ -1,11 +1,17 @@
 """
 Tool Runner - Executes security tools safely in sandboxed environment
+
+Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 20.4, 21.1, 21.2, 22.1
 """
 import subprocess
 import os
 import tempfile
 from typing import Dict, List, Optional
 from pathlib import Path
+import time
+
+from tracing import get_trace_id, StructuredLogger, ExecutionSpan
+from database.repositories.tool_metrics_repository import ToolMetricsRepository
 
 
 class SecurityException(Exception):
@@ -45,18 +51,27 @@ class ToolRunner:
         ":(){ :|:& };:",  # Fork bomb
     ]
     
-    def __init__(self, sandbox_dir: Optional[str] = None):
+    def __init__(self, sandbox_dir: Optional[str] = None, connection_string: str = None):
         """
         Initialize Tool Runner
         
         Args:
             sandbox_dir: Directory for tool execution (default: temp directory)
+            connection_string: Database connection string for logging
         """
         if sandbox_dir:
             self.sandbox_dir = Path(sandbox_dir)
             self.sandbox_dir.mkdir(parents=True, exist_ok=True)
         else:
             self.sandbox_dir = Path(tempfile.mkdtemp(prefix="argus_sandbox_"))
+        
+        # Initialize tracing
+        self.connection_string = connection_string or os.getenv("DATABASE_URL")
+        self.logger = StructuredLogger(self.connection_string)
+        self.span_recorder = ExecutionSpan(self.connection_string)
+        
+        # Initialize metrics repository
+        self.metrics_repo = ToolMetricsRepository(self.connection_string) if self.connection_string else None
     
     def is_dangerous(self, tool: str, args: List[str]) -> bool:
         """
@@ -124,43 +139,125 @@ class ToolRunner:
         tmp_dir = self.sandbox_dir / "tmp"
         tmp_dir.mkdir(exist_ok=True)
         
-        try:
-            # Execute with locked environment
-            result = subprocess.run(
-                [tool] + args,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=str(self.sandbox_dir),
-                env=self._locked_env()
-            )
-            
-            return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-                "tool": tool,
-                "success": result.returncode == 0,
-            }
-            
-        except subprocess.TimeoutExpired:
-            return {
-                "stdout": "",
-                "stderr": f"Tool execution timed out after {timeout} seconds",
-                "returncode": -1,
-                "tool": tool,
-                "success": False,
-                "timeout": True,
-            }
-        except Exception as e:
-            return {
-                "stdout": "",
-                "stderr": str(e),
-                "returncode": -1,
-                "tool": tool,
-                "success": False,
-                "error": str(e),
-            }
+        # Record start time
+        start_time = time.time()
+        
+        # Execute with span tracing
+        with self.span_recorder.span(ExecutionSpan.SPAN_TOOL_EXECUTION, {"tool": tool}):
+            try:
+                # Execute with locked environment
+                result = subprocess.run(
+                    [tool] + args,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    cwd=str(self.sandbox_dir),
+                    env=self._locked_env()
+                )
+                
+                # Calculate duration
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Determine success
+                success = result.returncode == 0
+                
+                # Record tool metrics (Requirement 22.1)
+                if self.metrics_repo:
+                    try:
+                        self.metrics_repo.record_metric(
+                            tool_name=tool,
+                            duration_ms=duration_ms,
+                            success=success
+                        )
+                    except Exception as metric_error:
+                        # Don't fail execution if metrics recording fails
+                        print(f"Warning: Failed to record tool metric: {metric_error}")
+                
+                # Log tool execution
+                self.logger.log_tool_executed(
+                    tool_name=tool,
+                    arguments=args,
+                    duration_ms=duration_ms,
+                    success=success,
+                    return_code=result.returncode
+                )
+                
+                return {
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "returncode": result.returncode,
+                    "tool": tool,
+                    "success": success,
+                    "duration_ms": duration_ms,
+                    "trace_id": get_trace_id(),
+                }
+                
+            except subprocess.TimeoutExpired:
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Record tool metrics for timeout (Requirement 22.1)
+                if self.metrics_repo:
+                    try:
+                        self.metrics_repo.record_metric(
+                            tool_name=tool,
+                            duration_ms=duration_ms,
+                            success=False
+                        )
+                    except Exception as metric_error:
+                        print(f"Warning: Failed to record tool metric: {metric_error}")
+                
+                # Log timeout
+                self.logger.log_tool_executed(
+                    tool_name=tool,
+                    arguments=args,
+                    duration_ms=duration_ms,
+                    success=False,
+                    return_code=-1
+                )
+                
+                return {
+                    "stdout": "",
+                    "stderr": f"Tool execution timed out after {timeout} seconds",
+                    "returncode": -1,
+                    "tool": tool,
+                    "success": False,
+                    "timeout": True,
+                    "duration_ms": duration_ms,
+                    "trace_id": get_trace_id(),
+                }
+            except Exception as e:
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Record tool metrics for error (Requirement 22.1)
+                if self.metrics_repo:
+                    try:
+                        self.metrics_repo.record_metric(
+                            tool_name=tool,
+                            duration_ms=duration_ms,
+                            success=False
+                        )
+                    except Exception as metric_error:
+                        print(f"Warning: Failed to record tool metric: {metric_error}")
+                
+                # Log error
+                self.logger.log_tool_executed(
+                    tool_name=tool,
+                    arguments=args,
+                    duration_ms=duration_ms,
+                    success=False,
+                    return_code=-1
+                )
+                
+                return {
+                    "stdout": "",
+                    "stderr": str(e),
+                    "returncode": -1,
+                    "tool": tool,
+                    "success": False,
+                    "error": str(e),
+                    "duration_ms": duration_ms,
+                    "trace_id": get_trace_id(),
+                }
     
     def cleanup(self):
         """Clean up sandbox directory"""

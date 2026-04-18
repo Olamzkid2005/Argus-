@@ -8,12 +8,12 @@ const pool = new Pool({
 });
 
 export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAuth();
-    const engagementId = params.id;
+    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
@@ -38,15 +38,16 @@ export async function GET(
     return NextResponse.json({
       engagement: result.rows[0],
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Get engagement error:", error);
-    
-    if (error.message === "Unauthorized") {
+    const err = error as Error;
+
+    if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    if (error.message.startsWith("Forbidden")) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+    if (err.message.startsWith("Forbidden")) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
     }
     
     return NextResponse.json(

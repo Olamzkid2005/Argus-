@@ -270,7 +270,7 @@ class ToolExecutor:
                         finding_id,
                         engagement_id,
                         finding.type,
-                        finding.severity.value,
+                        finding.severity.value if hasattr(finding.severity, 'value') else finding.severity,
                         finding.confidence,
                         finding.endpoint,
                         Json(finding.evidence),
@@ -278,7 +278,7 @@ class ToolExecutor:
                         finding.cvss_score,
                         finding.owasp_category,
                         finding.cwe_id,
-                        finding.evidence_strength.value if finding.evidence_strength else None,
+                        finding.evidence_strength.value if finding.evidence_strength and hasattr(finding.evidence_strength, 'value') else (finding.evidence_strength or None),
                         finding.tool_agreement_level,
                         finding.fp_likelihood,
                     )

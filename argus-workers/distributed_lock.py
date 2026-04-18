@@ -26,7 +26,7 @@ class DistributedLock:
             redis_url: Redis connection URL
             worker_id: Unique worker identifier (generated if not provided)
         """
-        self.redis_client = redis.from_url(redis_url)
+        self.redis_client = redis.Redis.from_url(redis_url)
         self.worker_id = worker_id or str(uuid.uuid4())
         self.held_locks = {}  # engagement_id -> lock_key mapping
     

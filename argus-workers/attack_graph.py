@@ -91,16 +91,19 @@ class AttackGraph:
         """
         # Create vulnerability node
         vuln_node_id = f"vuln_{finding.type}_{finding.endpoint}"
+        if vuln_node_id in self.nodes:
+            return
+
         vuln_node = Node(
             node_id=vuln_node_id,
             node_type="vulnerability",
             data={
                 "type": finding.type,
-                "severity": finding.severity.value,
+                "severity": finding.severity.value if hasattr(finding.severity, 'value') else finding.severity,
                 "endpoint": finding.endpoint,
                 "source_tool": finding.source_tool,
             },
-            cvss=finding.cvss_score or self._estimate_cvss(finding.severity.value),
+            cvss=finding.cvss_score or self._estimate_cvss(finding.severity.value if hasattr(finding.severity, 'value') else finding.severity),
             confidence=finding.confidence,
         )
         self.nodes[vuln_node_id] = vuln_node

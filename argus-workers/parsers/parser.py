@@ -1,9 +1,15 @@
 """
 Parser Layer - Converts CLI tool output to JSON
+
+Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 20.5, 21.1, 21.2
 """
 import json
 from typing import List, Dict, Optional
 from abc import ABC, abstractmethod
+import time
+import os
+
+from tracing import get_trace_id, StructuredLogger, ExecutionSpan
 
 
 class ParserError(Exception):
@@ -211,13 +217,24 @@ class Parser:
     Main parser class that routes to appropriate tool parser
     """
     
-    def __init__(self):
+    def __init__(self, connection_string: str = None):
+        """
+        Initialize Parser with optional database connection for tracing.
+        
+        Args:
+            connection_string: Database connection string
+        """
         self.parsers = {
             "nuclei": NucleiParser(),
             "httpx": HttpxParser(),
             "sqlmap": SqlmapParser(),
             "ffuf": FfufParser(),
         }
+        
+        # Initialize tracing
+        self.connection_string = connection_string or os.getenv("DATABASE_URL")
+        self.logger = StructuredLogger(self.connection_string)
+        self.span_recorder = ExecutionSpan(self.connection_string)
     
     def parse(self, tool_name: str, raw_output: str) -> List[Dict]:
         """
@@ -238,7 +255,39 @@ class Parser:
         if not parser:
             raise ParserError(f"No parser found for tool: {tool_name}")
         
-        try:
-            return parser.parse(raw_output)
-        except Exception as e:
-            raise ParserError(f"Failed to parse {tool_name} output: {e}")
+        # Record start time
+        start_time = time.time()
+        
+        # Execute with span tracing
+        with self.span_recorder.span(ExecutionSpan.SPAN_PARSING, {"tool": tool_name}):
+            try:
+                findings = parser.parse(raw_output)
+                
+                # Calculate duration
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Log parser completion
+                self.logger.log_parser_completed(
+                    tool_name=tool_name,
+                    findings_count=len(findings),
+                    parse_time_ms=duration_ms
+                )
+                
+                return findings
+                
+            except Exception as e:
+                # Calculate duration
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Log parser failure
+                self.logger.log(
+                    "parser_failed",
+                    f"Parser failed for {tool_name}: {str(e)}",
+                    {
+                        "tool_name": tool_name,
+                        "error": str(e),
+                        "parse_time_ms": duration_ms,
+                    }
+                )
+                
+                raise ParserError(f"Failed to parse {tool_name} output: {e}")

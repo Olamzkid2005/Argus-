@@ -1,9 +1,15 @@
 """
 Intelligence Engine - THE ONLY decision-maker
 Analyzes findings and generates recommended actions
+
+Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2
 """
 from typing import Dict, List, Optional
 from collections import defaultdict
+import time
+import os
+
+from tracing import get_trace_id, StructuredLogger, ExecutionSpan
 
 
 class IntelligenceEngine:
@@ -12,9 +18,17 @@ class IntelligenceEngine:
     Uses ONLY frozen snapshot data, never live DB reads.
     """
     
-    def __init__(self):
-        """Initialize Intelligence Engine"""
-        pass
+    def __init__(self, connection_string: str = None):
+        """
+        Initialize Intelligence Engine.
+        
+        Args:
+            connection_string: Database connection string for tracing
+        """
+        # Initialize tracing
+        self.connection_string = connection_string or os.getenv("DATABASE_URL")
+        self.logger = StructuredLogger(self.connection_string)
+        self.span_recorder = ExecutionSpan(self.connection_string)
     
     def evaluate(self, snapshot: Dict) -> Dict:
         """
@@ -37,17 +51,33 @@ class IntelligenceEngine:
         findings = snapshot.get("findings", [])
         loop_budget = snapshot.get("loop_budget", {})
         
-        # Assign confidence scores
-        scored_findings = self.assign_confidence_scores(findings)
-        
-        # Generate actions based on intelligence
-        actions = self.generate_actions(scored_findings, snapshot)
-        
-        return {
-            "scored_findings": scored_findings,
-            "actions": actions,
-            "reasoning": self._generate_reasoning(scored_findings, actions),
-        }
+        # Execute with span tracing
+        with self.span_recorder.span(
+            ExecutionSpan.SPAN_INTELLIGENCE_EVALUATION,
+            {"findings_count": len(findings)}
+        ):
+            # Assign confidence scores
+            scored_findings = self.assign_confidence_scores(findings)
+            
+            # Generate actions based on intelligence
+            actions = self.generate_actions(scored_findings, snapshot)
+            
+            # Generate reasoning
+            reasoning = self._generate_reasoning(scored_findings, actions)
+            
+            # Log intelligence decision
+            self.logger.log_intelligence_decision(
+                actions=actions,
+                findings_analyzed=len(findings),
+                reasoning=reasoning
+            )
+            
+            return {
+                "scored_findings": scored_findings,
+                "actions": actions,
+                "reasoning": reasoning,
+                "trace_id": get_trace_id(),
+            }
     
     def assign_confidence_scores(self, findings: List[Dict]) -> List[Dict]:
         """

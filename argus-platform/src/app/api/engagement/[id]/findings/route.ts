@@ -9,11 +9,11 @@ const pool = new Pool({
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAuth();
-    const engagementId = params.id;
+    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
@@ -26,46 +26,47 @@ export async function GET(
 
     // Build query with filters
     let query = "SELECT * FROM findings WHERE engagement_id = $1";
-    const params: any[] = [engagementId];
+    const queryParams: (string | number | string[])[] = [engagementId];
     let paramIndex = 2;
 
     if (severity) {
       const severities = severity.split(",");
       query += ` AND severity = ANY($${paramIndex})`;
-      params.push(severities);
+      queryParams.push(severities);
       paramIndex++;
     }
 
     if (minConfidence) {
       query += ` AND confidence >= $${paramIndex}`;
-      params.push(parseFloat(minConfidence));
+      queryParams.push(parseFloat(minConfidence));
       paramIndex++;
     }
 
     if (sourceTool) {
       const tools = sourceTool.split(",");
       query += ` AND source_tool = ANY($${paramIndex})`;
-      params.push(tools);
+      queryParams.push(tools);
       paramIndex++;
     }
 
     query += " ORDER BY severity DESC, confidence DESC, created_at DESC";
 
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, queryParams);
 
     return NextResponse.json({
       findings: result.rows,
       count: result.rows.length,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Get findings error:", error);
-    
-    if (error.message === "Unauthorized") {
+    const err = error as Error;
+
+    if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
-    if (error.message.startsWith("Forbidden")) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+    if (err.message.startsWith("Forbidden")) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
     }
     
     return NextResponse.json(

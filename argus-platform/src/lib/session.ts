@@ -16,12 +16,12 @@ export async function requireAuth() {
   return session;
 }
 
-export function withAuth(handler: Function) {
-  return async (req: Request, context?: any) => {
+export function withAuth(handler: (req: Request, context?: Record<string, unknown>, session?: Awaited<ReturnType<typeof requireAuth>>) => Promise<NextResponse | Response>) {
+  return async (req: Request, context?: Record<string, unknown>) => {
     try {
       const session = await requireAuth();
       return await handler(req, context, session);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }

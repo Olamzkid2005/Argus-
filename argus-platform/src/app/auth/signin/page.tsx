@@ -1,10 +1,10 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SignIn() {
+function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -30,7 +30,7 @@ export default function SignIn() {
         const callbackUrl = searchParams.get("callbackUrl") || "/";
         router.push(callbackUrl);
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
@@ -92,5 +92,13 @@ export default function SignIn() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function SignIn() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50"><p>Loading...</p></div>}>
+      <SignInForm />
+    </Suspense>
   );
 }

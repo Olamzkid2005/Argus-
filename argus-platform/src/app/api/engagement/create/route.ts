@@ -26,6 +26,29 @@ export async function POST(req: Request) {
       );
     }
 
+    // Validate rate limit configuration if provided
+    if (rateLimitConfig) {
+      const { requests_per_second, concurrent_requests } = rateLimitConfig;
+      
+      if (requests_per_second !== undefined) {
+        if (typeof requests_per_second !== 'number' || requests_per_second < 1 || requests_per_second > 20) {
+          return NextResponse.json(
+            { error: "requests_per_second must be between 1 and 20" },
+            { status: 400 }
+          );
+        }
+      }
+      
+      if (concurrent_requests !== undefined) {
+        if (typeof concurrent_requests !== 'number' || concurrent_requests < 1 || concurrent_requests > 5) {
+          return NextResponse.json(
+            { error: "concurrent_requests must be between 1 and 5" },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const client = await pool.connect();
     
     try {
@@ -93,10 +116,11 @@ export async function POST(req: Request) {
     } finally {
       client.release();
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Create engagement error:", error);
-    
-    if (error.message === "Unauthorized") {
+    const err = error as Error;
+
+    if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
