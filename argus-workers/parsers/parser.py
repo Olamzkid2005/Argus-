@@ -607,6 +607,308 @@ class SemgrepParser(BaseParser):
         return findings
 
 
+class NiktoParser(BaseParser):
+    """Parser for Nikto output (web server scanner)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse Nikto output (CSV or text format)
+        
+        Args:
+            raw_output: Nikto output
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip() or not line.startswith("+"):
+                continue
+            
+            # Parse Nikto output lines like:
+            # + /admin - OSVDB-3263 (Apache/Perl MIME types / XSS)
+            if " - " in line:
+                parts = line.split(" - ", 1)
+                endpoint = parts[0].replace("+", "").strip()
+                description = parts[1] if len(parts) > 1 else ""
+                
+                # Determine severity
+                severity = "MEDIUM"
+                if any(x in description.lower() for x in ["xss", "sql", "injection"]):
+                    severity = "HIGH"
+                elif any(x in description.lower() for x in ["default", "credential", "password"]):
+                    severity = "CRITICAL"
+                
+                finding = {
+                    "type": "WEB_VULNERABILITY",
+                    "severity": severity,
+                    "endpoint": endpoint,
+                    "evidence": {
+                        "description": description[:200],
+                        "raw": line[:300],
+                    },
+                    "confidence": 0.75,
+                    "tool": "nikto",
+                }
+                findings.append(finding)
+        
+        return findings
+
+
+class WhatWebParser(BaseParser):
+    """Parser for WhatWeb output (web technology fingerprinting)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse WhatWeb JSON output
+        
+        Args:
+            raw_output: WhatWeb output (JSON format)
+            
+        Returns:
+            List of technology findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                # Try JSON format
+                data = json.loads(line)
+                target = data.get("target", "")
+                plugins = data.get("plugins", {})
+                
+                # Extract technologies
+                technologies = list(plugins.keys())
+                
+                if technologies:
+                    # Determine if any are sensitive
+                    sensitive = ["wordpress", "drupal", "joomla", "apache", "nginx", "php"]
+                    severity = "INFO"
+                    if any(t.lower() in [s.lower() for s in sensitive] for t in technologies):
+                        severity = "LOW"
+                    
+                    finding = {
+                        "type": "TECHNOLOGY_FINGERPRINT",
+                        "severity": severity,
+                        "endpoint": target,
+                        "evidence": {
+                            "technologies": technologies,
+                            "plugins": plugins,
+                        },
+                        "confidence": 0.95,
+                        "tool": "whatweb",
+                    }
+                    findings.append(finding)
+                    
+            except json.JSONDecodeError:
+                # Try plain text format: 127.0.0.1 [200] [Apache] [PHP/5.3.3]
+                if "[" in line:
+                    parts = line.split("[")
+                    if len(parts) >= 3:
+                        endpoint = parts[0].strip()
+                        technologies = [p.replace("]", "").strip() for p in parts[2:]]
+                        
+                        finding = {
+                            "type": "TECHNOLOGY_FINGERPRINT",
+                            "severity": "INFO",
+                            "endpoint": endpoint,
+                            "evidence": {"technologies": technologies},
+                            "confidence": 0.90,
+                            "tool": "whatweb",
+                        }
+                        findings.append(finding)
+        
+        return findings
+
+
+class AmassParser(BaseParser):
+    """Parser for Amass output (subdomain enumeration)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse Amass JSON/Lines output
+        
+        Args:
+            raw_output: Amass output (JSON lines or text)
+            
+        Returns:
+            List of subdomain findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                # Try JSON format first
+                data = json.loads(line)
+                
+                if data.get("name"):  # subdomain
+                    finding = {
+                        "type": "SUBDOMAIN_DISCOVERY",
+                        "severity": "INFO",
+                        "endpoint": data.get("name", ""),
+                        "evidence": {
+                            "sources": data.get("sources", []),
+                            "domain": data.get("domain", ""),
+                        },
+                        "confidence": 0.90,
+                        "tool": "amass",
+                    }
+                    findings.append(finding)
+                    
+            except json.JSONDecodeError:
+                # Try plain subdomain format
+                if line.startswith("http") or "*." in line or not " " in line:
+                    endpoint = line.strip()
+                    if endpoint and ("." in endpoint or "*." in endpoint):
+                        finding = {
+                            "type": "SUBDOMAIN_DISCOVERY",
+                            "severity": "INFO",
+                            "endpoint": endpoint,
+                            "evidence": {"source": "amass"},
+                            "confidence": 0.85,
+                            "tool": "amass",
+                        }
+                        findings.append(finding)
+        
+        return findings
+
+
+class NaabuParser(BaseParser):
+    """Parser for Naabu output (port scanning)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse Naabu output (JSON or text)
+        
+        Args:
+            raw_output: Naabu output
+            
+        Returns:
+            List of port findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                # Try JSON format
+                data = json.loads(line)
+                host = data.get("host", "")
+                port = data.get("port", "")
+                
+                finding = {
+                    "type": "OPEN_PORT",
+                    "severity": "INFO",
+                    "endpoint": f"{host}:{port}",
+                    "evidence": {
+                        "port": port,
+                        "service": data.get("service", ""),
+                        "banner": data.get("banner", "")[:100],
+                    },
+                    "confidence": 0.95,
+                    "tool": "naabu",
+                }
+                findings.append(finding)
+                
+            except json.JSONDecodeError:
+                # Try text format: host:port
+                if ":" in line:
+                    parts = line.strip().split(":")
+                    if len(parts) == 2:
+                        finding = {
+                            "type": "OPEN_PORT",
+                            "severity": "INFO",
+                            "endpoint": line.strip(),
+                            "evidence": {"port": parts[1]},
+                            "confidence": 0.90,
+                            "tool": "naabu",
+                        }
+                        findings.append(finding)
+        
+        return findings
+
+
+class TestSSLParser(BaseParser):
+    """Parser for testssl output (TLS scanning)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse testssl JSON output
+        
+        Args:
+            raw_output: testssl output (JSON format)
+            
+        Returns:
+            List of TLS vulnerability findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            # Process each finding
+            for check in data.get("results", []):
+                id_info = check.get("id", {})
+                vuln = check.get("vulnerability", "")
+                
+                if not vuln:
+                    continue
+                
+                # Map severity
+                severity = "LOW"
+                rating = check.get("severity", "").upper()
+                if rating == "CRITICAL" or rating == "HIGH":
+                    severity = rating
+                elif rating == "MEDIUM":
+                    severity = "MEDIUM"
+                
+                finding = {
+                    "type": "TLS_VULNERABILITY",
+                    "severity": severity,
+                    "endpoint": data.get("host", ""),
+                    "evidence": {
+                        "check": id_info.get("header", ""),
+                        "vulnerability": vuln,
+                        "rating": rating,
+                    },
+                    "confidence": 0.90,
+                    "tool": "testssl",
+                }
+                findings.append(finding)
+                
+        except json.JSONDecodeError:
+            # Try plain text format
+            for line in raw_output.split("\n"):
+                if "Rating" in line or "VULNERABLE" in line.upper():
+                    severity = "HIGH"
+                    if "MEDIUM" in line.upper():
+                        severity = "MEDIUM"
+                    elif "LOW" in line.upper():
+                        severity = "LOW"
+                    
+                    if severity != "INFO":  # Skip info lines
+                        finding = {
+                            "type": "TLS_VULNERABILITY",
+                            "severity": severity,
+                            "endpoint": "TLS",
+                            "evidence": {"raw": line[:200]},
+                            "confidence": 0.80,
+                            "tool": "testssl",
+                        }
+                        findings.append(finding)
+        
+        return findings
+
+
 class Parser:
     """
     Main parser class that routes to appropriate tool parser
@@ -632,6 +934,11 @@ class Parser:
             "jwt_tool": JwtToolParser(),
             "commix": CommixParser(),
             "semgrep": SemgrepParser(),
+            "nikto": NiktoParser(),
+            "whatweb": WhatWebParser(),
+            "amass": AmassParser(),
+            "naabu": NaabuParser(),
+            "testssl": TestSSLParser(),
         }
         
         # Initialize tracing

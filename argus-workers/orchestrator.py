@@ -224,6 +224,87 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"katana failed: {e}")
         
+        # Execute ffuf for fuzzing/directory discovery
+        try:
+            ffuf_result = self.tool_runner.run(
+                "ffuf",
+                ["-u", f"{target}/FUZZ", "-json"],
+                timeout=180
+            )
+            if ffuf_result.get("success"):
+                parsed = self.parser.parse("ffuf", ffuf_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "ffuf")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"ffuf failed: {e}")
+        
+        # Execute amass for subdomain enumeration
+        try:
+            amass_result = self.tool_runner.run(
+                "amass",
+                ["enum", "-d", target.replace("https://", "").replace("http://", "").split("/")[0], "-json"],
+                timeout=300
+            )
+            if amass_result.get("success"):
+                parsed = self.parser.parse("amass", amass_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "amass")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"amass failed: {e}")
+        
+        # Execute naabu for port scanning
+        try:
+            target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+            naabu_result = self.tool_runner.run(
+                "naabu",
+                ["-host", target_domain, "-json"],
+                timeout=120
+            )
+            if naabu_result.get("success"):
+                parsed = self.parser.parse("naabu", naabu_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "naabu")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"naabu failed: {e}")
+        
+        # Execute whatweb for technology fingerprinting
+        try:
+            whatweb_result = self.tool_runner.run(
+                "whatweb",
+                ["--format=json", target],
+                timeout=120
+            )
+            if whatweb_result.get("success"):
+                parsed = self.parser.parse("whatweb", whatweb_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "whatweb")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"whatweb failed: {e}")
+        
+        # Execute nikto for web server scanning
+        try:
+            nikto_result = self.tool_runner.run(
+                "nikto",
+                ["-h", target, "-Format", "csv"],
+                timeout=300
+            )
+            if nikto_result.get("success"):
+                parsed = self.parser.parse("nikto", nikto_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "nikto")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"nikto failed: {e}")
+        
         # Execute gau for known URLs
         try:
             gau_result = self.tool_runner.run(
@@ -477,6 +558,28 @@ class Orchestrator:
                             all_findings.append(normalized)
             except Exception as e:
                 logger.warning(f"commix failed for {target}: {e}")
+            
+            # Execute testssl for TLS vulnerability scanning
+            try:
+                testssl_result = self.tool_runner.run(
+                    "testssl",
+                    ["--jsonfile", "/tmp/testssl.json", target],
+                    timeout=300
+                )
+                if testssl_result.get("success"):
+                    try:
+                        with open("/tmp/testssl.json", "r") as f:
+                            testssl_output = f.read()
+                        parsed = self.parser.parse("testssl", testssl_output)
+                    except:
+                        parsed = []
+                    
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "testssl")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"testssl failed for {target}: {e}")
         
         return all_findings
     
