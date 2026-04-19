@@ -1,0 +1,80 @@
+rules:
+  - id: insecure-random
+    severity: WARNING
+    languages: [python]
+    message: >-
+      random module used for security-sensitive operations (tokens, passwords).
+      Use secrets module for cryptographically secure random values.
+    metadata:
+      cwe: "CWE-338"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: random.randint(...)
+      - pattern: random.random()
+      - pattern: random.choice(...)
+
+  - id: pickle-untrusted-data
+    severity: ERROR
+    languages: [python]
+    message: >-
+      pickle.load with untrusted data. This allows arbitrary code execution.
+      Use JSON or a safe deserialization library.
+    metadata:
+      cwe: "CWE-502"
+      owasp: "A08:2021-Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: pickle.load($DATA)
+      - pattern: pickle.loads($DATA)
+      - pattern: pickle.Unpickler($FILE)
+
+  - id: yaml-unsafe-load
+    severity: ERROR
+    languages: [python]
+    message: >-
+      yaml.load without safe loader. This allows arbitrary code execution.
+      Use yaml.safe_load or yaml.load with SafeLoader.
+    metadata:
+      cwe: "CWE-502"
+      owasp: "A08:2021-Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: yaml.load($DATA)
+      - pattern: yaml.full_load($DATA)
+
+  - id: hardcoded-ip-address
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Hardcoded IP address in source. Use environment variables for environment-specific config.
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: LOW
+    pattern-either:
+      - pattern: IP_ADDRESS = "$VALUE"
+      - pattern: 'host\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"'
+
+  - id: missing-rate-limit
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Endpoint may be missing rate limiting. No @rate_limit decorator or middleware found.
+      Add rate limiting to prevent brute force and DoS.
+    metadata:
+      cwe: "CWE-770"
+      owasp: "A04:2021-Insecure Design"
+      category: security
+      confidence: LOW
+    pattern-either:
+      - pattern: '@app.post("'
+      - pattern: '@app.put("'
+      - pattern: '@app.delete("'
+      - pattern: 'app.post('
+      - pattern: 'app.put('
+      - pattern: 'router.post('

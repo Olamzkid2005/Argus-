@@ -1,0 +1,58 @@
+rules:
+  - id: ssrf-url-fetch-no-validation
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      URL fetched without validation. Attackers can target internal services, cloud metadata.
+      Always validate and restrict the URL scheme and host.
+    metadata:
+      cwe: "CWE-918"
+      owasp: "A10:2021-Server-Side Request Forgery"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: requests.get($URL)
+      - pattern: requests.post($URL)
+      - pattern: urllib.request.urlopen($URL)
+      - pattern: urllib3.PoolManager().request("GET", $URL)
+      - pattern: |
+          fetch($URL, ...)
+      - pattern: |
+          axios.get($URL)
+      - pattern: |
+          $HTTP.get($URL)
+
+  - id: ssrf-unrestricted-url-param
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      URL parameter passed directly to fetch/request. No allowlist validation.
+      Validate against allowlist and check for internal hosts.
+    metadata:
+      cwe: "CWE-918"
+      owasp: "A10:2021-Server-Side Request Forgery"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: requests.get(request.args.get("url"))
+      - pattern: requests.get(req.body.url)
+      - pattern: requests.get(req.query.url)
+      - pattern: fetch(req.params.url)
+      - pattern: axios.get(req.body.url)
+
+  - id: xxe-xml-unrestricted-parser
+    severity: ERROR
+    languages: [python, javascript]
+    message: >-
+      XML parser without XXE protection. Attackers can read local files, SSRF, DoS.
+      Use defusedxml or disable external entities.
+    metadata:
+      cwe: "CWE-611"
+      owasp: "A04:2021-Insecure Design"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: ET.parse($XML)
+      - pattern: etree.parse($XML)
+      - pattern: xml.etree.ElementTree.parse($XML)
+      - pattern: new DOMParser().parseFromString($XML)

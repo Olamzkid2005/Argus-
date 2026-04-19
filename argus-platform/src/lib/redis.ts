@@ -5,10 +5,27 @@ import crypto from "crypto";
 // Redis client for job queue
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
+// Map job types to Celery task names
+const TASK_NAME_MAP: Record<string, string> = {
+  recon: "tasks.recon.run_recon",
+  scan: "tasks.scan.run_scan",
+  analyze: "tasks.analyze.run_analysis",
+  report: "tasks.report.generate_report",
+  repo_scan: "tasks.repo_scan.run_repo_scan",
+};
+
+// Map job types to positional arg order (matching Celery task signatures)
+// recon: (engagement_id, target, budget, trace_id)
+// scan: (engagement_id, targets, budget, trace_id)
+// analyze: (engagement_id, budget, trace_id)
+// report: (engagement_id, trace_id)
+// repo_scan: (engagement_id, repo_url, budget, trace_id)
+
 export interface JobMessage {
-  type: "recon" | "scan" | "analyze" | "report";
+  type: "recon" | "scan" | "analyze" | "report" | "repo_scan";
   engagement_id: string;
   target: string;
+  repo_url?: string;
   budget: {
     max_cycles: number;
     max_depth: number;
@@ -24,9 +41,10 @@ export interface JobMessage {
 export function generateIdempotencyKey(
   engagementId: string,
   jobType: string,
-  target: string
+  target: string,
 ): string {
-  const data = `${engagementId}:${jobType}:${target}`;
+  // For repo_scan, use repo_url as target
+  const data = `${engagementId}:${jobType}:${target || ""}`;
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
@@ -55,7 +73,32 @@ export async function markJobComplete(idempotencyKey: string): Promise<void> {
 }
 
 /**
- * Push a job to the Redis queue with atomic idempotency
+ * Build positional args for a Celery task based on job type
+ */
+function buildTaskArgs(job: JobMessage): unknown[] {
+  switch (job.type) {
+    case "recon":
+      return [job.engagement_id, job.target, job.budget, job.trace_id];
+    case "scan":
+      return [job.engagement_id, [job.target], job.budget, job.trace_id];
+    case "analyze":
+      return [job.engagement_id, job.budget, job.trace_id];
+    case "report":
+      return [job.engagement_id, job.trace_id];
+    case "repo_scan":
+      return [
+        job.engagement_id,
+        job.repo_url || job.target,
+        job.budget,
+        job.trace_id,
+      ];
+    default:
+      return [job.engagement_id, job.target, job.budget, job.trace_id];
+  }
+}
+
+/**
+ * Push a job to the Celery task queue using the proper Kombu message format
  */
 export async function pushJob(job: JobMessage): Promise<string> {
   const jobId = uuidv4();
@@ -64,7 +107,7 @@ export async function pushJob(job: JobMessage): Promise<string> {
   const idempotencyKey = generateIdempotencyKey(
     job.engagement_id,
     job.type,
-    job.target
+    job.target,
   );
 
   // Use atomic SET NX (SET if Not eXists) for idempotency check-and-set
@@ -77,25 +120,52 @@ export async function pushJob(job: JobMessage): Promise<string> {
     return jobId; // Return jobId but don't push duplicate to queue
   }
 
-  const jobData = {
-    ...job,
-    job_id: jobId,
-    idempotency_key: idempotencyKey,
+  // Get the Celery task name
+  const taskName =
+    TASK_NAME_MAP[job.type] || `tasks.${job.type}.run_${job.type}`;
+
+  // Build positional args matching the Celery task signature
+  const args = buildTaskArgs(job);
+
+  // Build the Celery/Kombu message in the format Celery expects
+  // Format: [args, kwargs, embed, content_type, content_encoding]
+  // But the JSON-encoded body format Celery uses is:
+  // {"body": "<base64-encoded-json>", "content-encoding": "utf-8", "content-type": "application/json", "headers": {...}, "properties": {...}}
+  const taskBody = {
+    args: args,
+    kwargs: {},
   };
 
-  // Push to Celery queue format
-  const celeryMessage = JSON.stringify([
-    [],
-    jobData,
-    {
-      callbacks: null,
-      errbacks: null,
-      chain: null,
-      chord: null,
-    },
-  ]);
+  const taskBodyStr = JSON.stringify(taskBody);
+  const taskBodyB64 = Buffer.from(taskBodyStr).toString("base64");
 
-  const queueName = `celery:${job.type}`;
+  const celeryMessage = JSON.stringify({
+    body: taskBodyB64,
+    "content-encoding": "utf-8",
+    "content-type": "application/json",
+    headers: {
+      id: jobId,
+      task: taskName,
+      lang: "py",
+      root_id: jobId,
+      parent_id: null,
+      group: null,
+    },
+    properties: {
+      correlation_id: jobId,
+      reply_to: jobId,
+      delivery_mode: 2,
+      delivery_info: {
+        exchange: job.type,
+        routing_key: job.type,
+      },
+      priority: 0,
+      body_encoding: "base64",
+      delivery_tag: jobId,
+    },
+  });
+
+  const queueName = job.type;
 
   await redis.lpush(queueName, celeryMessage);
 

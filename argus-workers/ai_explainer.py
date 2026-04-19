@@ -43,7 +43,12 @@ class AIExplainer:
     - Describe attacker scenarios
     - Suggest framework-specific fixes
     - Provide verification steps
+    - Generate embeddings for similarity search
     """
+
+    # Embedding model configuration
+    EMBEDDING_MODEL = "text-embedding-3-small"
+    EMBEDDING_DIMENSIONS = 1536
     
     def __init__(
         self,
@@ -51,8 +56,26 @@ class AIExplainer:
         model_version: str = "gpt-4",
         temperature: float = 0.3,
         max_tokens: int = 500,
-        db_connection=None
+        db_connection=None,
+        embedding_client=None
     ):
+        """
+        Initialize AI explainer.
+        
+        Args:
+            llm_client: LLM client (OpenAI, Anthropic, etc.) for explanations
+            model_version: Model version to use
+            temperature: Temperature for generation (0.3 for factual output)
+            max_tokens: Maximum tokens in response (500 limit)
+            db_connection: Database connection for storing explanations
+            embedding_client: Separate client for embedding generation (optional)
+        """
+        self.llm_client = llm_client
+        self.model_version = model_version
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.db = db_connection
+        self.embedding_client = embedding_client
         """
         Initialize AI explainer.
         
@@ -357,3 +380,153 @@ Keep response under 500 tokens. Be factual and specific."""
         
         except Exception as e:
             logger.error(f"Failed to store explanation: {e}")
+
+    async def generate_embedding(self, text: str) -> Optional[List[float]]:
+        """
+        Generate embedding for text using OpenAI API.
+        
+        Args:
+            text: Text to generate embedding for
+            
+        Returns:
+            List of embedding dimensions, or None if unavailable
+        """
+        # Try using embedding client if provided
+        if self.embedding_client:
+            try:
+                response = await self.embedding_client.embeddings.create(
+                    model=self.EMBEDDING_MODEL,
+                    input=text
+                )
+                return response.data[0].embedding
+            except Exception as e:
+                logger.warning(f"Embedding client failed: {e}")
+        
+        # Try using main LLM client as fallback
+        if self.llm_client:
+            try:
+                # Some LLM clients support embeddings
+                response = await self.llm_client.embeddings.create(
+                    model=self.EMBEDDING_MODEL,
+                    input=text
+                )
+                return response.data[0].embedding
+            except AttributeError:
+                # Client doesn't support embeddings
+                pass
+            except Exception as e:
+                logger.warning(f"LLM client embedding failed: {e}")
+        
+        # Return placeholder embedding for testing
+        logger.info("Using placeholder embedding (no API key configured)")
+        return self._generate_placeholder_embedding(text)
+    
+    def _generate_placeholder_embedding(self, text: str) -> List[float]:
+        """
+        Generate a deterministic placeholder embedding for testing.
+        
+        Note: This is NOT a real semantic embedding - it just provides
+        consistent output for development/testing without API keys.
+        """
+        import hashlib
+        
+        # Generate deterministic "random" numbers from text hash
+        hash_bytes = hashlib.sha256(text.encode()).digest()
+        embedding = []
+        
+        for i in range(0, len(hash_bytes), 4):
+            if i + 3 < len(hash_bytes):
+                value = int.from_bytes(hash_bytes[i:i+4], 'big')
+                normalized = (value % 10000) / 10000.0
+                embedding.append(normalized)
+        
+        # Pad to required dimensions
+        while len(embedding) < self.EMBEDDING_DIMENSIONS:
+            embedding.append(0.0)
+        
+        return embedding[:self.EMBEDDING_DIMENSIONS]
+    
+    async def generate_and_store_embeddings(
+        self,
+        findings: List[Dict],
+        engagement_id: str
+    ) -> Dict[str, bool]:
+        """
+        Generate and store embeddings for findings using pgvector.
+        
+        Args:
+            findings: List of finding dictionaries
+            engagement_id: Engagement ID
+            
+        Returns:
+            Dictionary with success count and errors
+        """
+        from database.repositories.pgvector_repository import PGVectorRepository
+        
+        result = {"success": 0, "errors": 0, "skipped": 0}
+        
+        # Check if pgvector is available
+        repo = PGVectorRepository(self.db)
+        if not repo.check_pgvector_available():
+            logger.warning("pgvector not available, skipping embeddings")
+            result["skipped"] = len(findings)
+            return result
+        
+        for finding in findings:
+            try:
+                # Generate text for embedding from finding
+                text_for_embedding = self._finding_to_text(finding)
+                
+                # Generate embedding
+                embedding = await self.generate_embedding(text_for_embedding)
+                
+                if embedding is None:
+                    result["skipped"] += 1
+                    continue
+                
+                # Store embedding
+                success = repo.store_embedding(
+                    finding_id=finding.get("id", ""),
+                    engagement_id=engagement_id,
+                    embedding=embedding,
+                    text_content=text_for_embedding,
+                )
+                
+                if success:
+                    result["success"] += 1
+                else:
+                    result["errors"] += 1
+                    
+            except Exception as e:
+                logger.error(f"Failed to process embedding for {finding.get('id')}: {e}")
+                result["errors"] += 1
+        
+        logger.info(
+            f"Embedding generation complete: {result['success']} success, "
+            f"{result['errors']} errors, {result['skipped']} skipped"
+        )
+        return result
+    
+    def _finding_to_text(self, finding: Dict) -> str:
+        """
+        Convert finding to text for embedding generation.
+        
+        Args:
+            finding: Finding dictionary
+            
+        Returns:
+            Text representation
+        """
+        parts = [
+            finding.get("type", "unknown"),
+            finding.get("endpoint", ""),
+            finding.get("severity", ""),
+        ]
+        
+        evidence = finding.get("evidence", {})
+        if evidence:
+            payload = evidence.get("payload", "")
+            if payload:
+                parts.append(f"Payload: {payload}")
+        
+        return " | ".join([str(p) for p in parts if p])

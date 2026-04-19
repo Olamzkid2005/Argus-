@@ -40,6 +40,7 @@ app = Celery(
         "tasks.scan",
         "tasks.analyze",
         "tasks.report",
+        "tasks.repo_scan",
     ],
 )
 
@@ -71,16 +72,24 @@ app.conf.update(
     # Result Backend Configuration
     result_expires=3600,  # Results expire after 1 hour
     result_extended=True,  # Store additional metadata
+    result_compression="gzip",  # Compress results
     
-    # Worker Configuration
+    # Worker Configuration - Optimization
     worker_prefetch_multiplier=1,  # Fetch one task at a time
     worker_max_tasks_per_child=100,  # Restart worker after 100 tasks
     worker_disable_rate_limits=False,
+    worker_send_task_events=True,  # Enable task events
+    worker_pool="prefork",  # Use prefork pool for CPU tasks
     
     # Broker Configuration
     broker_connection_retry_on_startup=True,
     broker_connection_retry=True,
     broker_connection_max_retries=10,
+    broker_transport_options={
+        "visibility_timeout": 3600,
+        "fanout_prefix": True,
+        "fanout_patterns": True,
+    },
     
     # Task Routes (for future queue separation)
     task_routes={
@@ -88,6 +97,7 @@ app.conf.update(
         "tasks.scan.*": {"queue": "scan"},
         "tasks.analyze.*": {"queue": "analyze"},
         "tasks.report.*": {"queue": "report"},
+        "tasks.repo_scan.*": {"queue": "repo_scan"},
     },
     
     # Task Priority

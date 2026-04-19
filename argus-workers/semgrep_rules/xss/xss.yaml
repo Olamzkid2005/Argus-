@@ -1,0 +1,97 @@
+rules:
+  - id: xss-inner-html-user-data
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      innerHTML with user input allows XSS. Use textContent or sanitize with DOMPurify.
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: element.innerHTML = $USER_INPUT
+      - pattern: $ELEMENT.innerHTML += $USER_INPUT
+      - pattern: document.write($USER_INPUT)
+      - pattern: document.writeln($USER_INPUT)
+
+  - id: xss-dangerously-set-inner-html
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      dangerouslySetInnerHTML used with user input. This is a common XSS vector.
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          <div dangerouslySetInnerHTML={{ __html: $USER_INPUT }} />
+      - pattern: |
+          $COMPONENT.dangerouslySetInnerHTML = ...
+
+  - id: xss-document-write
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      document.write with user data. This is a direct XSS vector.
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: document.write($USER_INPUT)
+      - pattern: document.writeln($USER_INPUT)
+
+  - id: xss-eval-user-data
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      eval() or similar with user input. This allows arbitrary code execution.
+    metadata:
+      cwe: "CWE-94"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: eval($USER_INPUT)
+      - pattern: new Function($USER_INPUT)
+      - pattern: setTimeout($USER_INPUT)
+      - pattern: setInterval($USER_INPUT)
+      - pattern: execScript($USER_INPUT)
+
+  - id: xss-python-template-injection
+    severity: ERROR
+    languages: [python]
+    message: >-
+      User input rendered as template. This can lead to SSTI (Server-Side Template Injection).
+      Never render user input as template code.
+    metadata:
+      cwe: "CWE-94"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $TEMPLATE = $USER_INPUT
+          Template($TEMPLATE)
+      - pattern: |
+          $ENV.from_string($USER_INPUT)
+      - pattern: |
+          $TEMPLATE.render(user_input=$USER_INPUT)
+
+  - id: xss-jinja2-user-data
+    severity: ERROR
+    languages: [python]
+    message: >-
+      Jinja2 template with |safeFilter. This bypasses escaping.
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: '{{ $USER_INPUT | safe }}'
+      - pattern: '{% autoescape false %}$USER_INPUT{% endautoescape %}'

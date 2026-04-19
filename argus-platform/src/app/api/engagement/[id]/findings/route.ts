@@ -5,7 +5,7 @@ import { pool } from "@/lib/db";
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAuth();
@@ -19,7 +19,10 @@ export async function GET(
     const severity = searchParams.get("severity");
     const minConfidence = searchParams.get("minConfidence");
     const sourceTool = searchParams.get("sourceTool");
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
+    const limit = Math.min(
+      parseInt(searchParams.get("limit") || "50", 10),
+      100,
+    );
     const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     // Build query with filters
@@ -52,7 +55,10 @@ export async function GET(
     // Get total count
     let countQuery = query.replace("SELECT *", "SELECT COUNT(*)");
     countQuery = countQuery.split("ORDER BY")[0];
-    const countResult = await pool.query(countQuery, queryParams.slice(0, paramIndex - 1));
+    const countResult = await pool.query(
+      countQuery,
+      queryParams.slice(0, paramIndex - 1),
+    );
     const total = parseInt(countResult.rows[0].count, 10);
 
     // Apply pagination
@@ -77,14 +83,14 @@ export async function GET(
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
-    
+
     return NextResponse.json(
       { error: "Failed to fetch findings" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

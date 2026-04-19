@@ -9,21 +9,39 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
-function isValidPassword(password: string): { valid: boolean; message?: string } {
+function isValidPassword(password: string): {
+  valid: boolean;
+  message?: string;
+} {
   if (password.length < 8) {
-    return { valid: false, message: "Password must be at least 8 characters long" };
+    return {
+      valid: false,
+      message: "Password must be at least 8 characters long",
+    };
   }
   if (password.length > 128) {
-    return { valid: false, message: "Password must be at most 128 characters long" };
+    return {
+      valid: false,
+      message: "Password must be at most 128 characters long",
+    };
   }
   if (!/[A-Z]/.test(password)) {
-    return { valid: false, message: "Password must contain at least one uppercase letter" };
+    return {
+      valid: false,
+      message: "Password must contain at least one uppercase letter",
+    };
   }
   if (!/[a-z]/.test(password)) {
-    return { valid: false, message: "Password must contain at least one lowercase letter" };
+    return {
+      valid: false,
+      message: "Password must contain at least one lowercase letter",
+    };
   }
   if (!/[0-9]/.test(password)) {
-    return { valid: false, message: "Password must contain at least one number" };
+    return {
+      valid: false,
+      message: "Password must contain at least one number",
+    };
   }
   return { valid: true };
 }
@@ -41,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (!email || !password || !passwordConfirm || !orgName) {
       return NextResponse.json(
         { error: "All fields are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -49,7 +67,7 @@ export async function POST(request: NextRequest) {
     if (!isValidEmail(email)) {
       return NextResponse.json(
         { error: "Invalid email format" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -58,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (!passwordValidation.valid) {
       return NextResponse.json(
         { error: passwordValidation.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -66,7 +84,7 @@ export async function POST(request: NextRequest) {
     if (password !== passwordConfirm) {
       return NextResponse.json(
         { error: "Passwords do not match" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -74,21 +92,21 @@ export async function POST(request: NextRequest) {
     if (!isValidOrgName(orgName)) {
       return NextResponse.json(
         { error: "Organization name must be between 2 and 255 characters" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Check if user already exists
     const existingUser = await pool.query(
       "SELECT id FROM users WHERE email = $1",
-      [email.toLowerCase().trim()]
+      [email.toLowerCase().trim()],
     );
 
     if (existingUser.rows.length > 0) {
       // Generic error message to prevent email enumeration
       return NextResponse.json(
         { error: "Account creation failed. Please try again." },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -105,7 +123,7 @@ export async function POST(request: NextRequest) {
       const orgId = uuidv4();
       await client.query(
         "INSERT INTO organizations (id, name) VALUES ($1, $2)",
-        [orgId, orgName.trim()]
+        [orgId, orgName.trim()],
       );
 
       // Create user with admin role (first user of the org)
@@ -113,7 +131,7 @@ export async function POST(request: NextRequest) {
       await client.query(
         `INSERT INTO users (id, org_id, email, password_hash, role)
          VALUES ($1, $2, $3, $4, $5)`,
-        [userId, orgId, email.toLowerCase().trim(), passwordHash, "admin"]
+        [userId, orgId, email.toLowerCase().trim(), passwordHash, "admin"],
       );
 
       await client.query("COMMIT");
@@ -123,7 +141,7 @@ export async function POST(request: NextRequest) {
           message: "Account created successfully",
           user: { id: userId, email: email.toLowerCase().trim() },
         },
-        { status: 201 }
+        { status: 201 },
       );
     } catch (txError) {
       await client.query("ROLLBACK");
@@ -135,7 +153,7 @@ export async function POST(request: NextRequest) {
     console.error("Signup error:", error);
     return NextResponse.json(
       { error: "An error occurred during sign up. Please try again." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

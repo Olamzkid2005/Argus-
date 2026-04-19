@@ -43,6 +43,7 @@ CREATE TABLE engagements (
     authorized_scope JSONB NOT NULL, -- {domains: [], ipRanges: []}
     status VARCHAR(50) NOT NULL DEFAULT 'created', -- created, recon, awaiting_approval, scanning, analyzing, reporting, complete, failed, paused
     rate_limit_config JSONB, -- {requestsPerSecond, concurrentRequests, respectRobotsTxt, adaptiveSlowdown}
+    scan_type VARCHAR(50) NOT NULL DEFAULT 'url', -- 'url' for web app scan, 'repo' for repository scan
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP WITH TIME ZONE,

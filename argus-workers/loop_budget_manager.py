@@ -9,6 +9,21 @@ class LoopBudgetManager:
     Enforces maximum cycles, depth, and cost limits to prevent infinite loops
     """
     
+    # Tool cost estimates (in USD)
+    TOOL_COSTS = {
+        "httpx": 0.05,
+        "katana": 0.08,
+        "gau": 0.05,
+        "waybackurls": 0.03,
+        "arjun": 0.12,
+        "nuclei": 0.10,
+        "dalfox": 0.15,
+        "sqlmap": 0.20,
+        "ffuf": 0.10,
+        "jwt_tool": 0.10,
+        "commix": 0.20,
+    }
+    
     def __init__(self, engagement_id: str, config: Optional[Dict] = None):
         """
         Initialize Loop Budget Manager

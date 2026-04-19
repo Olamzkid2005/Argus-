@@ -14,7 +14,7 @@ interface State {
 
 /**
  * Error Boundary Component
- * 
+ *
  * Catches JavaScript errors in child components and displays a fallback UI
  * instead of crashing the entire application.
  */
@@ -28,8 +28,9 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: any) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
+    void errorInfo; // acknowledge param
   }
 
   handleRetry = () => {
@@ -64,7 +65,8 @@ export class ErrorBoundary extends Component<Props, State> {
               Something went wrong
             </h2>
             <p className="text-slate-400 mb-6">
-              An unexpected error occurred. Please try again or return to the dashboard.
+              An unexpected error occurred. Please try again or return to the
+              dashboard.
             </p>
             <div className="flex gap-3 justify-center">
               <button
@@ -74,7 +76,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 Try Again
               </button>
               <button
-                onClick={() => window.location.href = "/dashboard"}
+                onClick={() => (window.location.href = "/dashboard")}
                 className="px-4 py-2 border border-slate-600 text-slate-300 font-medium rounded-md hover:bg-slate-800 transition-colors"
               >
                 Go to Dashboard

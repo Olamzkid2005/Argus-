@@ -12,6 +12,7 @@
     "@auth/pg-adapter": "^1.11.2",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
+    "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
@@ -21,8 +22,10 @@
     "next-auth": "^4.24.14",
     "next-themes": "^0.4.6",
     "pg": "^8.20.0",
+    "postcss": "^8.4.49",
     "react": "^18",
     "react-dom": "^18",
+    "tailwindcss": "^3.4.17",
     "tailwind-merge": "^3.5.0",
     "uuid": "^13.0.0"
   },

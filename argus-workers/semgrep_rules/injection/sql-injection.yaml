@@ -1,0 +1,119 @@
+rules:
+  - id: sql-injection-string-concatenation
+    severity: ERROR
+    languages: [python]
+    message: >-
+      SQL query built using string concatenation/formatting. This allows SQL injection.
+      Use parameterized queries instead.
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $CURSOR.execute(f"SELECT ...{$VAR}...")
+      - pattern: |
+          $CURSOR.execute("SELECT ..." + $VAR + "...")
+      - pattern: |
+          $CURSOR.execute("SELECT ...'%s'..." % $VAR)
+      - pattern: |
+          $DB.execute(f"SELECT ...{$VAR}...")
+      - pattern: |
+          db.execute("...{}".format($VAR))
+      - pattern: |
+          $QUERY = "SELECT ..." + $VAR + "..."
+          $CURSOR.execute($QUERY)
+
+  - id: sql-injection-format-string
+    severity: ERROR
+    languages: [python]
+    message: >-
+      SQL query built using format string. Use parameterized queries.
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $CURSOR.execute("SELECT ...%s..." % $VAR, ...)
+      - pattern: |
+          $QUERY = "SELECT ...$VAR..."
+          $DB.execute($QUERY)
+
+  - id: nosql-injection-mongodb
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      MongoDB query without input type validation. Attackers can inject operators like $gt, $ne.
+      Validate input is a string before using in queries.
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          db.$COLLECTION.find_one({ $FIELD: $INPUT, ... })
+      - pattern: |
+          db.$COLLECTION.find({ $FIELD: $INPUT, ... })
+      - pattern: |
+          collection.findOne({ $FIELD: $INPUT })
+      - patterns:
+          - pattern: $DB.$COLLECTION.find($WHERE)
+          - pattern-inside: |
+              $WHERE = $INPUT
+          - pattern-inside: |
+              import ...
+
+  - id: sql-injection-javascript
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      SQL query built with string concatenation. Use parameterized queries.
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $DB.query(`SELECT ...${...}...`)
+      - pattern: |
+          $DB.execute(`SELECT ...${...}...`)
+      - pattern: |
+          $DB.all("SELECT ..." + $VAR + "...")
+
+  - id: sql-injection-ruby
+    severity: ERROR
+    languages: [ruby]
+    message: >-
+      SQL query with string interpolation. Use parameterized queries.
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $CONN.execute("...#{...}...")
+      - pattern: |
+          $DB.execute("...#{$VAR}...")
+
+  - id: sql-injection-java
+    severity: ERROR
+    languages: [java]
+    message: >-
+      SQL query built with string concatenation. Use prepared statements.
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021-Injection"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          $STMT = "SELECT ... " + $VAR + " ..."
+          $CONN.createStatement($STMT)
+      - pattern: |
+          $STMT.executeQuery("SELECT ... " + $VAR)

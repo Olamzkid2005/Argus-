@@ -1,12 +1,48 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Zap, ShieldCheck, Cpu, Network, ArrowRight } from "lucide-react";
+import {
+  Zap,
+  ShieldCheck,
+  Cpu,
+  Network,
+  ArrowRight,
+  Loader2,
+} from "lucide-react";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 export default function Home() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Wait for session to load
+    if (status === "loading") {
+      return;
+    }
+    setLoading(false);
+
+    // If not logged in, show landing page with sign-in prompt
+    // If logged in, redirect to dashboard
+    if (session) {
+      router.push("/dashboard");
+    }
+  }, [session, status, router]);
+
+  if (loading || status === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center py-20 px-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
@@ -30,23 +66,25 @@ export default function Home() {
             </motion.div>
 
             <h1 className="text-6xl md:text-8xl font-extrabold tracking-tighter mb-6 bg-gradient-to-br from-foreground to-muted-foreground bg-clip-text text-transparent">
-              Security at the <br /> 
+              Security at the <br />
               <span className="text-primary italic">Speed of Thought</span>
             </h1>
 
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 text-balance">
-              Argus transforms passive scanning into autonomous intelligence. 
-              Our AI orchestrates complex attack chains to identify critical risks before they exist.
+              Argus transforms passive scanning into autonomous intelligence.
+              Our AI orchestrates complex attack chains to identify critical
+              risks before they exist.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a
-                href="/dashboard"
+              <button
+                onClick={() => signIn()}
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-lg hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] transition-all hover:-translate-y-1"
               >
-                Launch Dashboard
+                <ShieldCheck className="h-5 w-5" />
+                Sign In to Launch
                 <ArrowRight className="h-5 w-5" />
-              </a>
+              </button>
               <a
                 href="/docs"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-secondary text-secondary-foreground rounded-2xl font-bold text-lg border border-border hover:bg-muted transition-all"
@@ -57,11 +95,26 @@ export default function Home() {
 
             <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8">
               {[
-                { icon: ShieldCheck, title: "Autonomous Recon", desc: "Passive and active enumeration discovery at scale." },
-                { icon: Cpu, title: "AI Intelligence", desc: "Gathers findings and chains them into exploit paths." },
-                { icon: Network, title: "Attack Graphs", desc: "Visualizes the blast radius of every vulnerability." }
+                {
+                  icon: ShieldCheck,
+                  title: "Autonomous Recon",
+                  desc: "Passive and active enumeration discovery at scale.",
+                },
+                {
+                  icon: Cpu,
+                  title: "AI Intelligence",
+                  desc: "Gathers findings and chains them into exploit paths.",
+                },
+                {
+                  icon: Network,
+                  title: "Attack Graphs",
+                  desc: "Visualizes the blast radius of every vulnerability.",
+                },
               ].map((item, i) => (
-                <div key={i} className="flex flex-col items-center text-center p-6">
+                <div
+                  key={i}
+                  className="flex flex-col items-center text-center p-6"
+                >
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 border border-primary/10">
                     <item.icon className="h-6 w-6 text-primary" />
                   </div>

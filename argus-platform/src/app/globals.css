@@ -79,9 +79,13 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-image: 
+    background-image:
       radial-gradient(circle at 0% 0%, var(--argus-indigo) 4%, transparent 35%),
-      radial-gradient(circle at 100% 100%, var(--argus-magenta) 4%, transparent 35%);
+      radial-gradient(
+        circle at 100% 100%,
+        var(--argus-magenta) 4%,
+        transparent 35%
+      );
     background-attachment: fixed;
   }
 }
@@ -90,7 +94,7 @@
   .prism-glass {
     @apply bg-card/10 backdrop-blur-xl border border-white/10 shadow-2xl;
   }
-  
+
   [data-theme="light"] .prism-glass {
     @apply bg-white/70 border-black/5 shadow-lg;
   }
@@ -100,7 +104,7 @@
   }
 
   .prism-scanner::before {
-    content: '';
-    @apply absolute inset-0 rounded-full border-2 border-transparent border-t-argus-cyan border-r-argus-indigo animate-[spin_3s_cubic-bezier(0.5,0,0.5,1)_infinite];
+    content: "";
+    @apply absolute inset-0 rounded-full border-2 border-transparent border-t-[#06b6d4] border-r-[#6366f1] animate-[spin_3s_cubic-bezier(0.5,0,0.5,1)_infinite];
   }
 }

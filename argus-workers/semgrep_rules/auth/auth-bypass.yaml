@@ -1,0 +1,98 @@
+rules:
+  - id: idor-missing-ownership-check
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      Resource accessed without ownership verification. This allows IDOR (Insecure Direct Object Reference).
+      Always verify the user owns or has permission to access the resource.
+    metadata:
+      cwe: "CWE-639"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          @app.get("/api/$RESOURCE/{id}")
+          def get_$RESOURCE(id):
+            $RES = db.get($RESOURCE, id)
+            return $RES
+      - pattern: |
+          app.get("/api/$RESOURCE/:id", (req, res) => {
+            const $RES = db.$RESOURCE.find(id);
+          });
+
+  - id: auth-missing-role-check
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      Admin/action endpoint checks authentication but not authorization.
+      Use role-based access control (RBAC).
+    metadata:
+      cwe: "CWE-862"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          @app.delete("/api/admin/$RESOURCE/{id}")
+          def delete_$RESOURCE(user = Depends(get_current_user)):
+            # No role check
+            db.delete($RESOURCE, id)
+      - pattern: |
+          app.get("/api/admin/$RESOURCE", (req, res) => {
+            # No admin check
+          });
+
+  - id: oauth-state-missing
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      OAuth flow missing state parameter. This enables CSRF attacks.
+      Generate and validate state parameter.
+    metadata:
+      cwe: "CWE-352"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          redirect(f"https://accounts.google.com/oauth?client_id=...")
+      - pattern: |
+          redirect(`https://oauth.provider.com/auth?...`)
+      - pattern: |
+          return response.redirect("$OAUTH_URL");
+
+  - id: session-fixation
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      Session ID not regenerated on login. This enables session fixation attacks.
+      Regenerate session ID after authentication.
+    metadata:
+      cwe: "CWE-384"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          @app.post("/login")
+          def login():
+            session["user_id"] = user.id
+      - pattern: |
+          app.post("/login", (req, res) => {
+            req.session.user = user;
+          });
+
+  - id: missing-access-control-header
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Missing security headers. Add X-Frame-Options, X-Content-Type-Options, etc.
+    metadata:
+      cwe: "CWE-346"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: LOW
+    pattern-either:
+      - pattern: response.headers["X-Frame-Options"]
+      - pattern: res.setHeader("X-Frame-Options")

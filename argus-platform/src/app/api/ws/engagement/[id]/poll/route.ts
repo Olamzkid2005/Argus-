@@ -1,9 +1,9 @@
 /**
  * Polling Endpoint for Real-Time Engagement Updates
- * 
+ *
  * This endpoint provides a polling-based fallback for WebSocket functionality
  * when native WebSocket is not available.
- * 
+ *
  * Requirements: 31.1, 31.2, 31.3, 31.4
  */
 
@@ -25,7 +25,7 @@ const MAX_EVENTS_PER_ENGAGEMENT = 100;
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     // Verify authentication
@@ -82,14 +82,14 @@ export async function GET(
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
-    
+
     return NextResponse.json(
       { error: "Failed to fetch events" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -99,11 +99,11 @@ export async function GET(
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id: engagementId } = await params;
-    
+
     // Verify API key for worker authentication
     const apiKey = req.headers.get("x-api-key");
     const expectedApiKey = process.env.WORKER_API_KEY;
@@ -114,12 +114,12 @@ export async function POST(
 
     // Parse event from request body
     const event = (await req.json()) as WebSocketEvent;
-    
+
     // Validate event
     if (!event.type || !event.timestamp) {
       return NextResponse.json(
         { error: "Invalid event format" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -149,10 +149,10 @@ export async function POST(
     });
   } catch (error: unknown) {
     console.error("Event publish error:", error);
-    
+
     return NextResponse.json(
       { error: "Failed to publish event" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

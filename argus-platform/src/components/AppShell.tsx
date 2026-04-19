@@ -9,7 +9,7 @@ interface Props {
 
 /**
  * Client-side layout wrapper with error boundary
- * 
+ *
  * This component wraps the application's main content with an error boundary
  * to prevent the entire app from crashing if a component errors.
  */

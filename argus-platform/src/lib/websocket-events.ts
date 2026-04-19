@@ -1,10 +1,10 @@
 /**
  * WebSocket Event Types for Real-Time Updates
- * 
+ *
  * Requirements: 31.2, 31.3, 31.4
  */
 
-export type WebSocketEventType = 
+export type WebSocketEventType =
   | "finding_discovered"
   | "state_transition"
   | "rate_limit_event"
@@ -116,7 +116,7 @@ export const WEBSOCKET_CHANNELS = {
  */
 export async function publishWebSocketEvent(
   redis: import("ioredis").default,
-  event: WebSocketEvent
+  event: WebSocketEvent,
 ): Promise<void> {
   const channel = WEBSOCKET_CHANNELS.engagement(event.engagement_id);
   const message = JSON.stringify(event);

@@ -22,6 +22,11 @@ from websocket_events import (
     WebSocketEventPublisher,
     get_websocket_publisher,
 )
+from tools.tool_runner import ToolRunner
+from parsers.parser import Parser
+from parsers.normalizer import FindingNormalizer
+from database.repositories.finding_repository import FindingRepository
+from database.repositories.engagement_repository import EngagementRepository
 
 
 class EngagementTimeoutError(Exception):
@@ -58,6 +63,13 @@ class Orchestrator:
         
         # Initialize WebSocket event publisher
         self.ws_publisher = get_websocket_publisher()
+        
+        # Initialize execution components
+        self.tool_runner = ToolRunner(connection_string=db_conn)
+        self.parser = Parser(connection_string=db_conn)
+        self.normalizer = FindingNormalizer()
+        self.finding_repo = FindingRepository(db_conn) if db_conn else None
+        self.engagement_repo = EngagementRepository(db_conn) if db_conn else None
     
     def run(self, job: Dict) -> Dict:
         """
@@ -98,6 +110,8 @@ class Orchestrator:
                 return self.run_analysis(job)
             elif job_type == "report":
                 return self.run_reporting(job)
+            elif job_type == "repo_scan":
+                return self.run_repo_scan(job)
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
     
@@ -107,28 +121,47 @@ class Orchestrator:
         
         Args:
             job: Job dictionary
-            
+        
         Returns:
             Recon results
         """
         self._check_timeout()
         
+        target = job.get("target")
+        
         # Publish job started event
         self.ws_publisher.publish_job_started(
             engagement_id=self.engagement_id,
             job_type="recon",
-            target=job.get("target")
+            target=target
         )
         
         # Log job started
         self.logger.log_job_started(
             job_type="recon",
             engagement_id=self.engagement_id,
-            target=job.get("target")
+            target=target
         )
         
-        # Execute reconnaissance tools (httpx, nuclei)
-        # This is a placeholder - actual implementation would call ToolExecutor
+        # Execute reconnaissance tools
+        findings = self._execute_recon_tools(target, job.get("budget", {}))
+        
+        # Save findings to database
+        findings_count = len(findings)
+        if self.finding_repo and findings:
+            try:
+                for finding in findings:
+                    self.finding_repo.create_finding(
+                        engagement_id=self.engagement_id,
+                        finding_type=finding.get("type", "UNKNOWN"),
+                        severity=finding.get("severity", "INFO"),
+                        endpoint=finding.get("endpoint", ""),
+                        evidence=finding.get("evidence", {}),
+                        confidence=finding.get("confidence", 0.5),
+                        source_tool=finding.get("tool", "unknown"),
+                    )
+            except Exception as e:
+                logger.error(f"Failed to save findings: {e}")
         
         # Publish state transition event
         self.ws_publisher.publish_state_transition(
@@ -141,10 +174,114 @@ class Orchestrator:
         return {
             "phase": "recon",
             "status": "completed",
-            "findings_count": 0,
+            "findings_count": findings_count,
             "next_state": "awaiting_approval",
             "trace_id": get_trace_id(),
         }
+    
+    def _execute_recon_tools(self, target: str, budget: Dict) -> List[Dict]:
+        """
+        Execute reconnaissance tools against target.
+        
+        Args:
+            target: Target URL
+            budget: Budget configuration
+            
+        Returns:
+            List of findings
+        """
+        all_findings = []
+        
+        # Execute httpx for endpoint discovery
+        try:
+            httpx_result = self.tool_runner.run(
+                "httpx",
+                ["-u", target, "-json", "-silent"],
+                timeout=60
+            )
+            if httpx_result.get("success"):
+                parsed = self.parser.parse("httpx", httpx_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "httpx")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"httpx failed: {e}")
+        
+        # Execute katana for web crawling
+        try:
+            katana_result = self.tool_runner.run(
+                "katana",
+                ["-u", target, "-jsonl", "-silent", "-d", "3"],
+                timeout=120
+            )
+            if katana_result.get("success"):
+                parsed = self.parser.parse("katana", katana_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "katana")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"katana failed: {e}")
+        
+        # Execute gau for known URLs
+        try:
+            gau_result = self.tool_runner.run(
+                "gau",
+                [target, "--json"],
+                timeout=180
+            )
+            if gau_result.get("success"):
+                parsed = self.parser.parse("gau", gau_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "gau")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"gau failed: {e}")
+        
+        # Execute waybackurls for historical URLs
+        try:
+            wayback_result = self.tool_runner.run(
+                "waybackurls",
+                [target],
+                timeout=120
+            )
+            if wayback_result.get("success"):
+                parsed = self.parser.parse("waybackurls", wayback_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "waybackurls")
+                    if normalized:
+                        all_findings.append(normalized)
+        except Exception as e:
+            logger.warning(f"waybackurls failed: {e}")
+        
+        return all_findings
+    
+    def _normalize_finding(self, raw_finding: Dict, tool: str) -> Optional[Dict]:
+        """
+        Normalize a raw finding to VulnerabilityFinding schema.
+        
+        Args:
+            raw_finding: Raw finding from parser
+            tool: Tool name
+            
+        Returns:
+            Normalized finding, or None if invalid
+        """
+        try:
+            finding = self.normalizer.normalize(raw_finding, tool)
+            return {
+                "type": finding.type,
+                "severity": finding.severity.value if hasattr(finding.severity, 'value') else finding.severity,
+                "endpoint": finding.endpoint,
+                "evidence": finding.evidence,
+                "confidence": finding.confidence,
+                "source_tool": tool,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to normalize finding: {e}")
+            return None
     
     def run_scan(self, job: Dict) -> Dict:
         """
@@ -152,28 +289,47 @@ class Orchestrator:
         
         Args:
             job: Job dictionary
-            
+        
         Returns:
             Scan results
         """
         self._check_timeout()
         
+        targets = job.get("targets", [])
+        
         # Publish job started event
         self.ws_publisher.publish_job_started(
             engagement_id=self.engagement_id,
             job_type="scan",
-            target=str(job.get("targets", []))
+            target=str(targets)
         )
         
         # Log job started
         self.logger.log_job_started(
             job_type="scan",
             engagement_id=self.engagement_id,
-            target=str(job.get("targets", []))
+            target=str(targets)
         )
         
-        # Execute scanning tools based on Intelligence Engine actions
-        # This is a placeholder - actual implementation would call ToolExecutor
+        # Execute scanning tools against targets
+        findings = self._execute_scan_tools(targets, job.get("budget", {}))
+        
+        # Save findings to database
+        findings_count = len(findings)
+        if self.finding_repo and findings:
+            try:
+                for finding in findings:
+                    self.finding_repo.create_finding(
+                        engagement_id=self.engagement_id,
+                        finding_type=finding.get("type", "UNKNOWN"),
+                        severity=finding.get("severity", "INFO"),
+                        endpoint=finding.get("endpoint", ""),
+                        evidence=finding.get("evidence", {}),
+                        confidence=finding.get("confidence", 0.5),
+                        source_tool=finding.get("source_tool", "unknown"),
+                    )
+            except Exception as e:
+                logger.error(f"Failed to save findings: {e}")
         
         # Publish state transition event
         self.ws_publisher.publish_state_transition(
@@ -186,10 +342,143 @@ class Orchestrator:
         return {
             "phase": "scan",
             "status": "completed",
-            "findings_count": 0,
+            "findings_count": findings_count,
             "next_state": "analyzing",
             "trace_id": get_trace_id(),
         }
+    
+    def _execute_scan_tools(self, targets: List[str], budget: Dict) -> List[Dict]:
+        """
+        Execute scanning tools against targets.
+        
+        Args:
+            targets: List of target URLs
+            budget: Budget configuration
+            
+        Returns:
+            List of findings
+        """
+        all_findings = []
+        
+        for target in targets:
+            # Execute Nuclei for vulnerability scanning
+            try:
+                nuclei_result = self.tool_runner.run(
+                    "nuclei",
+                    ["-u", target, "-json", "-silent"],
+                    timeout=300
+                )
+                if nuclei_result.get("success"):
+                    parsed = self.parser.parse("nuclei", nuclei_result.get("stdout", ""))
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "nuclei")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"nuclei failed for {target}: {e}")
+            
+            # Execute dalfox for XSS
+            try:
+                dalfox_result = self.tool_runner.run(
+                    "dalfox",
+                    ["url", target, "-json"],
+                    timeout=300
+                )
+                if dalfox_result.get("success"):
+                    parsed = self.parser.parse("dalfox", dalfox_result.get("stdout", ""))
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "dalfox")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"dalfox failed for {target}: {e}")
+            
+            # Execute sqlmap for SQL injection
+            try:
+                sqlmap_result = self.tool_runner.run(
+                    "sqlmap",
+                    ["-u", target, "--batch", "--json-output", "/tmp/sqlmap.json"],
+                    timeout=300
+                )
+                if sqlmap_result.get("success"):
+                    # Read JSON output if available
+                    import json
+                    try:
+                        with open("/tmp/sqlmap.json", "r") as f:
+                            sqlmap_output = f.read()
+                        parsed = self.parser.parse("sqlmap", sqlmap_output)
+                    except:
+                        parsed = []
+                    
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "sqlmap")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"sqlmap failed for {target}: {e}")
+            
+            # Execute arjun for parameter discovery
+            try:
+                arjun_result = self.tool_runner.run(
+                    "arjun",
+                    ["-u", target, "-m", "GET", "-o", "/tmp/arjun.json", "-t", "20"],
+                    timeout=180
+                )
+                if arjun_result.get("success"):
+                    try:
+                        with open("/tmp/arjun.json", "r") as f:
+                            arjun_output = f.read()
+                        parsed = self.parser.parse("arjun", arjun_output)
+                    except:
+                        parsed = []
+                    
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "arjun")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"arjun failed for {target}: {e}")
+            
+            # Execute jwt_tool for JWT vulnerability testing
+            try:
+                # First check if target has JWT tokens
+                jwt_result = self.tool_runner.run(
+                    "jwt_tool",
+                    ["-u", target, "-C", "-d"],
+                    timeout=120
+                )
+                if jwt_result.get("success"):
+                    parsed = self.parser.parse("jwt_tool", jwt_result.get("stdout", ""))
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "jwt_tool")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"jwt_tool failed for {target}: {e}")
+            
+            # Execute commix for command injection testing
+            try:
+                commix_result = self.tool_runner.run(
+                    "commix",
+                    ["--url", target, "--batch", "--json-output", "/tmp/commix.json"],
+                    timeout=300
+                )
+                if commix_result.get("success"):
+                    try:
+                        with open("/tmp/commix.json", "r") as f:
+                            commix_output = f.read()
+                        parsed = self.parser.parse("commix", commix_output)
+                    except:
+                        parsed = []
+                    
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "commix")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"commix failed for {target}: {e}")
+        
+        return all_findings
     
     def run_analysis(self, job: Dict) -> Dict:
         """
@@ -197,7 +486,7 @@ class Orchestrator:
         
         Args:
             job: Job dictionary
-            
+        
         Returns:
             Analysis results
         """
@@ -215,24 +504,64 @@ class Orchestrator:
             engagement_id=self.engagement_id
         )
         
-        # Create decision snapshot
-        # Call Intelligence Engine evaluate()
-        # Check Loop Budget can_continue()
-        # Generate next actions or transition to reporting
+        # Get findings from database
+        findings = []
+        if self.finding_repo:
+            try:
+                findings = self.finding_repo.get_findings_by_engagement(self.engagement_id)
+                findings = [f.to_dict() for f in findings]
+            except Exception as e:
+                logger.warning(f"Failed to load findings: {e}")
+        
+        # Import Intelligence Engine and Loop Budget
+        from intelligence_engine import IntelligenceEngine
+        from loop_budget_manager import LoopBudgetManager
+        from snapshot_manager import SnapshotManager
+        
+        # Create snapshot
+        db_conn = os.getenv("DATABASE_URL")
+        snapshot_mgr = SnapshotManager(db_conn)
+        snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
+        
+        # Initialize budget manager
+        budget_config = job.get("budget", {})
+        budget_mgr = LoopBudgetManager(self.engagement_id, budget_config)
+        
+        # Evaluate with Intelligence Engine
+        engine = IntelligenceEngine(db_conn)
+        snapshot["findings"] = findings
+        snapshot["loop_budget"] = budget_mgr.to_dict()
+        
+        evaluation = engine.evaluate(snapshot)
+        
+        # Extract actions
+        actions = evaluation.get("actions", [])
+        
+        # Check budget for continuation
+        next_state = "reporting"
+        for action in actions:
+            can_continue, reason = budget_mgr.can_continue(action)
+            if can_continue:
+                budget_mgr.consume(action)
+                next_state = "recon"  # Loop back for more scanning
+            else:
+                logger.info(f"Budget exhausted: {reason}")
         
         # Publish state transition event
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
             from_state="analyzing",
-            to_state="reporting",
-            reason="Analysis completed"
+            to_state=next_state,
+            reason="Analysis completed" if next_state == "reporting" else "Additional targets discovered"
         )
         
         return {
             "phase": "analyze",
             "status": "completed",
-            "actions": [],
-            "next_state": "reporting",
+            "actions": actions,
+            "scored_findings": evaluation.get("scored_findings", []),
+            "reasoning": evaluation.get("reasoning", ""),
+            "next_state": next_state,
             "trace_id": get_trace_id(),
         }
     
@@ -333,3 +662,173 @@ class Orchestrator:
         """
         elapsed = self.get_elapsed_time()
         return max(0.0, self.HARD_TIMEOUT_SECONDS - elapsed)
+    
+    def run_repo_scan(self, job: Dict) -> Dict:
+        """
+        Execute repository scanning phase (Semgrep static analysis)
+        
+        Args:
+            job: Job dictionary with repo_url
+            
+        Returns:
+            Repo scan results
+        """
+        self._check_timeout()
+        
+        repo_url = job.get("repo_url")
+        
+        # Publish job started event
+        self.ws_publisher.publish_job_started(
+            engagement_id=self.engagement_id,
+            job_type="repo_scan",
+            target=repo_url
+        )
+        
+        # Log job started
+        self.logger.log_job_started(
+            job_type="repo_scan",
+            engagement_id=self.engagement_id,
+            target=repo_url
+        )
+        
+        # Execute repository scan
+        findings = self._execute_repo_scan(repo_url, job.get("budget", {}))
+        
+        # Save findings to database
+        findings_count = len(findings)
+        if self.finding_repo and findings:
+            try:
+                for finding in findings:
+                    self.finding_repo.create_finding(
+                        engagement_id=self.engagement_id,
+                        finding_type=finding.get("type", "UNKNOWN"),
+                        severity=finding.get("severity", "INFO"),
+                        endpoint=finding.get("endpoint", ""),
+                        evidence=finding.get("evidence", {}),
+                        confidence=finding.get("confidence", 0.5),
+                        source_tool=finding.get("tool", "semgrep"),
+                    )
+            except Exception as e:
+                logger.error(f"Failed to save repo findings: {e}")
+        
+        # Publish state transition event
+        self.ws_publisher.publish_state_transition(
+            engagement_id=self.engagement_id,
+            from_state="created",
+            to_state="awaiting_approval",
+            reason="Repository scan completed"
+        )
+        
+        return {
+            "phase": "repo_scan",
+            "status": "completed",
+            "findings_count": findings_count,
+            "next_state": "awaiting_approval",
+            "trace_id": get_trace_id(),
+        }
+    
+    def _execute_repo_scan(self, repo_url: str, budget: Dict) -> List[Dict]:
+        """
+        Execute Semgrep scan on a repository using vibe-security-ultra custom rules.
+        
+        Args:
+            repo_url: GitHub/GitLab repo URL
+            budget: Budget configuration
+            
+        Returns:
+            List of code vulnerability findings
+        """
+        import tempfile
+        import shutil
+        import subprocess
+        import os
+        
+        all_findings = []
+        
+        # Get path to custom semgrep rules
+        rules_dir = os.path.join(os.path.dirname(__file__), "semgrep_rules")
+        
+        temp_dir = tempfile.mkdtemp(prefix="argus_repo_scan_")
+        
+        try:
+            # Clone repository
+            clone_result = subprocess.run(
+                ["git", "clone", "--depth", "1", repo_url, temp_dir],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if clone_result.returncode != 0:
+                logger.warning(f"Failed to clone repo {repo_url}: {clone_result.stderr}")
+                return []
+            
+            # First run with custom rules (vibe-security-ultra)
+            custom_rules_path = os.path.join(rules_dir, "secrets")
+            auto_rules_path = os.path.join(rules_dir, "auth")
+            injection_rules_path = os.path.join(rules_dir, "injection")
+            xss_rules_path = os.path.join(rules_dir, "xss")
+            ssrf_rules_path = os.path.join(rules_dir, "ssrf")
+            csrf_rules_path = os.path.join(rules_dir, "csrf")
+            auto_rules_path2 = os.path.join(rules_dir, "auto")
+            auth_rules_path = os.path.join(rules_dir, "auth")
+            
+            # Run semgrep with custom rules
+            custom_configs = []
+            for config_dir in [custom_rules_path, auto_rules_path, injection_rules_path, 
+                           xss_rules_path, ssrf_rules_path, csrf_rules_path, auto_rules_path2, auth_rules_path]:
+                if os.path.isdir(config_dir):
+                    custom_configs.append(config_dir)
+            
+            # Run with auto rules as baseline
+            semgrep_result = self.tool_runner.run(
+                "semgrep",
+                ["--json", "--config", "auto", temp_dir],
+                timeout=300
+            )
+            
+            if semgrep_result.get("success"):
+                parsed = self.parser.parse(
+                    "semgrep", 
+                    semgrep_result.get("stdout", "")
+                )
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "semgrep")
+                    if normalized:
+                        all_findings.append(normalized)
+            else:
+                logger.warning(f"Semgrep auto scan failed: {semgrep_result.get('stderr')}")
+            
+            # Also try custom rules if available
+            if custom_configs:
+                for config in custom_configs[:3]:  # Limit to 3 rule sets to avoid timeout
+                    try:
+                        semgrep_result = self.tool_runner.run(
+                            "semgrep",
+                            ["--json", "--config", config, temp_dir],
+                            timeout=180
+                        )
+                        if semgrep_result.get("success"):
+                            parsed = self.parser.parse(
+                                "semgrep", 
+                                semgrep_result.get("stdout", "")
+                            )
+                            for p in parsed:
+                                normalized = self._normalize_finding(p, "semgrep")
+                                if normalized:
+                                    # Avoid duplicates
+                                    if not any(n.get("endpoint") == normalized.get("endpoint") for n in all_findings):
+                                        all_findings.append(normalized)
+                    except Exception as e:
+                        logger.warning(f"Semgrep custom rules scan failed for {config}: {e}")
+                
+        except Exception as e:
+            logger.warning(f"Repo scan failed: {e}")
+        finally:
+            # Cleanup temp directory
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+        
+        return all_findings

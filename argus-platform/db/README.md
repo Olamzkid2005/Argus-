@@ -22,6 +22,7 @@ docker-compose exec postgres psql -U argus_user -d argus_pentest -c "\dt"
 The schema will be automatically applied when the container starts.
 
 **Connection Details:**
+
 - Host: `localhost`
 - Port: `5432`
 - Database: `argus_pentest`
@@ -50,6 +51,7 @@ cd argus-platform/db
 ```
 
 The setup script will:
+
 - Create the `argus_pentest` database
 - Create the `argus_user` user
 - Apply the schema (tables, indexes, functions)
@@ -153,13 +155,13 @@ psql postgresql://argus_user:changeme@localhost:5432/argus_pentest -c "SELECT ve
 ### Using Node.js
 
 ```javascript
-const { Pool } = require('pg');
+const { Pool } = require("pg");
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
 });
 
-pool.query('SELECT NOW()', (err, res) => {
+pool.query("SELECT NOW()", (err, res) => {
   console.log(err ? err : res.rows[0]);
   pool.end();
 });
@@ -257,6 +259,7 @@ After setting up the database:
 4. Access the application at `http://localhost:3000`
 
 For more detailed information, see:
+
 - [Database Setup Guide](../../docs/database-setup.md)
 - [Design Document](.kiro/specs/argus-pentest-platform/design.md)
 - [Requirements Document](.kiro/specs/argus-pentest-platform/requirements.md)

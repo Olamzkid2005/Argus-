@@ -53,7 +53,7 @@ export const authOptions: NextAuthOptions = {
           // Query user from database
           const result = await pool.query(
             "SELECT id, email, password_hash, org_id, role FROM users WHERE email = $1",
-            [credentials.email]
+            [credentials.email],
           );
 
           if (result.rows.length === 0) {
@@ -65,11 +65,23 @@ export const authOptions: NextAuthOptions = {
           // Verify password
           const isValid = await bcrypt.compare(
             credentials.password,
-            user.password_hash
+            user.password_hash,
           );
 
           if (!isValid) {
             return null;
+          }
+
+          // Check if 2FA is enabled
+          if (user.two_factor_enabled) {
+            // Return partial user - require 2FA code
+            return {
+              id: user.id,
+              email: user.email,
+              orgId: user.org_id,
+              role: user.role,
+              requires2FA: true,
+            };
           }
 
           // Return user object (will be encoded in JWT)
@@ -91,7 +103,23 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
+      // Audit log the sign in attempt
+      try {
+        const { logAudit } = await import("@/lib/audit");
+
+        await logAudit({
+          action:
+            account?.provider === "credentials" ? "user_login" : "user_login",
+          userId: user.id,
+          metadata: {
+            provider: account?.provider,
+            email: user.email,
+          },
+        });
+      } catch (auditError) {
+        console.error("Audit logging error:", auditError);
+      }
       // Handle OAuth sign-ins (Google, GitHub)
       if (account?.provider === "google" || account?.provider === "github") {
         try {
@@ -103,7 +131,7 @@ export const authOptions: NextAuthOptions = {
           // Check if user exists
           const existingUser = await pool.query(
             "SELECT id, org_id, role FROM users WHERE email = $1",
-            [email.toLowerCase()]
+            [email.toLowerCase()],
           );
 
           if (existingUser.rows.length > 0) {
@@ -129,7 +157,7 @@ export const authOptions: NextAuthOptions = {
             const orgId = uuidv4();
             await client.query(
               "INSERT INTO organizations (id, name) VALUES ($1, $2)",
-              [orgId, orgName]
+              [orgId, orgName],
             );
 
             // Create user as admin of their new org
@@ -137,7 +165,7 @@ export const authOptions: NextAuthOptions = {
             await client.query(
               `INSERT INTO users (id, org_id, email, name, role)
                VALUES ($1, $2, $3, $4, $5)`,
-              [userId, orgId, email.toLowerCase(), user.name ?? null, "admin"]
+              [userId, orgId, email.toLowerCase(), user.name ?? null, "admin"],
             );
 
             await client.query("COMMIT");
@@ -164,10 +192,15 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       // Initial sign in - attach user data to token
       if (user) {
-        const oauthUser = user as OAuthUser;
+        const oauthUser = user as OAuthUser & { requires2FA?: boolean };
         token.id = oauthUser.id ?? token.id;
         token.orgId = oauthUser.orgId ?? token.orgId;
         token.role = oauthUser.role ?? token.role;
+
+        // Mark if 2FA verification is pending
+        if (oauthUser.requires2FA) {
+          token.requires2FA = true;
+        }
       }
       // Handle session updates
       if (trigger === "update" && session) {
@@ -179,10 +212,20 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        const t = token as JWTtoken;
-        (session.user as { id?: string; orgId?: string; role?: string }).id = t.id;
-        (session.user as { id?: string; orgId?: string; role?: string }).orgId = t.orgId;
-        (session.user as { id?: string; orgId?: string; role?: string }).role = t.role;
+        const t = token as JWTtoken & { requires2FA?: boolean };
+        (session.user as { id?: string; orgId?: string; role?: string }).id =
+          t.id;
+        (session.user as { id?: string; orgId?: string; role?: string }).orgId =
+          t.orgId;
+        (session.user as { id?: string; orgId?: string; role?: string }).role =
+          t.role;
+
+        // If 2FA is required but not verified, deny access
+        if (t.requires2FA) {
+          (
+            session.user as { requires2FAVerification?: boolean }
+          ).requires2FAVerification = true;
+        }
       }
       return session;
     },

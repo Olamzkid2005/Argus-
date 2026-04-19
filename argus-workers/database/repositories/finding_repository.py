@@ -43,6 +43,18 @@ class FindingRepository(BaseRepository):
         finally:
             cursor.close()
             conn.close()
+    
+    def get_findings_by_engagement(self, engagement_id: str) -> List[Dict]:
+        """
+        Get all findings for an engagement (alias for find_by_engagement).
+        
+        Args:
+            engagement_id: Engagement ID
+            
+        Returns:
+            List of finding dictionaries
+        """
+        return self.find_by_engagement(engagement_id)
 
     def find_by_severity(
         self,

@@ -5,7 +5,7 @@ import { pool } from "@/lib/db";
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAuth();
@@ -21,13 +21,13 @@ export async function GET(
        FROM engagements e
        LEFT JOIN loop_budgets lb ON e.id = lb.engagement_id
        WHERE e.id = $1`,
-      [engagementId]
+      [engagementId],
     );
 
     if (result.rows.length === 0) {
       return NextResponse.json(
         { error: "Engagement not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -41,14 +41,14 @@ export async function GET(
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
-    
+
     return NextResponse.json(
       { error: "Failed to fetch engagement" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

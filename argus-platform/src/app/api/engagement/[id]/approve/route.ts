@@ -7,15 +7,15 @@ import { pool } from "@/lib/db";
 
 /**
  * POST /api/engagement/[id]/approve
- * 
+ *
  * Approves findings and transitions engagement from awaiting_approval to scanning.
  * Pushes "scan" job to Redis queue.
- * 
+ *
  * Requirements: 33.2, 33.3, 33.4
  */
 export async function POST(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAuth();
@@ -36,14 +36,14 @@ export async function POST(
          LEFT JOIN loop_budgets lb ON e.id = lb.engagement_id
          WHERE e.id = $1
          FOR UPDATE OF e`,
-        [engagementId]
+        [engagementId],
       );
 
       if (engagementResult.rows.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           { error: "Engagement not found" },
-          { status: 404 }
+          { status: 404 },
         );
       }
 
@@ -56,14 +56,14 @@ export async function POST(
           {
             error: `Cannot approve engagement in ${engagement.status} state. Must be in awaiting_approval state.`,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
       // Transition engagement to scanning state
       await client.query(
         `UPDATE engagements SET status = $1, updated_at = NOW() WHERE id = $2`,
-        ["scanning", engagementId]
+        ["scanning", engagementId],
       );
 
       // Record state transition
@@ -77,7 +77,7 @@ export async function POST(
           "awaiting_approval",
           "scanning",
           "User approved findings",
-        ]
+        ],
       );
 
       await client.query("COMMIT");
@@ -123,7 +123,7 @@ export async function POST(
 
     return NextResponse.json(
       { error: "Failed to approve engagement" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

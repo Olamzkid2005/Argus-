@@ -1,0 +1,115 @@
+rules:
+  - id: jwt-algorithm-none
+    severity: ERROR
+    languages: [python, javascript, typescript]
+    message: >-
+      JWT configured to accept "none" algorithm. Attackers can forge tokens by setting alg:none.
+      Always whitelist algorithms.
+    metadata:
+      cwe: "CWE-345"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: options={"verify_signature": False}
+      - pattern: algorithms=["none", "None", "NONE"]
+      - pattern: |
+          jwt.verify($TOKEN, $SECRET, { algorithms: [...] })
+      - pattern: algorithm\s*=\s*["']?none["']?
+
+  - id: jwt-no-expiration
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      JWT token has no expiration (exp claim). This allows replay attacks.
+      Use short-lived access tokens (15 min) with rotating refresh tokens.
+    metadata:
+      cwe: "CWE-613"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: jwt.encode($PAYLOAD, $KEY, algorithm="HS256")
+      - pattern: |
+          const token = jwt.sign($PAYLOAD, $KEY)
+      - pattern: |
+          $PAYLOAD = { user_id: ..., ... }  # No exp claim
+
+  - id: jwt-excessive-lifetime
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      JWT token has excessive lifetime (> 1 hour for access). Use short-lived tokens.
+    metadata:
+      cwe: "CWE-613"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: exp: $>3600  # > 1 hour in seconds
+      - pattern: expiresIn: "24h"
+      - pattern: expiresIn: "7d"
+
+  - id: jwt-local-storage
+    severity: WARNING
+    languages: [javascript, typescript]
+    message: >-
+      JWT stored in localStorage. XSS can steal these tokens.
+      Use httpOnly, secure cookies instead.
+    metadata:
+      cwe: "CWE-922"
+      owasp: "A04:2021-Insecure Design"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: localStorage.setItem("token", ...)
+      - pattern: localStorage.setItem("jwt", ...)
+      - pattern: localStorage["token"] = ...
+
+  - id: weak-password-hashing-md5
+    severity: ERROR
+    languages: [python, javascript, java, php]
+    message: >-
+      MD5 used for password hashing. MD5 is cryptographically broken.
+      Use bcrypt, Argon2, or scrypt.
+    metadata:
+      cwe: "CWE-327"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: hashlib.md5($PASSWORD)
+      - pattern: md5($PASSWORD)
+      - pattern: MessageDigest.getInstance("MD5")
+
+  - id: weak-password-hashing-sha1
+    severity: ERROR
+    languages: [python, javascript, java, php]
+    message: >-
+      SHA1 used for password hashing. SHA1 is cryptographically broken.
+      Use bcrypt, Argon2, or scrypt.
+    metadata:
+      cwe: "CWE-327"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: hashlib.sha1($PASSWORD)
+      - pattern: sha1($PASSWORD)
+      - pattern: MessageDigest.getInstance("SHA-1")
+
+  - id: weak-password-hashing-no-salt
+    severity: WARNING
+    languages: [python, javascript, java, php]
+    message: >-
+      Password hashing without salt. This enables rainbow table attacks.
+      Use salt via bcrypt (gensalt) or Argon2.
+    metadata:
+      cwe: "CWE-916"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: hashlib.sha256($PASSWORD)
+      - pattern: hashlib.md5($PASSWORD)
+      - pattern: hash($PASSWORD)

@@ -1,9 +1,9 @@
 /**
  * WebSocket Endpoint for Real-Time Engagement Updates
- * 
+ *
  * This endpoint handles WebSocket connections for real-time updates
  * on engagement progress, findings, and state transitions.
- * 
+ *
  * Requirements: 31.1
  */
 
@@ -18,7 +18,7 @@ import { WEBSOCKET_CHANNELS } from "@/lib/websocket-events";
 
 /**
  * GET handler for WebSocket upgrade and polling fallback
- * 
+ *
  * For production WebSocket support, use a custom server or:
  * - Socket.io with Next.js custom server
  * - Pusher or Ably for managed WebSocket service
@@ -26,7 +26,7 @@ import { WEBSOCKET_CHANNELS } from "@/lib/websocket-events";
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     // Verify authentication
@@ -38,7 +38,7 @@ export async function GET(
 
     // Check if this is a WebSocket upgrade request
     const upgradeHeader = req.headers.get("upgrade");
-    
+
     if (upgradeHeader && upgradeHeader.toLowerCase() === "websocket") {
       // WebSocket upgrade not supported in standard Next.js App Router
       // Return instructions for WebSocket setup
@@ -52,7 +52,7 @@ export async function GET(
         {
           status: 426,
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
     }
 
@@ -71,14 +71,14 @@ export async function GET(
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
-    
+
     return NextResponse.json(
       { error: "Failed to establish connection" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

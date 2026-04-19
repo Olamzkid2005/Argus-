@@ -57,6 +57,13 @@ class FindingNormalizer:
         # Default
         "http_endpoint": "HTTP_ENDPOINT",
         "directory_found": "DIRECTORY_FOUND",
+        
+        # New tool types
+        "crawled_endpoint": "CRAWLED_ENDPOINT",
+        "known_url": "KNOWN_URL",
+        "historical_url": "HISTORICAL_URL",
+        "parameter_discovery": "PARAMETER_DISCOVERY",
+        "code_vulnerability": "CODE_VULNERABILITY",
     }
     
     # Severity mappings (tool-specific → Severity enum)
@@ -77,6 +84,15 @@ class FindingNormalizer:
         "burp": 0.05,
         "httpx": 0.30,
         "ffuf": 0.40,
+        # New tools
+        "katana": 0.10,
+        "gau": 0.25,
+        "waybackurls": 0.30,
+        "arjun": 0.10,
+        "dalfox": 0.10,
+        "jwt_tool": 0.08,
+        "commix": 0.05,
+        "semgrep": 0.12,
     }
     
     def normalize(self, raw_finding: Dict, source_tool: str) -> VulnerabilityFinding:

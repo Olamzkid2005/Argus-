@@ -3,7 +3,7 @@ Engagement repository for database operations on engagements
 """
 from typing import Dict, List, Optional
 from psycopg2.extras import RealDictCursor
-from psycopg2 import Json
+from psycopg2.extras import Json
 from database.repositories.base import BaseRepository
 
 

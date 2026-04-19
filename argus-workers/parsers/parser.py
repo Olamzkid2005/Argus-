@@ -212,6 +212,401 @@ class FfufParser(BaseParser):
         return findings
 
 
+class KatanaParser(BaseParser):
+    """Parser for katana output (web crawler)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse katana JSON lines output
+        
+        Args:
+            raw_output: Katana output (JSON lines format)
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                data = json.loads(line)
+                request = data.get("request", {})
+                
+                finding = {
+                    "type": "CRAWLED_ENDPOINT",
+                    "severity": "INFO",
+                    "endpoint": request.get("url", request.get("endpoint", "")),
+                    "evidence": {
+                        "method": request.get("method", "GET"),
+                        "body": request.get("body"),
+                        "header": request.get("header"),
+                    },
+                    "confidence": 0.85,
+                    "tool": "katana",
+                }
+                findings.append(finding)
+                
+            except json.JSONDecodeError:
+                # Try plain URL fallback
+                if line.strip().startswith("http"):
+                    findings.append({
+                        "type": "CRAWLED_ENDPOINT",
+                        "severity": "INFO",
+                        "endpoint": line.strip(),
+                        "evidence": {},
+                        "confidence": 0.85,
+                        "tool": "katana",
+                    })
+                continue
+        
+        return findings
+
+
+class GauParser(BaseParser):
+    """Parser for gau output (GetAllUrls)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse gau plain URL output
+        
+        Args:
+            raw_output: Gau output (plain URLs)
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            url = line.strip()
+            if url.startswith("http://") or url.startswith("https://"):
+                finding = {
+                    "type": "KNOWN_URL",
+                    "severity": "INFO",
+                    "endpoint": url,
+                    "evidence": {
+                        "source": "gau",
+                    },
+                    "confidence": 0.75,
+                    "tool": "gau",
+                }
+                findings.append(finding)
+        
+        return findings
+
+
+class WaybackurlsParser(BaseParser):
+    """Parser for waybackurls output"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse waybackurls plain URL output
+        
+        Args:
+            raw_output: Waybackurls output (plain URLs)
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            url = line.strip()
+            if url.startswith("http://") or url.startswith("https://"):
+                finding = {
+                    "type": "HISTORICAL_URL",
+                    "severity": "INFO",
+                    "endpoint": url,
+                    "evidence": {
+                        "source": "wayback",
+                    },
+                    "confidence": 0.70,
+                    "tool": "waybackurls",
+                }
+                findings.append(finding)
+        
+        return findings
+
+
+class ArjunParser(BaseParser):
+    """Parser for arjun output (parameter discovery)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse arjun JSON output
+        
+        Args:
+            raw_output: Arjun output
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                items = data.get("params", [data])
+            else:
+                return findings
+            
+            for item in items:
+                param_name = item.get("name", item.get("param", ""))
+                url = item.get("url", item.get("endpoint", ""))
+                
+                # Check for auth-related parameters
+                severity = "MEDIUM"
+                if any(kw in param_name.lower() for kw in ["token", "auth", "key", "secret", "password"]):
+                    severity = "HIGH"
+                
+                finding = {
+                    "type": "PARAMETER_DISCOVERY",
+                    "severity": severity,
+                    "endpoint": url,
+                    "evidence": {
+                        "parameter": param_name,
+                        "method": item.get("method", "GET"),
+                        "type": item.get("type", "param"),
+                    },
+                    "confidence": 0.85,
+                    "tool": "arjun",
+                }
+                findings.append(finding)
+                
+        except json.JSONDecodeError:
+            pass
+        
+        return findings
+
+
+class DalfoxParser(BaseParser):
+    """Parser for dalfox output (XSS scanner)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse dalfox JSON lines output
+        
+        Args:
+            raw_output: Dalfox output (JSON lines format)
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                data = json.loads(line)
+                
+                # Determine severity based on dalfox's analysis
+                severity = "HIGH"
+                if data.get("state") == "confirmed" or data.get("type") == "stored":
+                    severity = "HIGH"
+                
+                finding = {
+                    "type": "XSS",
+                    "severity": severity,
+                    "endpoint": data.get("url", data.get("endpoint", "")),
+                    "evidence": {
+                        "parameter": data.get("param", ""),
+                        "payload": data.get("payload", ""),
+                        "state": data.get("state", "unknown"),
+                        "poc": data.get("poc", ""),
+                    },
+                    "confidence": 0.90,
+                    "tool": "dalfox",
+                }
+                findings.append(finding)
+                
+            except json.JSONDecodeError:
+                continue
+        
+        return findings
+
+
+class JwtToolParser(BaseParser):
+    """Parser for jwt_tool output"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse jwt_tool JSON output
+        
+        Args:
+            raw_output: jwt_tool output
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            vulnerabilities = data.get("vulnerabilities", [])
+            token = data.get("token", {})
+            
+            for vuln in vulnerabilities:
+                vuln_type = vuln.get("type", "unknown")
+                
+                # Map jwt_tool vulnerability types to standard types
+                if "none" in vuln_type.lower():
+                    finding_type = "JWT_VULNERABILITY"
+                    severity = "HIGH"
+                    confidence = 0.95
+                elif "weak" in vuln_type.lower():
+                    finding_type = "JWT_VULNERABILITY"
+                    severity = "MEDIUM"
+                    confidence = 0.85
+                else:
+                    finding_type = "JWT_VULNERABILITY"
+                    severity = "MEDIUM"
+                    confidence = 0.80
+                
+                finding = {
+                    "type": finding_type,
+                    "severity": severity,
+                    "endpoint": token.get("url", ""),
+                    "evidence": {
+                        "algorithm": token.get("alg", ""),
+                        "vulnerability": vuln_type,
+                        "claims": token.get("payload", {}),
+                    },
+                    "confidence": confidence,
+                    "tool": "jwt_tool",
+                }
+                findings.append(finding)
+                
+        except json.JSONDecodeError:
+            pass
+        
+        return findings
+
+
+class CommixParser(BaseParser):
+    """Parser for commix output (command injection)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse commix plain text output
+        
+        Args:
+            raw_output: Commix output
+            
+        Returns:
+            List of findings
+        """
+        findings = []
+        
+        # Look for command injection indicators
+        injection_indicators = [
+            "command injection",
+            "shellshock",
+            "suspicious",
+            "shell",
+            "#!",
+        ]
+        
+        raw_lower = raw_output.lower()
+        
+        # Check if any injection was found
+        if any(indicator in raw_lower for indicator in injection_indicators):
+            # Extract the most likely injection point
+            endpoint = ""
+            for line in raw_output.split("\n"):
+                if "http" in line and ("://" in line or "parameter" in line.lower()):
+                    endpoint = line.strip()
+                    break
+            
+            finding = {
+                "type": "COMMAND_INJECTION",
+                "severity": "HIGH",  # Will be CRITICAL if verified
+                "endpoint": endpoint,
+                "evidence": {
+                    "raw_output": raw_output[:1000],
+                },
+                "confidence": 0.95,
+                "tool": "commix",
+            }
+            findings.append(finding)
+        
+        return findings
+
+
+class SemgrepParser(BaseParser):
+    """Parser for Semgrep output (static code analysis)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse Semgrep JSON output
+        
+        Args:
+            raw_output: Semgrep output (JSON)
+            
+        Returns:
+            List of code vulnerability findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            # Semgrep outputs results in "results" array
+            results = data.get("results", [])
+            
+            for result in results:
+                extra = result.get("extra", {})
+                metadata = extra.get("metadata", {})
+                
+                # Map severity
+                severity = "MEDIUM"
+                severity_str = extra.get("severity", "").lower()
+                if severity_str == "error":
+                    severity = "CRITICAL"
+                elif severity_str == "warning":
+                    severity = "HIGH"
+                
+                # Get file and line info
+                path = result.get("path", "")
+                start_line = result.get("start", {}).get("line", 0)
+                
+                finding = {
+                    "type": "CODE_VULNERABILITY",
+                    "severity": severity,
+                    "endpoint": f"file:{path}:{start_line}",
+                    "evidence": {
+                        "file": path,
+                        "line": start_line,
+                        "content": result.get("extra", {}).get("lines", ""),
+                        "check_id": result.get("check_id", ""),
+                        "cwe": metadata.get("cwe", ""),
+                        "owasp": metadata.get("owasp", ""),
+                    },
+                    "confidence": 0.90,
+                    "tool": "semgrep",
+                }
+                findings.append(finding)
+                
+        except json.JSONDecodeError:
+            pass
+        
+        return findings
+
+
 class Parser:
     """
     Main parser class that routes to appropriate tool parser
@@ -229,6 +624,14 @@ class Parser:
             "httpx": HttpxParser(),
             "sqlmap": SqlmapParser(),
             "ffuf": FfufParser(),
+            "katana": KatanaParser(),
+            "gau": GauParser(),
+            "waybackurls": WaybackurlsParser(),
+            "arjun": ArjunParser(),
+            "dalfox": DalfoxParser(),
+            "jwt_tool": JwtToolParser(),
+            "commix": CommixParser(),
+            "semgrep": SemgrepParser(),
         }
         
         # Initialize tracing

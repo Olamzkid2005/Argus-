@@ -6,12 +6,12 @@ import { pool } from "@/lib/db";
  */
 export async function canAccessEngagement(
   session: Session,
-  engagementId: string
+  engagementId: string,
 ): Promise<boolean> {
   try {
     const result = await pool.query(
       "SELECT org_id FROM engagements WHERE id = $1",
-      [engagementId]
+      [engagementId],
     );
 
     if (result.rows.length === 0) {
@@ -31,10 +31,10 @@ export async function canAccessEngagement(
  */
 export async function requireEngagementAccess(
   session: Session,
-  engagementId: string
+  engagementId: string,
 ): Promise<void> {
   const hasAccess = await canAccessEngagement(session, engagementId);
-  
+
   if (!hasAccess) {
     throw new Error("Forbidden: You do not have access to this engagement");
   }

@@ -4,13 +4,13 @@ import { pool } from "@/lib/db";
 
 /**
  * GET /api/tools/performance
- * 
+ *
  * Returns tool performance statistics over the last 7 days.
- * 
+ *
  * Query Parameters:
  * - days: Number of days to look back (default: 7)
  * - tool: Specific tool name to get stats for (optional)
- * 
+ *
  * Requirements: 22.3, 22.4
  */
 export async function GET(req: Request) {
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     if (isNaN(days) || days < 1 || days > 365) {
       return NextResponse.json(
         { error: "Invalid 'days' parameter. Must be between 1 and 365." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
         WHERE tool_name = $1 AND created_at >= NOW() - INTERVAL '1 day' * $2
         GROUP BY tool_name
         `,
-        [toolName, days]
+        [toolName, days],
       );
 
       if (result.rows.length === 0) {
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
       GROUP BY tool_name
       ORDER BY total_executions DESC
       `,
-      [days]
+      [days],
     );
 
     // Calculate summary statistics
@@ -89,11 +89,11 @@ export async function GET(req: Request) {
       total_tools: result.rows.length,
       total_executions: result.rows.reduce(
         (sum, row) => sum + parseInt(row.total_executions),
-        0
+        0,
       ),
       total_successes: result.rows.reduce(
         (sum, row) => sum + parseInt(row.success_count),
-        0
+        0,
       ),
       overall_success_rate: 0,
       avg_duration_across_tools: 0,
@@ -102,7 +102,7 @@ export async function GET(req: Request) {
     // Calculate overall success rate
     if (summary.total_executions > 0) {
       summary.overall_success_rate = parseFloat(
-        ((summary.total_successes / summary.total_executions) * 100).toFixed(2)
+        ((summary.total_successes / summary.total_executions) * 100).toFixed(2),
       );
     }
 
@@ -110,10 +110,10 @@ export async function GET(req: Request) {
     if (result.rows.length > 0) {
       const totalAvgDuration = result.rows.reduce(
         (sum, row) => sum + parseFloat(row.avg_duration_ms || 0),
-        0
+        0,
       );
       summary.avg_duration_across_tools = parseFloat(
-        (totalAvgDuration / result.rows.length).toFixed(2)
+        (totalAvgDuration / result.rows.length).toFixed(2),
       );
     }
 
@@ -133,7 +133,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       { error: "Failed to fetch tool performance statistics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

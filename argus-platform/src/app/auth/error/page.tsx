@@ -17,8 +17,13 @@ function AuthErrorContent() {
           </h2>
         </div>
         <div className="mt-4">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded" role="alert">
-            <p className="font-medium">An error occurred during authentication</p>
+          <div
+            className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded"
+            role="alert"
+          >
+            <p className="font-medium">
+              An error occurred during authentication
+            </p>
             {error && <p className="text-sm mt-1">{error}</p>}
           </div>
         </div>
@@ -37,7 +42,13 @@ function AuthErrorContent() {
 
 export default function AuthError() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50"><p>Loading...</p></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <p>Loading...</p>
+        </div>
+      }
+    >
       <AuthErrorContent />
     </Suspense>
   );

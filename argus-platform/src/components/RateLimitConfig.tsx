@@ -2,14 +2,21 @@
 
 /**
  * Rate Limit Configuration Component
- * 
+ *
  * Allows users to configure rate limiting settings before starting an engagement.
- * 
+ *
  * Requirements: 29.4
  */
 
 import { useState } from "react";
-import { Settings2, Zap, ShieldCheck, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Settings2,
+  Zap,
+  ShieldCheck,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
 export interface RateLimitConfigData {
   requests_per_second: number;
@@ -30,10 +37,16 @@ const DEFAULT_CONFIG: RateLimitConfigData = {
   adaptive_slowdown: true,
 };
 
-export default function RateLimitConfig({ value, onChange }: RateLimitConfigProps) {
+export default function RateLimitConfig({
+  value,
+  onChange,
+}: RateLimitConfigProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const handleChange = (field: keyof RateLimitConfigData, newValue: number | boolean) => {
+  const handleChange = (
+    field: keyof RateLimitConfigData,
+    newValue: number | boolean,
+  ) => {
     onChange({
       ...value,
       [field]: newValue,
@@ -47,7 +60,9 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
           <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
             <Zap className="h-4 w-4 text-primary" />
           </div>
-          <h3 className="text-sm font-black uppercase tracking-widest">Rate Control</h3>
+          <h3 className="text-sm font-black uppercase tracking-widest">
+            Rate Control
+          </h3>
         </div>
         <button
           type="button"
@@ -55,7 +70,11 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
           className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
         >
           {showAdvanced ? "Basic View" : "Advanced Logic"}
-          {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {showAdvanced ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )}
         </button>
       </div>
 
@@ -63,10 +82,15 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
         {/* Requests Per Second */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
-            <label htmlFor="rps" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+            <label
+              htmlFor="rps"
+              className="text-[10px] font-black uppercase text-muted-foreground tracking-widest"
+            >
               Request Velocity
             </label>
-            <span className="text-xs font-mono font-bold text-primary">{value.requests_per_second} RPS</span>
+            <span className="text-xs font-mono font-bold text-primary">
+              {value.requests_per_second} RPS
+            </span>
           </div>
           <input
             id="rps"
@@ -75,7 +99,9 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
             max="20"
             step="0.5"
             value={value.requests_per_second}
-            onChange={(e) => handleChange("requests_per_second", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("requests_per_second", parseFloat(e.target.value))
+            }
             className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
           />
           <p className="text-[10px] text-muted-foreground leading-relaxed">
@@ -86,10 +112,15 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
         {/* Concurrent Requests */}
         <div className="space-y-4">
           <div className="flex justify-between items-end">
-            <label htmlFor="concurrent" className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+            <label
+              htmlFor="concurrent"
+              className="text-[10px] font-black uppercase text-muted-foreground tracking-widest"
+            >
               Concurrency
             </label>
-            <span className="text-xs font-mono font-bold text-argus-cyan">{value.concurrent_requests} Spans</span>
+            <span className="text-xs font-mono font-bold text-argus-cyan">
+              {value.concurrent_requests} Spans
+            </span>
           </div>
           <input
             id="concurrent"
@@ -98,7 +129,9 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
             max="5"
             step="1"
             value={value.concurrent_requests}
-            onChange={(e) => handleChange("concurrent_requests", parseInt(e.target.value))}
+            onChange={(e) =>
+              handleChange("concurrent_requests", parseInt(e.target.value))
+            }
             className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-argus-cyan"
           />
           <p className="text-[10px] text-muted-foreground leading-relaxed">
@@ -115,11 +148,16 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
               id="robots"
               type="checkbox"
               checked={value.respect_robots_txt}
-              onChange={(e) => handleChange("respect_robots_txt", e.target.checked)}
+              onChange={(e) =>
+                handleChange("respect_robots_txt", e.target.checked)
+              }
               className="mt-1 h-4 w-4 bg-secondary border-border rounded accent-primary text-primary"
             />
             <div className="flex-1">
-              <label htmlFor="robots" className="block text-xs font-bold uppercase tracking-tight">
+              <label
+                htmlFor="robots"
+                className="block text-xs font-bold uppercase tracking-tight"
+              >
                 Respect Robots Protocol
               </label>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -134,11 +172,16 @@ export default function RateLimitConfig({ value, onChange }: RateLimitConfigProp
               id="adaptive"
               type="checkbox"
               checked={value.adaptive_slowdown}
-              onChange={(e) => handleChange("adaptive_slowdown", e.target.checked)}
+              onChange={(e) =>
+                handleChange("adaptive_slowdown", e.target.checked)
+              }
               className="mt-1 h-4 w-4 bg-secondary border-border rounded accent-primary text-primary"
             />
             <div className="flex-1">
-              <label htmlFor="adaptive" className="block text-xs font-bold uppercase tracking-tight">
+              <label
+                htmlFor="adaptive"
+                className="block text-xs font-bold uppercase tracking-tight"
+              >
                 Intelligent Backoff
               </label>
               <p className="mt-1 text-[10px] text-muted-foreground">

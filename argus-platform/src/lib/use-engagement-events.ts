@@ -1,9 +1,9 @@
 /**
  * React Hook for Real-Time Engagement Events
- * 
+ *
  * Provides a unified interface for receiving real-time updates
  * via polling (fallback) or WebSocket connection.
- * 
+ *
  * Requirements: 31.5
  */
 
@@ -31,12 +31,12 @@ export interface UseEngagementEventsReturn {
 
 /**
  * Hook for subscribing to real-time engagement events
- * 
+ *
  * Uses polling as the primary mechanism with WebSocket support
  * available when configured.
  */
 export function useEngagementEvents(
-  options: UseEngagementEventsOptions
+  options: UseEngagementEventsOptions,
 ): UseEngagementEventsReturn {
   const {
     engagementId,
@@ -66,7 +66,7 @@ export function useEngagementEvents(
       });
 
       const response = await fetch(
-        `/api/ws/engagement/${engagementId}/poll?${params}`
+        `/api/ws/engagement/${engagementId}/poll?${params}`,
       );
 
       if (!response.ok) {
@@ -88,9 +88,12 @@ export function useEngagementEvents(
         if (data.events && data.events.length > 0) {
           setEvents((prev) => {
             // Deduplicate events
-            const existingIds = new Set(prev.map((e) => `${e.type}-${e.timestamp}`));
+            const existingIds = new Set(
+              prev.map((e) => `${e.type}-${e.timestamp}`),
+            );
             const newEvents = data.events.filter(
-              (e: WebSocketEvent) => !existingIds.has(`${e.type}-${e.timestamp}`)
+              (e: WebSocketEvent) =>
+                !existingIds.has(`${e.type}-${e.timestamp}`),
             );
             return [...newEvents, ...prev].slice(0, 100); // Keep last 100 events
           });
@@ -192,7 +195,7 @@ export function useEngagementEvents(
 export function useEngagementEventType<T extends WebSocketEvent["type"]>(
   engagementId: string,
   eventType: T,
-  options?: Omit<UseEngagementEventsOptions, "engagementId" | "onEvent">
+  options?: Omit<UseEngagementEventsOptions, "engagementId" | "onEvent">,
 ) {
   const [typedEvents, setTypedEvents] = useState<
     Extract<WebSocketEvent, { type: T }>[]
@@ -207,7 +210,7 @@ export function useEngagementEventType<T extends WebSocketEvent["type"]>(
         ]);
       }
     },
-    [eventType]
+    [eventType],
   );
 
   const result = useEngagementEvents({

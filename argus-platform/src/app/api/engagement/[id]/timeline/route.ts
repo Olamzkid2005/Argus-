@@ -13,7 +13,7 @@ import { pool } from "@/lib/db";
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAuth();
@@ -24,7 +24,10 @@ export async function GET(
 
     // Parse query parameters for pagination
     const { searchParams } = new URL(req.url);
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
+    const limit = Math.min(
+      parseInt(searchParams.get("limit") || "50", 10),
+      100,
+    );
     const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     // Query execution spans ordered by timestamp
@@ -42,8 +45,12 @@ export async function GET(
     `;
 
     // Get total count
-    const countQuery = baseQuery.replace("SELECT DISTINCT es.id,", "SELECT COUNT(DISTINCT es.id)")
-      .replace("SELECT DISTINCT es.trace_id,", "SELECT COUNT(DISTINCT es.trace_id),");
+    const countQuery = baseQuery
+      .replace("SELECT DISTINCT es.id,", "SELECT COUNT(DISTINCT es.id)")
+      .replace(
+        "SELECT DISTINCT es.trace_id,",
+        "SELECT COUNT(DISTINCT es.trace_id),",
+      );
     const countResult = await pool.query(countQuery, [engagementId]);
     const total = parseInt(countResult.rows[0].count, 10);
 
@@ -67,14 +74,14 @@ export async function GET(
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
+
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
-    
+
     return NextResponse.json(
       { error: "Failed to fetch timeline" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

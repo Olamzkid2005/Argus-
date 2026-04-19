@@ -1,6 +1,6 @@
 /**
  * Tests for POST /api/engagement/[id]/approve endpoint
- * 
+ *
  * Requirements: 33.2, 33.3, 33.4
  */
 
@@ -89,9 +89,12 @@ describe("POST /api/engagement/[id]/approve", () => {
       .mockResolvedValueOnce({ rows: [] }) // INSERT state transition
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
-    const request = new Request("http://localhost:3000/api/engagement/engagement-123/approve", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:3000/api/engagement/engagement-123/approve",
+      {
+        method: "POST",
+      },
+    );
 
     const params = Promise.resolve({ id: engagementId });
     const response = await POST(request, { params });
@@ -107,7 +110,7 @@ describe("POST /api/engagement/[id]/approve", () => {
     // Verify state transition was recorded
     expect(mockClient.query).toHaveBeenCalledWith(
       expect.stringContaining("UPDATE engagements SET status"),
-      ["scanning", engagementId]
+      ["scanning", engagementId],
     );
 
     expect(mockClient.query).toHaveBeenCalledWith(
@@ -118,7 +121,7 @@ describe("POST /api/engagement/[id]/approve", () => {
         "awaiting_approval",
         "scanning",
         "User approved findings",
-      ])
+      ]),
     );
 
     // Verify scan job was pushed to queue
@@ -132,7 +135,7 @@ describe("POST /api/engagement/[id]/approve", () => {
           max_depth: 3,
           max_cost: 0.5,
         },
-      })
+      }),
     );
   });
 
@@ -144,9 +147,12 @@ describe("POST /api/engagement/[id]/approve", () => {
       .mockResolvedValueOnce({ rows: [] }) // SELECT engagement (empty)
       .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
 
-    const request = new Request("http://localhost:3000/api/engagement/nonexistent-123/approve", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:3000/api/engagement/nonexistent-123/approve",
+      {
+        method: "POST",
+      },
+    );
 
     const params = Promise.resolve({ id: engagementId });
     const response = await POST(request, { params });
@@ -177,9 +183,12 @@ describe("POST /api/engagement/[id]/approve", () => {
       })
       .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
 
-    const request = new Request("http://localhost:3000/api/engagement/engagement-123/approve", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:3000/api/engagement/engagement-123/approve",
+      {
+        method: "POST",
+      },
+    );
 
     const params = Promise.resolve({ id: engagementId });
     const response = await POST(request, { params });
@@ -197,9 +206,12 @@ describe("POST /api/engagement/[id]/approve", () => {
   it("should return 401 if user is not authenticated", async () => {
     (requireAuth as jest.Mock).mockRejectedValue(new Error("Unauthorized"));
 
-    const request = new Request("http://localhost:3000/api/engagement/engagement-123/approve", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:3000/api/engagement/engagement-123/approve",
+      {
+        method: "POST",
+      },
+    );
 
     const params = Promise.resolve({ id: "engagement-123" });
     const response = await POST(request, { params });
@@ -212,12 +224,15 @@ describe("POST /api/engagement/[id]/approve", () => {
 
   it("should return 403 if user does not have access to engagement", async () => {
     (requireEngagementAccess as jest.Mock).mockRejectedValue(
-      new Error("Forbidden: Access denied")
+      new Error("Forbidden: Access denied"),
     );
 
-    const request = new Request("http://localhost:3000/api/engagement/engagement-123/approve", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:3000/api/engagement/engagement-123/approve",
+      {
+        method: "POST",
+      },
+    );
 
     const params = Promise.resolve({ id: "engagement-123" });
     const response = await POST(request, { params });
@@ -248,9 +263,12 @@ describe("POST /api/engagement/[id]/approve", () => {
       })
       .mockRejectedValueOnce(new Error("Database error")); // UPDATE fails
 
-    const request = new Request("http://localhost:3000/api/engagement/engagement-123/approve", {
-      method: "POST",
-    });
+    const request = new Request(
+      "http://localhost:3000/api/engagement/engagement-123/approve",
+      {
+        method: "POST",
+      },
+    );
 
     const params = Promise.resolve({ id: engagementId });
     const response = await POST(request, { params });

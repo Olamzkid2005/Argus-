@@ -101,8 +101,10 @@ class ToolRunner:
         Returns:
             Dictionary of environment variables
         """
+        # Include venv bin path for installed tools (semgrep, etc.)
+        venv_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "venv", "bin")
         return {
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "PATH": f"{venv_bin}:/usr/local/bin:/usr/bin:/bin",
             "HOME": str(self.sandbox_dir),
             "TMPDIR": str(self.sandbox_dir / "tmp"),
             "LANG": "en_US.UTF-8",

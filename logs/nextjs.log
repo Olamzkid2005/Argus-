@@ -1,0 +1,226 @@
+
+> argus-platform@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 6.1s
+ ○ Compiling /src/middleware ...
+ ✓ Compiled /src/middleware in 1419ms (78 modules)
+ ○ Compiling / ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (153kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ ✓ Compiled / in 25.5s (1352 modules)
+ GET / 200 in 26933ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 1360ms (1365 modules)
+ GET /dashboard 200 in 1744ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 866ms (721 modules)
+ GET /favicon.ico 200 in 1051ms
+ GET /dashboard 200 in 451ms
+ ○ Compiling /engagements ...
+ ✓ Compiled /engagements in 1297ms (1403 modules)
+ GET /engagements 200 in 2128ms
+ ○ Compiling /api/engagement/create ...
+ ✓ Compiled /api/engagement/create in 4s (1051 modules)
+Create engagement error: Error: Unauthorized
+    at requireAuth (webpack-internal:///(rsc)/./src/lib/session.ts:23:15)
+    at async POST (webpack-internal:///(rsc)/./src/app/api/engagement/create/route.ts:20:25)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+(node:83442) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ POST /api/engagement/create 401 in 4405ms
+Create engagement error: Error: Unauthorized
+    at requireAuth (webpack-internal:///(rsc)/./src/lib/session.ts:23:15)
+    at async POST (webpack-internal:///(rsc)/./src/app/api/engagement/create/route.ts:20:25)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+ POST /api/engagement/create 401 in 24ms
+ ○ Compiling /api/auth/signup ...
+ ✓ Compiled /api/auth/signup in 727ms (1053 modules)
+ POST /api/auth/signup 400 in 843ms
+ POST /api/auth/signup 201 in 654ms
+ ○ Compiling /api/auth/[...nextauth] ...
+ ✓ Compiled /api/auth/[...nextauth] in 694ms (987 modules)
+ POST /api/auth/callback/credentials 302 in 2027ms
+ GET /api/auth/csrf 200 in 37ms
+ POST /api/auth/callback/credentials 302 in 20ms
+ POST /api/auth/signin?csrf=true 302 in 9ms
+ POST /api/auth/signin?csrf=true 302 in 20ms
+ POST /api/auth/signin?csrf=true 302 in 12ms
+ POST /api/auth/signin?csrf=true 302 in 9ms
+ POST /api/auth/signin?csrf=true 302 in 27ms
+ POST /api/auth/signin?csrf=true 302 in 25ms
+ POST /api/auth/signin?csrf=true 302 in 8ms
+ POST /api/auth/signin?csrf=true 302 in 8ms
+ POST /api/auth/signin?csrf=true 302 in 19ms
+ POST /api/auth/signin?csrf=true 302 in 21ms
+ POST /api/auth/signin?csrf=true 302 in 9ms
+ POST /api/auth/signin?csrf=true 302 in 10ms
+ POST /api/auth/signin?csrf=true 302 in 17ms
+ POST /api/auth/signin?csrf=true 302 in 8ms
+ POST /api/auth/signin?csrf=true 302 in 17ms
+ POST /api/auth/signin?csrf=true 302 in 12ms
+ POST /api/auth/signin?csrf=true 302 in 9ms
+ POST /api/auth/signin?csrf=true 302 in 18ms
+ POST /api/auth/signin?csrf=true 302 in 40ms
+ POST /api/auth/signin?csrf=true 302 in 12ms
+ POST /api/auth/signin?csrf=true 302 in 26ms
+ POST /api/auth/signin?csrf=true 302 in 9ms
+ POST /api/auth/signin?csrf=true 302 in 11ms
+ POST /api/auth/signin?csrf=true 302 in 30ms
+ POST /api/auth/signin?csrf=true 302 in 15ms
+ POST /api/auth/signin?csrf=true 302 in 31ms
+ POST /api/auth/signin?csrf=true 302 in 11ms
+ POST /api/auth/signin?csrf=true 302 in 13ms
+ POST /api/auth/signin?csrf=true 302 in 12ms
+ POST /api/auth/signin?csrf=true 302 in 17ms
+ POST /api/auth/signin?csrf=true 302 in 27ms
+ POST /api/auth/signin?csrf=true 302 in 20ms
+ POST /api/auth/signin?csrf=true 302 in 18ms
+ POST /api/auth/signin?csrf=true 302 in 15ms
+ POST /api/auth/signin?csrf=true 302 in 38ms
+ POST /api/auth/signin?csrf=true 302 in 46ms
+ POST /api/auth/signin?csrf=true 302 in 14ms
+ POST /api/auth/signin?csrf=true 302 in 20ms
+ POST /api/auth/signin?csrf=true 302 in 29ms
+ POST /api/auth/signin?csrf=true 302 in 12ms
+ POST /api/auth/signin?csrf=true 302 in 19ms
+ POST /api/auth/signin?csrf=true 302 in 11ms
+ POST /api/auth/signin?csrf=true 302 in 22ms
+ POST /api/auth/signin?csrf=true 302 in 40ms
+ POST /api/auth/signin?csrf=true 302 in 15ms
+ POST /api/auth/signin?csrf=true 302 in 11ms
+ POST /api/auth/signin?csrf=true 302 in 17ms
+ POST /api/auth/signin?csrf=true 302 in 8ms
+ POST /api/auth/signin?csrf=true 302 in 9ms
+ POST /api/auth/signin?csrf=true 302 in 37ms
+ GET /api/auth/session 200 in 13ms
+ GET /api/auth/csrf 200 in 18ms
+ POST /api/auth/callback/credentials 302 in 867ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1053ms (995 modules)
+ POST / 200 in 1427ms
+ ○ Compiling /api/engagement/create ...
+ ✓ Compiled /api/engagement/create in 695ms (1063 modules)
+Create engagement error: error: syntax error at or near "authorization"
+    at /Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/client.js:631:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async POST (webpack-internal:///(rsc)/./src/app/api/engagement/create/route.ts:60:38)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13) {
+  length: 102,
+  severity: 'ERROR',
+  code: '42601',
+  detail: undefined,
+  hint: undefined,
+  position: '60',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'scan.l',
+  line: '1192',
+  routine: 'scanner_yyerror'
+}
+ POST /api/engagement/create 500 in 922ms
+Create engagement error: error: syntax error at or near "authorization"
+    at /Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/client.js:631:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async POST (webpack-internal:///(rsc)/./src/app/api/engagement/create/route.ts:60:38)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13) {
+  length: 102,
+  severity: 'ERROR',
+  code: '42601',
+  detail: undefined,
+  hint: undefined,
+  position: '60',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'scan.l',
+  line: '1192',
+  routine: 'scanner_yyerror'
+}
+ POST /api/engagement/create 500 in 17ms
+ ✓ Compiled in 2.9s (1736 modules)
+ ✓ Compiled in 2.2s (1385 modules)
+[?25h

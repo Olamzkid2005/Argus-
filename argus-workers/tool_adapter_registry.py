@@ -124,6 +124,149 @@ class HttpxAdapterV1(BaseToolAdapter):
         return parser.parse(raw_output)
 
 
+class KatanaAdapterV1(BaseToolAdapter):
+    """Katana adapter for schema version 1.x (JSON lines)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                if "request" in data:
+                    return True
+            except json.JSONDecodeError:
+                pass
+        return True
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import KatanaParser
+        parser = KatanaParser()
+        return parser.parse(raw_output)
+
+
+class GauAdapterV1(BaseToolAdapter):
+    """Gau adapter for schema version 1.x (plain URLs)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        first_line = raw_output.split("\n")[0].strip()
+        return first_line.startswith("http://") or first_line.startswith("https://")
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import GauParser
+        parser = GauParser()
+        return parser.parse(raw_output)
+
+
+class WaybackurlsAdapterV1(BaseToolAdapter):
+    """Waybackurls adapter for schema version 1.x (plain URLs)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        first_line = raw_output.split("\n")[0].strip()
+        return first_line.startswith("http://") or first_line.startswith("https://")
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import WaybackurlsParser
+        parser = WaybackurlsParser()
+        return parser.parse(raw_output)
+
+
+class ArjunAdapterV1(BaseToolAdapter):
+    """Arjun adapter for schema version 1.x (JSON)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        try:
+            data = json.loads(raw_output)
+            return isinstance(data, (dict, list))
+        except json.JSONDecodeError:
+            return False
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import ArjunParser
+        parser = ArjunParser()
+        return parser.parse(raw_output)
+
+
+class DalfoxAdapterV1(BaseToolAdapter):
+    """Dalfox adapter for schema version 1.x (JSON lines)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                if "url" in data or "param" in data:
+                    return True
+            except json.JSONDecodeError:
+                pass
+        return True
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import DalfoxParser
+        parser = DalfoxParser()
+        return parser.parse(raw_output)
+
+
+class JwtToolAdapterV1(BaseToolAdapter):
+    """JWT Tool adapter for schema version 1.x (JSON)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        try:
+            data = json.loads(raw_output)
+            return "vulnerabilities" in data or "token" in data
+        except json.JSONDecodeError:
+            return False
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import JwtToolParser
+        parser = JwtToolParser()
+        return parser.parse(raw_output)
+
+
+class CommixAdapterV1(BaseToolAdapter):
+    """Commix adapter for schema version 1.x (text)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        # Commix outputs text, accept any non-empty
+        return bool(raw_output.strip())
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import CommixParser
+        parser = CommixParser()
+        return parser.parse(raw_output)
+
+
+class SemgrepAdapterV1(BaseToolAdapter):
+    """Semgrep adapter for schema version 1.x (JSON)."""
+    
+    def validate_schema(self, raw_output: str) -> bool:
+        if not raw_output.strip():
+            return True
+        try:
+            data = json.loads(raw_output)
+            return "results" in data or isinstance(data, list)
+        except json.JSONDecodeError:
+            return False
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        from parsers.parser import SemgrepParser
+        parser = SemgrepParser()
+        return parser.parse(raw_output)
+
+
 class ToolAdapterRegistry:
     """
     Registry for tool adapters with versioning support.
@@ -167,6 +310,113 @@ class ToolAdapterRegistry:
                 ]
             },
             description="Httpx JSON or plain URL output"
+        )
+        
+        # Katana v1
+        self.register_adapter(
+            tool_name="katana",
+            schema_version="1.x",
+            adapter_class=KatanaAdapterV1,
+            expected_schema={
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"}
+                }
+            },
+            description="Katana JSON lines output"
+        )
+        
+        # Gau v1
+        self.register_adapter(
+            tool_name="gau",
+            schema_version="1.x",
+            adapter_class=GauAdapterV1,
+            expected_schema={
+                "type": "string",
+                "pattern": "^https?://"
+            },
+            description="Gau plain URL output"
+        )
+        
+        # Waybackurls v1
+        self.register_adapter(
+            tool_name="waybackurls",
+            schema_version="1.x",
+            adapter_class=WaybackurlsAdapterV1,
+            expected_schema={
+                "type": "string",
+                "pattern": "^https?://"
+            },
+            description="Waybackurls plain URL output"
+        )
+        
+        # Arjun v1
+        self.register_adapter(
+            tool_name="arjun",
+            schema_version="1.x",
+            adapter_class=ArjunAdapterV1,
+            expected_schema={
+                "oneOf": [
+                    {"type": "array"},
+                    {"type": "object", "properties": {"params": {"type": "array"}}}
+                ]
+            },
+            description="Arjun JSON output"
+        )
+        
+        # Dalfox v1
+        self.register_adapter(
+            tool_name="dalfox",
+            schema_version="1.x",
+            adapter_class=DalfoxAdapterV1,
+            expected_schema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "param": {"type": "string"}
+                }
+            },
+            description="Dalfox JSON lines output"
+        )
+        
+        # JWT Tool v1
+        self.register_adapter(
+            tool_name="jwt_tool",
+            schema_version="1.x",
+            adapter_class=JwtToolAdapterV1,
+            expected_schema={
+                "type": "object",
+                "properties": {
+                    "vulnerabilities": {"type": "array"},
+                    "token": {"type": "object"}
+                }
+            },
+            description="JWT Tool JSON output"
+        )
+        
+        # Commix v1
+        self.register_adapter(
+            tool_name="commix",
+            schema_version="1.x",
+            adapter_class=CommixAdapterV1,
+            expected_schema={
+                "type": "string"
+            },
+            description="Commix plain text output"
+        )
+        
+        # Semgrep v1
+        self.register_adapter(
+            tool_name="semgrep",
+            schema_version="1.x",
+            adapter_class=SemgrepAdapterV1,
+            expected_schema={
+                "type": "object",
+                "properties": {
+                    "results": {"type": "array"}
+                }
+            },
+            description="Semgrep JSON output"
         )
     
     def register_adapter(
