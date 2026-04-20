@@ -318,6 +318,24 @@ INSERT INTO organizations (id, name, plan) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
+-- USER SETTINGS TABLE
+-- ============================================================================
+
+-- User API keys and settings (encrypted storage)
+CREATE TABLE user_settings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_email VARCHAR(255) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    key VARCHAR(100) NOT NULL,
+    value TEXT, -- Encrypted for sensitive values
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_email, key)
+);
+
+-- Index for faster lookups
+CREATE INDEX idx_user_settings_email ON user_settings(user_email);
+
+-- ============================================================================
 -- GRANTS (Adjust based on your user setup)
 -- ============================================================================
 

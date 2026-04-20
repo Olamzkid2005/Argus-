@@ -65,6 +65,13 @@ export default function RootLayout({
                         Findings
                       </a>
                     </div>
+                    <a
+                        href="/settings"
+                        className="transition-colors hover:text-primary"
+                      >
+                        Settings
+                      </a>
+                    </div>
                     <div className="h-6 w-px bg-border mx-2" />
                     <ThemeToggle />
                   </div>
