@@ -45,14 +45,34 @@ class FindingNormalizer:
         "ssrf": "SSRF",
         "server-side request forgery": "SSRF",
         
-        # Command Injection
+        # Command Injection / RCE
         "command injection": "COMMAND_INJECTION",
         "os command injection": "COMMAND_INJECTION",
+        "rce": "REMOTE_CODE_EXECUTION",
         
         # Path Traversal
         "path traversal": "PATH_TRAVERSAL",
         "directory traversal": "PATH_TRAVERSAL",
         "lfi": "PATH_TRAVERSAL",
+        
+        # XXE
+        "xxe": "XML_EXTERNAL_ENTITY",
+        "xml external entity": "XML_EXTERNAL_ENTITY",
+        
+        # CSRF
+        "csrf": "CSRF",
+        "cross-site request forgery": "CSRF",
+        
+        # Session Hijacking
+        "session hijacking": "SESSION_HIJACKING",
+        "session fixation": "SESSION_HIJACKING",
+        
+        # Race Condition
+        "race condition": "RACE_CONDITION",
+        
+        # Business Logic
+        "business logic": "BUSINESS_LOGIC",
+        "logic flaw": "BUSINESS_LOGIC",
         
         # Default
         "http_endpoint": "HTTP_ENDPOINT",
@@ -64,6 +84,81 @@ class FindingNormalizer:
         "historical_url": "HISTORICAL_URL",
         "parameter_discovery": "PARAMETER_DISCOVERY",
         "code_vulnerability": "CODE_VULNERABILITY",
+    }
+    
+    # CWE to vulnerability type mappings
+    CWE_TYPE_MAPPINGS = {
+        # CWE-78: OS Command Injection (RCE)
+        "CWE-78": "REMOTE_CODE_EXECUTION",
+        "CWE-74": "REMOTE_CODE_EXECUTION",
+        "CWE-94": "CODE_INJECTION",
+        
+        # CWE-352: CSRF
+        "CWE-352": "CSRF",
+        
+        # CWE-79: XSS (stored/reflected)
+        "CWE-79": "XSS",
+        
+        # CWE-86: DOM XSS
+        "CWE-86": "DOM_XSS",
+        
+        # CWE-639: IDOR
+        "CWE-639": "IDOR",
+        
+        # CWE-611: XXE
+        "CWE-611": "XML_EXTERNAL_ENTITY",
+        
+        # CWE-200: Information Disclosure
+        "CWE-200": "INFORMATION_DISCLOSURE",
+        "CWE-319": "CLEARtext_TRANSMISSION",
+        
+        # CWE-462: Race Condition
+        "CWE-462": "RACE_CONDITION",
+        
+        # CWE-367: Race Condition (TOCTOU)
+        "CWE-367": "RACE_CONDITION",
+        
+        # CWE-287: Authentication Issues
+        "CWE-287": "BROKEN_AUTHENTICATION",
+        
+        # CWE-306: Missing Authentication
+        "CWE-306": "MISSING_AUTHENTICATION",
+        
+        # CWE-22: Path Traversal
+        "CWE-22": "PATH_TRAVERSAL",
+        
+        # CWE-89: SQL Injection
+        "CWE-89": "SQL_INJECTION",
+        
+        # CWE-918: SSRF
+        "CWE-918": "SSRF",
+        
+        # CWE-250: Unnecessary Privileges
+        "CWE-250": "PRIVILEGE_ESCALATION",
+        
+        # CWE-915: Improperly Controlled Modification
+        "CWE-915": "MASS_ASSIGNMENT",
+        
+        # CWE-697: Incorrect Comparison
+        "CWE-697": "BUSINESS_LOGIC",
+        
+        # CWE-353: Missing Integrity Check
+        "CWE-353": "MISSING_INTEGRITY_CHECK",
+    }
+    
+    # OWASP to vulnerability type mappings
+    OWASP_TYPE_MAPPINGS = {
+        "A03:2021-Injection": "REMOTE_CODE_EXECUTION",
+        "A01:2021-Broken Access Control": "IDOR",
+        "A02:2021-Cryptographic Failures": "WEAK_CRYPTOGRAPHY",
+        "A03:2021-Injection": "SQL_INJECTION",
+        "A04:2021-Insecure Design": "BUSINESS_LOGIC",
+        "A05:2021-Security Misconfiguration": "SECURITY_MISCONFIGURATION",
+        "A06:2021-Vulnerable and Outdated Components": "VULNERABLE_DEPENDENCY",
+        "A07:2021-Identification and Authentication Failures": "BROKEN_AUTHENTICATION",
+        "A08:2021-Software and Data Integrity Failures": "INTEGRITY_FAILURE",
+        "A09:2021-Security Logging and Monitoring Failures": "INSUFFICIENT_LOGGING",
+        "A10:2021-Server-Side Request Forgery (SSRF)": "SSRF",
     }
     
     # Severity mappings (tool-specific → Severity enum)
@@ -110,10 +205,11 @@ class FindingNormalizer:
             FindingValidationError: If validation fails
         """
         try:
-            # Normalize type
+            # Normalize type (pass full raw_finding for CWE extraction)
             normalized_type = self._normalize_type(
                 raw_finding.get("type", "UNKNOWN"),
-                source_tool
+                source_tool,
+                raw_finding
             )
             
             # Normalize severity
@@ -154,22 +250,60 @@ class FindingNormalizer:
         except Exception as e:
             raise FindingValidationError(f"Normalization failed: {e}")
     
-    def _normalize_type(self, raw_type: str, source_tool: str) -> str:
+    def _normalize_type(self, raw_type: str, source_tool: str, raw_finding: Dict = None) -> str:
         """
         Normalize vulnerability type names
         
         Args:
             raw_type: Raw type from tool
             source_tool: Source tool name
+            raw_finding: Full raw finding (for CWE extraction)
             
         Returns:
             Standardized type name
         """
         raw_type_lower = raw_type.lower().strip()
         
-        # Check mappings
+        # Check mappings based on raw type first
         if raw_type_lower in self.TYPE_MAPPINGS:
             return self.TYPE_MAPPINGS[raw_type_lower]
+        
+        # If we have CWE info in evidence, use it to determine type
+        if raw_finding:
+            evidence = raw_finding.get("evidence", {})
+            
+            # Extract CWE from evidence (Semgrep puts it here)
+            cwe = evidence.get("cwe", "")
+            if cwe:
+                # Handle formats like "CWE-78", "CWE:78", "78"
+                cwe = cwe.upper()
+                if not cwe.startswith("CWE-"):
+                    cwe = f"CWE-{cwe}"
+                
+                # Also try without prefix
+                cwe_key = cwe.replace("CWE-", "")
+                if cwe_key in self.CWE_TYPE_MAPPINGS:
+                    return self.CWE_TYPE_MAPPINGS[cwe_key]
+                if cwe in self.CWE_TYPE_MAPPINGS:
+                    return self.CWE_TYPE_MAPPINGS[cwe]
+            
+            # Also check OWASP category
+            owasp = evidence.get("owasp", "")
+            if owasp and owasp in self.OWASP_TYPE_MAPPINGS:
+                return self.OWASP_TYPE_MAPPINGS[owasp]
+            
+            # Try to extract from metadata or other fields
+            metadata = raw_finding.get("metadata", {})
+            if metadata:
+                cwe = metadata.get("cwe", "")
+                if cwe:
+                    cwe = cwe.upper()
+                    if cwe in self.CWE_TYPE_MAPPINGS:
+                        return self.CWE_TYPE_MAPPINGS[cwe]
+                
+                owasp = metadata.get("owasp", "")
+                if owasp and owasp in self.OWASP_TYPE_MAPPINGS:
+                    return self.OWASP_TYPE_MAPPINGS[owasp]
         
         # Return uppercase version if no mapping found
         return raw_type.upper().replace(" ", "_")

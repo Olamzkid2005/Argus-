@@ -7,11 +7,17 @@ using Redis as the message broker and result backend.
 
 import logging
 import os
+import sys
 from celery import Celery
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Ensure the project root is in the Python path so forked workers can find modules
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # Configure logging
 def setup_logging():
@@ -29,6 +35,21 @@ logger = setup_logging()
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", f"{REDIS_URL}/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", f"{REDIS_URL}/0")
+
+# Ensure required environment variables are set
+if not os.getenv("DATABASE_URL"):
+    # Try to read from platform .env.local
+    platform_root = os.path.dirname(os.path.abspath(__file__))
+    platform_env = os.path.join(os.path.dirname(platform_root), "argus-platform", ".env.local")
+    if os.path.exists(platform_env):
+        with open(platform_env) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    if key == "DATABASE_URL":
+                        os.environ[key] = value.strip()
+                        break
 
 # Create Celery application
 app = Celery(

@@ -2,7 +2,8 @@
 Finding repository for database operations on vulnerability findings
 """
 from typing import Dict, List, Optional
-from psycopg2.extras import RealDictCursor
+import uuid
+from psycopg2.extras import RealDictCursor, Json
 from database.repositories.base import BaseRepository
 
 
@@ -15,6 +16,87 @@ class FindingRepository(BaseRepository):
 
     table_name = "findings"
     id_column = "id"
+
+    def create_finding(
+        self,
+        engagement_id: str,
+        finding_type: str,
+        severity: str,
+        endpoint: str,
+        evidence: dict,
+        confidence: float,
+        source_tool: str,
+        cvss_score: Optional[float] = None,
+        owasp_category: Optional[str] = None,
+        cwe_id: Optional[str] = None,
+        evidence_strength: Optional[str] = None,
+        tool_agreement_level: Optional[str] = None,
+        fp_likelihood: Optional[float] = None,
+    ) -> str:
+        """
+        Create a new finding in the database.
+
+        Args:
+            engagement_id: Engagement ID
+            finding_type: Type of finding (SQL_INJECTION, XSS, etc.)
+            severity: Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+            endpoint: Affected endpoint
+            evidence: Evidence dictionary
+            confidence: Confidence score (0.0-1.0)
+            source_tool: Tool that found the finding
+            cvss_score: Optional CVSS score
+            owasp_category: Optional OWASP category
+            cwe_id: Optional CWE ID
+            evidence_strength: Optional evidence strength
+            tool_agreement_level: Optional tool agreement level
+            fp_likelihood: Optional false positive likelihood
+
+        Returns:
+            The ID of the created finding
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        finding_id = str(uuid.uuid4())
+
+        try:
+            cursor.execute(
+                """
+                INSERT INTO findings (
+                    id, engagement_id, type, severity, confidence,
+                    endpoint, evidence, source_tool, cvss_score,
+                    owasp_category, cwe_id, evidence_strength,
+                    tool_agreement_level, fp_likelihood, verified, created_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                )
+                """,
+                (
+                    finding_id,
+                    engagement_id,
+                    finding_type,
+                    severity,
+                    confidence,
+                    endpoint,
+                    Json(evidence),
+                    source_tool,
+                    cvss_score,
+                    owasp_category,
+                    cwe_id,
+                    evidence_strength,
+                    tool_agreement_level,
+                    fp_likelihood,
+                )
+            )
+            conn.commit()
+            return finding_id
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)
 
     def find_by_engagement(self, engagement_id: str) -> List[Dict]:
         """

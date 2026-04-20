@@ -1,6 +1,8 @@
 import Redis from "ioredis";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
+import { spawn } from "child_process";
+import path from "path";
 
 // Redis client for job queue
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
@@ -98,10 +100,13 @@ function buildTaskArgs(job: JobMessage): unknown[] {
 }
 
 /**
- * Push a job to the Celery task queue using the proper Kombu message format
+ * Push a job to the Celery task queue by dispatching through Python script
+ * 
+ * This properly dispatches tasks to Celery rather than manually pushing to Redis lists
+ * which bypasses Celery's broker mechanism.
  */
 export async function pushJob(job: JobMessage): Promise<string> {
-  const jobId = uuidv4();
+  const traceId = job.trace_id || uuidv4();
 
   // Generate idempotency key
   const idempotencyKey = generateIdempotencyKey(
@@ -117,59 +122,62 @@ export async function pushJob(job: JobMessage): Promise<string> {
 
   // If wasSet is null, another process already set this key - job is duplicate
   if (!wasSet) {
-    return jobId; // Return jobId but don't push duplicate to queue
+    return traceId; // Return jobId but don't push duplicate to queue
   }
 
-  // Get the Celery task name
-  const taskName =
-    TASK_NAME_MAP[job.type] || `tasks.${job.type}.run_${job.type}`;
+  // Execute the Python dispatch script
+  return new Promise((resolve, reject) => {
+    const workersRoot = process.cwd();
+    const dispatchScript = path.join(workersRoot, "argus-workers", "dispatch_task.py");
+    const pythonPath = path.join(workersRoot, "argus-workers", "venv", "bin", "python");
 
-  // Build positional args matching the Celery task signature
-  const args = buildTaskArgs(job);
+    // Build the job payload matching dispatch_task.py expectations
+    const jobPayload = {
+      type: job.type,
+      engagement_id: job.engagement_id,
+      target: job.target,
+      repo_url: job.repo_url,
+      budget: job.budget,
+      trace_id: traceId,
+    };
 
-  // Build the Celery/Kombu message in the format Celery expects
-  // Format: [args, kwargs, embed, content_type, content_encoding]
-  // But the JSON-encoded body format Celery uses is:
-  // {"body": "<base64-encoded-json>", "content-encoding": "utf-8", "content-type": "application/json", "headers": {...}, "properties": {...}}
-  const taskBody = {
-    args: args,
-    kwargs: {},
-  };
-
-  const taskBodyStr = JSON.stringify(taskBody);
-  const taskBodyB64 = Buffer.from(taskBodyStr).toString("base64");
-
-  const celeryMessage = JSON.stringify({
-    body: taskBodyB64,
-    "content-encoding": "utf-8",
-    "content-type": "application/json",
-    headers: {
-      id: jobId,
-      task: taskName,
-      lang: "py",
-      root_id: jobId,
-      parent_id: null,
-      group: null,
-    },
-    properties: {
-      correlation_id: jobId,
-      reply_to: jobId,
-      delivery_mode: 2,
-      delivery_info: {
-        exchange: job.type,
-        routing_key: job.type,
+    const child = spawn(pythonPath, [dispatchScript], {
+      cwd: workersRoot,
+      env: {
+        ...process.env,
+        PYTHONPATH: workersRoot,
       },
-      priority: 0,
-      body_encoding: "base64",
-      delivery_tag: jobId,
-    },
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        console.error("dispatch_task.py error:", stderr);
+        reject(new Error(`dispatch_task.py exited with code ${code}: ${stderr}`));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(stdout.trim());
+        resolve(result.task_id);
+      } catch (e) {
+        reject(new Error(`Failed to parse dispatch result: ${stdout}`));
+      }
+    });
+
+    child.stdin.write(JSON.stringify(jobPayload));
+    child.stdin.end();
   });
-
-  const queueName = job.type;
-
-  await redis.lpush(queueName, celeryMessage);
-
-  return jobId;
 }
 
 /**
