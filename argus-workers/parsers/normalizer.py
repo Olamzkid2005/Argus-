@@ -84,6 +84,26 @@ class FindingNormalizer:
         "historical_url": "HISTORICAL_URL",
         "parameter_discovery": "PARAMETER_DISCOVERY",
         "code_vulnerability": "CODE_VULNERABILITY",
+        
+        # Web Scanner types
+        "missing_security_headers": "SECURITY_MISCONFIGURATION",
+        "missing_csp": "SECURITY_MISCONFIGURATION",
+        "weak_csp": "SECURITY_MISCONFIGURATION",
+        "insecure_cookie": "INSECURE_COOKIE",
+        "wildcard_cors": "CORS_MISCONFIGURATION",
+        "reflected_origin_cors": "CORS_MISCONFIGURATION",
+        "exposed_sensitive_file": "INFORMATION_DISCLOSURE",
+        "exposed_secret": "EXPOSED_SECRET",
+        "open_redirect": "OPEN_REDIRECT",
+        "host_header_injection": "HOST_HEADER_INJECTION",
+        "http_verb_tampering": "HTTP_VERB_TAMPERING",
+        "exposed_debug_endpoint": "EXPOSED_DEBUG_ENDPOINT",
+        "default_credentials": "DEFAULT_CREDENTIALS",
+        "mass_assignment": "MASS_ASSIGNMENT",
+        "reflected_xss": "XSS",
+        "ssti": "SERVER_SIDE_TEMPLATE_INJECTION",
+        "lfi": "PATH_TRAVERSAL",
+        "xxe": "XML_EXTERNAL_ENTITY",
     }
     
     # CWE to vulnerability type mappings
@@ -188,6 +208,7 @@ class FindingNormalizer:
         "jwt_tool": 0.08,
         "commix": 0.05,
         "semgrep": 0.12,
+        "web_scanner": 0.15,
     }
     
     def normalize(self, raw_finding: Dict, source_tool: str) -> VulnerabilityFinding:

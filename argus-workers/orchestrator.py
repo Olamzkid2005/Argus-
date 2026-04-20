@@ -23,6 +23,7 @@ from websocket_events import (
     get_websocket_publisher,
 )
 from tools.tool_runner import ToolRunner
+from tools.web_scanner import WebScanner
 from parsers.parser import Parser
 from parsers.normalizer import FindingNormalizer
 from database.repositories.finding_repository import FindingRepository
@@ -580,6 +581,19 @@ class Orchestrator:
                             all_findings.append(normalized)
             except Exception as e:
                 logger.warning(f"testssl failed for {target}: {e}")
+            
+            # Execute comprehensive web scanner
+            try:
+                web_scanner = WebScanner(timeout=10, rate_limit=0.1)
+                web_findings = web_scanner.scan(target)
+                
+                for wf in web_findings:
+                    # Map web scanner findings to normalized format
+                    normalized = self._normalize_finding(wf, "web_scanner")
+                    if normalized:
+                        all_findings.append(normalized)
+            except Exception as e:
+                logger.warning(f"WebScanner failed for {target}: {e}")
         
         return all_findings
     
