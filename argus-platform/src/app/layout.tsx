@@ -64,8 +64,7 @@ export default function RootLayout({
                       >
                         Findings
                       </a>
-                    </div>
-                    <a
+                      <a
                         href="/settings"
                         className="transition-colors hover:text-primary"
                       >
