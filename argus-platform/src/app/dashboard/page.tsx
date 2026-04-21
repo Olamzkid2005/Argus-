@@ -154,10 +154,23 @@ export default function DashboardPage() {
   
   const heroRef = useRef<HTMLDivElement>(null);
   const [eyeOpacity, setEyeOpacity] = useState(1);
-  const [engagementId, setEngagementId] = useState<string>("");
-  const [isConnected, setIsConnected] = useState(false);
+  // Restore engagement state synchronously so it survives navigation without flashing
+  const [engagementId, setEngagementId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    const urlId = new URL(window.location.href).searchParams.get("engagement");
+    return urlId || localStorage.getItem("argus:active_engagement") || "";
+  });
+  const [isConnected, setIsConnected] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const urlId = new URL(window.location.href).searchParams.get("engagement");
+    return !!(urlId || localStorage.getItem("argus:active_engagement"));
+  });
   const [isApproving, setIsApproving] = useState(false);
-  const [currentState, setCurrentState] = useState<string>("created");
+  const [currentState, setCurrentState] = useState<string>(() => {
+    if (typeof window === "undefined") return "created";
+    const storedState = localStorage.getItem("argus:active_state");
+    return storedState || "created";
+  });
   const [dbStats, setDbStats] = useState<{
     totalFindings: number;
     totalEngagements: number;
@@ -183,29 +196,31 @@ export default function DashboardPage() {
     setIsConnected(false);
     setCurrentState("created");
     localStorage.removeItem("argus:active_engagement");
+    localStorage.removeItem("argus:active_state");
     const url = new URL(window.location.href);
     url.searchParams.delete("engagement");
     window.history.replaceState({}, "", url.toString());
   }, []);
 
-  // Restore active engagement on mount (from URL or localStorage)
+  // Sync URL query param into state when it changes (back/forward navigation)
   useEffect(() => {
     const urlId = searchParams.get("engagement");
-    if (urlId) {
+    if (urlId && urlId !== engagementId) {
       setEngagementId(urlId);
       setIsConnected(true);
-      return;
+    } else if (!urlId && engagementId && !localStorage.getItem("argus:active_engagement")) {
+      // URL cleared and localStorage cleared — disconnect
+      setEngagementId("");
+      setIsConnected(false);
     }
-    const storedId = localStorage.getItem("argus:active_engagement");
-    if (storedId) {
-      setEngagementId(storedId);
-      setIsConnected(true);
-      // Sync back to URL
-      const url = new URL(window.location.href);
-      url.searchParams.set("engagement", storedId);
-      window.history.replaceState({}, "", url.toString());
+  }, [searchParams, engagementId]);
+
+  // Persist current state to localStorage whenever it changes
+  useEffect(() => {
+    if (isConnected && currentState) {
+      localStorage.setItem("argus:active_state", currentState);
     }
-  }, [searchParams]);
+  }, [currentState, isConnected]);
 
   // Fetch findings from DB so they persist beyond Redis TTL
   useEffect(() => {
@@ -280,15 +295,6 @@ export default function DashboardPage() {
       router.push("/auth/signin");
     }
   }, [status, router]);
-
-  // Engagement selection from URL
-  useEffect(() => {
-    const urlEngagementId = searchParams.get("engagement");
-    if (urlEngagementId) {
-      setEngagementId(urlEngagementId);
-      setIsConnected(true);
-    }
-  }, [searchParams]);
 
   // Fetch real dashboard stats from DB
   useEffect(() => {

@@ -257,7 +257,7 @@ class Orchestrator:
             logger.warning(f"katana failed: {e}")
         
         # Execute ffuf for fuzzing/directory discovery
-        wordlist_dir = "/Users/mac/wordlists"
+        wordlist_dir = "/Users/mac/Documents/Argus-/argus-workers/wordlists"
         ffuf_wordlist = {
             "default": os.path.join(wordlist_dir, "common.txt"),
             "high": os.path.join(wordlist_dir, "extended.txt"),

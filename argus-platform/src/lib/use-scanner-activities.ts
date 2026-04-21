@@ -27,21 +27,60 @@ export interface UseScannerActivitiesReturn {
   refetch: () => void;
 }
 
+const STORAGE_KEY = (id: string) => `argus:activities:${id}`;
+
+function loadStoredActivities(id: string): ScannerActivity[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY(id));
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore parse errors
+  }
+  return [];
+}
+
+function saveStoredActivities(id: string, activities: ScannerActivity[]) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY(id), JSON.stringify(activities.slice(0, 100)));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
 /**
  * Hook for polling scanner activities from the database.
  * Provides persistent, historical visibility into what scanning tools did.
+ * Activities are cached in sessionStorage to survive page navigation.
  */
 export function useScannerActivities(
   options: UseScannerActivitiesOptions,
 ): UseScannerActivitiesReturn {
   const { engagementId, pollingInterval = 2000, enabled = true } = options;
 
-  const [activities, setActivities] = useState<ScannerActivity[]>([]);
+  const [activities, setActivities] = useState<ScannerActivity[]>(() =>
+    engagementId ? loadStoredActivities(engagementId) : [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const prevIdRef = useRef(engagementId);
+
+  // Reset stored data when engagementId changes
+  useEffect(() => {
+    if (prevIdRef.current !== engagementId) {
+      prevIdRef.current = engagementId;
+      setActivities(engagementId ? loadStoredActivities(engagementId) : []);
+    }
+  }, [engagementId]);
+
+  // Persist activities to sessionStorage
+  useEffect(() => {
+    if (engagementId) {
+      saveStoredActivities(engagementId, activities);
+    }
+  }, [engagementId, activities]);
 
   const fetchActivities = useCallback(async () => {
     if (!engagementId || !mountedRef.current) return;

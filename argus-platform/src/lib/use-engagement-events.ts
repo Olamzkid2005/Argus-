@@ -3,6 +3,7 @@
  *
  * Provides a unified interface for receiving real-time updates
  * via polling (fallback) or WebSocket connection.
+ * Events are persisted to sessionStorage so they survive page navigation.
  *
  * Requirements: 31.5
  */
@@ -29,6 +30,43 @@ export interface UseEngagementEventsReturn {
   clearEvents: () => void;
 }
 
+const STORAGE_KEY = (id: string) => `argus:events:${id}`;
+const STATE_KEY = (id: string) => `argus:state:${id}`;
+
+function loadStoredEvents(id: string): WebSocketEvent[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY(id));
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore parse errors
+  }
+  return [];
+}
+
+function saveStoredEvents(id: string, events: WebSocketEvent[]) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY(id), JSON.stringify(events.slice(0, 100)));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function loadStoredState(id: string): string | null {
+  try {
+    return sessionStorage.getItem(STATE_KEY(id));
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredState(id: string, state: string) {
+  try {
+    sessionStorage.setItem(STATE_KEY(id), state);
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Hook for subscribing to real-time engagement events
  *
@@ -46,14 +84,41 @@ export function useEngagementEvents(
     onError,
   } = options;
 
-  const [events, setEvents] = useState<WebSocketEvent[]>([]);
-  const [currentState, setCurrentState] = useState<string | null>(null);
+  const [events, setEvents] = useState<WebSocketEvent[]>(() =>
+    loadStoredEvents(engagementId),
+  );
+  const [currentState, setCurrentState] = useState<string | null>(() =>
+    loadStoredState(engagementId),
+  );
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const lastTimestampRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+  const prevIdRef = useRef(engagementId);
+
+  // Reset stored data when engagementId changes
+  useEffect(() => {
+    if (prevIdRef.current !== engagementId) {
+      prevIdRef.current = engagementId;
+      setEvents(loadStoredEvents(engagementId));
+      setCurrentState(loadStoredState(engagementId));
+      lastTimestampRef.current = null;
+    }
+  }, [engagementId]);
+
+  // Persist events to sessionStorage
+  useEffect(() => {
+    saveStoredEvents(engagementId, events);
+  }, [engagementId, events]);
+
+  // Persist state to sessionStorage
+  useEffect(() => {
+    if (currentState) {
+      saveStoredState(engagementId, currentState);
+    }
+  }, [engagementId, currentState]);
 
   // Fetch events via polling
   const fetchEvents = useCallback(async () => {
@@ -154,7 +219,13 @@ export function useEngagementEvents(
   const clearEvents = useCallback(() => {
     setEvents([]);
     lastTimestampRef.current = null;
-  }, []);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY(engagementId));
+      sessionStorage.removeItem(STATE_KEY(engagementId));
+    } catch {
+      // ignore
+    }
+  }, [engagementId]);
 
   // Start/stop polling based on enabled state
   useEffect(() => {
