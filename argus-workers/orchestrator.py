@@ -963,7 +963,13 @@ class Orchestrator:
     
     def _execute_repo_scan(self, repo_url: str, budget: Dict, aggressiveness: str = "default") -> List[Dict]:
         """
-        Execute Semgrep scan on a repository using vibe-security-ultra custom rules.
+        Execute comprehensive repository scan using multiple SAST/DAST tools.
+        
+        Tools:
+        - Semgrep: static code analysis with OWASP, CWE, secrets, and language-specific rules
+        - Gitleaks: secret detection in git history
+        - Trivy: dependency vulnerability scanning
+        - Custom rules: vibe-security-ultra framework rules
         
         Args:
             repo_url: GitHub/GitLab repo URL
@@ -977,6 +983,7 @@ class Orchestrator:
         import shutil
         import subprocess
         import os
+        import glob
         
         all_findings = []
         agg = aggressiveness or "default"
@@ -990,10 +997,41 @@ class Orchestrator:
         clone_depth = ["--depth", "1"] if agg == "default" else ["--depth", "1"] if agg == "high" else []
         semgrep_timeout = 300 if agg == "default" else 600 if agg == "high" else 1200
         custom_rule_limit = 3 if agg == "default" else 6 if agg == "high" else 999
-        include_pro_rules = agg == "extreme"
+        
+        # Common exclude patterns for noise reduction
+        exclude_args = [
+            "--exclude", "node_modules",
+            "--exclude", "vendor",
+            "--exclude", ".git",
+            "--exclude", "dist",
+            "--exclude", "build",
+            "--exclude", "*.min.js",
+            "--exclude", "*.map",
+            "--exclude", "coverage",
+            "--exclude", ".next",
+            "--exclude", ".nuxt",
+        ]
+        
+        # Helper to deduplicate findings by endpoint + type
+        seen = set()
+        def add_finding(finding: Dict):
+            key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{finding.get('evidence', {}).get('check_id', '') or finding.get('evidence', {}).get('cve_id', '')}"
+            if key not in seen:
+                seen.add(key)
+                all_findings.append(finding)
+        
+        def _emit(tool: str, activity: str, status: str, items: int = None):
+            self.ws_publisher.publish_scanner_activity(
+                engagement_id=self.engagement_id,
+                tool_name=tool,
+                activity=activity,
+                status=status,
+                target=repo_url,
+                items_found=items,
+            )
         
         try:
-            # Clone repository
+            # ── Clone repository ──
             clone_cmd = ["git", "clone"] + clone_depth + [repo_url, temp_dir]
             clone_timeout = 120 if agg in ("default", "high") else 300
             clone_result = subprocess.run(
@@ -1005,27 +1043,127 @@ class Orchestrator:
             
             if clone_result.returncode != 0:
                 logger.warning(f"Failed to clone repo {repo_url}: {clone_result.stderr}")
+                _emit("git", f"Clone failed: {clone_result.stderr[:200]}", "failed")
                 return []
             
-            self.ws_publisher.publish_scanner_activity(
-                engagement_id=self.engagement_id,
-                tool_name="git",
-                activity=f"Cloned repository ({'shallow' if clone_depth else 'full'} clone)",
-                status="completed",
-                target=repo_url,
-            )
+            _emit("git", f"Cloned repository ({'shallow' if clone_depth else 'full'} clone)", "completed")
+            
+            # ── Detect dominant language for language-specific rules ──
+            detected_langs = set()
+            if os.path.exists(os.path.join(temp_dir, "package.json")) or \
+               glob.glob(os.path.join(temp_dir, "**/*.js"), recursive=True) or \
+               glob.glob(os.path.join(temp_dir, "**/*.ts"), recursive=True):
+                detected_langs.add("javascript")
+            if os.path.exists(os.path.join(temp_dir, "requirements.txt")) or \
+               os.path.exists(os.path.join(temp_dir, "Pipfile")) or \
+               os.path.exists(os.path.join(temp_dir, "setup.py")) or \
+               glob.glob(os.path.join(temp_dir, "**/*.py"), recursive=True):
+                detected_langs.add("python")
+            if os.path.exists(os.path.join(temp_dir, "go.mod")) or \
+               glob.glob(os.path.join(temp_dir, "**/*.go"), recursive=True):
+                detected_langs.add("go")
+            if os.path.exists(os.path.join(temp_dir, "Cargo.toml")) or \
+               glob.glob(os.path.join(temp_dir, "**/*.rs"), recursive=True):
+                detected_langs.add("rust")
+            if os.path.exists(os.path.join(temp_dir, "Gemfile")) or \
+               glob.glob(os.path.join(temp_dir, "**/*.rb"), recursive=True):
+                detected_langs.add("ruby")
+            if os.path.exists(os.path.join(temp_dir, "pom.xml")) or \
+               os.path.exists(os.path.join(temp_dir, "build.gradle")) or \
+               glob.glob(os.path.join(temp_dir, "**/*.java"), recursive=True):
+                detected_langs.add("java")
+            
+            # Map to semgrep registry configs
+            lang_registry_map = {
+                "javascript": "p/javascript",
+                "python": "p/python",
+                "go": "p/go",
+                "rust": "p/rust",
+                "ruby": "p/ruby",
+                "java": "p/java",
+            }
+            
+            # ── 1. Gitleaks: secret detection in git history ──
+            _emit("gitleaks", "Scanning git history for leaked secrets", "started")
+            try:
+                gitleaks_cmd = [
+                    "gitleaks", "detect", "--source", temp_dir,
+                    "--verbose", "--json",
+                ]
+                if agg == "high":
+                    gitleaks_cmd.extend(["--max-target-megabytes", "50"])
+                elif agg == "extreme":
+                    gitleaks_cmd.extend(["--follow-symlinks", "--max-target-megabytes", "100"])
+                
+                gitleaks_result = self.tool_runner.run(
+                    "gitleaks", gitleaks_cmd, timeout=180 if agg == "default" else 300
+                )
+                if gitleaks_result.get("success"):
+                    parsed = self.parser.parse("gitleaks", gitleaks_result.get("stdout", ""))
+                    count = 0
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "gitleaks")
+                        if normalized:
+                            add_finding(normalized)
+                            count += 1
+                    _emit("gitleaks", f"Git history scan complete — found {count} secrets", "completed", items=count)
+                else:
+                    _emit("gitleaks", "No secrets found in git history", "completed", items=0)
+            except Exception as e:
+                _emit("gitleaks", f"Secret scan failed: {str(e)}", "failed")
+                logger.warning(f"Gitleaks failed: {e}")
+            
+            # ── 2. Trivy: dependency vulnerability scanning ──
+            _emit("trivy", "Scanning dependencies for known CVEs", "started")
+            try:
+                trivy_scanners = "vuln"
+                if agg == "high":
+                    trivy_scanners = "vuln,misconfig"
+                elif agg == "extreme":
+                    trivy_scanners = "vuln,misconfig,secret"
+                
+                trivy_result = self.tool_runner.run(
+                    "trivy",
+                    [
+                        "fs", "--scanners", trivy_scanners,
+                        "--skip-dirs", "node_modules,vendor,dist,build,.git,coverage",
+                        "--format", "json", temp_dir,
+                    ],
+                    timeout=300 if agg == "default" else 600,
+                )
+                if trivy_result.get("success"):
+                    parsed = self.parser.parse("trivy", trivy_result.get("stdout", ""))
+                    count = 0
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "trivy")
+                        if normalized:
+                            add_finding(normalized)
+                            count += 1
+                    _emit("trivy", f"Dependency scan complete — found {count} CVEs", "completed", items=count)
+                else:
+                    _emit("trivy", "No dependency vulnerabilities found", "completed", items=0)
+            except Exception as e:
+                _emit("trivy", f"Dependency scan failed: {str(e)}", "failed")
+                logger.warning(f"Trivy failed: {e}")
+            
+            # ── 3. Semgrep: static code analysis ──
+            # Build registry configs based on aggressiveness
+            registry_configs = ["p/secrets", "p/ci"]
+            if agg in ("high", "extreme"):
+                registry_configs.extend(["p/owasp-top-ten", "p/cwe-top-25"])
+            if agg == "extreme":
+                registry_configs.append("p/command-injection")
+            
+            # Add language-specific configs
+            for lang in detected_langs:
+                registry_config = lang_registry_map.get(lang)
+                if registry_config and registry_config not in registry_configs:
+                    registry_configs.append(registry_config)
             
             # Build custom rules list from available directories
             rule_subdirs = [
-                "secrets",
-                "auth",
-                "injection",
-                "xss",
-                "ssrf",
-                "csrf",
-                "auto",
-                "business-logic",
-                "deserialization",
+                "secrets", "auth", "injection", "xss", "ssrf",
+                "csrf", "auto", "business-logic", "deserialization",
             ]
             custom_configs = []
             for subdir in rule_subdirs:
@@ -1033,62 +1171,44 @@ class Orchestrator:
                 if os.path.isdir(config_dir):
                     custom_configs.append(config_dir)
             
-            # Run with auto rules as baseline
-            self.ws_publisher.publish_scanner_activity(
-                engagement_id=self.engagement_id,
-                tool_name="semgrep",
-                activity=f"Running Semgrep static analysis ({agg} mode)",
-                status="started",
-                target=repo_url,
-            )
-            
-            semgrep_result = self.tool_runner.run(
-                "semgrep",
-                ["--json", "--config", "auto", temp_dir],
-                timeout=semgrep_timeout
-            )
-            
-            if semgrep_result.get("success"):
-                parsed = self.parser.parse(
-                    "semgrep", 
-                    semgrep_result.get("stdout", "")
-                )
-                for p in parsed:
-                    normalized = self._normalize_finding(p, "semgrep")
-                    if normalized:
-                        all_findings.append(normalized)
-            else:
-                logger.warning(f"Semgrep auto scan failed: {semgrep_result.get('stderr')}")
-            
-            # Also try custom rules if available
-            if custom_configs:
+            # Run Semgrep with registry configs + custom rules
+            _emit("semgrep", f"Running Semgrep static analysis ({agg} mode) — {len(registry_configs)} rule sets", "started")
+            try:
+                # Build semgrep command with all registry configs
+                semgrep_cmd = ["--json"] + exclude_args
+                for config in registry_configs:
+                    semgrep_cmd.extend(["--config", config])
+                # Add custom rules (respect limit)
                 rules_used = 0
                 for config in custom_configs:
                     if rules_used >= custom_rule_limit:
                         break
-                    try:
-                        semgrep_result = self.tool_runner.run(
-                            "semgrep",
-                            ["--json", "--config", config, temp_dir],
-                            timeout=semgrep_timeout
-                        )
-                        if semgrep_result.get("success"):
-                            parsed = self.parser.parse(
-                                "semgrep", 
-                                semgrep_result.get("stdout", "")
-                            )
-                            for p in parsed:
-                                normalized = self._normalize_finding(p, "semgrep")
-                                if normalized:
-                                    # Avoid duplicates
-                                    if not any(n.get("endpoint") == normalized.get("endpoint") for n in all_findings):
-                                        all_findings.append(normalized)
-                        rules_used += 1
-                    except Exception as e:
-                        logger.warning(f"Semgrep custom rules scan failed for {config}: {e}")
+                    semgrep_cmd.extend(["--config", config])
+                    rules_used += 1
+                semgrep_cmd.append(temp_dir)
+                
+                semgrep_result = self.tool_runner.run(
+                    "semgrep", semgrep_cmd, timeout=semgrep_timeout
+                )
+                if semgrep_result.get("success"):
+                    parsed = self.parser.parse("semgrep", semgrep_result.get("stdout", ""))
+                    count = 0
+                    for p in parsed:
+                        normalized = self._normalize_finding(p, "semgrep")
+                        if normalized:
+                            add_finding(normalized)
+                            count += 1
+                    _emit("semgrep", f"Static analysis complete — found {count} code issues", "completed", items=count)
+                else:
+                    logger.warning(f"Semgrep scan failed: {semgrep_result.get('stderr')}")
+                    _emit("semgrep", f"Scan failed: {semgrep_result.get('stderr', 'unknown error')[:200]}", "failed")
+            except Exception as e:
+                _emit("semgrep", f"Static analysis failed: {str(e)}", "failed")
+                logger.warning(f"Semgrep failed: {e}")
                 
         except Exception as e:
             logger.warning(f"Repo scan failed: {e}")
+            _emit("repo_scan", f"Repository scan failed: {str(e)}", "failed")
         finally:
             # Cleanup temp directory
             try:
@@ -1096,13 +1216,6 @@ class Orchestrator:
             except:
                 pass
         
-        self.ws_publisher.publish_scanner_activity(
-            engagement_id=self.engagement_id,
-            tool_name="semgrep",
-            activity=f"Repository scan complete — found {len(all_findings)} issues",
-            status="completed",
-            target=repo_url,
-            items_found=len(all_findings),
-        )
+        _emit("repo_scan", f"Repository scan complete — {len(all_findings)} total issues found", "completed", items=len(all_findings))
         
         return all_findings

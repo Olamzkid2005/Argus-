@@ -837,6 +837,113 @@ class NaabuParser(BaseParser):
         return findings
 
 
+class GitleaksParser(BaseParser):
+    """Parser for gitleaks output (secret detection in git history)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse gitleaks JSON output
+        
+        Args:
+            raw_output: Gitleaks output (JSON array)
+            
+        Returns:
+            List of secret leak findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            if not isinstance(data, list):
+                data = [data] if isinstance(data, dict) else []
+            
+            for leak in data:
+                finding = {
+                    "type": "SECRET_LEAK",
+                    "severity": "CRITICAL",
+                    "endpoint": leak.get("File", leak.get("file", "")),
+                    "evidence": {
+                        "file": leak.get("File", leak.get("file", "")),
+                        "line": leak.get("StartLine", leak.get("startLine", leak.get("line", 0))),
+                        "secret_type": leak.get("RuleID", leak.get("ruleId", leak.get("Description", "unknown"))),
+                        "commit": leak.get("Commit", leak.get("commit", "")),
+                        "author": leak.get("Author", leak.get("author", "")),
+                        "date": leak.get("Date", leak.get("date", "")),
+                        "match": leak.get("Match", leak.get("match", "")),
+                    },
+                    "confidence": 0.95,
+                    "tool": "gitleaks",
+                }
+                findings.append(finding)
+                
+        except json.JSONDecodeError:
+            pass
+        
+        return findings
+
+
+class TrivyParser(BaseParser):
+    """Parser for trivy output (dependency vulnerability scanning)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse trivy JSON output
+        
+        Args:
+            raw_output: Trivy output (JSON format with Results array)
+            
+        Returns:
+            List of dependency vulnerability findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            results = data.get("Results", [])
+            if isinstance(data, list):
+                results = data
+            
+            for result in results:
+                target = result.get("Target", "")
+                vulns = result.get("Vulnerabilities", [])
+                
+                for vuln in vulns:
+                    severity = vuln.get("Severity", "UNKNOWN").upper()
+                    if severity == "UNKNOWN":
+                        severity = "INFO"
+                    
+                    cve_id = vuln.get("VulnerabilityID", "")
+                    pkg_name = vuln.get("PkgName", "")
+                    installed = vuln.get("InstalledVersion", "")
+                    fixed = vuln.get("FixedVersion", "")
+                    
+                    finding = {
+                        "type": "DEPENDENCY_VULNERABILITY",
+                        "severity": severity,
+                        "endpoint": target,
+                        "evidence": {
+                            "cve_id": cve_id,
+                            "package": pkg_name,
+                            "installed_version": installed,
+                            "fixed_version": fixed,
+                            "title": vuln.get("Title", ""),
+                            "description": vuln.get("Description", "")[:500],
+                            "references": vuln.get("References", [])[:5],
+                            "cvss": vuln.get("CVSS", {}),
+                        },
+                        "confidence": 0.90,
+                        "tool": "trivy",
+                    }
+                    findings.append(finding)
+                    
+        except json.JSONDecodeError:
+            pass
+        
+        return findings
+
+
 class TestSSLParser(BaseParser):
     """Parser for testssl output (TLS scanning)"""
     
@@ -939,6 +1046,8 @@ class Parser:
             "amass": AmassParser(),
             "naabu": NaabuParser(),
             "testssl": TestSSLParser(),
+            "gitleaks": GitleaksParser(),
+            "trivy": TrivyParser(),
         }
         
         # Initialize tracing
