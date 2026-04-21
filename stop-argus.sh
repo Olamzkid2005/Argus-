@@ -15,38 +15,44 @@ echo -e "${BLUE}║   Stopping Argus Platform Services    ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
 echo ""
 
-# Stop Next.js
+# Stop Next.js (try PID file first, then fallback to pkill)
 if [ -f logs/nextjs.pid ]; then
     NEXTJS_PID=$(cat logs/nextjs.pid)
     echo -e "${YELLOW}Stopping Next.js (PID: $NEXTJS_PID)...${NC}"
-    if kill $NEXTJS_PID 2>/dev/null; then
+    if kill -0 $NEXTJS_PID 2>/dev/null; then
+        kill $NEXTJS_PID 2>/dev/null || true
+        sleep 1
+        kill -9 $NEXTJS_PID 2>/dev/null || true
         echo -e "${GREEN}✓ Next.js stopped${NC}"
-    else
-        echo -e "${YELLOW}⚠ Next.js process not found (may have already stopped)${NC}"
     fi
-    rm logs/nextjs.pid
-else
-    echo -e "${YELLOW}⚠ No Next.js PID file found${NC}"
+    rm -f logs/nextjs.pid
 fi
 
-# Stop Celery
+# Also kill any Next.js dev server processes
+pkill -f "next-server" 2>/dev/null && echo -e "${GREEN}✓ Killed next-server processes${NC}" || true
+
+# Stop Celery (try PID file first, then use pkill for all celery processes)
 if [ -f logs/celery.pid ]; then
     CELERY_PID=$(cat logs/celery.pid)
     echo -e "${YELLOW}Stopping Celery workers (PID: $CELERY_PID)...${NC}"
-    if kill $CELERY_PID 2>/dev/null; then
+    if kill -0 $CELERY_PID 2>/dev/null; then
+        # Graceful shutdown first
+        kill $CELERY_PID 2>/dev/null || true
+        sleep 2
+        # Force kill if still running
+        pkill -f "celery.*worker" 2>/dev/null || true
         echo -e "${GREEN}✓ Celery workers stopped${NC}"
-    else
-        echo -e "${YELLOW}⚠ Celery process not found (may have already stopped)${NC}"
     fi
-    rm logs/celery.pid
-else
-    echo -e "${YELLOW}⚠ No Celery PID file found${NC}"
+    rm -f logs/celery.pid
 fi
 
 # Kill any remaining node/celery processes (fallback)
-echo -e "${YELLOW}Cleaning up any remaining processes...${NC}"
-pkill -f "next dev" 2>/dev/null && echo -e "${GREEN}✓ Cleaned up Next.js processes${NC}" || true
-pkill -f "celery.*worker" 2>/dev/null && echo -e "${GREEN}✓ Cleaned up Celery processes${NC}" || true
+echo -e "${YELLOW}Final cleanup...${NC}"
+pkill -f "next dev" 2>/dev/null || true
+pkill -f "next-server" 2>/dev/null || true  
+pkill -f "celery.*worker" 2>/dev/null || true
+pkill -f "python.*celery" 2>/dev/null || true
+echo -e "${GREEN}✓ Cleanup complete${NC}"
 
 echo ""
 echo -e "${GREEN}All services stopped!${NC}"

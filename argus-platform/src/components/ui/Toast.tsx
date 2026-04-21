@@ -7,7 +7,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
+import { X, CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react";
 
 interface Toast {
   id: string;
@@ -40,26 +40,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const getIcon = (type: Toast["type"]) => {
     switch (type) {
       case "success":
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
+        return <CheckCircle2 className="h-4 w-4 text-[#00FF88]" />;
       case "error":
-        return <AlertCircle className="h-5 w-5 text-red-500" />;
+        return <AlertCircle className="h-4 w-4 text-[#FF4444]" />;
       case "warning":
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+        return <AlertTriangle className="h-4 w-4 text-[#FF8800]" />;
       case "info":
-        return <Info className="h-5 w-5 text-blue-500" />;
+        return <Info className="h-4 w-4 text-prism-cyan" />;
     }
   };
 
   const getStyles = (type: Toast["type"]) => {
     switch (type) {
       case "success":
-        return "bg-green-500/10 border-green-500/50";
+        return "border-[#00FF88]/20 bg-void/90";
       case "error":
-        return "bg-red-500/10 border-red-500/50";
+        return "border-[#FF4444]/20 bg-void/90";
       case "warning":
-        return "bg-yellow-500/10 border-yellow-500/50";
+        return "border-[#FF8800]/20 bg-void/90";
       case "info":
-        return "bg-blue-500/10 border-blue-500/50";
+        return "border-prism-cyan/20 bg-void/90";
     }
   };
 
@@ -67,24 +67,41 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       {toasts.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3">
           {toasts.map((toast) => (
             <div
               key={toast.id}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${getStyles(toast.type)} shadow-lg animate-in slide-in-from-right`}
+              className={`flex items-center gap-4 px-5 py-4 border backdrop-blur-xl shadow-2xl animate-in fade-in slide-in-from-right-8 duration-300 ${getStyles(toast.type)}`}
+              style={{ borderRadius: '2px' }}
             >
-              {getIcon(toast.type)}
-              <span className="text-sm">{toast.message}</span>
+              <div className="shrink-0">{getIcon(toast.type)}</div>
+              <div className="flex-1 min-w-[200px]">
+                <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-secondary mb-0.5">
+                  System Notification
+                </div>
+                <div className="text-[12px] font-mono text-text-primary tracking-tight">
+                  {toast.message}
+                </div>
+              </div>
               <button
                 onClick={() => removeToast(toast.id)}
-                className="ml-2 hover:opacity-70"
+                className="shrink-0 p-1 hover:bg-white/5 transition-colors"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5 text-text-secondary" />
               </button>
+              
+              {/* Progress bar line */}
+              <div className="absolute bottom-0 left-0 h-[1px] bg-prism-cream/30 animate-[shrink_5s_linear_forwards]" style={{ width: '100%' }} />
             </div>
           ))}
         </div>
       )}
+      <style jsx global>{`
+        @keyframes shrink {
+          from { width: 100%; }
+          to { width: 0%; }
+        }
+      `}</style>
     </ToastContext.Provider>
   );
 }

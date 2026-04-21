@@ -1,28 +1,69 @@
-Usage: celery [OPTIONS] COMMAND [ARGS]...
-Try 'celery --help' for help.
+ 
+ -------------- celery@MacBook-Air.local v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-21 11:15:58
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         argus_workers:0x10b026ba0
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 4 (prefork)
+-- ******* ---- .> task events: ON
+--- ***** ----- 
+ -------------- [queues]
+                .> analyze          exchange=analyze(direct) key=analyze
+                .> celery           exchange=celery(direct) key=celery
+                .> recon            exchange=recon(direct) key=recon
+                .> repo_scan        exchange=repo_scan(direct) key=repo_scan
+                .> report           exchange=report(direct) key=report
+                .> scan             exchange=scan(direct) key=scan
 
-Error: 
-Unable to load celery application.
-While trying to load the module celery_app the following error occurred:
+[tasks]
+  . tasks.analyze.evaluate_findings
+  . tasks.analyze.run_analysis
+  . tasks.recon.expand_recon
+  . tasks.recon.run_recon
+  . tasks.repo_scan.expand_repo_scan
+  . tasks.repo_scan.run_repo_scan
+  . tasks.report.generate_report
+  . tasks.report.get_findings_summary
+  . tasks.scan.auth_focused_scan
+  . tasks.scan.deep_scan
+  . tasks.scan.run_scan
+
+[2026-04-21 11:16:00,060: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-21 11:16:00,071: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-21 11:16:01,099: INFO/MainProcess] mingle: all alone
+[2026-04-21 11:16:01,302: INFO/MainProcess] celery@MacBook-Air.local ready.
+[2026-04-21 11:21:17,761: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
+[2026-04-21 11:21:18,290: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
+[2026-04-21 11:21:18,406: WARNING/ForkPoolWorker-2] Task df2dad8e-04b4-420f-9913-80c4b9a48425 retrying: No module named 'distributed_lock'
+[2026-04-21 11:21:18,410: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] retry: Retry in 0s: ModuleNotFoundError("No module named 'distributed_lock'")
+[2026-04-21 11:21:18,852: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
+[2026-04-21 11:21:18,863: WARNING/ForkPoolWorker-4] Task df2dad8e-04b4-420f-9913-80c4b9a48425 retrying: No module named 'distributed_lock'
+[2026-04-21 11:21:18,864: INFO/ForkPoolWorker-4] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] retry: Retry in 1s: ModuleNotFoundError("No module named 'distributed_lock'")
+[2026-04-21 11:21:19,476: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
+[2026-04-21 11:21:19,485: WARNING/ForkPoolWorker-2] Task df2dad8e-04b4-420f-9913-80c4b9a48425 retrying: No module named 'distributed_lock'
+[2026-04-21 11:21:19,486: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] retry: Retry in 4s: ModuleNotFoundError("No module named 'distributed_lock'")
+[2026-04-21 11:21:23,489: ERROR/ForkPoolWorker-2] Task df2dad8e-04b4-420f-9913-80c4b9a48425 failed: No module named 'distributed_lock'
+[2026-04-21 11:21:23,490: ERROR/ForkPoolWorker-2] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] raised unexpected: ModuleNotFoundError("No module named 'distributed_lock'")
 Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bin/celery.py", line 137, in celery
-    app = find_app(app)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/utils.py", line 383, in find_app
-    sym = symbol_by_name(app, imp=imp)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/kombu/utils/imports.py", line 59, in symbol_by_name
-    module = imp(module_name, package=package, **kwargs)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/utils/imports.py", line 105, in import_from_cwd
-    return imp(module, package=package)
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/importlib/__init__.py", line 88, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
-  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
-  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
-  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
-  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 11, in <module>
-    from dotenv import load_dotenv
-ModuleNotFoundError: No module named 'dotenv'
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 858, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
+    ret = task.retry(exc=exc, **retry_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
+    raise_with_context(exc)
+    ~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
+    return task._orig_run(*args, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/recon.py", line 41, in run_recon
+    from distributed_lock import LockContext, DistributedLock
+ModuleNotFoundError: No module named 'distributed_lock'
 
+worker: Warm shutdown (MainProcess)

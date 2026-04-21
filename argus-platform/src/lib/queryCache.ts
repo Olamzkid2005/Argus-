@@ -1,7 +1,7 @@
 /**
  * Query result caching using Redis for expensive database queries
  */
-import { redis } from "./redis";
+import redis from "./redis";
 
 const DEFAULT_TTL = 60; // 1 minute default cache TTL
 

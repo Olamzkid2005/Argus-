@@ -44,6 +44,7 @@ CREATE TABLE engagements (
     status VARCHAR(50) NOT NULL DEFAULT 'created', -- created, recon, awaiting_approval, scanning, analyzing, reporting, complete, failed, paused
     rate_limit_config JSONB, -- {requestsPerSecond, concurrentRequests, respectRobotsTxt, adaptiveSlowdown}
     scan_type VARCHAR(50) NOT NULL DEFAULT 'url', -- 'url' for web app scan, 'repo' for repository scan
+    scan_aggressiveness VARCHAR(20) NOT NULL DEFAULT 'default', -- default, high, extreme
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP WITH TIME ZONE,
@@ -224,6 +225,20 @@ CREATE TABLE rate_limit_events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Scanner activity log for live visibility into tool operations
+CREATE TABLE scanner_activities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+    tool_name VARCHAR(100) NOT NULL,
+    activity TEXT NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'in_progress', -- started, in_progress, completed, failed
+    target VARCHAR(2048),
+    details TEXT,
+    items_found INTEGER,
+    duration_ms INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ============================================================================
 -- AI EXPLAINABILITY TABLES
 -- ============================================================================
@@ -281,6 +296,10 @@ CREATE INDEX idx_tool_metrics_created_at ON tool_metrics(created_at);
 CREATE INDEX idx_job_states_engagement_id ON job_states(engagement_id);
 CREATE INDEX idx_job_states_status ON job_states(status);
 CREATE INDEX idx_job_states_idempotency_key ON job_states(idempotency_key);
+
+-- Scanner activities indexes
+CREATE INDEX idx_scanner_activities_engagement_id ON scanner_activities(engagement_id);
+CREATE INDEX idx_scanner_activities_created_at ON scanner_activities(created_at);
 
 -- ============================================================================
 -- FUNCTIONS AND TRIGGERS

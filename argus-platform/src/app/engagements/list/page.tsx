@@ -101,10 +101,10 @@ export default function EngagementsListPage() {
     return (
       <div className="min-h-screen p-8">
         <div className="max-w-6xl mx-auto">
-          <Skeleton width={200} height={32} className="mb-6" />
+          <Skeleton className="w-[200px] h-8 mb-6" />
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} width="100%" height={80} />
+              <Skeleton key={i} className="w-full h-20" />
             ))}
           </div>
         </div>

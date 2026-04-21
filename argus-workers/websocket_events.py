@@ -30,6 +30,7 @@ class WebSocketEventPublisher:
     EVENT_TOOL_EXECUTED = "tool_executed"
     EVENT_JOB_STARTED = "job_started"
     EVENT_JOB_COMPLETED = "job_completed"
+    EVENT_SCANNER_ACTIVITY = "scanner_activity"
     EVENT_ERROR = "error"
     
     # Redis configuration
@@ -282,6 +283,94 @@ class WebSocketEventPublisher:
             }
         }
         self._publish_event(event)
+
+    def publish_scanner_activity(
+        self,
+        engagement_id: str,
+        tool_name: str,
+        activity: str,
+        status: str = "in_progress",
+        target: str = None,
+        details: str = None,
+        items_found: int = None,
+        duration_ms: int = None
+    ) -> None:
+        """
+        Publish a scanner activity event for live visibility into what tools are doing.
+        Also persists the activity to the database for historical review.
+
+        Args:
+            engagement_id: Engagement ID
+            tool_name: Name of the scanning tool (e.g. 'amass', 'naabu', 'nuclei')
+            activity: Human-readable description of the activity
+            status: Activity status ('started', 'in_progress', 'completed', 'failed')
+            target: Optional target being scanned
+            details: Optional additional details / raw output snippet
+            items_found: Number of items discovered (subdomains, ports, endpoints, etc.)
+            duration_ms: Execution duration in milliseconds
+        """
+        event = {
+            "type": self.EVENT_SCANNER_ACTIVITY,
+            "engagement_id": engagement_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": {
+                "tool_name": tool_name,
+                "activity": activity,
+                "status": status,
+                "target": target,
+                "details": details,
+                "items_found": items_found,
+                "duration_ms": duration_ms,
+            }
+        }
+        self._publish_event(event)
+
+        # Persist to database for historical access
+        self._persist_scanner_activity(
+            engagement_id=engagement_id,
+            tool_name=tool_name,
+            activity=activity,
+            status=status,
+            target=target,
+            details=details,
+            items_found=items_found,
+            duration_ms=duration_ms,
+        )
+
+    def _persist_scanner_activity(
+        self,
+        engagement_id: str,
+        tool_name: str,
+        activity: str,
+        status: str,
+        target: str = None,
+        details: str = None,
+        items_found: int = None,
+        duration_ms: int = None,
+    ) -> None:
+        """Write scanner activity to Postgres for persistence."""
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            return
+        try:
+            import psycopg2
+            conn = psycopg2.connect(db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO scanner_activities
+                    (engagement_id, tool_name, activity, status, target, details, items_found, duration_ms)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (engagement_id, tool_name, activity, status, target, details, items_found, duration_ms),
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            # Non-critical: don't let DB write failure break the scan
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to persist scanner activity: {e}")
     
     def publish_error(
         self,

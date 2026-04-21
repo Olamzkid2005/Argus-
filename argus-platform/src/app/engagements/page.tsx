@@ -12,9 +12,12 @@ import {
   Loader2, 
   Target,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Zap,
+  Bomb,
 } from "lucide-react";
 import MatrixDataRain from "@/components/effects/MatrixDataRain";
+import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 
 export default function EngagementsPage() {
   const router = useRouter();
@@ -23,15 +26,27 @@ export default function EngagementsPage() {
   
   const [scanType, setScanType] = useState<"url" | "repo">("url");
   const [target, setTarget] = useState("");
+  const [scanAggressiveness, setScanAggressiveness] = useState("default");
   const [isLoading, setIsLoading] = useState(false);
   const [progressStep, setProgressStep] = useState("");
   const [error, setError] = useState("");
 
+  // Load user's default aggressiveness from settings
   useEffect(() => {
     if (status === "unauthenticated") {
       signIn();
     }
-  }, [status, router]);
+    if (status === "authenticated") {
+      fetch("/api/settings")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.settings?.scan_aggressiveness) {
+            setScanAggressiveness(data.settings.scan_aggressiveness);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [status]);
 
   if (status === "loading") {
     return (
@@ -76,6 +91,7 @@ export default function EngagementsPage() {
         body: JSON.stringify({
           targetUrl: target,
           scanType: scanType,
+          scanAggressiveness: scanAggressiveness,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: validatedScope,
         }),
@@ -178,6 +194,44 @@ export default function EngagementsPage() {
                   !!! {error} !!!
                 </p>
               )}
+            </div>
+
+            {/* Scan Aggressiveness */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <label className="text-[10px] font-bold text-text-secondary uppercase tracking-[0.2em]">
+                  Scan Aggressiveness
+                </label>
+                <ScanModeHelp trigger="icon" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { id: "default", name: "Default", icon: <Target size={14} />, color: "prism-cyan" },
+                  { id: "high", name: "High", icon: <Zap size={14} />, color: "orange-400" },
+                  { id: "extreme", name: "Extreme", icon: <Bomb size={14} />, color: "red-400" },
+                ].map((preset) => {
+                  const isSelected = scanAggressiveness === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setScanAggressiveness(preset.id)}
+                      className={`flex flex-col items-center gap-1.5 py-3 border transition-all ${
+                        isSelected
+                          ? `border-${preset.color} bg-${preset.color}/10`
+                          : "border-structural bg-surface/30 hover:border-text-secondary/20"
+                      }`}
+                    >
+                      <span className={isSelected ? `text-${preset.color}` : "text-text-secondary"}>
+                        {preset.icon}
+                      </span>
+                      <span className={`text-[9px] font-bold uppercase tracking-widest ${isSelected ? `text-${preset.color}` : "text-text-secondary"}`}>
+                        {preset.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <button

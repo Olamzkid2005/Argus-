@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const tool = searchParams.get("tool");
     const verified = searchParams.get("verified");
     const search = searchParams.get("search");
+    const engagementId = searchParams.get("engagement_id");
 
     // Date range params
     const dateFrom = searchParams.get("date_from");
@@ -62,6 +63,12 @@ export async function GET(req: NextRequest) {
       if (search) {
         query += ` AND (f.endpoint ILIKE $${paramIndex} OR f.type ILIKE $${paramIndex})`;
         params.push(`%${search}%`);
+        paramIndex++;
+      }
+
+      if (engagementId && engagementId !== "all") {
+        query += ` AND f.engagement_id = $${paramIndex}`;
+        params.push(engagementId);
         paramIndex++;
       }
 

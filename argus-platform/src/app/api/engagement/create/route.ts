@@ -15,6 +15,7 @@ export async function POST(req: Request) {
       authorizedScope,
       rateLimitConfig,
       scanType,
+      scanAggressiveness,
     } = body;
 
     // Default to "url" scan type if not specified
@@ -73,10 +74,11 @@ export async function POST(req: Request) {
 
       // Create engagement
       const engagementId = uuidv4();
+      const effectiveAggressiveness = scanAggressiveness || "default";
       const engagementResult = await client.query(
         `INSERT INTO engagements 
-         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
          RETURNING *`,
         [
           engagementId,
@@ -88,6 +90,7 @@ export async function POST(req: Request) {
           session.user.id,
           rateLimitConfig ? JSON.stringify(rateLimitConfig) : null,
           effectiveScanType,
+          effectiveAggressiveness,
         ],
       );
 
@@ -105,6 +108,15 @@ export async function POST(req: Request) {
          (id, engagement_id, from_state, to_state, reason, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW())`,
         [uuidv4(), engagementId, null, "created", "Engagement created"],
+      );
+
+      // Auto-clear: Delete findings from previous engagements for this org
+      // This ensures each new scan starts fresh
+      await client.query(
+        `DELETE FROM findings f
+         USING engagements e
+         WHERE f.engagement_id = e.id AND e.org_id = $1`,
+        [session.user.orgId]
       );
 
       await client.query("COMMIT");
@@ -126,6 +138,7 @@ export async function POST(req: Request) {
               max_depth: 3,
               max_cost: 0.5,
             },
+            aggressiveness: effectiveAggressiveness,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });
@@ -140,6 +153,7 @@ export async function POST(req: Request) {
               max_depth: 3,
               max_cost: 0.5,
             },
+            aggressiveness: effectiveAggressiveness,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });

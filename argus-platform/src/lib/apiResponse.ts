@@ -10,8 +10,9 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
-export interface PaginatedResponse<T = unknown> extends ApiResponse<T> {
-  meta?: {
+export interface PaginatedResponse<T = unknown> {
+  data: T[];
+  meta: {
     total: number;
     page: number;
     limit: number;
@@ -51,11 +52,11 @@ export function errorResponse(
  */
 export function paginatedResponse<T>(
   data: T[],
-  meta: PaginatedResponse["meta"],
+  meta: PaginatedResponse<T>["meta"],
   status: number = 200
 ): NextResponse<PaginatedResponse<T>> {
   return NextResponse.json(
-    { data, meta },
+    { data, meta } as PaginatedResponse<T>,
     { status }
   );
 }

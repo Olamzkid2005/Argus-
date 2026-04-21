@@ -145,7 +145,8 @@ class Orchestrator:
         )
         
         # Execute reconnaissance tools
-        findings = self._execute_recon_tools(target, job.get("budget", {}))
+        aggressiveness = job.get("aggressiveness", "default")
+        findings = self._execute_recon_tools(target, job.get("budget", {}), aggressiveness)
         
         # Save findings to database
         findings_count = len(findings)
@@ -180,162 +181,248 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
     
-    def _execute_recon_tools(self, target: str, budget: Dict) -> List[Dict]:
+    def _execute_recon_tools(self, target: str, budget: Dict, aggressiveness: str = "default") -> List[Dict]:
         """
         Execute reconnaissance tools against target.
         
         Args:
             target: Target URL
             budget: Budget configuration
+            aggressiveness: Scan aggressiveness level (default, high, extreme)
             
         Returns:
             List of findings
         """
         all_findings = []
+        target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+
+        # Aggressiveness config
+        agg = aggressiveness or "default"
+        katana_depth = {"default": "3", "high": "5", "extreme": "7"}.get(agg, "3")
+        naabu_ports = {"default": "-top-ports", "high": "-top-ports", "extreme": "-p-"}.get(agg, "-top-ports")
+        naabu_port_val = {"default": "1000", "high": "10000", "extreme": "1-65535"}.get(agg, "1000")
+        amass_mode = {"default": ["enum", "-d"], "high": ["enum", "-d"], "extreme": ["enum", "-d", "-brute", "-w"]}.get(agg, ["enum", "-d"])
+
+        def _emit(tool: str, activity: str, status: str, items: int = None, details: str = None):
+            self.ws_publisher.publish_scanner_activity(
+                engagement_id=self.engagement_id,
+                tool_name=tool,
+                activity=activity,
+                status=status,
+                target=target_domain,
+                items_found=items,
+                details=details,
+            )
         
         # Execute httpx for endpoint discovery
+        _emit("httpx", "Discovering live endpoints and probing HTTP services", "started")
         try:
             httpx_result = self.tool_runner.run(
                 "httpx",
                 ["-u", target, "-json", "-silent"],
                 timeout=60
             )
+            parsed_count = 0
             if httpx_result.get("success"):
                 parsed = self.parser.parse("httpx", httpx_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "httpx")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("httpx", "Live endpoint discovery complete", "completed", items=parsed_count)
         except Exception as e:
+            _emit("httpx", f"Live endpoint discovery failed: {str(e)}", "failed")
             logger.warning(f"httpx failed: {e}")
         
         # Execute katana for web crawling
+        _emit("katana", f"Crawling application routes and links up to depth {katana_depth}", "started")
         try:
             katana_result = self.tool_runner.run(
                 "katana",
-                ["-u", target, "-jsonl", "-silent", "-d", "3"],
-                timeout=120
+                ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
+                timeout=180 if agg == "extreme" else 120
             )
+            parsed_count = 0
             if katana_result.get("success"):
                 parsed = self.parser.parse("katana", katana_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "katana")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("katana", "Web crawling complete — mapped application surface", "completed", items=parsed_count)
         except Exception as e:
+            _emit("katana", f"Web crawling failed: {str(e)}", "failed")
             logger.warning(f"katana failed: {e}")
         
         # Execute ffuf for fuzzing/directory discovery
+        wordlist_dir = "/Users/mac/wordlists"
+        ffuf_wordlist = {
+            "default": os.path.join(wordlist_dir, "common.txt"),
+            "high": os.path.join(wordlist_dir, "extended.txt"),
+            "extreme": os.path.join(wordlist_dir, "comprehensive.txt"),
+        }.get(agg, os.path.join(wordlist_dir, "common.txt"))
+        ffuf_wordlist_name = os.path.basename(ffuf_wordlist)
+        _emit("ffuf", f"Fuzzing directories with {ffuf_wordlist_name} wordlist", "started")
         try:
+            ffuf_cmd = ["-u", f"{target}/FUZZ", "-w", ffuf_wordlist, "-json"]
+            if agg == "high":
+                ffuf_cmd.extend(["-t", "50"])
+            elif agg == "extreme":
+                ffuf_cmd.extend(["-t", "100", "-mc", "all"])
             ffuf_result = self.tool_runner.run(
                 "ffuf",
-                ["-u", f"{target}/FUZZ", "-json"],
-                timeout=180
+                ffuf_cmd,
+                timeout=300 if agg == "extreme" else 180
             )
+            parsed_count = 0
             if ffuf_result.get("success"):
                 parsed = self.parser.parse("ffuf", ffuf_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "ffuf")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("ffuf", "Directory fuzzing complete", "completed", items=parsed_count)
         except Exception as e:
+            _emit("ffuf", f"Directory fuzzing failed: {str(e)}", "failed")
             logger.warning(f"ffuf failed: {e}")
         
         # Execute amass for subdomain enumeration
+        amass_desc = "passive" if agg == "default" else "active + passive" if agg == "high" else "brute force + all sources"
+        _emit("amass", f"Enumerating subdomains for {target_domain} ({amass_desc})", "started")
         try:
+            amass_cmd = amass_mode + [target_domain, "-json"]
+            amass_timeout = 300 if agg == "default" else 600 if agg == "high" else 1200
             amass_result = self.tool_runner.run(
                 "amass",
-                ["enum", "-d", target.replace("https://", "").replace("http://", "").split("/")[0], "-json"],
-                timeout=300
+                amass_cmd,
+                timeout=amass_timeout
             )
+            parsed_count = 0
             if amass_result.get("success"):
                 parsed = self.parser.parse("amass", amass_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "amass")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("amass", f"Subdomain enumeration complete — found {parsed_count} subdomains", "completed", items=parsed_count)
         except Exception as e:
+            _emit("amass", f"Subdomain enumeration failed: {str(e)}", "failed")
             logger.warning(f"amass failed: {e}")
         
         # Execute naabu for port scanning
+        port_desc = "top 1000" if agg == "default" else "top 10,000" if agg == "high" else "full range 1-65535"
+        _emit("naabu", f"Probing open ports on {target_domain} ({port_desc})", "started")
         try:
-            target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+            naabu_cmd = ["-host", target_domain, "-json"]
+            if naabu_ports == "-p-":
+                naabu_cmd.append("-p-")
+            else:
+                naabu_cmd.extend(["-top-ports", naabu_port_val])
+            naabu_timeout = 120 if agg == "default" else 300 if agg == "high" else 900
             naabu_result = self.tool_runner.run(
                 "naabu",
-                ["-host", target_domain, "-json"],
-                timeout=120
+                naabu_cmd,
+                timeout=naabu_timeout
             )
+            parsed_count = 0
             if naabu_result.get("success"):
                 parsed = self.parser.parse("naabu", naabu_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "naabu")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("naabu", f"Port scan complete — found {parsed_count} open ports", "completed", items=parsed_count)
         except Exception as e:
+            _emit("naabu", f"Port scan failed: {str(e)}", "failed")
             logger.warning(f"naabu failed: {e}")
         
         # Execute whatweb for technology fingerprinting
+        _emit("whatweb", "Fingerprinting web technologies and server stack", "started")
         try:
             whatweb_result = self.tool_runner.run(
                 "whatweb",
                 ["--format=json", target],
                 timeout=120
             )
+            parsed_count = 0
             if whatweb_result.get("success"):
                 parsed = self.parser.parse("whatweb", whatweb_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "whatweb")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("whatweb", "Technology fingerprinting complete", "completed", items=parsed_count)
         except Exception as e:
+            _emit("whatweb", f"Technology fingerprinting failed: {str(e)}", "failed")
             logger.warning(f"whatweb failed: {e}")
         
         # Execute nikto for web server scanning
+        _emit("nikto", "Scanning web server for misconfigurations and known issues", "started")
         try:
             nikto_result = self.tool_runner.run(
                 "nikto",
                 ["-h", target, "-Format", "csv"],
                 timeout=300
             )
+            parsed_count = 0
             if nikto_result.get("success"):
                 parsed = self.parser.parse("nikto", nikto_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "nikto")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("nikto", "Web server scan complete", "completed", items=parsed_count)
         except Exception as e:
+            _emit("nikto", f"Web server scan failed: {str(e)}", "failed")
             logger.warning(f"nikto failed: {e}")
         
         # Execute gau for known URLs
+        _emit("gau", "Fetching known URLs from passive archives (gau)", "started")
         try:
             gau_result = self.tool_runner.run(
                 "gau",
                 [target, "--json"],
                 timeout=180
             )
+            parsed_count = 0
             if gau_result.get("success"):
                 parsed = self.parser.parse("gau", gau_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "gau")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("gau", "Passive URL discovery complete", "completed", items=parsed_count)
         except Exception as e:
+            _emit("gau", f"Passive URL discovery failed: {str(e)}", "failed")
             logger.warning(f"gau failed: {e}")
         
         # Execute waybackurls for historical URLs
+        _emit("waybackurls", "Retrieving historical URLs from Wayback Machine", "started")
         try:
             wayback_result = self.tool_runner.run(
                 "waybackurls",
                 [target],
                 timeout=120
             )
+            parsed_count = 0
             if wayback_result.get("success"):
                 parsed = self.parser.parse("waybackurls", wayback_result.get("stdout", ""))
                 for p in parsed:
                     normalized = self._normalize_finding(p, "waybackurls")
                     if normalized:
                         all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("waybackurls", "Historical URL retrieval complete", "completed", items=parsed_count)
         except Exception as e:
+            _emit("waybackurls", f"Historical URL retrieval failed: {str(e)}", "failed")
             logger.warning(f"waybackurls failed: {e}")
         
         return all_findings
@@ -394,7 +481,8 @@ class Orchestrator:
         )
         
         # Execute scanning tools against targets
-        findings = self._execute_scan_tools(targets, job.get("budget", {}))
+        scan_aggressiveness = job.get("aggressiveness", "default")
+        findings = self._execute_scan_tools(targets, job.get("budget", {}), scan_aggressiveness)
         
         # Save findings to database
         findings_count = len(findings)
@@ -429,26 +517,36 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
     
-    def _execute_scan_tools(self, targets: List[str], budget: Dict) -> List[Dict]:
+    def _execute_scan_tools(self, targets: List[str], budget: Dict, aggressiveness: str = "default") -> List[Dict]:
         """
         Execute scanning tools against targets.
         
         Args:
             targets: List of target URLs
             budget: Budget configuration
+            aggressiveness: Scan aggressiveness level (default, high, extreme)
             
         Returns:
             List of findings
         """
         all_findings = []
+        agg = aggressiveness or "default"
         
         for target in targets:
             # Execute Nuclei for vulnerability scanning
             try:
+                nuclei_cmd = ["-u", target, "-json", "-silent"]
+                nuclei_timeout = 300
+                if agg == "high":
+                    nuclei_cmd.extend(["-severity", "low,medium,high,critical"])
+                    nuclei_timeout = 600
+                elif agg == "extreme":
+                    nuclei_cmd.extend(["-severity", "info,low,medium,high,critical", "-tags", "fuzz"])
+                    nuclei_timeout = 1200
                 nuclei_result = self.tool_runner.run(
                     "nuclei",
-                    ["-u", target, "-json", "-silent"],
-                    timeout=300
+                    nuclei_cmd,
+                    timeout=nuclei_timeout
                 )
                 if nuclei_result.get("success"):
                     parsed = self.parser.parse("nuclei", nuclei_result.get("stdout", ""))
@@ -461,10 +559,18 @@ class Orchestrator:
             
             # Execute dalfox for XSS
             try:
+                dalfox_cmd = ["url", target, "-json"]
+                dalfox_timeout = 300
+                if agg == "high":
+                    dalfox_cmd.append("-b")
+                    dalfox_timeout = 600
+                elif agg == "extreme":
+                    dalfox_cmd.extend(["-b", "--deep-dom"])
+                    dalfox_timeout = 1200
                 dalfox_result = self.tool_runner.run(
                     "dalfox",
-                    ["url", target, "-json"],
-                    timeout=300
+                    dalfox_cmd,
+                    timeout=dalfox_timeout
                 )
                 if dalfox_result.get("success"):
                     parsed = self.parser.parse("dalfox", dalfox_result.get("stdout", ""))
@@ -477,10 +583,18 @@ class Orchestrator:
             
             # Execute sqlmap for SQL injection
             try:
+                sqlmap_cmd = ["-u", target, "--batch", "--json-output", "/tmp/sqlmap.json"]
+                sqlmap_timeout = 300
+                if agg == "high":
+                    sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
+                    sqlmap_timeout = 600
+                elif agg == "extreme":
+                    sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
+                    sqlmap_timeout = 1800
                 sqlmap_result = self.tool_runner.run(
                     "sqlmap",
-                    ["-u", target, "--batch", "--json-output", "/tmp/sqlmap.json"],
-                    timeout=300
+                    sqlmap_cmd,
+                    timeout=sqlmap_timeout
                 )
                 if sqlmap_result.get("success"):
                     # Read JSON output if available
@@ -501,10 +615,12 @@ class Orchestrator:
             
             # Execute arjun for parameter discovery
             try:
+                arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
+                arjun_timeout = 180 if agg == "default" else 300
                 arjun_result = self.tool_runner.run(
                     "arjun",
-                    ["-u", target, "-m", "GET", "-o", "/tmp/arjun.json", "-t", "20"],
-                    timeout=180
+                    ["-u", target, "-m", "GET", "-o", "/tmp/arjun.json", "-t", arjun_threads],
+                    timeout=arjun_timeout
                 )
                 if arjun_result.get("success"):
                     try:
@@ -809,7 +925,8 @@ class Orchestrator:
         )
         
         # Execute repository scan
-        findings = self._execute_repo_scan(repo_url, job.get("budget", {}))
+        repo_aggressiveness = job.get("aggressiveness", "default")
+        findings = self._execute_repo_scan(repo_url, job.get("budget", {}), repo_aggressiveness)
         
         # Save findings to database
         findings_count = len(findings)
@@ -844,13 +961,14 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
     
-    def _execute_repo_scan(self, repo_url: str, budget: Dict) -> List[Dict]:
+    def _execute_repo_scan(self, repo_url: str, budget: Dict, aggressiveness: str = "default") -> List[Dict]:
         """
         Execute Semgrep scan on a repository using vibe-security-ultra custom rules.
         
         Args:
             repo_url: GitHub/GitLab repo URL
             budget: Budget configuration
+            aggressiveness: Scan aggressiveness level (default, high, extreme)
             
         Returns:
             List of code vulnerability findings
@@ -861,47 +979,73 @@ class Orchestrator:
         import os
         
         all_findings = []
+        agg = aggressiveness or "default"
         
         # Get path to custom semgrep rules
         rules_dir = os.path.join(os.path.dirname(__file__), "semgrep_rules")
         
         temp_dir = tempfile.mkdtemp(prefix="argus_repo_scan_")
         
+        # Aggressiveness config for repo scans
+        clone_depth = ["--depth", "1"] if agg == "default" else ["--depth", "1"] if agg == "high" else []
+        semgrep_timeout = 300 if agg == "default" else 600 if agg == "high" else 1200
+        custom_rule_limit = 3 if agg == "default" else 6 if agg == "high" else 999
+        include_pro_rules = agg == "extreme"
+        
         try:
             # Clone repository
+            clone_cmd = ["git", "clone"] + clone_depth + [repo_url, temp_dir]
+            clone_timeout = 120 if agg in ("default", "high") else 300
             clone_result = subprocess.run(
-                ["git", "clone", "--depth", "1", repo_url, temp_dir],
+                clone_cmd,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=clone_timeout
             )
             
             if clone_result.returncode != 0:
                 logger.warning(f"Failed to clone repo {repo_url}: {clone_result.stderr}")
                 return []
             
-            # First run with custom rules (vibe-security-ultra)
-            custom_rules_path = os.path.join(rules_dir, "secrets")
-            auto_rules_path = os.path.join(rules_dir, "auth")
-            injection_rules_path = os.path.join(rules_dir, "injection")
-            xss_rules_path = os.path.join(rules_dir, "xss")
-            ssrf_rules_path = os.path.join(rules_dir, "ssrf")
-            csrf_rules_path = os.path.join(rules_dir, "csrf")
-            auto_rules_path2 = os.path.join(rules_dir, "auto")
-            auth_rules_path = os.path.join(rules_dir, "auth")
+            self.ws_publisher.publish_scanner_activity(
+                engagement_id=self.engagement_id,
+                tool_name="git",
+                activity=f"Cloned repository ({'shallow' if clone_depth else 'full'} clone)",
+                status="completed",
+                target=repo_url,
+            )
             
-            # Run semgrep with custom rules
+            # Build custom rules list from available directories
+            rule_subdirs = [
+                "secrets",
+                "auth",
+                "injection",
+                "xss",
+                "ssrf",
+                "csrf",
+                "auto",
+                "business-logic",
+                "deserialization",
+            ]
             custom_configs = []
-            for config_dir in [custom_rules_path, auto_rules_path, injection_rules_path, 
-                           xss_rules_path, ssrf_rules_path, csrf_rules_path, auto_rules_path2, auth_rules_path]:
+            for subdir in rule_subdirs:
+                config_dir = os.path.join(rules_dir, subdir)
                 if os.path.isdir(config_dir):
                     custom_configs.append(config_dir)
             
             # Run with auto rules as baseline
+            self.ws_publisher.publish_scanner_activity(
+                engagement_id=self.engagement_id,
+                tool_name="semgrep",
+                activity=f"Running Semgrep static analysis ({agg} mode)",
+                status="started",
+                target=repo_url,
+            )
+            
             semgrep_result = self.tool_runner.run(
                 "semgrep",
                 ["--json", "--config", "auto", temp_dir],
-                timeout=300
+                timeout=semgrep_timeout
             )
             
             if semgrep_result.get("success"):
@@ -918,12 +1062,15 @@ class Orchestrator:
             
             # Also try custom rules if available
             if custom_configs:
-                for config in custom_configs[:3]:  # Limit to 3 rule sets to avoid timeout
+                rules_used = 0
+                for config in custom_configs:
+                    if rules_used >= custom_rule_limit:
+                        break
                     try:
                         semgrep_result = self.tool_runner.run(
                             "semgrep",
                             ["--json", "--config", config, temp_dir],
-                            timeout=180
+                            timeout=semgrep_timeout
                         )
                         if semgrep_result.get("success"):
                             parsed = self.parser.parse(
@@ -936,6 +1083,7 @@ class Orchestrator:
                                     # Avoid duplicates
                                     if not any(n.get("endpoint") == normalized.get("endpoint") for n in all_findings):
                                         all_findings.append(normalized)
+                        rules_used += 1
                     except Exception as e:
                         logger.warning(f"Semgrep custom rules scan failed for {config}: {e}")
                 
@@ -947,5 +1095,14 @@ class Orchestrator:
                 shutil.rmtree(temp_dir)
             except:
                 pass
+        
+        self.ws_publisher.publish_scanner_activity(
+            engagement_id=self.engagement_id,
+            tool_name="semgrep",
+            activity=f"Repository scan complete — found {len(all_findings)} issues",
+            status="completed",
+            target=repo_url,
+            items_found=len(all_findings),
+        )
         
         return all_findings

@@ -2,109 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-
-  --primary: 217.2 91.2% 59.8%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-
-  --accent: 187.2 92.4% 42.4%;
-  --accent-foreground: 210 40% 98%;
-
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 224.3 76.3% 48%;
-
-  --radius: 0.75rem;
-
-  /* Custom Argus Tokens */
-  --argus-indigo: #6366f1;
-  --argus-cyan: #06b6d4;
-  --argus-magenta: #d946ef;
-}
-
-[data-theme="light"] {
-  --background: 210 40% 98%;
-  --foreground: 222.2 84% 4.9%;
-
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-
-  --primary: 221.2 83.2% 53.3%;
-  --primary-foreground: 210 40% 98%;
-
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-
-  --accent: 188.7 94.5% 36.3%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 221.2 83.2% 53.3%;
-
-  --argus-indigo: #4f46e5;
-  --argus-cyan: #0891b2;
-  --argus-magenta: #c026d3;
-}
-
 @layer base {
-  * {
-    @apply border-border;
+  :root, .dark {
+    /* Theme Tokens - Default Dark (Prism & Void) */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --radius: 0.5rem;
+
+    --bg-void: #000000; /* Pure Black as requested */
+    --bg-surface: #0A0A0F;
+    --bg-glass: rgba(10, 10, 15, 0.8);
+    --border-structural: rgba(255, 255, 255, 0.08);
+    --text-primary: #F0F0F5;
+    --text-secondary: #8A8A9E;
+    --prism-cream: #FFFDD0;
+    --prism-muted: #1A1A24;
+    --prism-cyan: #E9FFFF;
+    --prism-surface: #121212;
   }
+
+  .light {
+    --background: 240 10% 98%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+
+    --bg-void: #F5F5F7;
+    --bg-surface: #FFFFFF;
+    --bg-glass: rgba(255, 255, 255, 0.8);
+    --border-structural: rgba(0, 0, 0, 0.1);
+    --text-primary: #12121A;
+    --text-secondary: #6B6B7B;
+    --prism-cream: #B08D00;
+    --prism-muted: #E2E2E8;
+    --prism-cyan: #007799;
+    --prism-surface: #F0F0F5;
+  }
+
   body {
-    @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(circle at 0% 0%, var(--argus-indigo) 4%, transparent 35%),
-      radial-gradient(
-        circle at 100% 100%,
-        var(--argus-magenta) 4%,
-        transparent 35%
-      );
-    background-attachment: fixed;
+    background-color: var(--bg-void);
+    color: var(--text-primary);
+    @apply antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+@layer components {
+  .scanner-reveal-container {
+    perspective: 1000px;
+  }
+  .surface-layer {
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
   }
 }
 
 @layer utilities {
-  .prism-glass {
-    @apply bg-card/10 backdrop-blur-xl border border-white/10 shadow-2xl;
+  .shadow-glow-cream {
+    box-shadow: 0 0 20px var(--prism-cream);
   }
-
-  [data-theme="light"] .prism-glass {
-    @apply bg-white/70 border-black/5 shadow-lg;
+  .shadow-glow-cyan {
+    box-shadow: 0 0 20px var(--prism-cyan);
   }
-
-  .prism-scanner {
-    @apply relative border border-white/10 flex items-center justify-center rounded-full;
-  }
-
-  .prism-scanner::before {
-    content: "";
-    @apply absolute inset-0 rounded-full border-2 border-transparent border-t-[#06b6d4] border-r-[#6366f1] animate-[spin_3s_cubic-bezier(0.5,0,0.5,1)_infinite];
+  
+  @keyframes progress {
+    0% {
+      transform: translateX(-100%);
+    }
+    50% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
   }
 }

@@ -5,9 +5,38 @@ Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
 from celery_app import app
 import os
+import sys
+import importlib.util
+
+_workers_dir = "/Users/mac/Documents/Argus-/argus-workers"
+
+# Robust module loader — avoids sys.path issues in Celery fork pool workers
+def _load_module(module_name: str, rel_path: str = None):
+    rel_path = rel_path or f"{module_name}.py"
+    file_path = os.path.join(_workers_dir, rel_path)
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+_orchestrator = _load_module("orchestrator")
+Orchestrator = _orchestrator.Orchestrator
+
+_tracing = _load_module("tracing")
+TracingManager = _tracing.TracingManager
+TraceContext = _tracing.TraceContext
+
 import psycopg2
 
-from tracing import TracingManager, TraceContext
+_distributed_lock = _load_module("distributed_lock")
+LockContext = _distributed_lock.LockContext
+DistributedLock = _distributed_lock.DistributedLock
+
+_snapshot_manager = _load_module("snapshot_manager")
+SnapshotManager = _snapshot_manager.SnapshotManager
+
+_state_machine = _load_module("state_machine")
+EngagementStateMachine = _state_machine.EngagementStateMachine
 
 
 @app.task(bind=True, name="tasks.recon.run_recon")
@@ -21,10 +50,6 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         budget: Budget configuration
         trace_id: Optional trace_id for distributed tracing (generated if not provided)
     """
-    from orchestrator import Orchestrator
-    from distributed_lock import LockContext, DistributedLock
-    from snapshot_manager import SnapshotManager
-    from state_machine import EngagementStateMachine
 
     db_conn_string = os.getenv("DATABASE_URL")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -82,9 +107,6 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         budget: Budget configuration
         trace_id: Optional trace_id for distributed tracing
     """
-    from orchestrator import Orchestrator
-    from distributed_lock import LockContext, DistributedLock
-
     db_conn_string = os.getenv("DATABASE_URL")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 

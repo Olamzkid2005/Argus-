@@ -33,6 +33,7 @@ export interface JobMessage {
     max_depth: number;
     max_cost: number;
   };
+  aggressiveness?: string;
   trace_id: string;
   created_at: string;
 }
@@ -127,7 +128,8 @@ export async function pushJob(job: JobMessage): Promise<string> {
 
   // Execute the Python dispatch script
   return new Promise((resolve, reject) => {
-    const workersRoot = process.cwd();
+    // Fixed path - go up from argus-platform to root
+    const workersRoot = path.join(process.cwd(), "..");
     const dispatchScript = path.join(workersRoot, "argus-workers", "dispatch_task.py");
     const pythonPath = path.join(workersRoot, "argus-workers", "venv", "bin", "python");
 

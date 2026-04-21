@@ -32,21 +32,23 @@ export async function GET() {
     const email = session.user.email;
     redis = getRedisClient();
     
-    const openaiKey = await redis.get(`settings:${email}:openai_api_key`);
-    const opencodeKey = await redis.get(`settings:${email}:opencode_api_key`);
-    
+    const openrouterKey = await redis.get(`settings:${email}:openrouter_api_key`);
+    const preferredModel = await redis.get(`settings:${email}:preferred_ai_model`);
+    const scanAggressiveness = await redis.get(`settings:${email}:scan_aggressiveness`);
+
     const settings: Record<string, string> = {};
-    
-    // Mask the keys
-    if (openaiKey) {
-      settings.openai_api_key = openaiKey.startsWith("sk-") 
-        ? "sk-" + "•".repeat(20) 
-        : "•".repeat(24);
+
+    // Mask the key
+    if (openrouterKey) {
+      settings.openrouter_api_key = "sk-or-" + "•".repeat(20);
     }
-    if (opencodeKey) {
-      settings.opencode_api_key = "•".repeat(24);
+    if (preferredModel) {
+      settings.preferred_ai_model = preferredModel;
     }
-    
+    if (scanAggressiveness) {
+      settings.scan_aggressiveness = scanAggressiveness;
+    }
+
     return NextResponse.json({ settings });
     
   } catch (error) {
@@ -71,18 +73,19 @@ export async function PUT(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { openai_api_key, opencode_api_key, ...otherSettings } = body;
+    const { openrouter_api_key, preferred_ai_model, ...otherSettings } = body;
     const email = session.user.email;
     
     redis = getRedisClient();
     
-    // Store keys (if not masked with •)
-    if (openai_api_key && openai_api_key.length > 5 && !openai_api_key.includes("•")) {
-      await redis.setex(`settings:${email}:openai_api_key`, 86400, openai_api_key);
+    // Store OpenRouter key (if not masked with •)
+    if (openrouter_api_key && openrouter_api_key.length > 5 && !openrouter_api_key.includes("•")) {
+      await redis.setex(`settings:${email}:openrouter_api_key`, 86400, openrouter_api_key);
     }
     
-    if (opencode_api_key && opencode_api_key.length > 5 && !opencode_api_key.includes("•")) {
-      await redis.setex(`settings:${email}:opencode_api_key`, 86400, opencode_api_key);
+    // Store preferred model
+    if (preferred_ai_model && typeof preferred_ai_model === "string" && preferred_ai_model.length > 0) {
+      await redis.setex(`settings:${email}:preferred_ai_model`, 86400, preferred_ai_model);
     }
     
     // Store other settings

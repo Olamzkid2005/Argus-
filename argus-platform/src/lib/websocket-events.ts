@@ -11,6 +11,7 @@ export type WebSocketEventType =
   | "tool_executed"
   | "job_started"
   | "job_completed"
+  | "scanner_activity"
   | "error";
 
 export interface WebSocketEvent {
@@ -89,6 +90,21 @@ export interface JobCompletedEvent {
     status: "success" | "failed";
     findings_count: number;
     duration_ms: number;
+  };
+}
+
+export interface ScannerActivityEvent {
+  type: "scanner_activity";
+  engagement_id: string;
+  timestamp: string;
+  data: {
+    tool_name: string;
+    activity: string;
+    status: "started" | "in_progress" | "completed" | "failed";
+    target?: string;
+    details?: string;
+    items_found?: number;
+    duration_ms?: number;
   };
 }
 
