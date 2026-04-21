@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import type { AuditAction } from "@/lib/audit";
 
 /**
  * Middleware for security headers, rate limiting, API versioning,
@@ -19,7 +20,7 @@ function getClientIP(request: NextRequest): string {
  */
 async function logAuditEvent(
   request: NextRequest,
-  action: string,
+  action: AuditAction,
   details?: Record<string, unknown>
 ) {
   try {
@@ -134,8 +135,9 @@ export async function middleware(request: NextRequest) {
     ];
 
     if (sensitivePaths.some((p) => path.startsWith(p))) {
-      await logAuditEvent(request, `api_${request.method.toLowerCase()}`, {
+      await logAuditEvent(request, "api_request", {
         path,
+        method: request.method,
       });
     }
   }

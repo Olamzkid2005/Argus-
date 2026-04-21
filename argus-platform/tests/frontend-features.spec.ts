@@ -231,6 +231,7 @@ test('12. Engagement create API rejects unauthenticated requests', async () => {
 
 // Test 13: Signup with credentials works
 test('13. User can signup with email/password', async () => {
+  test.setTimeout(60000);
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage();
   
@@ -272,7 +273,7 @@ test('13. User can signup with email/password', async () => {
   
   console.log('✅ Signup test passed');
   await browser.close();
-}, 60000);
+});
 
 // Test 14: Engagement form shows progress bar when submitting
 test('14. Engagement form shows progress during submission', async () => {

@@ -78,6 +78,7 @@
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^18",
@@ -86,8 +87,10 @@
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "eslint-config-prettier": "^10.1.8",
+    "jest": "^30.3.0",
     "playwright": "^1.59.1",
     "prettier": "^3.8.3",
+    "ts-jest": "^29.4.9",
     "typescript": "^5"
   }
 }
