@@ -239,7 +239,8 @@ class FindingRepository(BaseRepository):
 
     def get_summary_by_engagement(self, engagement_id: str) -> Dict:
         """
-        Get summary statistics for findings
+        Get summary statistics for findings.
+        Uses materialized view if available for better performance.
 
         Args:
             engagement_id: Engagement ID
@@ -251,6 +252,37 @@ class FindingRepository(BaseRepository):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         try:
+            # Try materialized view first for better performance
+            cursor.execute(
+                """
+                SELECT total_findings, critical_count, high_count, medium_count, 
+                       low_count, info_count, avg_confidence
+                FROM mv_engagement_findings
+                WHERE engagement_id = %s
+                """,
+                (engagement_id,)
+            )
+            row = cursor.fetchone()
+            
+            if row:
+                summary = {}
+                for severity, key in [
+                    ("CRITICAL", "critical_count"),
+                    ("HIGH", "high_count"),
+                    ("MEDIUM", "medium_count"),
+                    ("LOW", "low_count"),
+                    ("INFO", "info_count"),
+                ]:
+                    count = row.get(key, 0) or 0
+                    if count > 0:
+                        summary[severity] = {
+                            "count": count,
+                            "avg_confidence": float(row.get("avg_confidence") or 0),
+                            "avg_cvss": 0,
+                        }
+                return summary
+            
+            # Fallback to direct query
             cursor.execute(
                 """
                 SELECT
@@ -273,6 +305,43 @@ class FindingRepository(BaseRepository):
                     "avg_cvss": float(row["avg_cvss"]) if row["avg_cvss"] else 0,
                 }
             return summary
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def find_by_engagement_with_details(self, engagement_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
+        """
+        Find findings with engagement details in a single query.
+        Avoids N+1 query problem by using JOINs.
+
+        Args:
+            engagement_id: Engagement ID
+            limit: Maximum number of records
+            offset: Number of records to skip
+
+        Returns:
+            List of finding dictionaries with engagement details
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        try:
+            cursor.execute(
+                """
+                SELECT 
+                    f.*,
+                    e.target_url as engagement_target,
+                    e.status as engagement_status
+                FROM findings f
+                INNER JOIN engagements e ON f.engagement_id = e.id
+                WHERE f.engagement_id = %s
+                ORDER BY f.created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (engagement_id, limit, offset)
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
         finally:
             cursor.close()
             conn.close()

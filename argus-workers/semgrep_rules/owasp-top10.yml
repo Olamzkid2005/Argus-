@@ -1,0 +1,234 @@
+rules:
+  - id: owasp-a01-broken-access-control
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "Potential broken access control - sensitive operation without authorization check"
+    metadata:
+      category: security
+      cwe: "CWE-284"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              def $FUNC(...):
+                ...
+                # TODO: add auth check
+                ...
+          - pattern: |
+              @$DECORATOR
+def $FUNC(...):
+  ...
+  $SENSITIVE_OPERATION
+  ...
+      - metavariable-pattern:
+          metavariable: $SENSITIVE_OPERATION
+          pattern-either:
+            - pattern: delete_user(...)
+            - pattern: update_role(...)
+            - pattern: grant_access(...)
+            - pattern: admin.$FUNC(...)
+
+  - id: owasp-a02-cryptographic-failures
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "Weak cryptographic configuration detected"
+    metadata:
+      category: security
+      cwe: "CWE-326"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              crypto.createHash('md5', ...)
+          - pattern: |
+              hashlib.md5(...)
+          - pattern: |
+              hashlib.sha1(...)
+          - pattern: |
+              CryptoJS.MD5(...)
+          - pattern: |
+              DES.new(...)
+          - pattern: |
+              javax.crypto.Cipher.getInstance("DES/ECB/PKCS5Padding")
+      - pattern-not: |
+          hashlib.md5(..., usedforsecurity=False)
+
+  - id: owasp-a03-injection
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "Potential injection vulnerability - unsanitized user input in query/command"
+    metadata:
+      category: security
+      cwe: "CWE-89"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $QUERY = "..." + $USER_INPUT
+              ...
+              execute($QUERY)
+          - pattern: |
+              $QUERY = f"...{$USER_INPUT}..."
+              ...
+              execute($QUERY)
+          - pattern: |
+              eval($USER_INPUT)
+          - pattern: |
+              exec($USER_INPUT)
+          - pattern: |
+              os.system($USER_INPUT)
+          - pattern: |
+              subprocess.call($USER_INPUT, shell=True)
+
+  - id: owasp-a04-insecure-design
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: WARNING
+    message: "Insecure design pattern - sensitive data in URL parameters"
+    metadata:
+      category: security
+      cwe: "CWE-598"
+      owasp: "A04:2021 - Insecure Design"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              window.location.href = "...?password=" + $VALUE
+          - pattern: |
+              requests.get("...?token=" + $VALUE)
+          - pattern: |
+              fetch("...?api_key=" + $VALUE)
+
+  - id: owasp-a05-security-misconfiguration
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: WARNING
+    message: "Security misconfiguration - debug mode enabled in production"
+    metadata:
+      category: security
+      cwe: "CWE-489"
+      owasp: "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              DEBUG = True
+          - pattern: |
+              app.debug = True
+          - pattern: |
+              app.run(debug=True)
+          - pattern: |
+              process.env.NODE_ENV = "development"
+          - pattern: |
+              app.enable('verbose errors')
+      - pattern-not-inside: |
+          if __name__ == '__main__':
+            ...
+
+  - id: owasp-a06-vulnerable-components
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: WARNING
+    message: "Potentially vulnerable component - outdated dependency reference"
+    metadata:
+      category: security
+      cwe: "CWE-1035"
+      owasp: "A06:2021 - Vulnerable and Outdated Components"
+      confidence: LOW
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $DEP == "*"
+          - pattern: |
+              $DEP >= "0.0.0"
+      - metavariable-regex:
+          metavariable: $DEP
+          regex: "(django|flask|express|lodash|jquery|bootstrap|axios|requests|urllib3)"
+
+  - id: owasp-a07-auth-failures
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "Authentication failure - weak password policy or missing MFA"
+    metadata:
+      category: security
+      cwe: "CWE-287"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              MIN_PASSWORD_LENGTH = $LEN
+          - pattern: |
+              password_min_length = $LEN
+      - metavariable-comparison:
+          metavariable: $LEN
+          comparison: $LEN < 8
+
+  - id: owasp-a08-integrity-failures
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "Software and data integrity failure - insecure deserialization"
+    metadata:
+      category: security
+      cwe: "CWE-502"
+      owasp: "A08:2021 - Software and Data Integrity Failures"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              pickle.loads($USER_INPUT)
+          - pattern: |
+              yaml.load($USER_INPUT, Loader=yaml.Loader)
+          - pattern: |
+              yaml.unsafe_load($USER_INPUT)
+          - pattern: |
+              ObjectInputStream.readObject(...)
+          - pattern: |
+              JSON.parse($USER_INPUT)
+      - pattern-not: |
+          yaml.load($USER_INPUT, Loader=yaml.SafeLoader)
+
+  - id: owasp-a09-logging-failures
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: WARNING
+    message: "Security logging failure - sensitive data in logs"
+    metadata:
+      category: security
+      cwe: "CWE-532"
+      owasp: "A09:2021 - Security Logging and Monitoring Failures"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              logger.info("...password..." + $VALUE)
+          - pattern: |
+              console.log("...token..." + $VALUE)
+          - pattern: |
+              log.debug("...secret..." + $VALUE)
+          - pattern: |
+              print("...api_key..." + $VALUE)
+
+  - id: owasp-a10-ssrf
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "Server-Side Request Forgery (SSRF) - user-controlled URL in request"
+    metadata:
+      category: security
+      cwe: "CWE-918"
+      owasp: "A10:2021 - Server-Side Request Forgery"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              requests.get($USER_INPUT, ...)
+          - pattern: |
+              urllib.request.urlopen($USER_INPUT)
+          - pattern: |
+              fetch($USER_INPUT, ...)
+          - pattern: |
+              axios.get($USER_INPUT, ...)
+          - pattern: |
+              curl_setopt($CH, CURLOPT_URL, $USER_INPUT)
+      - metavariable-regex:
+          metavariable: $USER_INPUT
+          regex: "^(?!.*(whitelist|allowlist|approved)).*$"

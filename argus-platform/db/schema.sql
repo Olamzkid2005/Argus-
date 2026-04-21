@@ -358,6 +358,85 @@ CREATE INDEX idx_user_settings_email ON user_settings(user_email);
 -- GRANTS (Adjust based on your user setup)
 -- ============================================================================
 
+-- ============================================================================
+-- CUSTOM RULES TABLES (Step 27)
+-- ============================================================================
+
+CREATE TABLE custom_rules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    rule_yaml TEXT NOT NULL,
+    severity VARCHAR(50) NOT NULL DEFAULT 'MEDIUM',
+    category VARCHAR(100) NOT NULL DEFAULT 'custom',
+    tags TEXT[],
+    status VARCHAR(50) NOT NULL DEFAULT 'draft',
+    version INTEGER NOT NULL DEFAULT 1,
+    parent_rule_id UUID REFERENCES custom_rules(id) ON DELETE SET NULL,
+    test_results JSONB,
+    is_community_shared BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT valid_rule_status CHECK (status IN ('draft', 'active', 'deprecated', 'archived'))
+);
+
+CREATE TABLE custom_rule_versions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    rule_id UUID NOT NULL REFERENCES custom_rules(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    rule_yaml TEXT NOT NULL,
+    change_notes TEXT,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(rule_id, version)
+);
+
+CREATE INDEX idx_custom_rules_org_id ON custom_rules(org_id);
+CREATE INDEX idx_custom_rules_status ON custom_rules(status);
+CREATE INDEX idx_custom_rules_category ON custom_rules(category);
+CREATE INDEX idx_custom_rule_versions_rule_id ON custom_rule_versions(rule_id);
+
+-- ============================================================================
+-- ASSET INVENTORY TABLES (Step 28)
+-- ============================================================================
+
+CREATE TABLE assets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    engagement_id UUID REFERENCES engagements(id) ON DELETE SET NULL,
+    asset_type VARCHAR(100) NOT NULL, -- domain, ip, endpoint, repository, container, api
+    identifier VARCHAR(2048) NOT NULL,
+    display_name VARCHAR(255),
+    description TEXT,
+    attributes JSONB NOT NULL DEFAULT '{}',
+    risk_score DECIMAL(4, 2) DEFAULT 0.00,
+    risk_level VARCHAR(50) DEFAULT 'LOW',
+    criticality VARCHAR(50) DEFAULT 'medium',
+    lifecycle_status VARCHAR(50) NOT NULL DEFAULT 'active',
+    discovered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_scanned_at TIMESTAMP WITH TIME ZONE,
+    verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT valid_asset_type CHECK (asset_type IN ('domain', 'ip', 'endpoint', 'repository', 'container', 'api', 'network', 'cloud_resource')),
+    CONSTRAINT valid_lifecycle_status CHECK (lifecycle_status IN ('active', 'inactive', 'decommissioned', 'unknown')),
+    CONSTRAINT valid_risk_level CHECK (risk_level IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO')),
+    CONSTRAINT valid_criticality CHECK (criticality IN ('critical', 'high', 'medium', 'low', 'informational')),
+    CONSTRAINT unique_org_identifier_type UNIQUE (org_id, identifier, asset_type)
+);
+
+CREATE INDEX idx_assets_org_id ON assets(org_id);
+CREATE INDEX idx_assets_engagement_id ON assets(engagement_id);
+CREATE INDEX idx_assets_asset_type ON assets(asset_type);
+CREATE INDEX idx_assets_risk_score ON assets(risk_score);
+CREATE INDEX idx_assets_lifecycle_status ON assets(lifecycle_status);
+
+-- ============================================================================
+-- GRANTS (Adjust based on your user setup)
+-- ============================================================================
+
 -- Grant permissions to argus_user (if exists)
 DO $$
 BEGIN

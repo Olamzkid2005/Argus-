@@ -5,14 +5,20 @@ Publishes real-time events to Redis for WebSocket distribution.
 Used by Python workers to notify the frontend of findings, state changes,
 and other engagement updates.
 
+Supports event batching and severity-based filtering.
+
 Requirements: 31.2, 31.3, 31.4
 """
 
 import json
 import os
+import time
+import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import redis
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketEventPublisher:
@@ -21,6 +27,9 @@ class WebSocketEventPublisher:
     
     Events are stored in Redis lists for polling and published
     to Redis channels for active subscribers.
+    
+    Features event batching to reduce Redis overhead and
+    supports filtering by severity/type.
     """
     
     # Event types
@@ -33,9 +42,20 @@ class WebSocketEventPublisher:
     EVENT_SCANNER_ACTIVITY = "scanner_activity"
     EVENT_ERROR = "error"
     
+    # Severity levels
+    SEVERITY_CRITICAL = "CRITICAL"
+    SEVERITY_HIGH = "HIGH"
+    SEVERITY_MEDIUM = "MEDIUM"
+    SEVERITY_LOW = "LOW"
+    SEVERITY_INFO = "INFO"
+    
     # Redis configuration
     EVENTS_TTL = 300  # 5 minutes
     MAX_EVENTS = 100
+    
+    # Batching configuration
+    BATCH_SIZE = 10
+    BATCH_INTERVAL_MS = 100
     
     def __init__(self, redis_url: str = None):
         """
@@ -46,6 +66,8 @@ class WebSocketEventPublisher:
         """
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self._redis = None
+        self._batch_buffer: Dict[str, List[Dict[str, Any]]] = {}
+        self._last_flush = time.time()
     
     @property
     def redis(self) -> redis.Redis:
@@ -66,16 +88,45 @@ class WebSocketEventPublisher:
         """Get Redis key for current state"""
         return f"state:engagement:{engagement_id}"
     
-    def _publish_event(self, event: Dict[str, Any]) -> None:
+    def _should_publish(self, event: Dict[str, Any], min_severity: Optional[str] = None) -> bool:
+        """
+        Check if event should be published based on severity filter.
+        
+        Args:
+            event: Event dictionary
+            min_severity: Minimum severity to publish (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+            
+        Returns:
+            True if event should be published
+        """
+        if not min_severity:
+            return True
+        
+        severity_order = [self.SEVERITY_INFO, self.SEVERITY_LOW, self.SEVERITY_MEDIUM, 
+                         self.SEVERITY_HIGH, self.SEVERITY_CRITICAL]
+        
+        event_severity = event.get("data", {}).get("severity", self.SEVERITY_INFO)
+        
+        try:
+            return severity_order.index(event_severity) >= severity_order.index(min_severity)
+        except ValueError:
+            return True
+    
+    def _publish_event(self, event: Dict[str, Any], min_severity: Optional[str] = None) -> None:
         """
         Publish an event to Redis.
         
         Args:
             event: Event dictionary with type, engagement_id, timestamp, and data
+            min_severity: Optional minimum severity filter
         """
         engagement_id = event.get("engagement_id")
         if not engagement_id:
             raise ValueError("Event must have engagement_id")
+        
+        # Check severity filter
+        if not self._should_publish(event, min_severity):
+            return
         
         # Store in Redis list for polling
         events_key = self._get_events_key(engagement_id)
@@ -86,6 +137,97 @@ class WebSocketEventPublisher:
         # Publish to channel for active subscribers
         channel = self._get_channel(engagement_id)
         self.redis.publish(channel, json.dumps(event))
+    
+    def _add_to_batch(self, event: Dict[str, Any]) -> None:
+        """Add event to batch buffer"""
+        engagement_id = event.get("engagement_id")
+        if engagement_id not in self._batch_buffer:
+            self._batch_buffer[engagement_id] = []
+        self._batch_buffer[engagement_id].append(event)
+    
+    def flush_batches(self, min_severity: Optional[str] = None) -> None:
+        """
+        Flush all batched events to Redis.
+        
+        Args:
+            min_severity: Optional minimum severity filter
+        """
+        if not self._batch_buffer:
+            return
+        
+        for engagement_id, events in self._batch_buffer.items():
+            if not events:
+                continue
+            
+            events_key = self._get_events_key(engagement_id)
+            channel = self._get_channel(engagement_id)
+            
+            # Filter by severity
+            filtered = [e for e in events if self._should_publish(e, min_severity)]
+            
+            if filtered:
+                # Use pipeline for batch operations
+                pipe = self.redis.pipeline()
+                for event in filtered:
+                    pipe.lpush(events_key, json.dumps(event))
+                pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
+                pipe.expire(events_key, self.EVENTS_TTL)
+                pipe.execute()
+                
+                # Publish last event for notifications
+                if filtered:
+                    self.redis.publish(channel, json.dumps(filtered[-1]))
+        
+        self._batch_buffer.clear()
+        self._last_flush = time.time()
+    
+    def publish_finding(
+        self,
+        engagement_id: str,
+        finding_id: str,
+        finding_type: str,
+        severity: str,
+        confidence: float,
+        endpoint: str,
+        source_tool: str,
+        use_batch: bool = True
+    ) -> None:
+        """
+        Publish a finding discovered event.
+        
+        Requirements: 31.2
+        
+        Args:
+            engagement_id: Engagement ID
+            finding_id: Finding ID
+            finding_type: Type of vulnerability
+            severity: Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+            confidence: Confidence score (0.0 - 1.0)
+            endpoint: Affected endpoint URL
+            source_tool: Tool that discovered the finding
+            use_batch: Whether to batch this event
+        """
+        event = {
+            "type": self.EVENT_FINDING_DISCOVERED,
+            "engagement_id": engagement_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": {
+                "finding_id": finding_id,
+                "finding_type": finding_type,
+                "severity": severity,
+                "confidence": confidence,
+                "endpoint": endpoint,
+                "source_tool": source_tool,
+            }
+        }
+        
+        if use_batch:
+            self._add_to_batch(event)
+            # Auto-flush if batch is large enough
+            if len(self._batch_buffer.get(engagement_id, [])) >= self.BATCH_SIZE:
+                self.flush_batches()
+        else:
+            self._publish_event(event)
     
     def publish_finding(
         self,

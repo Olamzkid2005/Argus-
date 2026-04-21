@@ -1,0 +1,108 @@
+# Caddy Load Balancer Configuration for Argus Platform
+# Supports multiple Next.js instances with automatic HTTPS
+
+{
+    # Global options
+    auto_https off  # Enable in production
+    admin off
+    
+    # Logging
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+}
+
+# Load balancer for Next.js instances
+argus.local {
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    }
+    
+    # Rate limiting (requires caddy-rate-limit module)
+    # rate_limit {
+    #     zone static {
+    #         key {remote_host}
+    #         events 100
+    #         window 1m
+    #     }
+    # }
+    
+    # Reverse proxy with load balancing
+    reverse_proxy /* {
+        # Backend servers
+        to 127.0.0.1:3000
+        to 127.0.0.1:3001
+        to 127.0.0.1:3002
+        
+        # Load balancing policy
+        lb_policy least_conn
+        
+        # Health checks
+        health_uri /api/health
+        health_interval 30s
+        health_timeout 5s
+        
+        # Headers
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # Timeouts
+        transport http {
+            read_timeout 300s
+            write_timeout 300s
+            dial_timeout 10s
+        }
+    }
+    
+    # Static file serving with caching
+    handle /_next/static/* {
+        reverse_proxy 127.0.0.1:3000
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+    
+    # API routes
+    handle /api/* {
+        reverse_proxy {
+            to 127.0.0.1:3000
+            to 127.0.0.1:3001
+            to 127.0.0.1:3002
+            
+            lb_policy least_conn
+            
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+            
+            transport http {
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+    
+    # Health check
+    handle /health {
+        respond "healthy" 200
+    }
+    
+    # File upload size limit
+    request_body {
+        max_size 50MB
+    }
+}
+
+# Production HTTPS configuration
+# argus.example.com {
+#     tls admin@example.com
+#     
+#     import argus.local
+# }

@@ -2,14 +2,21 @@
 Intelligence Engine - THE ONLY decision-maker
 Analyzes findings and generates recommended actions
 
-Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2
+Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2, 18.1, 18.2, 18.3, 18.4
 """
 from typing import Dict, List, Optional
 from collections import defaultdict
 import time
 import os
+import json
+import re
+import logging
+
+import httpx
 
 from tracing import get_trace_id, StructuredLogger, ExecutionSpan
+
+logger = logging.getLogger(__name__)
 
 
 class IntelligenceEngine:
@@ -406,3 +413,374 @@ class IntelligenceEngine:
             reasoning_parts.append(f"- {action['type']}: {action['description']}")
         
         return " ".join(reasoning_parts)
+    
+    # ── AI-Powered Threat Intelligence (Step 18) ──
+    
+    def enrich_findings_with_threat_intel(self, findings: List[Dict]) -> List[Dict]:
+        """
+        Enrich findings with CVE data, EPSS scores, and threat intelligence.
+        
+        Args:
+            findings: List of findings to enrich
+            
+        Returns:
+            Enriched findings with threat intel metadata
+        """
+        enriched = []
+        
+        for finding in findings:
+            enriched_finding = finding.copy()
+            threat_intel = {}
+            
+            # Extract potential CVE IDs from evidence or type
+            cve_ids = self._extract_cve_ids(finding)
+            if cve_ids:
+                threat_intel["cve_ids"] = cve_ids
+                # Fetch CVE details from NVD
+                threat_intel["cve_details"] = self._fetch_nvd_cve_data(cve_ids)
+            
+            # Get EPSS scores for exploitability prediction
+            if cve_ids:
+                threat_intel["epss_scores"] = self._fetch_epss_scores(cve_ids)
+            
+            # Check threat intelligence feeds
+            threat_intel["threat_feed_hits"] = self._check_threat_feeds(finding)
+            
+            # Run false positive detection
+            fp_result = self._detect_false_positive(finding)
+            threat_intel["fp_assessment"] = fp_result
+            
+            enriched_finding["threat_intel"] = threat_intel
+            enriched.append(enriched_finding)
+        
+        return enriched
+    
+    def _extract_cve_ids(self, finding: Dict) -> List[str]:
+        """
+        Extract CVE IDs from finding evidence or description
+        
+        Args:
+            finding: Finding dictionary
+            
+        Returns:
+            List of CVE IDs
+        """
+        cve_ids = []
+        
+        # Check evidence for CVE references
+        evidence = finding.get("evidence", {})
+        evidence_str = json.dumps(evidence) if isinstance(evidence, dict) else str(evidence)
+        
+        # Also check type and any description fields
+        text_to_search = f"{finding.get('type', '')} {evidence_str}"
+        
+        # CVE pattern matching
+        cve_pattern = r'CVE-\d{4}-\d{4,}'
+        matches = re.findall(cve_pattern, text_to_search, re.IGNORECASE)
+        cve_ids.extend([m.upper() for m in matches])
+        
+        # Deduplicate
+        return list(set(cve_ids))[:5]  # Limit to 5 CVEs
+    
+    def _fetch_nvd_cve_data(self, cve_ids: List[str]) -> Dict[str, Dict]:
+        """
+        Fetch CVE details from NVD (National Vulnerability Database) API
+        
+        Args:
+            cve_ids: List of CVE IDs
+            
+        Returns:
+            Dictionary mapping CVE ID to details
+        """
+        results = {}
+        
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                for cve_id in cve_ids:
+                    try:
+                        response = client.get(
+                            f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
+                            headers={"User-Agent": "Argus-Platform/1.0"}
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            vulnerabilities = data.get("vulnerabilities", [])
+                            
+                            if vulnerabilities:
+                                vuln = vulnerabilities[0].get("cve", {})
+                                metrics = vuln.get("metrics", {})
+                                cvss_data = None
+                                
+                                # Prefer CVSS v3.1, fallback to v3.0, then v2
+                                if "cvssMetricV31" in metrics:
+                                    cvss_data = metrics["cvssMetricV31"][0].get("cvssData", {})
+                                elif "cvssMetricV30" in metrics:
+                                    cvss_data = metrics["cvssMetricV30"][0].get("cvssData", {})
+                                elif "cvssMetricV2" in metrics:
+                                    cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
+                                
+                                results[cve_id] = {
+                                    "description": vuln.get("descriptions", [{}])[0].get("value", ""),
+                                    "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
+                                    "severity": cvss_data.get("baseSeverity") if cvss_data else None,
+                                    "published": vuln.get("published", ""),
+                                    "last_modified": vuln.get("lastModified", ""),
+                                    "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
+                                }
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
+                        continue
+        except Exception as e:
+            logger.warning(f"NVD API client failed: {e}")
+        
+        return results
+    
+    def _fetch_epss_scores(self, cve_ids: List[str]) -> Dict[str, float]:
+        """
+        Fetch EPSS (Exploit Prediction Scoring System) scores
+        
+        Args:
+            cve_ids: List of CVE IDs
+            
+        Returns:
+            Dictionary mapping CVE ID to EPSS score (0.0-1.0)
+        """
+        scores = {}
+        
+        if not cve_ids:
+            return scores
+        
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                # EPSS API accepts comma-separated CVE IDs
+                cve_param = ",".join(cve_ids)
+                response = client.get(
+                    f"https://api.first.org/data/v1/epss?cve={cve_param}",
+                    headers={"User-Agent": "Argus-Platform/1.0"}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    for item in data.get("data", []):
+                        cve = item.get("cve", "").upper()
+                        epss_score = item.get("epss")
+                        if cve and epss_score is not None:
+                            try:
+                                scores[cve] = float(epss_score)
+                            except (ValueError, TypeError):
+                                continue
+        except Exception as e:
+            logger.warning(f"EPSS API fetch failed: {e}")
+        
+        return scores
+    
+    def _check_threat_feeds(self, finding: Dict) -> List[Dict]:
+        """
+        Check basic threat intelligence feeds for related indicators
+        
+        Args:
+            finding: Finding dictionary
+            
+        Returns:
+            List of threat feed hits
+        """
+        hits = []
+        finding_type = finding.get("type", "").upper()
+        endpoint = finding.get("endpoint", "")
+        
+        # Simple keyword-based threat feed simulation
+        # In production, this would query MISP, AlienVault OTX, etc.
+        threat_indicators = {
+            "SQL_INJECTION": {"feed": "exploitdb", "risk": "high", "description": "SQL injection commonly exploited in the wild"},
+            "COMMAND_INJECTION": {"feed": "exploitdb", "risk": "critical", "description": "Command injection frequently exploited"},
+            "XSS": {"feed": "cisa_kev", "risk": "medium", "description": "XSS present in known vulnerability catalogs"},
+            "BROKEN_ACCESS_CONTROL": {"feed": "owasp_top10", "risk": "high", "description": "Access control issues ranked #1 in OWASP Top 10"},
+            "AUTH_FAILURE": {"feed": "cisa_kev", "risk": "high", "description": "Authentication failures frequently targeted"},
+            "WEAK_TLS": {"feed": "cisa_kev", "risk": "medium", "description": "Weak TLS configurations in security advisories"},
+        }
+        
+        if finding_type in threat_indicators:
+            indicator = threat_indicators[finding_type].copy()
+            indicator["matched_type"] = finding_type
+            indicator["endpoint"] = endpoint
+            hits.append(indicator)
+        
+        return hits
+    
+    def _detect_false_positive(self, finding: Dict) -> Dict:
+        """
+        ML-based false positive detection using simple heuristics
+        
+        Uses a weighted scoring model based on:
+        - Evidence quality (verified > payload > minimal)
+        - Tool agreement (multi-tool confirmation)
+        - Endpoint characteristics (common vs unusual targets)
+        - Historical FP patterns (known noisy tools/findings)
+        
+        Args:
+            finding: Finding dictionary
+            
+        Returns:
+            FP assessment with score and verdict
+        """
+        scores = []
+        reasons = []
+        
+        # 1. Evidence quality heuristic
+        evidence = finding.get("evidence", {})
+        evidence_str = json.dumps(evidence) if isinstance(evidence, dict) else str(evidence)
+        evidence_len = len(evidence_str)
+        
+        if evidence_len > 500:
+            scores.append(0.85)
+            reasons.append("rich_evidence")
+        elif evidence_len > 100:
+            scores.append(0.70)
+            reasons.append("moderate_evidence")
+        else:
+            scores.append(0.45)
+            reasons.append("minimal_evidence")
+        
+        # 2. Tool agreement heuristic
+        source_tool = finding.get("source_tool", "unknown")
+        tool_agreement = finding.get("tool_agreement_level", "single_tool")
+        
+        if tool_agreement == "high":
+            scores.append(0.90)
+            reasons.append("multi_tool_confirmed")
+        elif tool_agreement == "medium":
+            scores.append(0.75)
+            reasons.append("dual_tool_confirmed")
+        else:
+            scores.append(0.60)
+            reasons.append("single_tool")
+        
+        # 3. Known noisy tools/finding types
+        noisy_tools = {"whatweb", "gau", "waybackurls"}
+        noisy_types = {"INFO_DISCLOSURE", "TECHNOLOGY_DETECTION"}
+        
+        if source_tool.lower() in noisy_tools or finding.get("type", "").upper() in noisy_types:
+            scores.append(0.40)
+            reasons.append("known_noisy_source")
+        else:
+            scores.append(0.80)
+            reasons.append("reliable_source")
+        
+        # 4. Endpoint characteristics
+        endpoint = finding.get("endpoint", "")
+        if endpoint.endswith((".js", ".css", ".png", ".jpg", ".gif")):
+            scores.append(0.35)
+            reasons.append("static_asset_endpoint")
+        elif "/api/" in endpoint.lower() or "/admin/" in endpoint.lower():
+            scores.append(0.85)
+            reasons.append("high_value_endpoint")
+        else:
+            scores.append(0.65)
+            reasons.append("standard_endpoint")
+        
+        # 5. Severity alignment check
+        severity = finding.get("severity", "INFO")
+        if severity == "CRITICAL" and evidence_len < 50:
+            scores.append(0.30)
+            reasons.append("severity_evidence_mismatch")
+        else:
+            scores.append(0.75)
+            reasons.append("severity_aligned")
+        
+        # Calculate overall confidence (not FP likelihood)
+        # Higher score = more likely to be TRUE positive
+        avg_score = sum(scores) / len(scores) if scores else 0.5
+        
+        # Determine verdict
+        if avg_score >= 0.75:
+            verdict = "true_positive"
+            confidence = avg_score
+        elif avg_score >= 0.50:
+            verdict = "likely_true_positive"
+            confidence = avg_score
+        elif avg_score >= 0.30:
+            verdict = "likely_false_positive"
+            confidence = 1.0 - avg_score
+        else:
+            verdict = "false_positive"
+            confidence = 1.0 - avg_score
+        
+        return {
+            "verdict": verdict,
+            "confidence": round(confidence, 3),
+            "true_positive_score": round(avg_score, 3),
+            "factors": reasons,
+            "factor_scores": {reason: round(score, 3) for reason, score in zip(reasons, scores)},
+        }
+    
+    def get_threat_summary(self, findings: List[Dict]) -> Dict:
+        """
+        Generate a threat intelligence summary for all findings
+        
+        Args:
+            findings: List of enriched findings
+            
+        Returns:
+            Threat summary dictionary
+        """
+        total_cves = 0
+        high_epss_count = 0
+        threat_feed_hits = 0
+        fp_likely_count = 0
+        
+        for finding in findings:
+            intel = finding.get("threat_intel", {})
+            
+            cve_details = intel.get("cve_details", {})
+            total_cves += len(cve_details)
+            
+            epss_scores = intel.get("epss_scores", {})
+            for score in epss_scores.values():
+                if score > 0.5:
+                    high_epss_count += 1
+            
+            threat_feed_hits += len(intel.get("threat_feed_hits", []))
+            
+            fp_assessment = intel.get("fp_assessment", {})
+            if fp_assessment.get("verdict") in ["likely_false_positive", "false_positive"]:
+                fp_likely_count += 1
+        
+        return {
+            "total_findings": len(findings),
+            "findings_with_cves": total_cves,
+            "high_exploitability_count": high_epss_count,
+            "threat_feed_hits": threat_feed_hits,
+            "likely_false_positives": fp_likely_count,
+            "risk_level": self._calculate_overall_risk(findings),
+        }
+    
+    def _calculate_overall_risk(self, findings: List[Dict]) -> str:
+        """
+        Calculate overall risk level based on findings and threat intel
+        
+        Args:
+            findings: List of enriched findings
+            
+        Returns:
+            Risk level string (critical, high, medium, low)
+        """
+        critical_count = sum(1 for f in findings if f.get("severity") == "CRITICAL")
+        high_count = sum(1 for f in findings if f.get("severity") == "HIGH")
+        
+        # Adjust for EPSS scores
+        high_epss_findings = 0
+        for f in findings:
+            intel = f.get("threat_intel", {})
+            epss = intel.get("epss_scores", {})
+            if any(score > 0.5 for score in epss.values()):
+                high_epss_findings += 1
+        
+        if critical_count >= 3 or high_epss_findings >= 3:
+            return "critical"
+        elif critical_count >= 1 or high_count >= 3 or high_epss_findings >= 1:
+            return "high"
+        elif high_count >= 1:
+            return "medium"
+        else:
+            return "low"

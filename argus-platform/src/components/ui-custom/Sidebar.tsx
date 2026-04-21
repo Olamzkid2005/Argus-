@@ -13,7 +13,9 @@ import {
   Command,
   Sun,
   Moon,
-  Laptop
+  Laptop,
+  FileCode2,
+  Server,
 } from "lucide-react";
 import { AIStatusIndicator } from "./AIStatus";
 
@@ -25,6 +27,8 @@ const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/engagements", icon: ShieldCheck, label: "Engagements" },
   { to: "/findings", icon: Bug, label: "Findings" },
+  { to: "/assets", icon: Server, label: "Assets" },
+  { to: "/rules", icon: FileCode2, label: "Rules" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];

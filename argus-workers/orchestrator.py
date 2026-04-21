@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Dict, List, Optional
 import os
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -926,7 +927,8 @@ class Orchestrator:
         
         # Execute repository scan
         repo_aggressiveness = job.get("aggressiveness", "default")
-        findings = self._execute_repo_scan(repo_url, job.get("budget", {}), repo_aggressiveness)
+        custom_rules_path = job.get("custom_rules_path")
+        findings = self._execute_repo_scan(repo_url, job.get("budget", {}), repo_aggressiveness, custom_rules_path)
         
         # Save findings to database
         findings_count = len(findings)
@@ -961,7 +963,7 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
     
-    def _execute_repo_scan(self, repo_url: str, budget: Dict, aggressiveness: str = "default") -> List[Dict]:
+    def _execute_repo_scan(self, repo_url: str, budget: Dict, aggressiveness: str = "default", custom_rules_path: str = None) -> List[Dict]:
         """
         Execute comprehensive repository scan using multiple SAST/DAST tools.
         
@@ -969,12 +971,15 @@ class Orchestrator:
         - Semgrep: static code analysis with OWASP, CWE, secrets, and language-specific rules
         - Gitleaks: secret detection in git history
         - Trivy: dependency vulnerability scanning
-        - Custom rules: vibe-security-ultra framework rules
+        - Bandit: Python security scanning
+        - Snyk: dependency vulnerability scanning
+        - Custom rules: vibe-security-ultra framework rules + user-provided rules
         
         Args:
             repo_url: GitHub/GitLab repo URL
             budget: Budget configuration
             aggressiveness: Scan aggressiveness level (default, high, extreme)
+            custom_rules_path: Optional path to additional Semgrep/custom rules
             
         Returns:
             List of code vulnerability findings
@@ -1146,7 +1151,103 @@ class Orchestrator:
                 _emit("trivy", f"Dependency scan failed: {str(e)}", "failed")
                 logger.warning(f"Trivy failed: {e}")
             
-            # ── 3. Semgrep: static code analysis ──
+            # ── 3. Bandit: Python security scanning ──
+            if "python" in detected_langs:
+                _emit("bandit", "Running Bandit Python security scanner", "started")
+                try:
+                    bandit_result = self.tool_runner.run(
+                        "bandit",
+                        [
+                            "-r", temp_dir,
+                            "-f", "json",
+                            "-ll",
+                            "-ii",
+                            "-x", ".git,node_modules,vendor,dist,build,coverage",
+                        ],
+                        timeout=300 if agg == "default" else 600,
+                    )
+                    if bandit_result.get("success"):
+                        try:
+                            bandit_data = json.loads(bandit_result.get("stdout", "{}"))
+                            bandit_results = bandit_data.get("results", [])
+                            count = 0
+                            for issue in bandit_results:
+                                severity = issue.get("issue_severity", "LOW").upper()
+                                finding = {
+                                    "type": f"BANDIT_{issue.get('test_id', 'UNKNOWN')}",
+                                    "severity": severity if severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] else "LOW",
+                                    "endpoint": f"file:{issue.get('filename', '')}:{issue.get('line_number', 0)}",
+                                    "evidence": {
+                                        "file": issue.get("filename", ""),
+                                        "line": issue.get("line_number", 0),
+                                        "code": issue.get("code", ""),
+                                        "issue_text": issue.get("issue_text", ""),
+                                        "test_name": issue.get("test_name", ""),
+                                    },
+                                    "confidence": 0.90,
+                                    "tool": "bandit",
+                                }
+                                normalized = self._normalize_finding(finding, "bandit")
+                                if normalized:
+                                    add_finding(normalized)
+                                    count += 1
+                            _emit("bandit", f"Bandit scan complete — found {count} issues", "completed", items=count)
+                        except json.JSONDecodeError:
+                            _emit("bandit", "Bandit output could not be parsed", "failed")
+                    else:
+                        _emit("bandit", "No Bandit issues found or scan failed", "completed", items=0)
+                except Exception as e:
+                    _emit("bandit", f"Bandit scan failed: {str(e)}", "failed")
+                    logger.warning(f"Bandit failed: {e}")
+            
+            # ── 4. Snyk: dependency vulnerability scanning ──
+            _emit("snyk", "Running Snyk dependency vulnerability scan", "started")
+            try:
+                snyk_result = self.tool_runner.run(
+                    "snyk",
+                    [
+                        "test", temp_dir,
+                        "--json",
+                        "--severity-threshold", "low" if agg == "extreme" else "medium",
+                    ],
+                    timeout=300 if agg == "default" else 600,
+                )
+                count = 0
+                if snyk_result.get("success"):
+                    try:
+                        snyk_data = json.loads(snyk_result.get("stdout", "{}"))
+                        vulns = snyk_data.get("vulnerabilities", [])
+                        for vuln in vulns:
+                            severity = vuln.get("severity", "low").upper()
+                            finding = {
+                                "type": "SNYK_VULNERABILITY",
+                                "severity": severity if severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] else "LOW",
+                                "endpoint": vuln.get("packageName", ""),
+                                "evidence": {
+                                    "title": vuln.get("title", ""),
+                                    "cve": vuln.get("identifiers", {}).get("CVE", []),
+                                    "cwe": vuln.get("identifiers", {}).get("CWE", []),
+                                    "package_name": vuln.get("packageName", ""),
+                                    "version": vuln.get("version", ""),
+                                    "fixed_in": vuln.get("fixedIn", []),
+                                },
+                                "confidence": 0.85,
+                                "tool": "snyk",
+                            }
+                            normalized = self._normalize_finding(finding, "snyk")
+                            if normalized:
+                                add_finding(normalized)
+                                count += 1
+                        _emit("snyk", f"Snyk scan complete — found {count} vulnerabilities", "completed", items=count)
+                    except json.JSONDecodeError:
+                        _emit("snyk", "Snyk output could not be parsed", "failed")
+                else:
+                    _emit("snyk", "No Snyk vulnerabilities found", "completed", items=0)
+            except Exception as e:
+                _emit("snyk", f"Snyk scan failed: {str(e)}", "failed")
+                logger.warning(f"Snyk failed: {e}")
+            
+            # ── 5. Semgrep: static code analysis ──
             # Build registry configs based on aggressiveness
             registry_configs = ["p/secrets", "p/ci"]
             if agg in ("high", "extreme"):
@@ -1170,6 +1271,12 @@ class Orchestrator:
                 config_dir = os.path.join(rules_dir, subdir)
                 if os.path.isdir(config_dir):
                     custom_configs.append(config_dir)
+            
+            # Add user-provided custom rules path if specified
+            if custom_rules_path and os.path.isdir(custom_rules_path):
+                custom_configs.append(custom_rules_path)
+            elif custom_rules_path and os.path.isfile(custom_rules_path):
+                custom_configs.append(custom_rules_path)
             
             # Run Semgrep with registry configs + custom rules
             _emit("semgrep", f"Running Semgrep static analysis ({agg} mode) — {len(registry_configs)} rule sets", "started")

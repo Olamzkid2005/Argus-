@@ -127,10 +127,35 @@ app.conf.update(
     
     # Beat Schedule (for periodic tasks)
     beat_schedule={
-        # Example: Clean up old results every hour
+        # Clean up old results every hour
         "cleanup-old-results": {
             "task": "tasks.maintenance.cleanup_old_results",
-            "schedule": 3600.0,  # Every hour
+            "schedule": 3600.0,
+        },
+        # Clean up failed engagements daily
+        "cleanup-failed-engagements": {
+            "task": "tasks.maintenance.cleanup_failed_engagements",
+            "schedule": 86400.0,
+        },
+        # Run security self-scan daily
+        "security-self-scan": {
+            "task": "tasks.security.run_self_scan",
+            "schedule": 86400.0,
+        },
+        # Cleanup old checkpoints weekly
+        "cleanup-checkpoints": {
+            "task": "tasks.maintenance.cleanup_checkpoints",
+            "schedule": 604800.0,
+        },
+        # Refresh materialized views every 5 minutes
+        "refresh-materialized-views": {
+            "task": "tasks.maintenance.refresh_views",
+            "schedule": 300.0,
+        },
+        # Worker health check every minute
+        "worker-health-check": {
+            "task": "tasks.maintenance.worker_health_check",
+            "schedule": 60.0,
         },
     },
 )
@@ -145,15 +170,83 @@ class BaseTask(app.Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Called when task fails"""
+        from error_classifier import classify_error, log_classified_error
+        from dead_letter_queue import get_dlq
+        from shutdown_handler import shutdown_handler
+        
+        classification = classify_error(exc, self.name)
+        
+        log_classified_error(
+            classification=classification,
+            task_id=task_id,
+            task_name=self.name,
+            error=exc,
+            extra_context={"args": str(args), "kwargs": str(kwargs)}
+        )
+        
+        # Send to DLQ if not retryable
+        if not classification.should_retry:
+            try:
+                dlq = get_dlq()
+                dlq.enqueue(
+                    task_id=task_id,
+                    task_name=self.name,
+                    args=list(args),
+                    kwargs=kwargs,
+                    error_message=str(exc),
+                    error_class=type(exc).__name__,
+                    retry_count=self.request.retries if self.request else 0,
+                    engagement_id=kwargs.get("engagement_id") if kwargs else None
+                )
+            except Exception as e:
+                logger.error(f"Failed to add task {task_id} to DLQ: {e}")
+        
+        # Handle shutdown-related failures
+        if shutdown_handler.should_shutdown():
+            shutdown_handler.handle_task_failure_on_shutdown(
+                task_id=task_id,
+                task_name=self.name,
+                args=args,
+                kwargs=kwargs,
+                error=exc
+            )
+        
         logger.error(f"Task {task_id} failed: {exc}")
 
     def on_retry(self, exc, task_id, args, kwargs, einfo):
         """Called when task is retried"""
-        logger.warning(f"Task {task_id} retrying: {exc}")
+        logger.warning(f"Task {task_id} retrying (attempt {self.request.retries}): {exc}")
 
     def on_success(self, retval, task_id, args, kwargs):
         """Called when task succeeds"""
         logger.info(f"Task {task_id} succeeded")
+    
+    def __call__(self, *args, **kwargs):
+        """Wrap task execution with shutdown checking"""
+        from shutdown_handler import shutdown_handler
+        from health_monitor import get_health_monitor
+        
+        task_id = self.request.id if self.request else "unknown"
+        
+        # Register with shutdown handler
+        shutdown_handler.register_task(task_id)
+        
+        # Update health metrics
+        try:
+            monitor = get_health_monitor()
+            monitor.increment_tasks()
+        except Exception:
+            pass
+        
+        try:
+            # Check if shutdown is requested before starting
+            if shutdown_handler.should_shutdown():
+                logger.warning(f"Task {task_id} cancelled due to shutdown")
+                raise Exception("Worker is shutting down")
+            
+            return self.run(*args, **kwargs)
+        finally:
+            shutdown_handler.unregister_task(task_id)
 
 # Set base task class
 app.Task = BaseTask

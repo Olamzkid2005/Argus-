@@ -1016,6 +1016,148 @@ class TestSSLParser(BaseParser):
         return findings
 
 
+class GospiderParser(BaseParser):
+    """Parser for Gospider output (JavaScript file discovery)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse Gospider JSON or text output
+        
+        Args:
+            raw_output: Gospider output
+            
+        Returns:
+            List of endpoint findings
+        """
+        findings = []
+        
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+            
+            try:
+                data = json.loads(line)
+                output = data.get("output", "")
+                
+                if output and output.startswith("http"):
+                    finding = {
+                        "type": "DISCOVERED_ENDPOINT",
+                        "severity": "INFO",
+                        "endpoint": output,
+                        "evidence": {
+                            "source": data.get("source", ""),
+                            "type": data.get("type", ""),
+                        },
+                        "confidence": 0.90,
+                        "tool": "gospider",
+                    }
+                    findings.append(finding)
+            except json.JSONDecodeError:
+                if line.startswith("http"):
+                    finding = {
+                        "type": "DISCOVERED_ENDPOINT",
+                        "severity": "INFO",
+                        "endpoint": line.strip(),
+                        "evidence": {},
+                        "confidence": 0.85,
+                        "tool": "gospider",
+                    }
+                    findings.append(finding)
+        
+        return findings
+
+
+class WpscanParser(BaseParser):
+    """Parser for WPScan output (WordPress security scanning)"""
+    
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse WPScan JSON output
+        
+        Args:
+            raw_output: WPScan JSON output
+            
+        Returns:
+            List of WordPress vulnerability findings
+        """
+        findings = []
+        
+        try:
+            data = json.loads(raw_output)
+            
+            # Parse interesting findings
+            interesting = data.get("interesting_findings", [])
+            for finding_data in interesting:
+                severity = "MEDIUM"
+                finding_type = finding_data.get("type", "unknown")
+                if finding_type in ["db_backup", "backups"]:
+                    severity = "HIGH"
+                elif finding_type in ["log_file"]:
+                    severity = "MEDIUM"
+                
+                finding = {
+                    "type": f"WP_{finding_type.upper()}",
+                    "severity": severity,
+                    "endpoint": finding_data.get("url", ""),
+                    "evidence": {
+                        "description": finding_data.get("to_s", ""),
+                        "found_by": finding_data.get("found_by", ""),
+                    },
+                    "confidence": 0.90,
+                    "tool": "wpscan",
+                }
+                findings.append(finding)
+            
+            # Parse vulnerabilities
+            vulns = data.get("vulnerabilities", {})
+            for vuln_type, vuln_list in vulns.items():
+                for vuln in vuln_list:
+                    severity = vuln.get("cvss", {}).get("score", 5.0)
+                    severity_str = "MEDIUM"
+                    if severity >= 7.0:
+                        severity_str = "HIGH"
+                    elif severity >= 9.0:
+                        severity_str = "CRITICAL"
+                    elif severity < 4.0:
+                        severity_str = "LOW"
+                    
+                    finding = {
+                        "type": f"WP_VULNERABILITY_{vuln_type.upper()}",
+                        "severity": severity_str,
+                        "endpoint": data.get("target_url", ""),
+                        "evidence": {
+                            "title": vuln.get("title", ""),
+                            "references": vuln.get("references", {}),
+                            "fixed_in": vuln.get("fixed_in", ""),
+                        },
+                        "confidence": 0.85,
+                        "tool": "wpscan",
+                    }
+                    findings.append(finding)
+            
+            # Parse version vulnerabilities
+            version = data.get("version", {})
+            version_vulns = version.get("vulnerabilities", [])
+            for vuln in version_vulns:
+                finding = {
+                    "type": "WP_CORE_VULNERABILITY",
+                    "severity": "HIGH",
+                    "endpoint": data.get("target_url", ""),
+                    "evidence": {
+                        "title": vuln.get("title", ""),
+                        "fixed_in": vuln.get("fixed_in", ""),
+                    },
+                    "confidence": 0.85,
+                    "tool": "wpscan",
+                }
+                findings.append(finding)
+                
+        except json.JSONDecodeError:
+            pass
+        
+        return findings
+
+
 class Parser:
     """
     Main parser class that routes to appropriate tool parser
@@ -1048,6 +1190,8 @@ class Parser:
             "testssl": TestSSLParser(),
             "gitleaks": GitleaksParser(),
             "trivy": TrivyParser(),
+            "gospider": GospiderParser(),
+            "wpscan": WpscanParser(),
         }
         
         # Initialize tracing

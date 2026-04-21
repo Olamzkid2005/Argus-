@@ -261,6 +261,118 @@ class ToolRunner:
                     "trace_id": get_trace_id(),
                 }
     
+    def run_nuclei(
+        self,
+        target: str,
+        templates_path: Optional[str] = None,
+        severity: Optional[str] = None,
+        tags: Optional[str] = None,
+        timeout: int = 300,
+    ) -> Dict:
+        """
+        Execute Nuclei with optional template path and filters
+        
+        Args:
+            target: Target URL or host
+            templates_path: Path to custom Nuclei templates directory
+            severity: Comma-separated severity levels (info,low,medium,high,critical)
+            tags: Comma-separated tags to filter templates
+            timeout: Execution timeout in seconds
+            
+        Returns:
+            Tool execution result dictionary
+        """
+        args = ["-u", target, "-json", "-silent"]
+        
+        if templates_path:
+            args.extend(["-t", templates_path])
+        
+        if severity:
+            args.extend(["-severity", severity])
+        
+        if tags:
+            args.extend(["-tags", tags])
+        
+        return self.run("nuclei", args, timeout=timeout)
+    
+    def run_naabu(
+        self,
+        target: str,
+        top_ports: Optional[str] = None,
+        port_range: Optional[str] = None,
+        timeout: int = 120,
+    ) -> Dict:
+        """
+        Execute Naabu port scanner
+        
+        Args:
+            target: Target host or IP
+            top_ports: Number of top ports to scan (e.g., "1000")
+            port_range: Specific port range (e.g., "1-65535")
+            timeout: Execution timeout in seconds
+            
+        Returns:
+            Tool execution result dictionary
+        """
+        args = ["-host", target, "-json"]
+        
+        if port_range:
+            args.extend(["-p", port_range])
+        elif top_ports:
+            args.extend(["-top-ports", top_ports])
+        
+        return self.run("naabu", args, timeout=timeout)
+    
+    def run_gospider(
+        self,
+        target: str,
+        depth: int = 3,
+        timeout: int = 120,
+    ) -> Dict:
+        """
+        Execute Gospider for JavaScript file and endpoint discovery
+        
+        Args:
+            target: Target URL
+            depth: Crawling depth
+            timeout: Execution timeout in seconds
+            
+        Returns:
+            Tool execution result dictionary
+        """
+        args = ["-s", target, "-q", "-j", "-d", str(depth)]
+        return self.run("gospider", args, timeout=timeout)
+    
+    def run_wpscan(
+        self,
+        target: str,
+        api_token: Optional[str] = None,
+        enumerate_options: Optional[List[str]] = None,
+        timeout: int = 300,
+    ) -> Dict:
+        """
+        Execute WPScan for WordPress security scanning
+        
+        Args:
+            target: Target WordPress URL
+            api_token: WPScan API token for vulnerability database access
+            enumerate_options: List of enumeration options (e.g., ["p", "t", "u"])
+            timeout: Execution timeout in seconds
+            
+        Returns:
+            Tool execution result dictionary
+        """
+        args = ["--url", target, "-f", "json", "--no-banner"]
+        
+        if api_token:
+            args.extend(["--api-token", api_token])
+        
+        if enumerate_options:
+            for opt in enumerate_options:
+                args.extend(["--enumerate", opt])
+        
+        return self.run("wpscan", args, timeout=timeout)
+    
     def cleanup(self):
         """Clean up sandbox directory"""
         import shutil

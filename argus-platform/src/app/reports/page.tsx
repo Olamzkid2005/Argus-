@@ -18,6 +18,7 @@ import {
   Trash2,
   Share2,
   Printer,
+  ShieldCheck,
 } from "lucide-react";
 import ScannerReveal from "@/components/effects/ScannerReveal";
 
@@ -196,18 +197,28 @@ export default function ReportsPage() {
 
       {/* Actions Bar */}
       <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={handleGenerateReport}
-          disabled={isGenerating}
-          className="flex items-center gap-2 px-6 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow-cream disabled:opacity-50"
-        >
-          {isGenerating ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <FileText size={14} />
-          )}
-          {isGenerating ? "GENERATING..." : "GENERATE REPORT"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGenerating}
+            className="flex items-center gap-2 px-6 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow-cream disabled:opacity-50"
+          >
+            {isGenerating ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <FileText size={14} />
+            )}
+            {isGenerating ? "GENERATING..." : "GENERATE REPORT"}
+          </button>
+
+          <button
+            onClick={() => router.push("/reports/compliance")}
+            className="flex items-center gap-2 px-5 py-2.5 border border-prism-cyan/30 text-prism-cyan font-bold text-xs tracking-widest uppercase hover:bg-prism-cyan/10 transition-all"
+          >
+            <ShieldCheck size={14} />
+            COMPLIANCE
+          </button>
+        </div>
 
         <div className="flex items-center gap-3">
           <ScannerReveal

@@ -52,6 +52,7 @@ TASK_NAME_MAP = {
     "analyze": "tasks.analyze.run_analysis",
     "report": "tasks.report.generate_report",
     "repo_scan": "tasks.repo_scan.run_repo_scan",
+    "compliance_report": "tasks.report.generate_compliance_report",
 }
 
 
@@ -143,6 +144,12 @@ def main():
                 job["engagement_id"],
                 job.get("repo_url") or job.get("target"),
                 job["budget"],
+                job.get("trace_id"),
+            ]
+        elif job_type == "compliance_report":
+            args = [
+                job["engagement_id"],
+                job.get("standard", "owasp_top10"),
                 job.get("trace_id"),
             ]
         else:

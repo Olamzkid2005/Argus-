@@ -2,6 +2,9 @@
 Celery tasks for maintenance operations
 """
 from celery_app import app
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="tasks.maintenance.cleanup_old_results")
@@ -56,6 +59,15 @@ def cleanup_old_results(self):
         )
         raw_outputs_deleted = cursor.rowcount
 
+        cursor.execute(
+            """
+            DELETE FROM query_performance_log
+            WHERE created_at < %s
+            """,
+            (cutoff_date,)
+        )
+        perf_logs_deleted = cursor.rowcount
+
         conn.commit()
 
         return {
@@ -63,6 +75,7 @@ def cleanup_old_results(self):
             "snapshots_deleted": snapshots_deleted,
             "checkpoints_deleted": checkpoints_deleted,
             "raw_outputs_deleted": raw_outputs_deleted,
+            "perf_logs_deleted": perf_logs_deleted,
         }
     except Exception as e:
         conn.rollback()
@@ -142,3 +155,71 @@ def cleanup_failed_engagements(self):
     finally:
         cursor.close()
         conn.close()
+
+
+@app.task(bind=True, name="tasks.maintenance.cleanup_checkpoints")
+def cleanup_checkpoints(self):
+    """Clean up old checkpoints using CheckpointManager"""
+    import os
+    from checkpoint_manager import CheckpointManager
+
+    db_conn = os.getenv("DATABASE_URL")
+    if not db_conn:
+        return {"status": "skipped", "reason": "No DATABASE_URL configured"}
+
+    try:
+        manager = CheckpointManager(db_conn)
+        deleted = manager.cleanup_old_checkpoints(max_age_days=7)
+        return {"status": "completed", "checkpoints_deleted": deleted}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.task(bind=True, name="tasks.maintenance.refresh_views")
+def refresh_views(self):
+    """Refresh materialized views for query performance"""
+    import psycopg2
+    import os
+
+    db_conn = os.getenv("DATABASE_URL")
+    if not db_conn:
+        return {"status": "skipped", "reason": "No DATABASE_URL configured"}
+
+    conn = psycopg2.connect(db_conn)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT refresh_mv_org_dashboard()")
+        cursor.execute("SELECT refresh_mv_engagement_findings()")
+        cursor.execute("SELECT refresh_mv_tool_performance()")
+        conn.commit()
+
+        return {"status": "completed", "views_refreshed": 3}
+    except Exception as e:
+        conn.rollback()
+        return {"status": "error", "error": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@app.task(bind=True, name="tasks.maintenance.worker_health_check")
+def worker_health_check(self):
+    """Check worker health and cleanup dead workers"""
+    from health_monitor import get_health_monitor
+
+    try:
+        monitor = get_health_monitor()
+        unhealthy = monitor.get_unhealthy_workers()
+        cleaned = monitor.cleanup_dead_workers()
+
+        if unhealthy:
+            logger.warning(f"Found {len(unhealthy)} unhealthy workers")
+
+        return {
+            "status": "completed",
+            "unhealthy_workers": len(unhealthy),
+            "cleaned_workers": cleaned,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}

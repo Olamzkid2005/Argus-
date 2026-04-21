@@ -76,21 +76,6 @@ class AIExplainer:
         self.max_tokens = max_tokens
         self.db = db_connection
         self.embedding_client = embedding_client
-        """
-        Initialize AI explainer.
-        
-        Args:
-            llm_client: LLM client (OpenAI, Anthropic, etc.)
-            model_version: Model version to use
-            temperature: Temperature for generation (0.3 for factual output)
-            max_tokens: Maximum tokens in response (500 limit)
-            db_connection: Database connection for storing explanations
-        """
-        self.llm_client = llm_client
-        self.model_version = model_version
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.db = db_connection
     
     async def explain_clusters(
         self,
@@ -530,3 +515,153 @@ Keep response under 500 tokens. Be factual and specific."""
                 parts.append(f"Payload: {payload}")
         
         return " | ".join([str(p) for p in parts if p])
+
+    # ── AI-Powered Threat Intelligence Integration (Step 18) ──
+
+    def _build_threat_intel_context(self, cluster: Dict) -> str:
+        """
+        Build threat intelligence context string from cluster findings.
+        
+        Args:
+            cluster: Vulnerability cluster with potential threat_intel on findings
+            
+        Returns:
+            Threat intel context string for prompt enrichment
+        """
+        intel_parts = []
+        cve_list = []
+        epss_alerts = []
+        feed_hits = []
+        fp_warnings = []
+        
+        for finding in cluster.get("findings", []):
+            threat_intel = finding.get("threat_intel", {})
+            
+            # Collect CVEs
+            cve_details = threat_intel.get("cve_details", {})
+            for cve_id, details in cve_details.items():
+                cve_list.append(f"{cve_id} (CVSS: {details.get('cvss_score', 'N/A')})")
+            
+            # Collect high EPSS scores
+            epss_scores = threat_intel.get("epss_scores", {})
+            for cve_id, score in epss_scores.items():
+                if score > 0.5:
+                    epss_alerts.append(f"{cve_id} (EPSS: {score:.1%})")
+            
+            # Collect threat feed hits
+            for hit in threat_intel.get("threat_feed_hits", []):
+                feed_hits.append(f"{hit.get('feed', 'unknown')}: {hit.get('description', '')}")
+            
+            # Collect FP warnings
+            fp_assessment = threat_intel.get("fp_assessment", {})
+            if fp_assessment.get("verdict") in ["likely_false_positive", "false_positive"]:
+                fp_warnings.append(
+                    f"{finding.get('type', 'unknown')} at {finding.get('endpoint', '')} "
+                    f"- {fp_assessment.get('verdict')} (confidence: {fp_assessment.get('confidence', 0)})")
+        
+        if cve_list:
+            intel_parts.append(f"Related CVEs: {', '.join(cve_list[:5])}")
+        
+        if epss_alerts:
+            intel_parts.append(f"High Exploitability (EPSS >50%): {', '.join(epss_alerts[:3])}")
+        
+        if feed_hits:
+            intel_parts.append(f"Threat Feed Matches: {', '.join(feed_hits[:3])}")
+        
+        if fp_warnings:
+            intel_parts.append(f"False Positive Warnings: {', '.join(fp_warnings[:2])}")
+        
+        return "\n".join(intel_parts) if intel_parts else ""
+
+    def _build_prompt_with_threat_intel(self, cluster: Dict) -> str:
+        """
+        Build prompt enriched with threat intelligence context.
+        
+        Args:
+            cluster: Sanitized cluster data with threat intel
+            
+        Returns:
+            Prompt string with threat intel
+        """
+        base_prompt = self._build_prompt(cluster)
+        threat_context = self._build_threat_intel_context(cluster)
+        
+        if not threat_context:
+            return base_prompt
+        
+        # Insert threat intel before TASK section
+        threat_section = f"""
+THREAT INTELLIGENCE CONTEXT:
+{threat_context}
+"""
+        
+        # Find the TASK section and insert before it
+        task_marker = "TASK:"
+        if task_marker in base_prompt:
+            parts = base_prompt.split(task_marker, 1)
+            return parts[0] + threat_section + "\n" + task_marker + parts[1]
+        
+        return base_prompt + threat_section
+
+    async def explain_clusters_with_threat_intel(
+        self,
+        clusters: List[Dict]
+    ) -> List[ExplanationResult]:
+        """
+        Generate explanations enriched with threat intelligence context.
+        
+        Args:
+            clusters: List of pre-grouped vulnerability clusters with threat_intel
+            
+        Returns:
+            List of explanation results
+        """
+        if not clusters:
+            logger.warning("No clusters provided for threat-intel explanation")
+            return []
+        
+        results = []
+        
+        for cluster in clusters:
+            try:
+                # Validate cluster structure
+                self._validate_cluster(cluster)
+                
+                # Sanitize cluster data
+                sanitized_cluster = self._sanitize_cluster_data(cluster)
+                
+                # Build prompt with threat intelligence
+                prompt = self._build_prompt_with_threat_intel(sanitized_cluster)
+                
+                # Generate explanation
+                explanation = await self._generate_explanation(prompt)
+                
+                # Create result
+                result = ExplanationResult(
+                    cluster_id=cluster["cluster_id"],
+                    explanation=explanation,
+                    model_version=self.model_version,
+                    token_count=len(explanation.split()),
+                    input_cluster_ids=[cluster["cluster_id"]],
+                    used_fields=list(sanitized_cluster.keys()),
+                    timestamp=datetime.now()
+                )
+                
+                # Store explanation and trace
+                if self.db:
+                    await self._store_explanation(result, sanitized_cluster)
+                
+                results.append(result)
+                
+                logger.info(
+                    f"Generated threat-intel explanation for cluster {cluster['cluster_id']}: "
+                    f"{len(explanation)} chars"
+                )
+            
+            except Exception as e:
+                logger.error(
+                    f"Failed to explain cluster {cluster.get('cluster_id', 'unknown')} with threat intel: {e}"
+                )
+                continue
+        
+        return results

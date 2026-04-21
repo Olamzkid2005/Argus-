@@ -1,5 +1,6 @@
 /**
  * Query result caching using Redis for expensive database queries
+ * Enhanced with tag-based invalidation and TTL strategies
  */
 import redis from "./redis";
 
@@ -8,6 +9,8 @@ const DEFAULT_TTL = 60; // 1 minute default cache TTL
 interface CacheOptions {
   ttl?: number;
   key?: string;
+  tags?: string[];
+  invalidateOnWrite?: boolean;
 }
 
 /**
@@ -19,7 +22,7 @@ export async function withQueryCache<T>(
   cacheKey: string,
   options: CacheOptions = {}
 ): Promise<T> {
-  const { ttl = DEFAULT_TTL } = options;
+  const { ttl = DEFAULT_TTL, tags = [] } = options;
 
   // Try to get from cache first
   try {
@@ -36,10 +39,16 @@ export async function withQueryCache<T>(
   // Execute the query
   const result = await queryFn();
 
-  // Cache the result
+  // Cache the result with tags
   try {
     if (redis) {
       await redis.setex(cacheKey, ttl, JSON.stringify(result));
+
+      // Add to tag sets
+      for (const tag of tags) {
+        await redis.sadd(`tag:${tag}`, cacheKey);
+        await redis.expire(`tag:${tag}`, ttl * 2);
+      }
     }
   } catch {
     // Cache write error, continue without caching
@@ -65,9 +74,30 @@ export async function invalidateCache(pattern: string): Promise<void> {
 }
 
 /**
+ * Invalidate cache by tag
+ */
+export async function invalidateCacheByTag(tag: string): Promise<number> {
+  try {
+    if (!redis) return 0;
+
+    const keys = await redis.smembers(`tag:${tag}`);
+    if (keys.length === 0) return 0;
+
+    await redis.del(...keys);
+    await redis.del(`tag:${tag}`);
+
+    return keys.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Invalidate all caches for engagement-related queries
  */
 export async function invalidateEngagementCache(engagementId: string): Promise<void> {
   await invalidateCache(`*:engagement:${engagementId}*`);
   await invalidateCache(`*:findings:*`);
+  await invalidateCacheByTag("engagements");
+  await invalidateCacheByTag("findings");
 }

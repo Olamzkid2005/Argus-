@@ -46,7 +46,7 @@ class BaseRepository:
         """
         self._external_conn = connection
 
-    def _get_connection(self):
+    def _get_connection(self, org_id: Optional[str] = None):
         """Get a database connection (external or from pool)"""
         if self._external_conn:
             # If it's a string, create a connection from it
@@ -75,6 +75,16 @@ class BaseRepository:
 
         return dict(row)
 
+    def _log_query_time(self, query: str, start_time: float, rows: int = 0):
+        """Log slow queries for performance monitoring"""
+        import time
+        import logging
+        elapsed_ms = (time.time() - start_time) * 1000
+        if elapsed_ms > 500:
+            logging.getLogger(__name__).warning(
+                f"Slow query ({elapsed_ms:.1f}ms, {rows} rows): {query[:200]}"
+            )
+
     def find_by_id(self, id: str) -> Optional[Dict]:
         """
         Find a record by ID
@@ -85,15 +95,16 @@ class BaseRepository:
         Returns:
             Dictionary of the record or None
         """
+        import time
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        start = time.time()
 
         try:
-            cursor.execute(
-                f"SELECT * FROM {self.table_name} WHERE {self.id_column} = %s",
-                (id,)
-            )
+            query = f"SELECT * FROM {self.table_name} WHERE {self.id_column} = %s"
+            cursor.execute(query, (id,))
             row = cursor.fetchone()
+            self._log_query_time(query, start, 1 if row else 0)
             return dict(row) if row else None
         finally:
             cursor.close()
@@ -111,15 +122,16 @@ class BaseRepository:
         Returns:
             List of record dictionaries
         """
+        import time
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        start = time.time()
 
         try:
-            cursor.execute(
-                f"SELECT * FROM {self.table_name} ORDER BY created_at DESC LIMIT %s OFFSET %s",
-                (limit, offset)
-            )
+            query = f"SELECT * FROM {self.table_name} ORDER BY created_at DESC LIMIT %s OFFSET %s"
+            cursor.execute(query, (limit, offset))
             rows = cursor.fetchall()
+            self._log_query_time(query, start, len(rows))
             return [dict(row) for row in rows]
         finally:
             cursor.close()
@@ -208,12 +220,17 @@ class BaseRepository:
         Returns:
             Total number of records
         """
+        import time
         conn = self._get_connection()
         cursor = conn.cursor()
+        start = time.time()
 
         try:
-            cursor.execute(f"SELECT COUNT(*) FROM {self.table_name}")
-            return cursor.fetchone()[0]
+            query = f"SELECT COUNT(*) FROM {self.table_name}"
+            cursor.execute(query)
+            result = cursor.fetchone()[0]
+            self._log_query_time(query, start)
+            return result
         finally:
             cursor.close()
             if not self._external_conn:

@@ -43,7 +43,7 @@ SnapshotManager = _snapshot_manager.SnapshotManager
 
 
 @app.task(bind=True, name="tasks.repo_scan.run_repo_scan")
-def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_id: str = None):
+def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_id: str = None, custom_rules_path: str = None):
     """
     Execute repository scanning phase for an engagement
 
@@ -52,6 +52,7 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
         repo_url: GitHub/GitLab repository URL
         budget: Budget configuration
         trace_id: Optional trace_id for distributed tracing (generated if not provided)
+        custom_rules_path: Optional path to additional Semgrep/custom rules
     """
     db_conn_string = os.getenv("DATABASE_URL")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -71,6 +72,7 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
             "repo_url": repo_url,
             "budget": budget,
             "trace_id": trace_id,
+            "custom_rules_path": custom_rules_path,
         }
 
         lock = DistributedLock(redis_url)

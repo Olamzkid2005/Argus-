@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, Suspense, lazy } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
@@ -24,6 +24,8 @@ import {
   XCircle,
   Loader2,
   Terminal,
+  GitBranch,
+  BarChart3,
 } from "lucide-react";
 import SurveillanceEye from "@/components/effects/SurveillanceEye";
 import MatrixDataRain from "@/components/effects/MatrixDataRain";
@@ -32,6 +34,11 @@ import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import ScannerActivityPanel from "@/components/ui-custom/ScannerActivityPanel";
 import { useScannerActivities } from "@/lib/use-scanner-activities";
+
+// Lazy load heavy visualization components
+const AttackPathGraph = lazy(() => import("@/components/ui-custom/AttackPathGraph"));
+const ExecutionTimeline = lazy(() => import("@/components/ui-custom/ExecutionTimeline"));
+const ToolPerformanceMetrics = lazy(() => import("@/components/ui-custom/ToolPerformanceMetrics"));
 
 // ── Components ──
 
@@ -179,6 +186,10 @@ export default function DashboardPage() {
   } | null>(null);
   const [recentEngagements, setRecentEngagements] = useState<any[]>([]);
   const [dbFindings, setDbFindings] = useState<any[]>([]);
+  const [toolMetrics, setToolMetrics] = useState<any[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+  const [attackPaths, setAttackPaths] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
+  const [engagementStart, setEngagementStart] = useState<string>(new Date().toISOString());
 
   // Persist active engagement to localStorage + URL so it survives navigation
   const connectEngagement = useCallback((id: string) => {
@@ -318,6 +329,97 @@ export default function DashboardPage() {
     };
     fetchStats();
   }, [status]);
+
+  // Fetch tool performance metrics
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const fetchMetrics = async () => {
+      try {
+        const response = await fetch("/api/tools/performance?days=7");
+        if (response.ok) {
+          const data = await response.json();
+          setToolMetrics(data.tools || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch tool metrics:", err);
+      }
+    };
+    fetchMetrics();
+  }, [status]);
+
+  // Fetch execution timeline for active engagement
+  useEffect(() => {
+    if (!engagementId || !isConnected) {
+      setTimelineEvents([]);
+      return;
+    }
+    const fetchTimeline = async () => {
+      try {
+        const [timelineRes, engagementRes] = await Promise.all([
+          fetch(`/api/engagement/${engagementId}/timeline?limit=100`),
+          fetch(`/api/engagement/${engagementId}`),
+        ]);
+        if (timelineRes.ok) {
+          const data = await timelineRes.json();
+          const spans = (data.spans || []).map((s: any) => ({
+            id: s.id,
+            name: s.span_name,
+            status: s.duration_ms > 0 ? "completed" : "running",
+            startTime: s.created_at,
+            endTime: s.duration_ms > 0 ? new Date(new Date(s.created_at).getTime() + s.duration_ms).toISOString() : undefined,
+            durationMs: s.duration_ms,
+          }));
+          setTimelineEvents(spans);
+        }
+        if (engagementRes.ok) {
+          const data = await engagementRes.json();
+          if (data.engagement?.created_at) {
+            setEngagementStart(data.engagement.created_at);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch timeline:", err);
+      }
+    };
+    fetchTimeline();
+    const interval = setInterval(fetchTimeline, 10000);
+    return () => clearInterval(interval);
+  }, [engagementId, isConnected]);
+
+  // Fetch attack paths for active engagement
+  useEffect(() => {
+    if (!engagementId || !isConnected) {
+      setAttackPaths({ nodes: [], edges: [] });
+      return;
+    }
+    const fetchPaths = async () => {
+      try {
+        const response = await fetch(`/api/engagement/${engagementId}/findings?limit=20`);
+        if (response.ok) {
+          const data = await response.json();
+          const findings = data.findings || [];
+          // Build synthetic attack path nodes from findings
+          const nodes = findings.slice(0, 6).map((f: any, i: number) => ({
+            id: `node-${i}`,
+            type: i === 0 ? "entry" : i === findings.length - 1 ? "target" : "exploit",
+            label: f.type,
+            description: f.endpoint,
+            cvss: f.cvss_score,
+            confidence: f.confidence,
+          }));
+          const edges = nodes.slice(0, -1).map((_: any, i: number) => ({
+            source: `node-${i}`,
+            target: `node-${i + 1}`,
+            label: "exploits",
+          }));
+          setAttackPaths({ nodes, edges });
+        }
+      } catch (err) {
+        console.error("Failed to fetch attack paths:", err);
+      }
+    };
+    fetchPaths();
+  }, [engagementId, isConnected]);
 
   // Poll engagement state from DB — Redis TTL can expire, DB is the source of truth
   useEffect(() => {
@@ -763,6 +865,77 @@ export default function DashboardPage() {
                   glowColor="var(--prism-cyan)"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Visualization Section ── */}
+        <div className="mt-8 space-y-6">
+          {/* Attack Path Graph */}
+          <div className="border border-structural bg-surface/30">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
+              <GitBranch size={16} className="text-prism-cream" />
+              <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Attack Path Visualization</h2>
+              {isConnected && attackPaths.nodes && (
+                <span className="ml-auto text-[10px] font-mono text-text-secondary">{attackPaths.nodes.length} nodes</span>
+              )}
+            </div>
+            <div className="p-1">
+              {isConnected && attackPaths.nodes ? (
+                <Suspense fallback={
+                  <div className="h-[420px] flex items-center justify-center bg-surface/20">
+                    <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
+                  </div>
+                }>
+                  <AttackPathGraph nodes={attackPaths.nodes} edges={attackPaths.edges} />
+                </Suspense>
+              ) : (
+                <div className="h-[420px] flex flex-col items-center justify-center bg-surface/20 text-text-secondary/40 gap-3">
+                  <GitBranch size={24} />
+                  <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to visualize attack paths</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Execution Timeline */}
+          <div className="border border-structural bg-surface/30">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
+              <Clock size={16} className="text-prism-cyan" />
+              <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Execution Timeline</h2>
+            </div>
+            <div className="p-1">
+              {isConnected && timelineEvents.length > 0 ? (
+                <Suspense fallback={
+                  <div className="h-[240px] flex items-center justify-center bg-surface/20">
+                    <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
+                  </div>
+                }>
+                  <ExecutionTimeline events={timelineEvents} engagementStart={engagementStart} />
+                </Suspense>
+              ) : (
+                <div className="h-[240px] flex flex-col items-center justify-center bg-surface/20 text-text-secondary/40 gap-3">
+                  <Clock size={24} />
+                  <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to view execution timeline</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Tool Performance Metrics */}
+          <div className="border border-structural bg-surface/30">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
+              <BarChart3 size={16} className="text-prism-cream" />
+              <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Tool Performance Metrics</h2>
+            </div>
+            <div className="p-5">
+              <Suspense fallback={
+                <div className="h-[200px] flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
+                </div>
+              }>
+                <ToolPerformanceMetrics metrics={toolMetrics} days={7} />
+              </Suspense>
             </div>
           </div>
         </div>

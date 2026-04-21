@@ -1,0 +1,184 @@
+rules:
+  - id: weak-random-number-generator
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Weak random number generator used for security-sensitive operation"
+    metadata:
+      category: security
+      cwe: "CWE-338"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              random.random()
+          - pattern: |
+              Math.random()
+          - pattern: |
+              java.util.Random()
+          - pattern: |
+              rand()
+      - pattern-inside: |
+          def $FUNC(...):
+            ...
+      - pattern-not-inside: |
+          def $FUNC(...):
+            ...
+            # not-for-security
+            ...
+
+  - id: hardcoded-crypto-key
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Hardcoded cryptographic key detected"
+    metadata:
+      category: security
+      cwe: "CWE-321"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $KEY = "..."
+              ...
+              AES.new($KEY, ...)
+          - pattern: |
+              $KEY = "..."
+              ...
+              crypto.createCipher(..., $KEY)
+          - pattern: |
+              $KEY = "..."
+              ...
+              javax.crypto.spec.SecretKeySpec($KEY, ...)
+          - pattern: |
+              $KEY = "..."
+              ...
+              Cipher.getInstance(...).init(Cipher.ENCRYPT_MODE, $KEY)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "^(SECRET_KEY|ENCRYPTION_KEY|AES_KEY|PRIVATE_KEY|api_key|auth_token)$"
+
+  - id: insecure-cipher-mode
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Insecure cipher mode detected (ECB mode lacks semantic security)"
+    metadata:
+      category: security
+      cwe: "CWE-327"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              Cipher.getInstance("AES/ECB/...")
+          - pattern: |
+              CryptoJS.AES.encrypt(..., { mode: CryptoJS.mode.ECB })
+          - pattern: |
+              AES.new(..., AES.MODE_ECB)
+
+  - id: weak-password-hashing
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Weak password hashing algorithm detected"
+    metadata:
+      category: security
+      cwe: "CWE-916"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              hashlib.md5($PASSWORD)
+          - pattern: |
+              hashlib.sha1($PASSWORD)
+          - pattern: |
+              crypt($PASSWORD, ...)
+          - pattern: |
+              md5($PASSWORD)
+          - pattern: |
+              sha1($PASSWORD)
+      - metavariable-regex:
+          metavariable: $PASSWORD
+          regex: "(password|passwd|pwd|pass)"
+
+  - id: missing-hmac-verification
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: WARNING
+    message: "Cryptographic signature without HMAC verification"
+    metadata:
+      category: security
+      cwe: "CWE-345"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              jwt.decode($TOKEN, $SECRET, verify=False)
+          - pattern: |
+              jwt.decode($TOKEN, $SECRET, algorithms=["none"])
+          - pattern: |
+              JWTVerifier.create(...).withSubject(...).build().verify($TOKEN)
+      - pattern-not: |
+          jwt.decode($TOKEN, $SECRET, algorithms=["HS256", ...])
+
+  - id: predictable-seed
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: WARNING
+    message: "Predictable seed used for PRNG in security context"
+    metadata:
+      category: security
+      cwe: "CWE-337"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              random.seed(1)
+          - pattern: |
+              random.seed(time.time())
+          - pattern: |
+              srand(time(NULL))
+          - pattern: |
+              java.util.Random(12345)
+      - pattern-not-inside: |
+          def test_$FUNC(...):
+            ...
+
+  - id: tls-verify-disabled
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: WARNING
+    message: "TLS certificate verification disabled"
+    metadata:
+      category: security
+      cwe: "CWE-295"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              requests.get(..., verify=False)
+          - pattern: |
+              process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+          - pattern: |
+              curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, false)
+          - pattern: |
+              axios.create({ httpsAgent: new https.Agent({ rejectUnauthorized: false }) })
+          - pattern: |
+              ssl._create_unverified_context()
+          - pattern: |
+              SSLContext.verify_mode = ssl.CERT_NONE
+
+  - id: insecure-random-for-token
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Insecure random generator used for token/session generation"
+    metadata:
+      category: security
+      cwe: "CWE-338"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              token = str(random.random())
+          - pattern: |
+              token = Math.random().toString()
+          - pattern: |
+              session_id = uuid.uuid1()
+          - pattern: |
+              secrets.token_hex(8)
+      - metavariable-regex:
+          metavariable: $TOKEN
+          regex: "(token|session|csrf|nonce)"

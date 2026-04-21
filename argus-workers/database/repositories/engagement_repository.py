@@ -62,12 +62,14 @@ class EngagementRepository(BaseRepository):
             cursor.close()
             conn.close()
 
-    def find_by_org(self, org_id: str) -> List[Dict]:
+    def find_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> List[Dict]:
         """
-        Find all engagements for an organization
+        Find all engagements for an organization with pagination.
 
         Args:
             org_id: Organization ID
+            limit: Maximum number of records
+            offset: Number of records to skip
 
         Returns:
             List of engagement dictionaries
@@ -76,13 +78,25 @@ class EngagementRepository(BaseRepository):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         try:
+            # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
-                SELECT * FROM engagements
-                WHERE org_id = %s
-                ORDER BY created_at DESC
+                SELECT 
+                    e.*,
+                    u.email as created_by_email,
+                    COALESCE(f.findings_count, 0) as findings_count
+                FROM engagements e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN (
+                    SELECT engagement_id, COUNT(*) as findings_count
+                    FROM findings
+                    GROUP BY engagement_id
+                ) f ON e.id = f.engagement_id
+                WHERE e.org_id = %s
+                ORDER BY e.created_at DESC
+                LIMIT %s OFFSET %s
                 """,
-                (org_id,)
+                (org_id, limit, offset)
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -104,11 +118,22 @@ class EngagementRepository(BaseRepository):
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         try:
+            # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
-                SELECT * FROM engagements
-                WHERE org_id = %s AND status NOT IN ('complete', 'failed')
-                ORDER BY created_at DESC
+                SELECT 
+                    e.*,
+                    u.email as created_by_email,
+                    COALESCE(f.findings_count, 0) as findings_count
+                FROM engagements e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN (
+                    SELECT engagement_id, COUNT(*) as findings_count
+                    FROM findings
+                    GROUP BY engagement_id
+                ) f ON e.id = f.engagement_id
+                WHERE e.org_id = %s AND e.status NOT IN ('complete', 'failed')
+                ORDER BY e.created_at DESC
                 """,
                 (org_id,)
             )

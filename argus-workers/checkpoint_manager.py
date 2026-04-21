@@ -211,6 +211,83 @@ class CheckpointManager:
             "partial_results": checkpoint["data"],
             "checkpoint_timestamp": checkpoint["created_at"].isoformat() if checkpoint["created_at"] else None,
         }
+    
+    def get_resume_plan(self, engagement_id: str) -> Optional[Dict]:
+        """
+        Get a detailed resume plan from the last checkpoint.
+        
+        Analyzes the checkpoint data and returns a plan for resuming
+        the scan from where it left off.
+        
+        Args:
+            engagement_id: Engagement ID
+            
+        Returns:
+            Resume plan with next steps, or None
+        """
+        checkpoint = self.load_checkpoint(engagement_id)
+        
+        if not checkpoint:
+            return None
+        
+        phase = checkpoint["phase"]
+        data = checkpoint["data"]
+        
+        # Define phase ordering
+        phases = ["recon", "scan", "analyze", "report"]
+        
+        try:
+            current_idx = phases.index(phase)
+        except ValueError:
+            current_idx = 0
+        
+        next_phase = phases[current_idx + 1] if current_idx + 1 < len(phases) else None
+        
+        return {
+            "engagement_id": engagement_id,
+            "completed_phase": phase,
+            "next_phase": next_phase,
+            "partial_results": data,
+            "remaining_phases": phases[current_idx + 1:] if next_phase else [],
+            "checkpoint_timestamp": checkpoint["created_at"].isoformat() if checkpoint["created_at"] else None,
+            "can_resume": True,
+        }
+    
+    def cleanup_old_checkpoints(self, max_age_days: int = 7) -> int:
+        """
+        Delete checkpoints older than specified age.
+        
+        Args:
+            max_age_days: Maximum age in days
+            
+        Returns:
+            Number of checkpoints deleted
+        """
+        from datetime import datetime, timedelta
+        
+        conn = psycopg2.connect(self.db_conn_string)
+        cursor = conn.cursor()
+        
+        try:
+            cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+            
+            cursor.execute(
+                """
+                DELETE FROM checkpoints
+                WHERE created_at < %s
+                """,
+                (cutoff,)
+            )
+            
+            conn.commit()
+            return cursor.rowcount
+            
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"Failed to cleanup checkpoints: {e}")
+        finally:
+            cursor.close()
+            conn.close()
 
 
 class CheckpointContext:
