@@ -59,6 +59,10 @@ export async function GET(req: NextRequest) {
     }
   } catch (error) {
     console.error("Dashboard stats error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch dashboard stats" },
       { status: 500 },

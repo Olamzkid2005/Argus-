@@ -130,6 +130,10 @@ export async function GET(req: NextRequest) {
     }
   } catch (error) {
     console.error("Engagements API error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch engagements" },
       { status: 500 },

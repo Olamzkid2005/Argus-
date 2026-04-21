@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
       // Get total count
       const countQuery = query.replace(
-        "SELECT f.id, f.severity, f.endpoint, f.source_tool, f.verified, f.confidence, f.created_at, f.evidence",
+        "SELECT f.id, f.type, f.severity, f.endpoint, f.source_tool, f.verified, f.confidence, f.created_at, f.evidence",
         "SELECT COUNT(*)",
       );
       const countResult = await client.query(countQuery, params);
@@ -152,6 +152,10 @@ export async function GET(req: NextRequest) {
     }
   } catch (error) {
     console.error("Findings API error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch findings" },
       { status: 500 },
@@ -264,6 +268,10 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error("Findings bulk operation error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to perform bulk operation" },
       { status: 500 },

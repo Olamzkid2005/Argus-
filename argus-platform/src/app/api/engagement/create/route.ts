@@ -111,36 +111,51 @@ export async function POST(req: Request) {
 
       // Push job to Redis queue based on scan type
       const traceId = uuidv4();
+      let jobPushed = false;
 
-      if (effectiveScanType === "repo") {
-        // Repository scan - clone repo and run Semgrep
-        await pushJob({
-          type: "repo_scan",
-          engagement_id: engagementId,
-          target: targetUrl,
-          repo_url: targetUrl,
-          budget: {
-            max_cycles: 5,
-            max_depth: 3,
-            max_cost: 0.5,
-          },
-          trace_id: traceId,
-          created_at: new Date().toISOString(),
-        });
-      } else {
-        // Web app scan - run reconnaissance
-        await pushJob({
-          type: "recon",
-          engagement_id: engagementId,
-          target: targetUrl,
-          budget: {
-            max_cycles: 5,
-            max_depth: 3,
-            max_cost: 0.5,
-          },
-          trace_id: traceId,
-          created_at: new Date().toISOString(),
-        });
+      try {
+        if (effectiveScanType === "repo") {
+          // Repository scan - clone repo and run Semgrep
+          await pushJob({
+            type: "repo_scan",
+            engagement_id: engagementId,
+            target: targetUrl,
+            repo_url: targetUrl,
+            budget: {
+              max_cycles: 5,
+              max_depth: 3,
+              max_cost: 0.5,
+            },
+            trace_id: traceId,
+            created_at: new Date().toISOString(),
+          });
+        } else {
+          // Web app scan - run reconnaissance
+          await pushJob({
+            type: "recon",
+            engagement_id: engagementId,
+            target: targetUrl,
+            budget: {
+              max_cycles: 5,
+              max_depth: 3,
+              max_cost: 0.5,
+            },
+            trace_id: traceId,
+            created_at: new Date().toISOString(),
+          });
+        }
+        jobPushed = true;
+      } catch (jobError) {
+        console.error("Failed to push job:", jobError);
+        // Rollback: delete the engagement if job push failed
+        await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+        throw new Error(`Job dispatch failed: ${jobError instanceof Error ? jobError.message : "unknown error"}`);
+      }
+
+      if (!jobPushed) {
+        // Clean up if job wasn't pushed
+        await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+        throw new Error("Failed to queue scan job");
       }
 
       return NextResponse.json({

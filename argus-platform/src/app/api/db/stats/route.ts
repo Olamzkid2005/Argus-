@@ -74,6 +74,10 @@ export async function GET(req: Request) {
     }
   } catch (error) {
     console.error("Get db stats error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch database statistics" },
       { status: 500 }
