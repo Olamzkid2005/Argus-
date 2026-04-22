@@ -6,6 +6,14 @@ import { pool } from "@/lib/db";
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();
+    const orgId = (session.user as { orgId?: string }).orgId;
+
+    if (!orgId) {
+      return NextResponse.json(
+        { error: "Session missing org ID" },
+        { status: 401 }
+      );
+    }
 
     const client = await pool.connect();
 
@@ -19,7 +27,7 @@ export async function GET(req: NextRequest) {
           (SELECT COUNT(*) FROM engagements WHERE org_id = $1 AND status = 'failed') as failed,
           (SELECT COUNT(*) FROM engagements WHERE org_id = $1 AND status IN ('scanning', 'analyzing')) as in_progress
       `,
-        [session.user.orgId],
+        [orgId],
       );
 
       // Get findings stats
@@ -35,11 +43,12 @@ export async function GET(req: NextRequest) {
         JOIN engagements e ON f.engagement_id = e.id
         WHERE e.org_id = $1
       `,
-        [session.user.orgId],
+        [orgId],
       );
 
       // Get recent activity
-      const recentActivity = await client.query(`
+      const recentActivity = await client.query(
+        `
         SELECT 
           e.id, e.target_url, e.status, e.created_at,
           (SELECT COUNT(*) FROM findings f WHERE f.engagement_id = e.id) as findings_count
@@ -47,7 +56,9 @@ export async function GET(req: NextRequest) {
         WHERE e.org_id = $1
         ORDER BY e.created_at DESC
         LIMIT 5
-      `);
+        `,
+        [orgId],
+      );
 
       return NextResponse.json({
         engagements: orgStats.rows[0],

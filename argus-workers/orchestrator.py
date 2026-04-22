@@ -12,6 +12,8 @@ import json
 
 logger = logging.getLogger(__name__)
 
+import psycopg2
+
 from tracing import (
     TracingManager,
     TraceContext,
@@ -72,6 +74,61 @@ class Orchestrator:
         self.normalizer = FindingNormalizer()
         self.finding_repo = FindingRepository(db_conn) if db_conn else None
         self.engagement_repo = EngagementRepository(db_conn) if db_conn else None
+    
+    def _load_custom_rules(self, engagement_id: str) -> List[Dict]:
+        """
+        Fetch active custom rules for the engagement's organization.
+        
+        Args:
+            engagement_id: Engagement ID
+            
+        Returns:
+            List of active custom rule dictionaries
+        """
+        db_conn = os.getenv("DATABASE_URL")
+        if not db_conn:
+            return []
+        
+        try:
+            conn = psycopg2.connect(db_conn)
+            cursor = conn.cursor()
+            
+            # Get org_id from engagement
+            cursor.execute(
+                "SELECT org_id FROM engagements WHERE id = %s",
+                (engagement_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                cursor.close()
+                conn.close()
+                return []
+            
+            org_id = row[0]
+            
+            # Fetch active custom rules for this org
+            cursor.execute(
+                """
+                SELECT id, name, description, severity, category, rule_yaml, tags
+                FROM custom_rules
+                WHERE org_id = %s AND status = 'active'
+                ORDER BY created_at DESC
+                """,
+                (org_id,)
+            )
+            
+            columns = [desc[0] for desc in cursor.description]
+            rules = []
+            for row in cursor.fetchall():
+                rule = dict(zip(columns, row))
+                rules.append(rule)
+            
+            cursor.close()
+            conn.close()
+            return rules
+        except Exception as e:
+            logger.warning(f"Failed to load custom rules: {e}")
+            return []
     
     def run(self, job: Dict) -> Dict:
         """
@@ -480,6 +537,20 @@ class Orchestrator:
             engagement_id=self.engagement_id,
             target=str(targets)
         )
+        
+        # Load and announce active custom rules
+        custom_rules = self._load_custom_rules(self.engagement_id)
+        if custom_rules:
+            for rule in custom_rules:
+                self.ws_publisher.publish_scanner_activity(
+                    engagement_id=self.engagement_id,
+                    tool_name="Custom Rules Engine",
+                    activity="custom rule loaded",
+                    status="completed",
+                    target=str(targets),
+                    details=f"{rule['name']} ({rule['severity']}) — {rule.get('description', '')[:120]}",
+                )
+            logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
         
         # Execute scanning tools against targets
         scan_aggressiveness = job.get("aggressiveness", "default")
