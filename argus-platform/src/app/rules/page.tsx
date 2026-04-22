@@ -19,6 +19,9 @@ import {
   Info,
   Sparkles,
   PenLine,
+  Trash2,
+  Power,
+  AlertCircle,
 } from "lucide-react";
 
 interface CustomRule {
@@ -31,6 +34,8 @@ interface CustomRule {
   version: number;
   is_community_shared: boolean;
   created_at: string;
+  tags?: string[];
+  rule_yaml?: string;
 }
 
 const containerVariants = {
@@ -67,6 +72,9 @@ export default function RulesPage() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedRule, setSelectedRule] = useState<CustomRule | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -78,16 +86,27 @@ export default function RulesPage() {
     setLoading(true);
     try {
       const res = await fetch(`/api/rules?status=${statusFilter}`);
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        data = { error: `Server returned ${res.status}` };
+      }
       if (res.ok) {
-        const data = await res.json();
         setRules(data.rules || []);
+      } else {
+        console.error("Fetch rules failed:", res.status, JSON.stringify(data, null, 2));
+        const msg = data?.error || data?.message || `Failed to fetch rules (HTTP ${res.status})`;
+        const detail = data?.details ? ` — ${data.details}` : "";
+        showToast("error", msg + detail);
       }
     } catch (e) {
       console.error("Failed to fetch rules:", e);
+      showToast("error", "Network error — failed to load rules");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, showToast]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -131,13 +150,55 @@ export default function RulesPage() {
         });
         fetchRules();
       } else {
-        console.error("Create rule failed:", res.status, data);
+        console.error("Create rule failed:", res.status, JSON.stringify(data, null, 2));
         const msg = data?.error || data?.message || `Failed to create rule (HTTP ${res.status})`;
-        showToast("error", msg);
+        const detail = data?.details ? ` — ${data.details}` : "";
+        showToast("error", msg + detail);
       }
     } catch (e) {
       console.error("Create rule network/error:", e);
       showToast("error", "Network error — check your connection and try again");
+    }
+  };
+
+  const deleteRule = async (id: string) => {
+    try {
+      const res = await fetch(`/api/rules/${id}`, { method: "DELETE" });
+      let data;
+      try { data = await res.json(); } catch { data = {}; }
+      if (res.ok) {
+        showToast("success", "Rule deleted");
+        setSelectedRule(null);
+        fetchRules();
+      } else {
+        const msg = data?.error || `Failed to delete rule (HTTP ${res.status})`;
+        showToast("error", msg);
+      }
+    } catch (e) {
+      showToast("error", "Network error — failed to delete rule");
+    }
+  };
+
+  const toggleRuleStatus = async (rule: CustomRule) => {
+    const nextStatus = rule.status === "active" ? "draft" : "active";
+    try {
+      const res = await fetch(`/api/rules/${rule.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      let data;
+      try { data = await res.json(); } catch { data = {}; }
+      if (res.ok) {
+        showToast("success", `Rule ${nextStatus === "active" ? "activated" : "deactivated"}`);
+        setSelectedRule((prev) => (prev ? { ...prev, status: nextStatus } : null));
+        fetchRules();
+      } else {
+        const msg = data?.error || `Failed to update rule (HTTP ${res.status})`;
+        showToast("error", msg);
+      }
+    } catch (e) {
+      showToast("error", "Network error — failed to update rule");
     }
   };
 
@@ -316,7 +377,8 @@ export default function RulesPage() {
               <motion.div
                 key={rule.id}
                 variants={itemVariants}
-                className="bg-white dark:bg-[#12121A] border border-outline-variant dark:border-white/[0.08] rounded-xl p-5 hover:shadow-md hover:border-primary/30 transition-all duration-300 group"
+                onClick={() => setSelectedRule(rule)}
+                className="bg-white dark:bg-[#12121A] border border-outline-variant dark:border-white/[0.08] rounded-xl p-5 hover:shadow-md hover:border-primary/30 transition-all duration-300 group cursor-pointer"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
@@ -562,6 +624,184 @@ export default function RulesPage() {
                     </div>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Rule Detail Modal */}
+      <AnimatePresence>
+        {selectedRule && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md"
+            onClick={() => { setDeleteConfirm(false); setSelectedRule(null); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-white dark:bg-[#12121A] w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-outline-variant dark:border-white/[0.08] shadow-glow"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant dark:border-white/[0.08]">
+                <h2 className="font-headline text-sm font-medium text-on-surface dark:text-[#F0F0F5] uppercase tracking-wider">
+                  Rule Details
+                </h2>
+                <button
+                  onClick={() => { setDeleteConfirm(false); setSelectedRule(null); }}
+                  className="text-outline dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-colors text-xs font-label"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h3 className="text-lg font-semibold text-on-surface dark:text-[#F0F0F5] font-headline">
+                    {selectedRule.name}
+                  </h3>
+                  <span
+                    className="text-[10px] font-label px-2 py-0.5 border rounded-md"
+                    style={{
+                      color: getSeverityColor(selectedRule.severity),
+                      borderColor: getSeverityColor(selectedRule.severity),
+                    }}
+                  >
+                    {selectedRule.severity}
+                  </span>
+                  <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] border border-outline-variant dark:border-white/[0.08] px-2 py-0.5 rounded-md">
+                    v{selectedRule.version}
+                  </span>
+                  {selectedRule.is_community_shared && (
+                    <span className="text-[10px] font-label text-primary border border-primary/30 px-2 py-0.5 rounded-md bg-primary/5">
+                      COMMUNITY
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-outline dark:text-[#8A8A9E] font-body leading-relaxed">
+                  {selectedRule.description || "No description provided."}
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-surface-container dark:bg-[#1A1A24] rounded-lg p-3 border border-outline-variant dark:border-white/[0.08]">
+                    <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1">
+                      Status
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-on-surface dark:text-[#F0F0F5] font-body">
+                      {getStatusIcon(selectedRule.status)}
+                      {selectedRule.status}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container dark:bg-[#1A1A24] rounded-lg p-3 border border-outline-variant dark:border-white/[0.08]">
+                    <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1">
+                      Category
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-on-surface dark:text-[#F0F0F5] font-body capitalize">
+                      <Layers size={12} />
+                      {selectedRule.category}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container dark:bg-[#1A1A24] rounded-lg p-3 border border-outline-variant dark:border-white/[0.08]">
+                    <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1">
+                      Created
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-on-surface dark:text-[#F0F0F5] font-body">
+                      <GitCommit size={12} />
+                      {new Date(selectedRule.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container dark:bg-[#1A1A24] rounded-lg p-3 border border-outline-variant dark:border-white/[0.08]">
+                    <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1">
+                      Version
+                    </span>
+                    <span className="text-xs text-on-surface dark:text-[#F0F0F5] font-body">
+                      {selectedRule.version}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedRule.tags && selectedRule.tags.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-2">
+                      Tags
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedRule.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[10px] font-label px-2 py-1 rounded-md bg-primary/5 border border-primary/20 text-primary"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-2">
+                    Rule YAML
+                  </span>
+                  <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] rounded-lg p-4 overflow-x-auto">
+                    <pre className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono whitespace-pre-wrap break-all">
+                      {selectedRule.rule_yaml || "No YAML available."}
+                    </pre>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-outline-variant dark:border-white/[0.08]">
+                  <div className="flex items-center gap-3">
+                    {deleteConfirm ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-red-400 font-label uppercase tracking-wider">
+                          Are you sure?
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (selectedRule) deleteRule(selectedRule.id);
+                          }}
+                          className="px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all"
+                        >
+                          Yes, Delete
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(false)}
+                          className="px-3 py-1.5 border border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:text-on-surface text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirm(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/30 text-red-400 hover:bg-red-500/10 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all"
+                      >
+                        <Trash2 size={12} />
+                        Delete
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (selectedRule) toggleRuleStatus(selectedRule);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all border ${
+                      selectedRule.status === "active"
+                        ? "border-prism-cream/30 text-prism-cream hover:bg-prism-cream/10"
+                        : "border-green-500/30 text-green-400 hover:bg-green-500/10"
+                    }`}
+                  >
+                    <Power size={12} />
+                    {selectedRule.status === "active" ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
