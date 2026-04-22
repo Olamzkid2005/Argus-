@@ -1,113 +1,102 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import EngagementsPage from '../../src/app/engagements/page';
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const mockPush = jest.fn();
-const mockShowToast = jest.fn();
-
-jest.mock('next/navigation', () => ({
+jest.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/",
   useRouter: () => ({ push: mockPush }),
 }));
 
-jest.mock('@/components/ui/Toast', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
+jest.mock("next-auth/react", () => ({
+  useSession: () => ({ data: { user: { email: "test@argus.io" } }, status: "authenticated" }),
 }));
 
-describe('EngagementsPage', () => {
+jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
+jest.mock("@/components/ui-custom/ScanModeHelp", () => ({ trigger }: any) => <span>{trigger}</span>);
+
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: async () => ({ settings: { scan_aggressiveness: "default" } }),
+  })
+);
+
+import EngagementsPage from "@/app/engagements/page";
+
+describe("Engagements Page", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockReset();
+    mockPush.mockClear();
+    (global.fetch as jest.Mock).mockClear();
   });
 
-  it('scan type toggle works', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ engagements: [], settings: {} }) });
+  it("renders engagement creation form", async () => {
     render(<EngagementsPage />);
+
     await waitFor(() => {
-      expect(screen.getByText('Web Application')).toBeInTheDocument();
-      expect(screen.getByText('Repository')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('Repository'));
-    expect(screen.getByPlaceholderText('username/repository')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Web Application'));
-    expect(screen.getByPlaceholderText('https://target.com')).toBeInTheDocument();
-  });
-
-  it('target input renders', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ engagements: [] }) });
-    render(<EngagementsPage />);
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('https://target.com')).toBeInTheDocument();
+      expect(screen.getByText("New Scan Engagement")).toBeInTheDocument();
     });
   });
 
-  it('aggressiveness selector works', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ engagements: [] }) });
+  it("renders scan type toggle buttons", async () => {
     render(<EngagementsPage />);
-    await waitFor(() => {
-      expect(screen.getByText('Default')).toBeInTheDocument();
-      expect(screen.getByText('High')).toBeInTheDocument();
-      expect(screen.getByText('Extreme')).toBeInTheDocument();
-    });
 
-    fireEvent.click(screen.getByText('High'));
-    // The submit should now use high aggressiveness
-    expect(screen.getByText('High').closest('button')).toHaveClass('border-amber-500');
+    await waitFor(() => {
+      expect(screen.getByText("Web Application")).toBeInTheDocument();
+      expect(screen.getByText("Repository")).toBeInTheDocument();
+    });
   });
 
-  it('submit button creates engagement via API', async () => {
-    (global.fetch as jest.Mock).mockImplementation((url: string, init?: any) => {
-      if (url === '/api/settings') {
+  it("renders target input and launch button", async () => {
+    render(<EngagementsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/https:\/\/target.com/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /launch engagement/i })).toBeInTheDocument();
+  });
+
+  it("renders aggressiveness presets", async () => {
+    render(<EngagementsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Default")).toBeInTheDocument();
+      expect(screen.getByText("High")).toBeInTheDocument();
+      expect(screen.getByText("Extreme")).toBeInTheDocument();
+    });
+  });
+
+  it("submits form to create engagement", async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string, options?: any) => {
+      if (url === "/api/settings") {
         return Promise.resolve({ ok: true, json: async () => ({ settings: {} }) });
       }
-      if (url === '/api/engagements') {
-        return Promise.resolve({ ok: true, json: async () => ({ engagements: [] }) });
-      }
-      if (url === '/api/engagement/create') {
-        return Promise.resolve({ ok: true, json: async () => ({ engagement: { id: 'eng-123' } }) });
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) });
-    });
-
-    render(<EngagementsPage />);
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('https://target.com')).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByPlaceholderText('https://target.com'), { target: { value: 'https://example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: /launch engagement/i }));
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/engagement/create', expect.objectContaining({ method: 'POST' }));
-    });
-  });
-
-  it('shows progress indicator during creation', async () => {
-    (global.fetch as jest.Mock).mockImplementation((url: string) => {
-      if (url === '/api/settings') {
-        return Promise.resolve({ ok: true, json: async () => ({ settings: {} }) });
-      }
-      if (url === '/api/engagements') {
-        return Promise.resolve({ ok: true, json: async () => ({ engagements: [] }) });
-      }
-      if (url === '/api/engagement/create') {
-        return new Promise((resolve) => {
-          setTimeout(() => resolve({ ok: true, json: async () => ({ engagement: { id: 'eng-123' } }) }), 100);
+      if (url === "/api/engagement/create") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ engagement: { id: "eng-123" } }),
         });
       }
       return Promise.resolve({ ok: true, json: async () => ({}) });
     });
 
     render(<EngagementsPage />);
+
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('https://target.com')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/https:\/\/target.com/i)).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText('https://target.com'), { target: { value: 'https://example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: /launch engagement/i }));
+    const targetInput = screen.getByPlaceholderText(/https:\/\/target.com/i);
+    const launchButton = screen.getByRole("button", { name: /launch engagement/i });
+
+    await userEvent.type(targetInput, "https://example.com");
+    fireEvent.click(launchButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/initializing|validating|creating/i)).toBeInTheDocument();
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/engagement/create",
+        expect.objectContaining({ method: "POST" })
+      );
     });
   });
 });

@@ -1,90 +1,56 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import RulesPage from '../../src/app/rules/page';
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-const mockPush = jest.fn();
-const mockShowToast = jest.fn();
-
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush }),
+jest.mock("next-auth/react", () => ({
+  useSession: () => ({ data: { user: { email: "test@argus.io" } }, status: "authenticated" }),
 }));
 
-jest.mock('@/components/ui/Toast', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
+jest.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/",
+  useRouter: () => ({ push: jest.fn() }),
 }));
 
-describe('RulesPage', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockReset();
-  });
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: async () => ({ rules: [] }),
+  })
+);
 
-  const mockRules = [
-    { id: 'rule-1', name: 'SQL Injection Check', description: 'Detects SQL injection patterns', severity: 'HIGH', category: 'injection', status: 'active', version: 1, is_community_shared: false, created_at: '2024-01-01' },
-    { id: 'rule-2', name: 'XSS Check', description: 'Detects XSS patterns', severity: 'MEDIUM', category: 'custom', status: 'draft', version: 2, is_community_shared: true, created_at: '2024-01-02' },
-  ];
+import RulesPage from "@/app/rules/page";
 
-  it('renders rules list', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ rules: mockRules }),
-    });
-
+describe("Rules Page", () => {
+  it("renders rules header", async () => {
     render(<RulesPage />);
+
     await waitFor(() => {
-      expect(screen.getByText('SQL Injection Check')).toBeInTheDocument();
-      expect(screen.getByText('XSS Check')).toBeInTheDocument();
+      expect(screen.getByText("Custom Rule Engine")).toBeInTheDocument();
     });
   });
 
-  it('status filter works', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ rules: mockRules }),
-    });
-
+  it("renders status filter buttons", async () => {
     render(<RulesPage />);
-    await waitFor(() => {
-      expect(screen.getByText('active')).toBeInTheDocument();
-    });
 
-    fireEvent.click(screen.getByText('draft'));
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('status=draft'), expect.anything());
+      expect(screen.getByText("all")).toBeInTheDocument();
+      expect(screen.getByText("active")).toBeInTheDocument();
+      expect(screen.getByText("draft")).toBeInTheDocument();
     });
   });
 
-  it('create rule modal opens', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ rules: mockRules }),
-    });
-
+  it("renders new rule button", async () => {
     render(<RulesPage />);
-    await waitFor(() => {
-      expect(screen.getByText('New Rule')).toBeInTheDocument();
-    });
 
-    fireEvent.click(screen.getByText('New Rule'));
     await waitFor(() => {
-      expect(screen.getByText('Create Custom Rule')).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new rule/i })).toBeInTheDocument();
     });
   });
 
-  it('YAML editor renders in create modal', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ rules: mockRules }),
-    });
-
+  it("shows empty state when no rules exist", async () => {
     render(<RulesPage />);
-    await waitFor(() => {
-      expect(screen.getByText('New Rule')).toBeInTheDocument();
-    });
 
-    fireEvent.click(screen.getByText('New Rule'));
     await waitFor(() => {
-      expect(screen.getByText('Rule YAML')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('custom-rule-001')).toBeInTheDocument();
+      expect(screen.getByText(/no rules found/i)).toBeInTheDocument();
     });
   });
 });

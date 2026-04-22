@@ -155,6 +155,10 @@ jest.mock('framer-motion', () => ({
   useTransform: () => ({ get: () => 0 }),
   useReducedMotion: () => false,
   useInView: () => true,
+  useMotionValue: (val: any) => ({ get: () => val, set: jest.fn() }),
+  useSpring: (val: any) => ({ get: () => val }),
+  useMotionTemplate: () => "",
+  motionValue: (val: any) => ({ get: () => val, set: jest.fn() }),
 }));
 
 // Mock recharts
@@ -192,6 +196,12 @@ jest.mock('recharts', () => ({
   Funnel: () => <div data-testid="recharts-funnel" />,
   LabelList: () => <div data-testid="recharts-label-list" />,
   ErrorBar: () => <div data-testid="recharts-error-bar" />,
+}));
+
+// Mock useToast
+jest.mock('@/components/ui/Toast', () => ({
+  useToast: () => ({ showToast: jest.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 // Mock @/lib/use-engagement-events
