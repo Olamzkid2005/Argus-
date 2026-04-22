@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Info,
 } from "lucide-react";
 
 interface CustomRule {

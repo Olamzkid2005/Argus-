@@ -343,6 +343,14 @@ export default function DashboardPage() {
     }
   }, [currentState, isConnected]);
 
+  // Persist active engagement whenever connected so navigation away/back
+  // does not clear the live scan context in the dashboard.
+  useEffect(() => {
+    if (isConnected && engagementId) {
+      localStorage.setItem("argus:active_engagement", engagementId);
+    }
+  }, [engagementId, isConnected]);
+
   // Fetch findings from DB so they persist beyond Redis TTL
   useEffect(() => {
     if (!engagementId || !isConnected) return;

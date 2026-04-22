@@ -38,6 +38,14 @@ interface Settings {
   scan_aggressiveness?: string;
 }
 
+interface AITestResult {
+  ok: boolean;
+  model?: string;
+  message?: string;
+  error?: string;
+  details?: string;
+}
+
 // Scan aggressiveness presets
 const AGGRESSIVENESS_PRESETS = [
   {
@@ -134,18 +142,6 @@ const OPENROUTER_MODELS = [
   { id: "perplexity/sonar", name: "Perplexity Sonar", provider: "perplexity", description: "Search-augmented model" },
 ];
 
-const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: "text-orange-400 bg-orange-400/10 border-orange-400/20",
-  openai: "text-primary bg-primary/10 border-primary/20",
-  google: "text-blue-400 bg-blue-400/10 border-blue-400/20",
-  meta: "text-indigo-400 bg-indigo-400/10 border-indigo-400/20",
-  deepseek: "text-cyan-400 bg-cyan-400/10 border-cyan-400/20",
-  mistral: "text-purple-400 bg-purple-400/10 border-purple-400/20",
-  qwen: "text-pink-400 bg-pink-400/10 border-pink-400/20",
-  nvidia: "text-green-400 bg-green-400/10 border-green-400/20",
-  perplexity: "text-teal-400 bg-teal-400/10 border-teal-400/20",
-};
-
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -156,9 +152,10 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [customModel, setCustomModel] = useState("");
-  const [showCustomInput, setShowCustomInput] = useState(false);
   const [temperature, setTemperature] = useState(0.7);
   const [isDark, setIsDark] = useState(false);
+  const [isTestingAI, setIsTestingAI] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<AITestResult | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -194,7 +191,7 @@ export default function SettingsPage() {
     setIsSaving(true);
     try {
       const payload = { ...settings };
-      if (customModel && showCustomInput) {
+      if (customModel.trim()) {
         payload.preferred_ai_model = customModel;
       }
       const response = await fetch("/api/settings", {
@@ -218,7 +215,6 @@ export default function SettingsPage() {
   const handleDiscard = () => {
     loadSettings();
     setCustomModel("");
-    setShowCustomInput(false);
     showToast("info", "Changes discarded");
   };
 
@@ -229,6 +225,46 @@ export default function SettingsPage() {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
+    }
+  };
+
+  const handleTestAIConnection = async () => {
+    setIsTestingAI(true);
+    setAiTestResult(null);
+    try {
+      const modelToTest = customModel.trim() || settings.preferred_ai_model || "";
+      const apiKeyToTest =
+        settings.openrouter_api_key && !settings.openrouter_api_key.includes("•")
+          ? settings.openrouter_api_key
+          : undefined;
+
+      const response = await fetch("/api/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: apiKeyToTest,
+          model: modelToTest,
+        }),
+      });
+
+      const data = await response.json();
+      setAiTestResult(data);
+
+      if (response.ok && data.ok) {
+        showToast("success", "AI test successful");
+      } else {
+        showToast("error", data.error || "AI test failed");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Network error";
+      setAiTestResult({
+        ok: false,
+        error: "Failed to test AI connection",
+        details: message,
+      });
+      showToast("error", "Failed to test AI connection");
+    } finally {
+      setIsTestingAI(false);
     }
   };
 
@@ -328,83 +364,101 @@ export default function SettingsPage() {
               <label className="text-[11px] font-bold text-on-surface uppercase tracking-wider mb-3 block font-headline">
                 Model Selection
               </label>
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {OPENROUTER_MODELS.map((model) => {
-                  const isSelected = currentModel === model.id;
-                  return (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        setSettings((p) => ({ ...p, preferred_ai_model: model.id }));
-                        setShowCustomInput(false);
-                      }}
-                      className={`w-full flex items-center gap-4 px-4 py-3 border rounded-lg transition-all duration-300 text-left ${
-                        isSelected
-                          ? "border-primary/40 bg-primary/10"
-                          : "border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/50 hover:border-primary/20"
-                      }`}
-                    >
-                      <div
-                        className={`w-5 h-5 border rounded flex items-center justify-center shrink-0 transition-all duration-300 ${
-                          isSelected ? "border-primary bg-primary" : "border-outline-variant dark:border-outline/30"
-                        }`}
-                      >
-                        {isSelected && <Check size={12} className="text-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-sm font-medium ${isSelected ? "text-primary" : "text-on-surface"}`}
-                          >
-                            {model.name}
-                          </span>
-                          <span
-                            className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${
-                              PROVIDER_COLORS[model.provider] ||
-                              "text-on-surface-variant bg-surface-container-high border-outline-variant"
-                            }`}
-                          >
-                            {model.provider}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-on-surface-variant mt-0.5">{model.description}</p>
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="rounded-lg border border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/50 p-3">
+                <select
+                  value={isCustomModel ? "__custom__" : (currentModel || "")}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "__custom__") {
+                      setSettings((p) => ({ ...p, preferred_ai_model: customModel || currentModel || "" }));
+                      return;
+                    }
+                    setCustomModel("");
+                    setSettings((p) => ({ ...p, preferred_ai_model: value }));
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-surface dark:bg-surface-container border border-outline-variant dark:border-outline/30 text-sm text-on-surface outline-none focus:border-primary transition-all duration-300"
+                >
+                  <option value="">Select a model</option>
+                  {Object.entries(
+                    OPENROUTER_MODELS.reduce((acc, model) => {
+                      acc[model.provider] = acc[model.provider] || [];
+                      acc[model.provider].push(model);
+                      return acc;
+                    }, {} as Record<string, typeof OPENROUTER_MODELS>)
+                  ).map(([provider, models]) => (
+                    <optgroup key={provider} label={provider.toUpperCase()}>
+                      {models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} ({model.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                  <option value="__custom__">Custom model ID...</option>
+                </select>
+                <div className="mt-2">
+                  {currentModel && !isCustomModel && (
+                    <p className="text-[11px] text-on-surface-variant">
+                      {
+                        OPENROUTER_MODELS.find((m) => m.id === currentModel)?.description
+                      }
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* Custom Model Option */}
-              <div className="mt-4">
-                {showCustomInput || isCustomModel ? (
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="text"
-                      value={customModel || (isCustomModel ? currentModel : "")}
-                      onChange={(e) => {
-                        setCustomModel(e.target.value);
-                        setSettings((p) => ({ ...p, preferred_ai_model: e.target.value }));
-                      }}
-                      placeholder="provider/model-name (e.g. google/gemini-2.0-pro)"
-                      className="flex-1 px-4 py-2 bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-sm font-mono text-on-surface outline-none focus:border-primary transition-all duration-300"
-                    />
-                    <button
-                      onClick={() => {
-                        setShowCustomInput(false);
-                        setCustomModel("");
-                      }}
-                      className="text-[11px] text-on-surface-variant hover:text-on-surface transition-all duration-300"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowCustomInput(true)}
-                    className="text-xs text-primary hover:underline transition-all duration-300"
+              {/* Always-available custom model input */}
+              <div className="mt-4 space-y-2">
+                <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">
+                  Custom Model ID (optional)
+                </label>
+                <input
+                  type="text"
+                  value={customModel || (isCustomModel ? currentModel || "" : "")}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCustomModel(value);
+                    setSettings((p) => ({ ...p, preferred_ai_model: value }));
+                  }}
+                  placeholder="Paste custom model, e.g. openai/gpt-oss-120b:free"
+                  className="w-full px-4 py-2 bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-sm font-mono text-on-surface outline-none focus:border-primary transition-all duration-300"
+                />
+                <p className="text-[11px] text-on-surface-variant">
+                  Paste any OpenRouter model slug to use a model not in the dropdown.
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <button
+                  type="button"
+                  onClick={handleTestAIConnection}
+                  disabled={isTestingAI}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 text-primary rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-primary/15 transition-all duration-300 disabled:opacity-50"
+                >
+                  {isTestingAI ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {isTestingAI ? "Testing Connection..." : "Test AI Connection"}
+                </button>
+
+                {aiTestResult && (
+                  <div
+                    className={`rounded-lg border p-3 text-xs ${
+                      aiTestResult.ok
+                        ? "border-green-500/30 bg-green-500/10 text-green-300"
+                        : "border-error/30 bg-error/10 text-red-300"
+                    }`}
                   >
-                    Use a custom model ID not listed above
-                  </button>
+                    <div className="font-bold uppercase tracking-wider mb-1">
+                      {aiTestResult.ok ? "Connection Successful" : "Connection Failed"}
+                    </div>
+                    {aiTestResult.model && (
+                      <div className="font-mono text-[11px] mb-1">Model: {aiTestResult.model}</div>
+                    )}
+                    <div className="text-[11px] leading-relaxed">
+                      {aiTestResult.ok
+                        ? aiTestResult.message
+                        : aiTestResult.error || aiTestResult.details || "Unknown error"}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
