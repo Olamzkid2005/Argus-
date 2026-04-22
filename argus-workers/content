@@ -1,0 +1,6 @@
+{
+  "specVersion": "1.4",
+  "tool": "argus-container-scanner",
+  "components": [],
+  "dependencies": []
+}

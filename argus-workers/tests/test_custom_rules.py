@@ -12,67 +12,68 @@ from custom_rules.registry import RuleRegistry
 class TestCustomRuleEngine:
     """Test CustomRuleEngine"""
 
-    @pytest.fixture
-    def engine(self):
-        return CustomRuleEngine()
-
-    def test_load_yaml_rules(self, engine):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-            f.write("""
+    def test_load_rules_from_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rule_file = os.path.join(tmpdir, "test.yml")
+            with open(rule_file, "w") as f:
+                f.write("""
 rules:
   - id: test-rule-1
-    name: Test SQL Injection
+    message: Test SQL Injection
     severity: HIGH
-    pattern: "SELECT.*FROM.*WHERE.*=.*\\$.*"
+    patterns:
+      - regex: "SELECT.*FROM.*WHERE.*=.*"
     category: injection
-    description: "Detects potential SQL injection"
 """)
-            temp_path = f.name
-        try:
-            rules = engine.load_rules(temp_path)
-            assert len(rules) == 1
-            assert rules[0]["id"] == "test-rule-1"
-            assert rules[0]["severity"] == "HIGH"
-        finally:
-            os.unlink(temp_path)
+            engine = CustomRuleEngine(rules_dir=tmpdir)
+            assert len(engine.rules) == 1
+            assert engine.rules[0]["id"] == "test-rule-1"
 
-    def test_execute_regex_rule(self, engine):
+    def test_add_rule(self):
+        engine = CustomRuleEngine()
+        rule = {"id": "test-regex", "message": "Hardcoded Secret", "severity": "CRITICAL", "patterns": [{"regex": "API_KEY\\s*=\\s*[\"'][^\"']+[\"']"}]}
+        engine.add_rule(rule)
+        assert len(engine.rules) == 1
+
+    def test_execute_regex_rule(self):
+        engine = CustomRuleEngine()
         rule = {
             "id": "test-regex",
-            "name": "Hardcoded Secret",
+            "message": "Hardcoded Secret",
             "severity": "CRITICAL",
-            "pattern": "API_KEY\\s*=\\s*[\"'][^\"']+[\"']",
-            "category": "secrets"
+            "patterns": [{"regex": "API_KEY\\s*=\\s*[\"'][^\"']+[\"']"}]
         }
+        engine.add_rule(rule)
         content = "const API_KEY = 'sk-1234567890abcdef';"
-        findings = engine.execute_rule(rule, content, "test.js")
+        findings = engine.execute(content, "test.js")
         assert len(findings) == 1
-        assert findings[0]["rule_id"] == "test-regex"
+        assert findings[0]["type"] == "test-regex"
         assert findings[0]["severity"] == "CRITICAL"
 
-    def test_execute_no_match(self, engine):
+    def test_execute_no_match(self):
+        engine = CustomRuleEngine()
         rule = {
             "id": "test-no-match",
-            "name": "No Match Rule",
+            "message": "No Match Rule",
             "severity": "LOW",
-            "pattern": "zzzzzzzzz",
-            "category": "test"
+            "patterns": [{"regex": "zzzzzzzzz"}]
         }
-        findings = engine.execute_rule(rule, "hello world", "test.txt")
+        engine.add_rule(rule)
+        findings = engine.execute("hello world", "test.txt")
         assert findings == []
 
-    def test_execute_keyword_rule(self, engine):
+    def test_execute_keyword_rule(self):
+        engine = CustomRuleEngine()
         rule = {
             "id": "test-keyword",
-            "name": "Dangerous Function",
+            "message": "Dangerous Function",
             "severity": "HIGH",
-            "keywords": ["eval(", "exec("],
-            "category": "code-quality"
+            "patterns": [{"pattern": "eval("}, {"pattern": "exec("}]
         }
+        engine.add_rule(rule)
         content = "eval(user_input);"
-        findings = engine.execute_rule(rule, content, "test.py")
+        findings = engine.execute(content, "test.py")
         assert len(findings) == 1
-        assert findings[0]["matched_keyword"] == "eval("
 
 
 class TestRuleValidator:
@@ -85,85 +86,84 @@ class TestRuleValidator:
     def test_valid_rule(self, validator):
         rule = {
             "id": "valid-rule",
-            "name": "Valid Rule",
+            "message": "Valid Rule",
             "severity": "HIGH",
-            "pattern": "test.*pattern",
-            "category": "test"
+            "patterns": [{"regex": "test.*pattern"}]
         }
-        result = validator.validate(rule)
-        assert result["valid"] is True
-        assert result["errors"] == []
+        is_valid, errors = validator.validate(rule)
+        assert is_valid is True
+        assert errors == []
 
     def test_missing_required_field(self, validator):
         rule = {"id": "bad-rule"}
-        result = validator.validate(rule)
-        assert result["valid"] is False
-        assert any("name" in e for e in result["errors"])
+        is_valid, errors = validator.validate(rule)
+        assert is_valid is False
+        assert any("message" in e for e in errors)
 
     def test_invalid_severity(self, validator):
         rule = {
             "id": "bad-severity",
-            "name": "Bad Severity",
+            "message": "Bad Severity",
             "severity": "INVALID",
-            "pattern": "test"
+            "patterns": [{"regex": "test"}]
         }
-        result = validator.validate(rule)
-        assert result["valid"] is False
-        assert any("severity" in e.lower() for e in result["errors"])
+        is_valid, errors = validator.validate(rule)
+        assert is_valid is False
+        assert any("severity" in e.lower() for e in errors)
 
     def test_invalid_regex(self, validator):
         rule = {
             "id": "bad-regex",
-            "name": "Bad Regex",
+            "message": "Bad Regex",
             "severity": "LOW",
-            "pattern": "[invalid("
+            "patterns": [{"regex": "[invalid("}]
         }
-        result = validator.validate(rule)
-        assert result["valid"] is False
-        assert any("regex" in e.lower() for e in result["errors"])
+        is_valid, errors = validator.validate(rule)
+        assert is_valid is False
+        assert any("regex" in e.lower() or "compile" in e.lower() for e in errors)
 
 
 class TestRuleRegistry:
     """Test RuleRegistry"""
 
     @pytest.fixture
-    def registry(self):
-        return RuleRegistry()
+    def registry(self, tmpdir):
+        return RuleRegistry(storage_dir=str(tmpdir))
 
     def test_register_rule(self, registry):
-        rule = {"id": "reg-1", "name": "Registered Rule", "severity": "MEDIUM", "pattern": "test"}
-        registry.register(rule)
-        assert "reg-1" in registry.rules
-        assert registry.rules["reg-1"]["version"] == 1
+        result = registry.register_rule("reg-1", "id: reg-1\nmessage: Registered Rule\nseverity: MEDIUM\npatterns:\n  - regex: test")
+        assert result["id"] == "reg-1"
+        assert result["version"] == 1
 
     def test_update_rule_creates_version(self, registry):
-        rule = {"id": "reg-2", "name": "Rule", "severity": "MEDIUM", "pattern": "test"}
-        registry.register(rule)
-        rule["name"] = "Updated Rule"
-        registry.update("reg-2", rule)
-        assert registry.rules["reg-2"]["version"] == 2
-        assert len(registry.get_versions("reg-2")) == 2
+        registry.register_rule("reg-2", "id: reg-2\nmessage: Rule\nseverity: MEDIUM\npatterns:\n  - regex: test")
+        result = registry.register_rule("reg-2", "id: reg-2\nmessage: Updated Rule\nseverity: MEDIUM\npatterns:\n  - regex: test")
+        assert result["version"] == 2
+        assert len(registry.get_rule_versions("reg-2")) == 2
 
     def test_rollback_rule(self, registry):
-        rule = {"id": "reg-3", "name": "Original", "severity": "MEDIUM", "pattern": "test"}
-        registry.register(rule)
-        rule["name"] = "Changed"
-        registry.update("reg-3", rule)
-        success = registry.rollback("reg-3", 1)
-        assert success is True
-        assert registry.rules["reg-3"]["name"] == "Original"
-        assert registry.rules["reg-3"]["version"] == 3
+        registry.register_rule("reg-3", "id: reg-3\nmessage: Original\nseverity: MEDIUM\npatterns:\n  - regex: test")
+        registry.register_rule("reg-3", "id: reg-3\nmessage: Changed\nseverity: MEDIUM\npatterns:\n  - regex: test")
+        result = registry.rollback_rule("reg-3", 1)
+        assert result is not None
+        assert result["version"] == 3
 
     def test_community_share(self, registry):
-        rule = {"id": "comm-1", "name": "Community Rule", "severity": "LOW", "pattern": "test"}
-        registry.register(rule)
-        registry.share_to_community("comm-1")
-        assert registry.rules["comm-1"]["is_community_shared"] is True
+        registry.register_rule("comm-1", "id: comm-1\nmessage: Community Rule\nseverity: LOW\npatterns:\n  - regex: test")
+        result = registry.publish_to_community("comm-1", "test_author")
+        assert result["author"] == "test_author"
+        assert result["downloads"] == 0
 
     def test_get_community_rules(self, registry):
-        rule = {"id": "comm-2", "name": "Shared Rule", "severity": "LOW", "pattern": "test"}
-        registry.register(rule)
-        registry.share_to_community("comm-2")
-        community = registry.get_community_rules()
+        registry.register_rule("comm-2", "id: comm-2\nmessage: Shared Rule\nseverity: LOW\npatterns:\n  - regex: test")
+        registry.publish_to_community("comm-2", "author")
+        community = registry.list_community_rules()
         assert len(community) == 1
         assert community[0]["id"] == "comm-2"
+
+    def test_download_community_rule(self, registry):
+        registry.register_rule("comm-3", "id: comm-3\nmessage: Downloadable\nseverity: LOW\npatterns:\n  - regex: test")
+        registry.publish_to_community("comm-3", "author")
+        result = registry.download_community_rule("comm-3")
+        assert result is not None
+        assert result["id"] == "comm-3"

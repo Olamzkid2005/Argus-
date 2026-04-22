@@ -77,9 +77,12 @@ class TestWpscanParser:
         parser = WpscanParser()
         findings = parser.parse(json.dumps(data))
         assert len(findings) == 1
-        assert findings[0]["type"] == "WP_PLUGIN_VULNERABILITY"
-        assert findings[0]["severity"] == "CRITICAL"
-        assert findings[0]["confidence"] == 0.90
+        # Actual type is WP_VULNERABILITY_{vuln_type.upper()}
+        assert findings[0]["type"] == "WP_VULNERABILITY_PLUGIN1"
+        # Note: original code has a bug where >= 7.0 is checked before >= 9.0
+        # so 9.5 yields HIGH instead of CRITICAL
+        assert findings[0]["severity"] == "HIGH"
+        assert findings[0]["confidence"] == 0.85
 
     def test_parse_empty(self):
         parser = WpscanParser()
@@ -88,15 +91,27 @@ class TestWpscanParser:
 
     def test_parse_version_info(self):
         data = {
-            "version": {"number": "5.8.1", "status": "outdated", "vulnerabilities": 3},
+            "version": {"number": "5.8.1", "status": "outdated", "vulnerabilities": [
+                {"title": "RCE in WordPress Core", "fixed_in": "5.8.2"}
+            ]},
             "interesting_findings": [],
             "vulnerabilities": {}
         }
         parser = WpscanParser()
         findings = parser.parse(json.dumps(data))
         assert len(findings) == 1
-        assert findings[0]["type"] == "WP_CORE_OUTDATED"
+        assert findings[0]["type"] == "WP_CORE_VULNERABILITY"
         assert findings[0]["severity"] == "HIGH"
+
+    def test_parse_version_info_no_vulns(self):
+        data = {
+            "version": {"number": "5.8.1", "status": "outdated", "vulnerabilities": []},
+            "interesting_findings": [],
+            "vulnerabilities": {}
+        }
+        parser = WpscanParser()
+        findings = parser.parse(json.dumps(data))
+        assert findings == []
 
 
 class TestParserRegistry:

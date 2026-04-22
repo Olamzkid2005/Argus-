@@ -108,7 +108,7 @@ test.describe('Vulnbank Scan - Create, Monitor, and Verify Findings', () => {
           
           console.log(`  Findings: ${findings.rowCount}`);
           
-          if (findings.rowCount > 0) {
+          if ((findings.rowCount ?? 0) > 0) {
             foundFindings = true;
             console.log('\n=== FINDINGS FOUND! ===\n');
             for (const f of findings.rows) {

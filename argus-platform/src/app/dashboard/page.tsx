@@ -6,6 +6,7 @@ import { useSession, signIn } from "next-auth/react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import { WebSocketEvent } from "@/lib/websocket-events";
 import { useToast } from "@/components/ui/Toast";
+import { motion } from "framer-motion";
 import {
   Activity,
   ShieldAlert,
@@ -27,8 +28,6 @@ import {
   GitBranch,
   BarChart3,
 } from "lucide-react";
-import SurveillanceEye from "@/components/effects/SurveillanceEye";
-import MatrixDataRain from "@/components/effects/MatrixDataRain";
 import ScannerReveal from "@/components/effects/ScannerReveal";
 import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
@@ -56,35 +55,36 @@ function StatCard({
   index: number;
 }) {
   return (
-    <div
-      className="relative border border-structural bg-surface/50 p-5 group hover:border-prism-cream/20 transition-all duration-300"
-      style={{ animationDelay: `${index * 100}ms` }}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.1 }}
+      className="relative bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-5 overflow-hidden transition-all duration-300 hover:shadow-glow hover:border-primary/30 group"
+      style={{ borderLeftWidth: 4, borderLeftColor: color }}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div
-          className="w-9 h-9 flex items-center justify-center border border-structural bg-surface/10"
-        >
+      <div className="flex items-start justify-between mb-3">
+        <div className="w-10 h-10 rounded-lg bg-surface-container dark:bg-[#1A1A24] flex items-center justify-center transition-colors duration-300">
           {/* @ts-ignore */}
-          <Icon size={18} style={{ color }} />
+          <Icon size={20} style={{ color }} />
         </div>
-        <Zap size={14} className="text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
+        <Zap size={14} className="text-on-surface-variant dark:text-[#8A8A9E] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
-      <div className="text-2xl font-semibold text-text-primary tracking-tight">{value}</div>
-      <div className="text-xs text-text-secondary mt-1 tracking-wide uppercase">{label}</div>
-    </div>
+      <div className="text-3xl font-headline font-bold text-on-surface dark:text-[#F0F0F5] tracking-tight">{value}</div>
+      <div className="text-xs font-body text-on-surface-variant dark:text-[#8A8A9E] mt-1 tracking-wide uppercase">{label}</div>
+    </motion.div>
   );
 }
 
 function ThreatFeedRow({ event }: { event: WebSocketEvent }) {
   const [hovered, setHovered] = useState(false);
-  
+
   const getSeverityColor = (severity: string): string => {
     switch (String(severity).toUpperCase()) {
-      case "CRITICAL": return "#FF4444";
+      case "CRITICAL": return "#BA1A1A";
       case "HIGH": return "#FF8800";
-      case "MEDIUM": return "var(--prism-cream)";
-      case "LOW": return "var(--prism-cyan)";
-      default: return "var(--text-secondary)";
+      case "MEDIUM": return "#6720FF";
+      case "LOW": return "#10B981";
+      default: return "#7A7489";
     }
   };
 
@@ -93,34 +93,32 @@ function ThreatFeedRow({ event }: { event: WebSocketEvent }) {
 
   return (
     <div
-      className="flex items-center gap-4 px-5 py-3 border-b border-structural last:border-b-0 group cursor-pointer hover:bg-surface/10 transition-colors"
+      className="flex items-center gap-4 px-5 py-3 border-b border-outline-variant dark:border-[#ffffff08] last:border-b-0 group cursor-pointer hover:bg-surface-container dark:hover:bg-[#1A1A24] transition-all duration-300"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="w-2 h-2 shrink-0" style={{ backgroundColor: color }} />
+      <div className="w-2 h-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-text-primary flex items-center gap-2">
-          <Radio size={12} className="text-text-secondary" />
+        <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] flex items-center gap-2">
+          <Radio size={12} className="text-on-surface-variant dark:text-[#8A8A9E]" />
           {event.data.finding_type as string || event.type}
         </div>
-        <div className="text-[11px] text-text-secondary font-mono mt-0.5 truncate uppercase">
+        <div className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono mt-0.5 truncate uppercase">
           {event.data.endpoint as string || "System intelligence"}
         </div>
       </div>
       <div className="flex items-center gap-3">
         <span
-          className="text-[11px] font-mono px-2 py-0.5 border"
+          className="text-[11px] font-mono px-2 py-0.5 border rounded-md transition-all duration-300"
           style={{
             color,
-            borderColor: "var(--border-structural)",
-            backgroundColor: "transparent",
-            boxShadow: hovered ? `0 0 8px ${color}20` : "none",
-            transition: "box-shadow 0.3s",
+            borderColor: hovered ? color : "var(--outline-variant)",
+            backgroundColor: hovered ? `${color}10` : "transparent",
           }}
         >
           {severity}
         </span>
-        <span className="text-[11px] text-text-secondary font-mono w-14 text-right">
+        <span className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono w-14 text-right">
           {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
       </div>
@@ -130,24 +128,127 @@ function ThreatFeedRow({ event }: { event: WebSocketEvent }) {
 
 function TimelineRow({ event }: { event: WebSocketEvent }) {
   const statusColor: Record<string, string> = {
-    job_started: "var(--prism-cyan)",
-    error: "#FF4444",
-    job_completed: "#00FF88",
-    state_transition: "var(--prism-cream)",
+    job_started: "#6720FF",
+    error: "#BA1A1A",
+    job_completed: "#10B981",
+    state_transition: "#FF8800",
   };
 
   return (
-    <div className="flex items-start gap-4 px-5 py-3 border-b border-structural last:border-b-0">
-      <div className="text-[11px] text-text-secondary font-mono w-12 shrink-0 pt-0.5">
+    <div className="flex items-start gap-4 px-5 py-3 border-b border-outline-variant dark:border-[#ffffff08] last:border-b-0 transition-all duration-300 hover:bg-surface-container dark:hover:bg-[#1A1A24]">
+      <div className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono w-12 shrink-0 pt-0.5">
         {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </div>
-      <div className="w-[6px] h-[6px] mt-1.5 shrink-0" style={{ backgroundColor: statusColor[event.type] || "var(--text-secondary)" }} />
+      <div className="w-[6px] h-[6px] mt-1.5 shrink-0 rounded-full" style={{ backgroundColor: statusColor[event.type] || "#7A7489" }} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-text-primary capitalize">{event.type.replace(/_/g, " ")}</div>
-        <div className="text-[11px] text-text-secondary font-mono mt-0.5 truncate uppercase">
+        <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] capitalize">{event.type.replace(/_/g, " ")}</div>
+        <div className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono mt-0.5 truncate uppercase">
           {event.data.message as string || event.data.from_state as string + " → " + event.data.to_state as string || ""}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScanStepTimeline({ currentState, activities }: { currentState: string; activities: any[] }) {
+  const steps = [
+    { id: "recon", label: "Reconnaissance" },
+    { id: "fingerprinting", label: "Fingerprinting" },
+    { id: "vuln_mapping", label: "Vulnerability Mapping" },
+    { id: "reporting", label: "Final Reporting" },
+  ];
+
+  const getStepStatus = (stepId: string) => {
+    const stateOrder = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+    const currentIdx = stateOrder.indexOf(currentState);
+
+    if (stepId === "recon") {
+      if (currentState === "recon" || currentState === "awaiting_approval") return "in_progress";
+      if (currentIdx > stateOrder.indexOf("awaiting_approval")) return "completed";
+    }
+    if (stepId === "fingerprinting") {
+      if (currentState === "scanning") return "in_progress";
+      if (currentIdx > stateOrder.indexOf("scanning")) return "completed";
+    }
+    if (stepId === "vuln_mapping") {
+      if (currentState === "analyzing") return "in_progress";
+      if (currentIdx > stateOrder.indexOf("analyzing")) return "completed";
+    }
+    if (stepId === "reporting") {
+      if (currentState === "reporting") return "in_progress";
+      if (currentState === "complete") return "completed";
+    }
+    return "pending";
+  };
+
+  const completedCount = steps.filter((s) => getStepStatus(s.id) === "completed").length;
+  const inProgressCount = steps.filter((s) => getStepStatus(s.id) === "in_progress").length;
+  const progress = steps.length > 0 ? ((completedCount + (inProgressCount * 0.5)) / steps.length) * 100 : 0;
+
+  const activeActivity = activities.find((a) => a.status === "started" || a.status === "in_progress");
+
+  return (
+    <div className="space-y-5">
+      <div className="h-2 w-full bg-surface-container dark:bg-[#1A1A24] rounded-full overflow-hidden">
+        <motion.div
+          className="h-full bg-primary rounded-full"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        />
+      </div>
+
+      <div className="space-y-3">
+        {steps.map((step, i) => {
+          const status = getStepStatus(step.id);
+          return (
+            <div key={step.id} className="flex items-center gap-3">
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
+                  status === "completed"
+                    ? "bg-primary text-on-primary"
+                    : status === "in_progress"
+                    ? "bg-primary/10 text-primary border border-primary"
+                    : "bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant dark:text-[#8A8A9E]"
+                }`}
+              >
+                {status === "completed" ? <CheckCircle2 size={14} /> : i + 1}
+              </div>
+              <span
+                className={`text-sm font-body transition-colors duration-300 ${
+                  status === "completed"
+                    ? "text-on-surface dark:text-[#F0F0F5]"
+                    : status === "in_progress"
+                    ? "text-primary font-medium"
+                    : "text-on-surface-variant dark:text-[#8A8A9E]"
+                }`}
+              >
+                {step.label}
+              </span>
+              {status === "in_progress" && (
+                <Loader2 size={14} className="text-primary animate-spin ml-auto" />
+              )}
+              {status === "completed" && (
+                <CheckCircle2 size={14} className="text-primary ml-auto" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {activeActivity && (
+        <div className="pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
+          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1.5">
+            Current Operation
+          </div>
+          <div className="flex items-center gap-2">
+            <Loader2 size={12} className="text-primary animate-spin shrink-0" />
+            <span className="text-xs font-body text-on-surface dark:text-[#F0F0F5] truncate">
+              {activeActivity.tool_name}: {activeActivity.activity}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -158,10 +259,7 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
-  
-  const heroRef = useRef<HTMLDivElement>(null);
-  const [eyeOpacity, setEyeOpacity] = useState(1);
-  // Restore engagement state synchronously so it survives navigation without flashing
+
   const [engagementId, setEngagementId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     const urlId = new URL(window.location.href).searchParams.get("engagement");
@@ -279,26 +377,6 @@ export default function DashboardPage() {
     enabled: isConnected && !!engagementId,
     pollingInterval: 2000,
   });
-
-  // Handle scroll for eye effect
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!heroRef.current) return;
-      const rect = heroRef.current.getBoundingClientRect();
-      const fadeStart = -rect.height * 0.3;
-      const fadeEnd = -rect.height * 0.7;
-      if (rect.top < fadeStart && rect.top > fadeEnd) {
-        const progress = (rect.top - fadeStart) / (fadeEnd - fadeStart);
-        setEyeOpacity(Math.max(0.15, progress));
-      } else if (rect.top <= fadeEnd) {
-        setEyeOpacity(0.15);
-      } else {
-        setEyeOpacity(1);
-      }
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   // Auth redirect
   useEffect(() => {
@@ -494,32 +572,32 @@ export default function DashboardPage() {
       label: "Total Findings",
       value: dbStats?.totalFindings ?? findings.length,
       icon: Activity,
-      color: "var(--prism-cyan)",
+      color: "#6720FF",
     },
     {
       label: "Engagements",
       value: dbStats?.totalEngagements ?? 0,
       icon: ShieldAlert,
-      color: "var(--prism-cream)",
+      color: "#A78BFA",
     },
     {
       label: "Critical Issues",
       value: dbStats?.criticalCount ?? 0,
       icon: Globe,
-      color: "#FF4444",
+      color: "#BA1A1A",
     },
     {
       label: "Verified",
       value: dbStats?.verifiedCount ?? 0,
       icon: Clock,
-      color: "#00FF88",
+      color: "#10B981",
     },
   ];
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-surface matrix-grid">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -527,83 +605,81 @@ export default function DashboardPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-void">
-      {/* ── Surveillance Header ── */}
-      <div ref={heroRef} className="relative w-full h-[50vh] overflow-hidden bg-void border-b border-structural">
-        <div className="absolute inset-0 z-0 opacity-20">
-          <MatrixDataRain />
-        </div>
-
-        <div className="absolute inset-0 z-10 flex items-center">
-          <div className="pl-12 max-w-lg">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 ${wsConnected ? "bg-prism-cream" : "bg-red-500"} animate-pulse`} />
-                <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">
-                  {wsConnected ? "System Online" : "Connection Standby"}
-                </span>
-              </div>
-              <AIStatusBadge />
-            </div>
-            <h1 className="text-5xl font-semibold text-text-primary tracking-tight leading-[1.1]">
-              INTELLIGENCE
-              <br />
-              DASHBOARD
-            </h1>
-            
-            <div className="mt-8 flex gap-3 max-w-md">
-              <div className="relative flex-1">
-                <Database className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-secondary" />
-                <input
-                  type="text"
-                  placeholder="Engagement ID..."
-                  value={engagementId}
-                  onChange={(e) => setEngagementId(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-surface/50 border border-structural text-xs font-mono outline-none focus:border-prism-cream transition-colors text-text-primary"
-                />
-              </div>
-              <button
-                onClick={() => {
-                  if (isConnected) {
-                    disconnectEngagement();
-                  } else {
-                    connectEngagement(engagementId);
-                  }
-                }}
-                disabled={!engagementId}
-                className={`px-6 py-2 px-6 rounded-sm text-xs font-bold transition-all ${
-                  isConnected
-                    ? "bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20"
-                    : "bg-prism-cream text-void hover:opacity-90 shadow-glow-cream"
-                } disabled:opacity-50`}
-              >
-                {isConnected ? "HALT" : "MONITOR"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="absolute top-0 right-0 w-[70%] h-full z-[1] pointer-events-none"
-          style={{ opacity: eyeOpacity }}
+    <div className="min-h-screen bg-surface matrix-grid">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-8">
+        {/* ── Header ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
         >
-          <SurveillanceEye />
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-void to-transparent z-20" />
-      </div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className={`w-2 h-2 rounded-full ${wsConnected ? "bg-primary" : "bg-error"} animate-pulse`} />
+            <span className="text-xs font-body text-on-surface-variant dark:text-[#8A8A9E] tracking-widest uppercase">
+              {wsConnected ? "System Online" : "Connection Standby"}
+            </span>
+            <AIStatusBadge />
+          </div>
+          <h1 className="text-4xl font-headline font-semibold text-on-surface dark:text-[#F0F0F5] tracking-tight">
+            Main Intelligence Hub
+          </h1>
+          <p className="text-sm font-body text-on-surface-variant dark:text-[#8A8A9E] mt-1">
+            Real-time security monitoring, threat intelligence, and operational command
+          </p>
+        </motion.div>
 
-      {/* ── Main Content ── */}
-      <div className="relative z-10 px-8 py-8 -mt-16">
-        {/* State Bar */}
+        {/* ── Engagement Connection Bar ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-8 p-4 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl transition-all duration-300"
+        >
+          <div className="relative flex-1">
+            <Database className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant dark:text-[#8A8A9E]" />
+            <input
+              type="text"
+              placeholder="Engagement ID..."
+              value={engagementId}
+              onChange={(e) => setEngagementId(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-sm font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-300 placeholder:text-on-surface-variant/40 dark:placeholder:text-[#8A8A9E]/40"
+            />
+          </div>
+          <button
+            onClick={() => {
+              if (isConnected) {
+                disconnectEngagement();
+              } else {
+                connectEngagement(engagementId);
+              }
+            }}
+            disabled={!engagementId}
+            className={`px-6 py-2.5 rounded-lg text-xs font-bold transition-all duration-300 ${
+              isConnected
+                ? "bg-error/10 text-error border border-error/20 hover:bg-error/20"
+                : "bg-primary text-on-primary hover:opacity-90 shadow-glow"
+            } disabled:opacity-50`}
+          >
+            {isConnected ? "Disconnect" : "Monitor"}
+          </button>
+        </motion.div>
+
+        {/* ── State Bar ── */}
         {isConnected && currentState && (
-          <div className="border border-structural bg-surface/80 backdrop-blur-md p-4 mb-8 flex items-center justify-between">
-            <div className="flex items-center gap-4 ml-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300"
+          >
+            <div className="flex items-center gap-4">
               <div className="relative w-8 h-8 flex items-center justify-center">
-                <div className="absolute inset-0 border border-prism-cyan/30 rounded-full animate-spin [animation-duration:3s]" />
-                <ShieldAlert className="h-4 w-4 text-prism-cyan" />
+                <div className="absolute inset-0 border border-primary/30 rounded-full animate-spin [animation-duration:3s]" />
+                <ShieldAlert className="h-4 w-4 text-primary" />
               </div>
-              <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">
-                Operational Phase: <span className="text-text-primary">{currentState.replace(/_/g, " ")}</span>
+              <span className="text-xs font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-widest font-body">
+                Operational Phase: <span className="text-on-surface dark:text-[#F0F0F5]">{currentState.replace(/_/g, " ")}</span>
               </span>
             </div>
 
@@ -612,40 +688,47 @@ export default function DashboardPage() {
                 <button
                   onClick={handleApprove}
                   disabled={isApproving}
-                  className="px-6 py-2 bg-prism-cream text-void font-bold text-[10px] tracking-widest uppercase hover:bg-white transition-colors disabled:opacity-50 shadow-glow-cream"
+                  className="px-6 py-2 bg-primary text-on-primary font-bold text-[10px] tracking-widest uppercase hover:opacity-90 transition-all duration-300 disabled:opacity-50 rounded-lg shadow-glow"
                 >
-                  {isApproving ? "AUTHORIZING..." : "AUTHORIZE EXECUTION"}
+                  {isApproving ? "Authorizing..." : "Authorize Execution"}
                 </button>
               )}
-              <button onClick={reconnect} className="p-2 text-text-secondary hover:text-text-primary transition-colors">
+              <button onClick={reconnect} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
                 <RefreshCcw size={16} />
               </button>
-              <button onClick={clearEvents} className="p-2 text-text-secondary hover:text-red-400 transition-colors">
+              <button onClick={clearEvents} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-lg hover:bg-error/5">
                 <Trash2 size={16} />
               </button>
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
-          {stats.map((s, i) => <StatCard key={s.label} {...s} index={i} />)}
+        {/* ── Stats Grid ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {stats.map((s, i) => (
+            <StatCard key={s.label} {...s} index={i} />
+          ))}
         </div>
 
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-3 gap-6 text-text-primary">
-          {/* Threat Feed */}
-          <div className="col-span-2 border border-structural bg-surface/30">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-structural">
+        {/* ── Bento Grid ── */}
+        <div className="grid grid-cols-12 gap-6 mb-8">
+          {/* Network Intelligence Feed */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="col-span-12 lg:col-span-8 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
               <div className="flex items-center gap-2">
-                <Radio size={16} className="text-prism-cream" />
-                <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">
+                <Radio size={16} className="text-primary" />
+                <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">
                   Network Intelligence Feed
                 </h2>
               </div>
-              <button 
+              <button
                 onClick={() => router.push(`/findings?engagement=${engagementId}`)}
-                className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary transition-colors"
+                className="flex items-center gap-1 text-[11px] text-on-surface-variant dark:text-[#8A8A9E] hover:text-primary transition-all duration-300"
               >
                 Deep View <ChevronRight size={12} />
               </button>
@@ -655,62 +738,62 @@ export default function DashboardPage() {
                 <div className="p-5">
                   {/* System Overview */}
                   <div className="grid grid-cols-3 gap-3 mb-5">
-                    <div className="border border-structural bg-surface/20 p-3">
-                      <div className="text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-1">Total Findings</div>
-                      <div className="text-xl font-semibold text-prism-cyan">{dbStats?.totalFindings ?? 0}</div>
+                    <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
+                      <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Total Findings</div>
+                      <div className="text-xl font-headline font-semibold text-primary">{dbStats?.totalFindings ?? 0}</div>
                     </div>
-                    <div className="border border-structural bg-surface/20 p-3">
-                      <div className="text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-1">Critical</div>
-                      <div className="text-xl font-semibold text-red-400">{dbStats?.criticalCount ?? 0}</div>
+                    <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
+                      <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Critical</div>
+                      <div className="text-xl font-headline font-semibold text-error">{dbStats?.criticalCount ?? 0}</div>
                     </div>
-                    <div className="border border-structural bg-surface/20 p-3">
-                      <div className="text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-1">Verified</div>
-                      <div className="text-xl font-semibold text-green-400">{dbStats?.verifiedCount ?? 0}</div>
+                    <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
+                      <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Verified</div>
+                      <div className="text-xl font-headline font-semibold text-green-500">{dbStats?.verifiedCount ?? 0}</div>
                     </div>
                   </div>
 
                   {/* Recent Engagements */}
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-[11px] font-bold text-text-secondary uppercase tracking-widest">Recent Engagements</h3>
-                      <button 
+                      <h3 className="text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-widest font-body">Recent Engagements</h3>
+                      <button
                         onClick={() => router.push("/engagements")}
-                        className="text-[10px] text-prism-cyan hover:underline"
+                        className="text-[10px] text-primary hover:underline transition-all duration-300"
                       >
                         View All
                       </button>
                     </div>
                     {recentEngagements.length === 0 ? (
-                      <div className="text-center py-6 text-text-secondary/40 text-xs font-mono uppercase">
+                      <div className="text-center py-6 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 text-xs font-mono uppercase">
                         No engagements yet
                       </div>
                     ) : (
                       <div className="space-y-2">
                         {recentEngagements.slice(0, 5).map((eng) => (
-                          <div 
-                            key={eng.id} 
-                            className="flex items-center justify-between px-3 py-2 border border-structural bg-surface/10 hover:bg-surface/20 transition-colors cursor-pointer"
+                          <div
+                            key={eng.id}
+                            className="flex items-center justify-between px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:bg-surface-container-high dark:hover:bg-[#1A1A24] transition-all duration-300 cursor-pointer"
                             onClick={() => {
                               connectEngagement(eng.id);
                             }}
                           >
                             <div className="flex items-center gap-3">
                               <div className={`w-2 h-2 rounded-full ${
-                                eng.status === 'complete' ? 'bg-green-400' :
-                                eng.status === 'failed' ? 'bg-red-400' :
-                                eng.status === 'scanning' ? 'bg-prism-cyan animate-pulse' :
-                                'bg-prism-cream'
+                                eng.status === 'complete' ? 'bg-green-500' :
+                                eng.status === 'failed' ? 'bg-error' :
+                                eng.status === 'scanning' ? 'bg-primary animate-pulse' :
+                                'bg-amber-400'
                               }`} />
                               <div>
-                                <div className="text-xs text-text-primary font-mono truncate max-w-[200px]">{eng.target_url}</div>
-                                <div className="text-[10px] text-text-secondary uppercase">{eng.status.replace(/_/g, " ")}</div>
+                                <div className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono truncate max-w-[200px]">{eng.target_url}</div>
+                                <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] uppercase">{eng.status.replace(/_/g, " ")}</div>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
                               {eng.findings_count > 0 && (
-                                <span className="text-[10px] font-mono text-prism-cream">{eng.findings_count} findings</span>
+                                <span className="text-[10px] font-mono text-primary">{eng.findings_count} findings</span>
                               )}
-                              <ChevronRight size={12} className="text-text-secondary" />
+                              <ChevronRight size={12} className="text-on-surface-variant dark:text-[#8A8A9E]" />
                             </div>
                           </div>
                         ))}
@@ -722,14 +805,14 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => router.push("/engagements")}
-                      className="flex items-center gap-2 px-4 py-2 bg-prism-cream text-void text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow-cream"
+                      className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all duration-300 shadow-glow rounded-lg"
                     >
                       <Target size={14} />
                       New Engagement
                     </button>
                     <button
                       onClick={() => router.push("/findings")}
-                      className="flex items-center gap-2 px-4 py-2 border border-structural text-text-secondary hover:text-text-primary hover:border-text-secondary/40 transition-all text-xs uppercase font-bold tracking-widest"
+                      className="flex items-center gap-2 px-4 py-2 border border-outline-variant dark:border-[#ffffff10] text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-primary/30 transition-all duration-300 text-xs uppercase font-bold tracking-widest rounded-lg"
                     >
                       <ShieldAlert size={14} />
                       View Findings
@@ -739,14 +822,14 @@ export default function DashboardPage() {
               ) : findings.length === 0 ? (
                 <div className="p-5">
                   {/* Live scan status */}
-                  <div className="flex items-center gap-3 mb-4 pb-4 border-b border-structural">
+                  <div className="flex items-center gap-3 mb-4 pb-4 border-b border-outline-variant dark:border-[#ffffff08]">
                     <div className="relative w-8 h-8 flex items-center justify-center">
-                      <div className="absolute inset-0 border border-prism-cyan/30 rounded-full animate-spin [animation-duration:3s]" />
-                      <Activity className="h-4 w-4 text-prism-cyan" />
+                      <div className="absolute inset-0 border border-primary/30 rounded-full animate-spin [animation-duration:3s]" />
+                      <Activity className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-text-primary uppercase tracking-widest">Active Scan In Progress</p>
-                      <p className="text-[10px] text-text-secondary font-mono mt-0.5">
+                      <p className="text-xs font-bold text-on-surface dark:text-[#F0F0F5] uppercase tracking-widest font-body">Active Scan In Progress</p>
+                      <p className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] font-mono mt-0.5">
                         {scannerActivities.length > 0
                           ? `${scannerActivities.filter((a) => a.status === "completed").length} / ${scannerActivities.length} operations complete`
                           : "Initializing scanner toolkit..."}
@@ -757,7 +840,7 @@ export default function DashboardPage() {
                   {/* Scanner steps */}
                   <div className="space-y-1">
                     {scannerActivities.length === 0 ? (
-                      <div className="flex items-center gap-3 px-3 py-2 text-text-secondary/40">
+                      <div className="flex items-center gap-3 px-3 py-2 text-on-surface-variant/40 dark:text-[#8A8A9E]/40">
                         {currentState === "scanning" || currentState === "recon" ? (
                           <>
                             <Loader2 size={12} className="animate-spin" />
@@ -777,29 +860,29 @@ export default function DashboardPage() {
                         return (
                           <div
                             key={activity.id}
-                            className={`flex items-center gap-3 px-3 py-2 border border-transparent hover:border-structural/40 transition-all ${
-                              isDone ? "opacity-60" : isFailed ? "opacity-80" : "bg-prism-cyan/5 border-prism-cyan/10"
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${
+                              isDone ? "opacity-60 border-transparent" : isFailed ? "opacity-80 border-transparent" : "bg-primary/5 border-primary/10"
                             }`}
                           >
                             {isDone ? (
-                              <CheckCircle2 size={12} className="text-green-400 shrink-0" />
+                              <CheckCircle2 size={12} className="text-green-500 shrink-0" />
                             ) : isFailed ? (
-                              <XCircle size={12} className="text-red-400 shrink-0" />
+                              <XCircle size={12} className="text-error shrink-0" />
                             ) : (
-                              <Loader2 size={12} className="text-prism-cyan animate-spin shrink-0" />
+                              <Loader2 size={12} className="text-primary animate-spin shrink-0" />
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold font-mono uppercase text-text-secondary">
+                                <span className="text-[10px] font-bold font-mono uppercase text-on-surface-variant dark:text-[#8A8A9E]">
                                   {activity.tool_name}
                                 </span>
                                 {activity.items_found !== null && activity.items_found !== undefined && (
-                                  <span className="text-[10px] font-mono text-prism-cream">
+                                  <span className="text-[10px] font-mono text-primary">
                                     {activity.items_found} found
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-text-primary truncate">{activity.activity}</p>
+                              <p className="text-[11px] text-on-surface dark:text-[#F0F0F5] truncate">{activity.activity}</p>
                             </div>
                           </div>
                         );
@@ -811,133 +894,127 @@ export default function DashboardPage() {
                 findings.map((event, i) => <ThreatFeedRow key={i} event={event} />)
               )}
             </div>
-          </div>
+          </motion.div>
 
-          {/* Right Column */}
-          <div className="flex flex-col gap-6">
-            {/* Live Scanner Activity */}
-            <div className="border border-structural bg-surface/30">
-              <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
-                <Terminal size={16} className="text-prism-cream" />
-                <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Live Operations</h2>
-                {isConnected && scannerActivities.some((a) => a.status === "started" || a.status === "in_progress") && (
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-prism-cyan opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-prism-cyan" />
-                    </span>
-                    <span className="text-[10px] font-mono text-prism-cyan uppercase">LIVE</span>
-                  </div>
-                )}
-              </div>
-              <ScannerActivityPanel activities={scannerActivities} />
-            </div>
-
-            {/* Timeline */}
-            <div className="border border-structural bg-surface/30">
-              <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
-                <Clock size={16} className="text-prism-cyan" />
-                <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Timeline</h2>
-              </div>
-              <div className="max-h-[400px] overflow-y-auto">
-                {otherEvents.map((event, i) => (
-                  <TimelineRow key={i} event={event} />
-                ))}
-              </div>
-            </div>
-
-            {/* Verification Status */}
-            <div className="border border-structural bg-surface/30 p-5">
-              <h3 className="text-xs font-medium text-text-secondary tracking-widest uppercase mb-4">Security Integrity</h3>
-              <div className="space-y-3">
-                <ScannerReveal
-                  icon="/assets/holographic-lock.png"
-                  text={wsConnected ? "VERIFIED" : "STANDBY"}
-                  scannedText="ENCRYPTED"
-                  className="w-full h-16 border-structural bg-surface/10"
-                  glowColor="var(--prism-cream)"
-                />
-                <ScannerReveal
-                  icon="/assets/prism-verified.png"
-                  text={isConnected ? "MONITORING" : "OFFLINE"}
-                  scannedText="PROTECTED"
-                  className="w-full h-16 border-structural bg-surface/10"
-                  glowColor="var(--prism-cyan)"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Visualization Section ── */}
-        <div className="mt-8 space-y-6">
-          {/* Attack Path Graph */}
-          <div className="border border-structural bg-surface/30">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
-              <GitBranch size={16} className="text-prism-cream" />
-              <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Attack Path Visualization</h2>
-              {isConnected && attackPaths.nodes && (
-                <span className="ml-auto text-[10px] font-mono text-text-secondary">{attackPaths.nodes.length} nodes</span>
-              )}
-            </div>
-            <div className="p-1">
-              {isConnected && attackPaths.nodes ? (
-                <Suspense fallback={
-                  <div className="h-[420px] flex items-center justify-center bg-surface/20">
-                    <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
-                  </div>
-                }>
-                  <AttackPathGraph nodes={attackPaths.nodes} edges={attackPaths.edges} />
-                </Suspense>
-              ) : (
-                <div className="h-[420px] flex flex-col items-center justify-center bg-surface/20 text-text-secondary/40 gap-3">
-                  <GitBranch size={24} />
-                  <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to visualize attack paths</p>
+          {/* Scanner Activity Panel */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="col-span-12 lg:col-span-4 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
+          >
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
+              <Terminal size={16} className="text-primary" />
+              <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Scanner Activity</h2>
+              {isConnected && scannerActivities.some((a) => a.status === "started" || a.status === "in_progress") && (
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                  </span>
+                  <span className="text-[10px] font-mono text-primary uppercase">Live</span>
                 </div>
               )}
             </div>
-          </div>
+            <div className="p-5">
+              {isConnected ? (
+                <ScanStepTimeline currentState={currentState} activities={scannerActivities} />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3">
+                  <Terminal size={24} />
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-center">
+                    Connect to an engagement to view scanner activity
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
 
           {/* Execution Timeline */}
-          <div className="border border-structural bg-surface/30">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
-              <Clock size={16} className="text-prism-cyan" />
-              <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Execution Timeline</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="col-span-12 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
+          >
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
+              <Clock size={16} className="text-primary" />
+              <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Execution Timeline</h2>
             </div>
             <div className="p-1">
               {isConnected && timelineEvents.length > 0 ? (
                 <Suspense fallback={
-                  <div className="h-[240px] flex items-center justify-center bg-surface/20">
-                    <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
+                  <div className="h-[240px] flex items-center justify-center bg-surface-container dark:bg-[#1A1A24]">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
                 }>
                   <ExecutionTimeline events={timelineEvents} engagementStart={engagementStart} />
                 </Suspense>
               ) : (
-                <div className="h-[240px] flex flex-col items-center justify-center bg-surface/20 text-text-secondary/40 gap-3">
+                <div className="h-[240px] flex flex-col items-center justify-center bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3 rounded-lg">
                   <Clock size={24} />
                   <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to view execution timeline</p>
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
+        </div>
+
+        {/* ── Visualization Section ── */}
+        <div className="space-y-6">
+          {/* Attack Path Graph */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
+          >
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
+              <GitBranch size={16} className="text-primary" />
+              <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Attack Path Visualization</h2>
+              {isConnected && attackPaths.nodes && (
+                <span className="ml-auto text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E]">{attackPaths.nodes.length} nodes</span>
+              )}
+            </div>
+            <div className="p-1">
+              {isConnected && attackPaths.nodes ? (
+                <Suspense fallback={
+                  <div className="h-[420px] flex items-center justify-center bg-surface-container dark:bg-[#1A1A24]">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                }>
+                  <AttackPathGraph nodes={attackPaths.nodes} edges={attackPaths.edges} />
+                </Suspense>
+              ) : (
+                <div className="h-[420px] flex flex-col items-center justify-center bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3 rounded-lg">
+                  <GitBranch size={24} />
+                  <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to visualize attack paths</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
 
           {/* Tool Performance Metrics */}
-          <div className="border border-structural bg-surface/30">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-structural">
-              <BarChart3 size={16} className="text-prism-cream" />
-              <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Tool Performance Metrics</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.6 }}
+            className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
+          >
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
+              <BarChart3 size={16} className="text-primary" />
+              <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Tool Performance Metrics</h2>
             </div>
             <div className="p-5">
               <Suspense fallback={
                 <div className="h-[200px] flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
               }>
                 <ToolPerformanceMetrics metrics={toolMetrics} days={7} />
               </Suspense>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

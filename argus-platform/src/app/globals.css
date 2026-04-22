@@ -3,109 +3,169 @@
 @tailwind utilities;
 
 @layer base {
-  :root, .dark {
-    /* Theme Tokens - Default Dark (Prism & Void) */
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --radius: 0.5rem;
+  :root {
+    /* Argus Light Theme - Default */
+    --background: 260 100% 99%;
+    --foreground: 240 10% 12%;
+    --card: 260 50% 98%;
+    --card-foreground: 240 10% 12%;
+    --popover: 260 50% 98%;
+    --popover-foreground: 240 10% 12%;
+    --primary: 262 100% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 0%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 260 30% 94%;
+    --muted-foreground: 250 8% 46%;
+    --accent: 260 30% 94%;
+    --accent-foreground: 240 10% 12%;
+    --destructive: 0 72% 41%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 260 20% 88%;
+    --input: 260 20% 88%;
+    --ring: 262 100% 56%;
+    --radius: 0.25rem;
 
-    --bg-void: #000000; /* Pure Black as requested */
-    --bg-surface: #0A0A0F;
-    --bg-glass: rgba(10, 10, 15, 0.8);
+    /* Sidebar */
+    --sidebar-background: 260 100% 99%;
+    --sidebar-foreground: 240 10% 12%;
+    --sidebar-primary: 262 100% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 260 30% 94%;
+    --sidebar-accent-foreground: 240 10% 12%;
+    --sidebar-border: 260 20% 88%;
+    --sidebar-ring: 262 100% 56%;
+
+    /* Legacy tokens for backward compatibility */
+    --bg-void: #FAF7FF;
+    --bg-surface: #FFFFFF;
+    --bg-glass: rgba(250, 247, 255, 0.8);
+    --border-structural: rgba(0, 0, 0, 0.08);
+    --text-primary: #1B1B21;
+    --text-secondary: #7A7489;
+    --prism-cream: #6720FF;
+    --prism-muted: #E6EAF4;
+    --prism-cyan: #6720FF;
+    --prism-surface: #F0EDF7;
+  }
+
+  .dark {
+    /* Argus Dark Theme */
+    --background: 240 10% 6%;
+    --foreground: 260 100% 98%;
+    --card: 240 10% 8%;
+    --card-foreground: 260 100% 98%;
+    --popover: 240 10% 8%;
+    --popover-foreground: 260 100% 98%;
+    --primary: 262 100% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 240 10% 6%;
+    --muted: 240 10% 15%;
+    --muted-foreground: 260 20% 65%;
+    --accent: 240 10% 15%;
+    --accent-foreground: 260 100% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 10% 15%;
+    --input: 240 10% 15%;
+    --ring: 262 100% 56%;
+
+    /* Sidebar */
+    --sidebar-background: 240 10% 6%;
+    --sidebar-foreground: 260 100% 98%;
+    --sidebar-primary: 262 100% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 10% 15%;
+    --sidebar-accent-foreground: 260 100% 98%;
+    --sidebar-border: 240 10% 15%;
+    --sidebar-ring: 262 100% 56%;
+
+    /* Legacy tokens */
+    --bg-void: #0A0A0F;
+    --bg-surface: #12121A;
+    --bg-glass: rgba(18, 18, 26, 0.8);
     --border-structural: rgba(255, 255, 255, 0.08);
     --text-primary: #F0F0F5;
     --text-secondary: #8A8A9E;
-    --prism-cream: #FFFDD0;
+    --prism-cream: #6720FF;
     --prism-muted: #1A1A24;
-    --prism-cyan: #E9FFFF;
-    --prism-surface: #121212;
-  }
-
-  .light {
-    --background: 240 10% 98%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-
-    --bg-void: #F5F5F7;
-    --bg-surface: #FFFFFF;
-    --bg-glass: rgba(255, 255, 255, 0.8);
-    --border-structural: rgba(0, 0, 0, 0.1);
-    --text-primary: #12121A;
-    --text-secondary: #6B6B7B;
-    --prism-cream: #B08D00;
-    --prism-muted: #E2E2E8;
-    --prism-cyan: #007799;
-    --prism-surface: #F0F0F5;
+    --prism-cyan: #A78BFA;
+    --prism-surface: #12121A;
   }
 
   body {
-    background-color: var(--bg-void);
-    color: var(--text-primary);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', sans-serif;
     @apply antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
   }
 }
 
 @layer components {
-  .scanner-reveal-container {
-    perspective: 1000px;
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
   }
-  .surface-layer {
-    transform-style: preserve-3d;
-    backface-visibility: hidden;
+
+  .dark .glass-panel {
+    background: rgba(18, 18, 26, 0.8);
+  }
+
+  .primary-gradient {
+    background: linear-gradient(135deg, #6720FF 0%, #8B5CF6 100%);
+  }
+
+  .hero-mesh {
+    background-color: #FAF7FF;
+    background-image: radial-gradient(at 0% 0%, hsla(261, 100%, 90%, 1) 0, transparent 50%),
+                      radial-gradient(at 100% 0%, hsla(261, 100%, 95%, 1) 0, transparent 50%);
+  }
+
+  .dark .hero-mesh {
+    background-color: #0A0A0F;
+    background-image: radial-gradient(at 0% 0%, hsla(261, 100%, 20%, 1) 0, transparent 50%),
+                      radial-gradient(at 100% 0%, hsla(261, 100%, 15%, 1) 0, transparent 50%);
+  }
+
+  .ghost-border {
+    outline: 1px solid rgba(202, 195, 218, 0.15);
+  }
+
+  .matrix-grid {
+    background-image: radial-gradient(circle at 2px 2px, rgba(103, 32, 255, 0.05) 1px, transparent 0);
+    background-size: 24px 24px;
   }
 }
 
 @layer utilities {
-  .shadow-glow-cream {
-    box-shadow: 0 0 20px var(--prism-cream);
+  .shadow-glow {
+    box-shadow: 0 0 20px rgba(103, 32, 255, 0.2);
   }
-  .shadow-glow-cyan {
-    box-shadow: 0 0 20px var(--prism-cyan);
+
+  .shadow-glow-strong {
+    box-shadow: 0 0 40px rgba(103, 32, 255, 0.3);
   }
-  
-  @keyframes progress {
-    0% {
-      transform: translateX(-100%);
-    }
-    50% {
-      transform: translateX(0%);
-    }
-    100% {
-      transform: translateX(100%);
-    }
+
+  .font-headline {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  .font-body {
+    font-family: 'Inter', sans-serif;
+  }
+
+  .font-label {
+    font-family: 'Inter', sans-serif;
+  }
+
+  .text-balance {
+    text-wrap: balance;
   }
 }

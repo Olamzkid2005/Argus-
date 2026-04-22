@@ -106,7 +106,7 @@ test.describe('Vulnbank Scan - Fixed Worker', () => {
           
           console.log(`  Findings count: ${findings.rowCount}`);
           
-          if (findings.rowCount > 0) {
+          if ((findings.rowCount ?? 0) > 0) {
             console.log('\n=== ALL FINDINGS ===\n');
             for (const f of findings.rows) {
               console.log(`[${f.severity}] ${f.type}`);
@@ -121,7 +121,7 @@ test.describe('Vulnbank Scan - Fixed Worker', () => {
           // If scan completed, stop polling
           if (eng.status === 'awaiting_approval' || eng.status === 'complete' || eng.status === 'failed') {
             console.log(`Scan reached state: ${eng.status}`);
-            if (findings.rowCount === 0) {
+            if ((findings.rowCount ?? 0) === 0) {
               console.log('No findings stored - checking why...');
             }
             break;

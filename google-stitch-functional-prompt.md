@@ -75,16 +75,7 @@ Create a cybersecurity operations center dashboard for vulnerability assessment 
 - Type-based filtering
 - Search functionality
 
-#### 8. Collaboration
-- Team management with role-based access (Admin, Member, Viewer)
-- Team member invitation
-- Finding comments and discussions
-- Assignment workflow for vulnerability remediation
-- Priority and due date management
-- Approval workflows for scan authorization
-- Activity feed showing all platform actions
-- Notification system with unread tracking
-- Mark all as read functionality
+
 
 #### 9. Settings
 - OpenRouter API key configuration for AI features

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FileBarChart,
   FileText,
@@ -19,6 +20,7 @@ import {
   Share2,
   Printer,
   ShieldCheck,
+  Plus,
 } from "lucide-react";
 import ScannerReveal from "@/components/effects/ScannerReveal";
 
@@ -36,21 +38,22 @@ interface Report {
 
 // ── Helpers ──
 const reportTypeConfig = {
-  engagement: { color: "var(--prism-cyan)", label: "Engagement" },
-  finding: { color: "var(--prism-cream)", label: "Finding" },
-  summary: { color: "var(--text-secondary)", label: "Summary" },
-  executive: { color: "#FF8800", label: "Executive" },
+  engagement: { color: "#6720FF", label: "Engagement" },
+  finding: { color: "#FF8800", label: "Finding" },
+  summary: { color: "#7A7489", label: "Summary" },
+  executive: { color: "#FF4444", label: "Executive" },
 };
 
 const statusConfig = {
-  generating: { color: "var(--prism-cyan)", label: "Generating" },
-  ready: { color: "#00FF88", label: "Ready" },
-  failed: { color: "#FF4444", label: "Failed" },
+  generating: { color: "#6720FF", label: "Generating", bg: "bg-primary/10" },
+  ready: { color: "#10B981", label: "Ready", bg: "bg-green-500/10" },
+  failed: { color: "#FF4444", label: "Failed", bg: "bg-error/10" },
 };
 
 // ── Main Page ──
 export default function ReportsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
 
@@ -77,11 +80,9 @@ export default function ReportsPage() {
           const data = await response.json();
           setReports(data.reports || []);
         } else {
-          // If API doesn't exist, use empty array for demo
           setReports([]);
         }
       } catch (err) {
-        // Silently fail - demo mode
         setReports([]);
       } finally {
         setIsLoading(false);
@@ -98,7 +99,6 @@ export default function ReportsPage() {
       if (response.ok) {
         const data = await response.json();
         showToast("success", "Report generation started");
-        // Refresh reports list
         const reportsResponse = await fetch("/api/reports");
         if (reportsResponse.ok) {
           const data = await reportsResponse.json();
@@ -171,8 +171,8 @@ export default function ReportsPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-background dark:bg-[#0A0A0F]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -180,69 +180,82 @@ export default function ReportsPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen px-8 py-8 bg-void">
+    <div className="min-h-screen px-6 py-6 bg-background dark:bg-[#0A0A0F] font-body">
       {/* Header */}
-      <div className="mb-8">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6"
+      >
         <div className="flex items-center gap-2 mb-2">
-          <FileBarChart size={18} className="text-prism-cream" />
-          <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">
+          <FileBarChart size={18} className="text-primary" />
+          <span className="text-[11px] font-mono text-on-surface-variant tracking-widest uppercase">
             Intelligence Reports
           </span>
         </div>
-        <h1 className="text-4xl font-semibold text-text-primary tracking-tight">REPORTS</h1>
-        <p className="text-sm text-text-secondary mt-2">
-          Generate and manage vulnerability assessment reports
-        </p>
-      </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Reports</h1>
+            <p className="text-sm text-on-surface-variant mt-1 font-body">
+              Generate and manage vulnerability assessment reports
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <ScannerReveal
+              icon="/assets/holographic-lock.png"
+              text="AUTO-SCHEDULE"
+              scannedText="CONFIGURED"
+              className="h-10 border-outline-variant dark:border-outline/30"
+              glowColor="var(--primary)"
+            />
+          </div>
+        </div>
+      </motion.div>
 
       {/* Actions Bar */}
-      <div className="flex items-center justify-between mb-6">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="flex items-center justify-between mb-6"
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={handleGenerateReport}
             disabled={isGenerating}
-            className="flex items-center gap-2 px-6 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow-cream disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold text-xs tracking-widest uppercase hover:bg-primary/90 transition-all duration-300 rounded-lg shadow-glow disabled:opacity-50"
           >
-            {isGenerating ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <FileText size={14} />
-            )}
-            {isGenerating ? "GENERATING..." : "GENERATE REPORT"}
+            {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            {isGenerating ? "GENERATING..." : "Generate Report"}
           </button>
 
           <button
             onClick={() => router.push("/reports/compliance")}
-            className="flex items-center gap-2 px-5 py-2.5 border border-prism-cyan/30 text-prism-cyan font-bold text-xs tracking-widest uppercase hover:bg-prism-cyan/10 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 border border-primary/30 text-primary font-bold text-xs tracking-widest uppercase hover:bg-primary/10 transition-all duration-300 rounded-lg"
           >
             <ShieldCheck size={14} />
-            COMPLIANCE
+            Compliance
           </button>
         </div>
+      </motion.div>
 
-        <div className="flex items-center gap-3">
-          <ScannerReveal
-            icon="/assets/holographic-lock.png"
-            text="AUTO-SCHEDULE"
-            scannedText="CONFIGURED"
-            className="h-10 border-structural"
-            glowColor="var(--prism-cyan)"
-          />
-        </div>
-      </div>
-
-      {/* Type Filter Bar */}
-      <div className="flex gap-3 mb-6">
+      {/* Type Filter Tabs */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="flex items-center gap-2 mb-4 flex-wrap"
+      >
         <button
           onClick={() => setTypeFilter("All")}
-          className={`flex items-center gap-2 px-4 py-2 border transition-all duration-200 ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${
             typeFilter === "All"
-              ? "border-prism-cream/40 bg-surface/50"
-              : "border-structural bg-surface/30 hover:border-text-secondary/20"
+              ? "bg-primary text-white shadow-glow"
+              : "bg-surface dark:bg-surface-container-low text-on-surface-variant border border-outline-variant dark:border-outline/30 hover:text-on-surface"
           }`}
         >
-          <span className="text-[10px] text-text-primary font-bold uppercase">All</span>
-          <span className="text-[11px] font-mono px-1.5 py-0.5" style={{ backgroundColor: "var(--structural)", color: "var(--text-secondary)" }}>
+          All
+          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white/20">
             {reports.length}
           </span>
         </button>
@@ -250,147 +263,163 @@ export default function ReportsPage() {
           <button
             key={type}
             onClick={() => setTypeFilter(typeFilter === type ? "All" : type)}
-            className={`flex items-center gap-2 px-4 py-2 border transition-all duration-200 ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${
               typeFilter === type
-                ? "border-prism-cream/40 bg-surface/50"
-                : "border-structural bg-surface/30 hover:border-text-secondary/20"
+                ? "bg-primary text-white shadow-glow"
+                : "bg-surface dark:bg-surface-container-low text-on-surface-variant border border-outline-variant dark:border-outline/30 hover:text-on-surface"
             }`}
           >
-            <span className="text-[10px] text-text-primary font-bold uppercase">{reportTypeConfig[type].label}</span>
+            {reportTypeConfig[type].label}
             <span
-              className="text-[11px] font-mono px-1.5 py-0.5"
+              className="text-[11px] font-mono px-1.5 py-0.5 rounded"
               style={{
-                color: reportTypeConfig[type].color,
-                backgroundColor: "var(--structural)",
+                color: typeFilter === type ? "white" : reportTypeConfig[type].color,
+                backgroundColor: typeFilter === type ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.05)",
               }}
             >
               {reportCounts[type] || 0}
             </span>
           </button>
         ))}
-      </div>
+      </motion.div>
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex-1 flex items-center gap-2 px-3 py-2 border border-structural bg-surface/30 transition-all">
-          <Search size={14} className="text-text-secondary shrink-0" />
+      {/* Search Bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="flex items-center gap-3 mb-4"
+      >
+        <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-surface dark:bg-surface-container-low border border-outline-variant dark:border-outline/30 rounded-lg transition-all duration-300 focus-within:border-primary focus-within:shadow-glow">
+          <Search size={14} className="text-on-surface-variant shrink-0" />
           <input
             type="text"
             placeholder="Search reports by name, ID, or engagement..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-secondary/60"
+            className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 font-body"
           />
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 border border-structural text-text-secondary hover:text-text-primary hover:border-text-secondary/40 transition-all text-sm uppercase font-bold tracking-widest text-[10px]">
+        <button className="flex items-center gap-2 px-4 py-2.5 bg-surface dark:bg-surface-container-low border border-outline-variant dark:border-outline/30 text-on-surface-variant hover:text-on-surface transition-all duration-300 rounded-lg text-xs uppercase font-bold tracking-widest">
           <Filter size={14} />
           Filter
         </button>
-      </div>
+      </motion.div>
 
       {/* Reports Table */}
-      <div className="border border-structural bg-surface/20">
-        <div className="grid grid-cols-[100px_1fr_120px_120px_100px_100px_40px] gap-4 px-5 py-3 border-b border-structural text-[11px] font-mono text-text-secondary tracking-wider uppercase">
-          <span>Report ID</span>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 overflow-hidden"
+      >
+        {/* Table Header */}
+        <div className="grid grid-cols-[80px_1fr_100px_100px_80px_100px_100px] gap-4 px-5 py-3 border-b border-outline-variant dark:border-outline/30 text-[11px] font-mono text-on-surface-variant tracking-wider uppercase bg-surface-container-low/50 dark:bg-surface-container/50">
+          <span>ID</span>
           <span>Report Name</span>
           <span>Type</span>
           <span>Status</span>
           <span>Format</span>
           <span>Created</span>
-          <span></span>
+          <span className="text-right">Actions</span>
         </div>
 
-        {filtered.map((report) => {
-          const typeStyle = reportTypeConfig[report.type];
-          const statusStyle = statusConfig[report.status];
-          const isReady = report.status === "ready";
+        {/* Table Body */}
+        <AnimatePresence>
+          {filtered.map((report, index) => {
+            const typeStyle = reportTypeConfig[report.type];
+            const statusStyle = statusConfig[report.status];
+            const isReady = report.status === "ready";
 
-          return (
-            <div
-              key={report.id}
-              className="grid grid-cols-[100px_1fr_120px_120px_100px_100px_40px] gap-4 px-5 py-4 items-center border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors"
-            >
-              <span className="text-[11px] font-mono text-text-secondary uppercase">
-                {report.id.split("-")[0]}
-              </span>
-
-              <div className="flex items-center gap-3">
-                <FileBarChart size={16} style={{ color: typeStyle.color }} />
-                <div>
-                  <div className="text-sm text-text-primary">{report.name}</div>
-                  {report.engagement_id && (
-                    <div className="text-[10px] text-text-secondary font-mono mt-0.5">
-                      Engagement: {report.engagement_id}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <span
-                className="text-[10px] font-mono font-bold px-2 py-0.5 border w-fit"
-                style={{
-                  color: typeStyle.color,
-                  borderColor: "var(--border-structural)",
-                  backgroundColor: "transparent",
-                }}
+            return (
+              <motion.div
+                key={report.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ delay: index * 0.02 }}
+                className="grid grid-cols-[80px_1fr_100px_100px_80px_100px_100px] gap-4 px-5 py-3.5 items-center border-b border-outline-variant dark:border-outline/30 last:border-b-0 hover:bg-surface-container-low/50 dark:hover:bg-surface-container/50 transition-all duration-300"
               >
-                {typeStyle.label}
-              </span>
-
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: statusStyle.color }}
-                />
-                <span className="text-[11px] text-text-secondary uppercase">
-                  {statusStyle.label}
+                <span className="text-[11px] font-mono text-on-surface-variant uppercase">
+                  {report.id.split("-")[0]}
                 </span>
-              </div>
 
-              <span className="text-[11px] font-mono text-text-secondary uppercase">
-                {report.format.toUpperCase()}
-              </span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <FileBarChart size={16} style={{ color: typeStyle.color }} />
+                  <div className="min-w-0">
+                    <div className="text-sm text-on-surface truncate font-body">{report.name}</div>
+                    {report.engagement_id && (
+                      <div className="text-[10px] text-on-surface-variant font-mono mt-0.5">
+                        Engagement: {report.engagement_id}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-              <span className="text-[11px] font-mono text-text-secondary">
-                {new Date(report.created_at).toLocaleDateString()}
-              </span>
-
-              <div className="flex items-center gap-2">
-                {isReady && (
-                  <>
-                    <button
-                      onClick={() => handleDownload(report.id)}
-                      className="p-1.5 text-text-secondary hover:text-prism-cyan transition-colors"
-                      title="Download"
-                    >
-                      <Download size={14} />
-                    </button>
-                    <button
-                      className="p-1.5 text-text-secondary hover:text-prism-cream transition-colors"
-                      title="Share"
-                    >
-                      <Share2 size={14} />
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => handleDelete(report.id)}
-                  className="p-1.5 text-text-secondary hover:text-red-500 transition-colors"
-                  title="Delete"
+                <span
+                  className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border w-fit"
+                  style={{
+                    color: typeStyle.color,
+                    borderColor: `${typeStyle.color}30`,
+                    backgroundColor: `${typeStyle.color}10`,
+                  }}
                 >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                  {typeStyle.label}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: statusStyle.color }}
+                  />
+                  <span className="text-[11px] text-on-surface-variant uppercase">{statusStyle.label}</span>
+                </div>
+
+                <span className="text-[11px] font-mono text-on-surface-variant uppercase">
+                  {report.format.toUpperCase()}
+                </span>
+
+                <span className="text-[11px] font-mono text-on-surface-variant">
+                  {new Date(report.created_at).toLocaleDateString()}
+                </span>
+
+                <div className="flex items-center justify-end gap-1">
+                  {isReady && (
+                    <>
+                      <button
+                        onClick={() => handleDownload(report.id)}
+                        className="p-1.5 text-on-surface-variant hover:text-primary transition-all duration-300 rounded"
+                        title="Download"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        className="p-1.5 text-on-surface-variant hover:text-primary transition-all duration-300 rounded"
+                        title="Share"
+                      >
+                        <Share2 size={14} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => handleDelete(report.id)}
+                    className="p-1.5 text-on-surface-variant hover:text-error transition-all duration-300 rounded"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
 
         {filtered.length === 0 && (
-          <div className="px-5 py-20 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase">
+          <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase">
             NO REPORTS FOUND IN SELECTED TELEMETRY
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

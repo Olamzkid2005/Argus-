@@ -238,11 +238,28 @@ fi
 
 source venv/bin/activate || die "Failed to activate Python venv"
 
-# Check requirements
+# Check requirements — skip pip install if core deps are already available.
+# This avoids rebuild failures (e.g. pydantic-core on Python 3.14) when deps
+# were previously installed successfully.
 if [ -f "requirements.txt" ]; then
     log_info "Checking Python dependencies..."
-    pip install -q -r requirements.txt || die "pip install failed"
-    log_ok "Python dependencies ready"
+    if python3 -c "import celery, redis, psycopg2" 2>/dev/null; then
+        log_ok "Python dependencies already satisfied"
+    else
+        log_warn "Missing dependencies — attempting install..."
+        if pip install -q -r requirements.txt 2>/dev/null; then
+            log_ok "Python dependencies installed"
+        else
+            log_warn "pip install had issues (some packages may need Rust/build tools)"
+            log_warn "Trying again without pydantic constraints..."
+            pip install -q celery redis psycopg2-binary requests httpx jinja2 pyyaml 2>/dev/null || true
+            if python3 -c "import celery, redis, psycopg2" 2>/dev/null; then
+                log_ok "Core Python dependencies ready"
+            else
+                die "Critical Python dependencies missing. Check logs/celery.log"
+            fi
+        fi
+    fi
 else
     log_warn "requirements.txt not found"
 fi

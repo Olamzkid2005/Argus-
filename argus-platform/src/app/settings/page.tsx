@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { motion } from "framer-motion";
 import {
   Key,
   Eye,
@@ -20,6 +21,14 @@ import {
   Zap,
   Target,
   Bomb,
+  Sun,
+  Moon,
+  Shield,
+  Cpu,
+  Activity,
+  Thermometer,
+  X,
+  Monitor,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 
@@ -36,9 +45,9 @@ const AGGRESSIVENESS_PRESETS = [
     name: "Default",
     description: "Standard scan depth — balanced coverage and speed",
     icon: <Target size={20} />,
-    color: "text-prism-cyan",
-    borderColor: "border-prism-cyan/30",
-    bgColor: "bg-prism-cyan/5",
+    color: "text-primary",
+    borderColor: "border-primary/30",
+    bgColor: "bg-primary/5",
     details: [
       "Katana crawl depth: 3",
       "Amass: passive enumeration",
@@ -68,9 +77,9 @@ const AGGRESSIVENESS_PRESETS = [
     name: "Extreme",
     description: "Maximum depth — exhaustive coverage",
     icon: <Bomb size={20} />,
-    color: "text-red-400",
-    borderColor: "border-red-400/30",
-    bgColor: "bg-red-400/5",
+    color: "text-error",
+    borderColor: "border-error/30",
+    bgColor: "bg-error/5",
     details: [
       "Katana crawl depth: 7+",
       "Amass: brute force + all sources",
@@ -83,14 +92,12 @@ const AGGRESSIVENESS_PRESETS = [
 
 // OpenRouter models - grouped by provider
 const OPENROUTER_MODELS = [
-  // Anthropic
   { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "anthropic", description: "Best balance of speed and intelligence" },
   { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet", provider: "anthropic", description: "Latest Sonnet with extended thinking" },
   { id: "anthropic/claude-3.7-sonnet:thinking", name: "Claude 3.7 Sonnet (Thinking)", provider: "anthropic", description: "Extended reasoning mode" },
   { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "anthropic", description: "Most powerful Anthropic model" },
   { id: "anthropic/claude-3.5-haiku", name: "Claude 3.5 Haiku", provider: "anthropic", description: "Fast and cost-effective" },
-  
-  // OpenAI
+
   { id: "openai/gpt-4o", name: "GPT-4O", provider: "openai", description: "OpenAI flagship multimodal model" },
   { id: "openai/gpt-4o-mini", name: "GPT-4O Mini", provider: "openai", description: "Fast and affordable" },
   { id: "openai/gpt-4.1", name: "GPT-4.1", provider: "openai", description: "Latest GPT generation" },
@@ -101,42 +108,35 @@ const OPENROUTER_MODELS = [
   { id: "openai/o1-mini", name: "O1 Mini", provider: "openai", description: "Fast reasoning" },
   { id: "openai/o3-mini", name: "O3 Mini", provider: "openai", description: "Latest reasoning model" },
   { id: "openai/o4-mini", name: "O4 Mini", provider: "openai", description: "Newest mini reasoning" },
-  
-  // Google
+
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google", description: "Google's most capable model" },
   { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google", description: "Fast multimodal model" },
   { id: "google/gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "google", description: "Fast and versatile" },
   { id: "google/gemini-2.0-flash-lite", name: "Gemini 2.0 Flash Lite", provider: "google", description: "Lightweight and cheap" },
   { id: "google/gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "google", description: "Long context champion" },
   { id: "google/gemini-1.5-flash", name: "Gemini 1.5 Flash", provider: "google", description: "Fast with 1M context" },
-  
-  // Meta
+
   { id: "meta-llama/llama-4-maverick", name: "Llama 4 Maverick", provider: "meta", description: "Latest Llama flagship" },
   { id: "meta-llama/llama-4-scout", name: "Llama 4 Scout", provider: "meta", description: "Efficient Llama variant" },
   { id: "meta-llama/llama-3.3-70b", name: "Llama 3.3 70B", provider: "meta", description: "High performance open model" },
-  
-  // DeepSeek
+
   { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "deepseek", description: "Strong reasoning model" },
   { id: "deepseek/deepseek-r1", name: "DeepSeek R1", provider: "deepseek", description: "Advanced reasoning specialist" },
-  
-  // Mistral
+
   { id: "mistralai/mistral-large", name: "Mistral Large", provider: "mistral", description: "Mistral's best model" },
   { id: "mistralai/mistral-medium", name: "Mistral Medium", provider: "mistral", description: "Balanced performance" },
   { id: "mistralai/mistral-small", name: "Mistral Small", provider: "mistral", description: "Fast and cheap" },
-  
-  // Qwen
+
   { id: "qwen/qwq-32b", name: "QWEN QWQ 32B", provider: "qwen", description: "Strong open reasoning model" },
-  
-  // NVIDIA
+
   { id: "nvidia/llama-3.1-nemotron-70b", name: "NVIDIA Nemotron 70B", provider: "nvidia", description: "NVIDIA optimized Llama" },
-  
-  // Perplexity
+
   { id: "perplexity/sonar", name: "Perplexity Sonar", provider: "perplexity", description: "Search-augmented model" },
 ];
 
 const PROVIDER_COLORS: Record<string, string> = {
   anthropic: "text-orange-400 bg-orange-400/10 border-orange-400/20",
-  openai: "text-prism-cream bg-prism-cream/10 border-prism-cream/20",
+  openai: "text-primary bg-primary/10 border-primary/20",
   google: "text-blue-400 bg-blue-400/10 border-blue-400/20",
   meta: "text-indigo-400 bg-indigo-400/10 border-indigo-400/20",
   deepseek: "text-cyan-400 bg-cyan-400/10 border-cyan-400/20",
@@ -157,6 +157,14 @@ export default function SettingsPage() {
   const [showKey, setShowKey] = useState(false);
   const [customModel, setCustomModel] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [temperature, setTemperature] = useState(0.7);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    }
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -207,10 +215,27 @@ export default function SettingsPage() {
     }
   };
 
+  const handleDiscard = () => {
+    loadSettings();
+    setCustomModel("");
+    setShowCustomInput(false);
+    showToast("info", "Changes discarded");
+  };
+
+  const toggleDarkMode = () => {
+    const newDark = !isDark;
+    setIsDark(newDark);
+    if (newDark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
+
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-background dark:bg-[#0A0A0F]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -221,277 +246,431 @@ export default function SettingsPage() {
   const isCustomModel = currentModel ? !OPENROUTER_MODELS.some((m) => m.id === currentModel) : false;
 
   return (
-    <div className="min-h-screen px-8 py-8 bg-void">
+    <div className="min-h-screen px-6 py-6 bg-background dark:bg-[#0A0A0F] font-body pb-24">
       {/* Header */}
-      <div className="mb-10">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
         <div className="flex items-center gap-2 mb-2">
-          <SettingsIcon size={18} className="text-prism-cream" />
-          <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">
+          <SettingsIcon size={18} className="text-primary" />
+          <span className="text-[11px] font-mono text-on-surface-variant tracking-widest uppercase">
             Platform Configuration
           </span>
         </div>
-        <h1 className="text-4xl font-semibold text-text-primary tracking-tight">SETTINGS</h1>
-        <p className="text-sm text-text-secondary mt-2">
+        <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Settings</h1>
+        <p className="text-sm text-on-surface-variant mt-1 font-body">
           Manage operational parameters and external intelligence integrations
         </p>
-      </div>
+      </motion.div>
 
-      <div className="max-w-3xl space-y-6">
-        {/* OpenRouter API Key */}
-        <div className="border border-white/[0.08] bg-surface/30 p-8">
-          <div className="flex items-center gap-3 mb-8">
-            <Key className="h-5 w-5 text-prism-cream" />
-            <h2 className="text-sm font-bold text-text-primary uppercase tracking-widest">
-              OpenRouter API Key
-            </h2>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-text-primary uppercase tracking-wider">
-                API Key
-              </label>
-              <a
-                href="https://openrouter.ai/keys"
-                target="_blank"
-                className="flex items-center gap-1 text-[10px] font-mono text-prism-cyan hover:underline uppercase"
-              >
-                Get Key <ExternalLink size={10} className="inline" />
-              </a>
+      <div className="grid grid-cols-12 gap-6">
+        {/* Left Column - Primary Configurations */}
+        <div className="col-span-12 lg:col-span-8 space-y-6">
+          {/* AI Configuration Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-primary/10 border border-primary/20">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  AI Configuration
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">OpenRouter integration settings</p>
+              </div>
             </div>
-            <div className="relative">
-              <input
-                type={showKey ? "text" : "password"}
-                value={settings.openrouter_api_key || ""}
-                onChange={(e) => setSettings((p) => ({ ...p, openrouter_api_key: e.target.value }))}
-                placeholder="sk-or-v1-..."
-                className="w-full px-4 py-3 pr-12 bg-void/50 border border-white/10 text-sm font-mono text-text-primary outline-none focus:border-prism-cream transition-colors"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors"
-              >
-                {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <p className="text-[11px] text-text-secondary">
-              One key unlocks 100+ models from OpenAI, Anthropic, Google, Meta, DeepSeek, Mistral, and more.
-            </p>
-          </div>
-        </div>
 
-        {/* AI Model Selection */}
-        <div className="border border-white/[0.08] bg-surface/30 p-8">
-          <div className="flex items-center gap-3 mb-8">
-            <Sparkles className="h-5 w-5 text-prism-cyan" />
-            <h2 className="text-sm font-bold text-text-primary uppercase tracking-widest">
-              AI Model Selection
-            </h2>
-          </div>
-
-          <p className="text-xs text-text-secondary mb-6 leading-relaxed">
-            Choose the model for vulnerability explanations and attack chain analysis. 
-            All models are accessible through your single OpenRouter key.
-          </p>
-
-          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-            {OPENROUTER_MODELS.map((model) => {
-              const isSelected = currentModel === model.id;
-              return (
-                <button
-                  key={model.id}
-                  onClick={() => {
-                    setSettings((p) => ({ ...p, preferred_ai_model: model.id }));
-                    setShowCustomInput(false);
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 border transition-all text-left ${
-                    isSelected
-                      ? "border-prism-cyan/40 bg-prism-cyan/10"
-                      : "border-structural bg-surface/20 hover:border-text-secondary/30"
-                  }`}
+            {/* API Key */}
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-on-surface uppercase tracking-wider font-headline">
+                  API Key
+                </label>
+                <a
+                  href="https://openrouter.ai/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] font-mono text-primary hover:underline uppercase transition-all duration-300"
                 >
-                  <div
-                    className={`w-5 h-5 border flex items-center justify-center shrink-0 ${
-                      isSelected ? "border-prism-cyan bg-prism-cyan" : "border-text-secondary/30"
-                    }`}
-                  >
-                    {isSelected && <Check size={12} className="text-void" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-sm font-medium ${
-                          isSelected ? "text-prism-cyan" : "text-text-primary"
-                        }`}
-                      >
-                        {model.name}
-                      </span>
-                      <span
-                        className={`text-[10px] font-mono uppercase px-1.5 py-0.5 border ${
-                          PROVIDER_COLORS[model.provider] || "text-text-secondary bg-surface/10 border-structural"
-                        }`}
-                      >
-                        {model.provider}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-text-secondary mt-0.5">{model.description}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Custom Model Option */}
-          <div className="mt-4">
-            {showCustomInput || isCustomModel ? (
-              <div className="flex items-center gap-3">
+                  Get Key <ExternalLink size={10} className="inline" />
+                </a>
+              </div>
+              <div className="relative">
                 <input
-                  type="text"
-                  value={customModel || (isCustomModel ? currentModel : "")}
-                  onChange={(e) => {
-                    setCustomModel(e.target.value);
-                    setSettings((p) => ({ ...p, preferred_ai_model: e.target.value }));
-                  }}
-                  placeholder="provider/model-name (e.g. google/gemini-2.0-pro)"
-                  className="flex-1 px-4 py-2 bg-void/50 border border-white/10 text-sm font-mono text-text-primary outline-none focus:border-prism-cream transition-colors"
+                  type={showKey ? "text" : "password"}
+                  value={settings.openrouter_api_key || ""}
+                  onChange={(e) => setSettings((p) => ({ ...p, openrouter_api_key: e.target.value }))}
+                  placeholder="sk-or-v1-..."
+                  className="w-full px-4 py-3 pr-12 bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-sm font-mono text-on-surface outline-none focus:border-primary transition-all duration-300"
                 />
                 <button
-                  onClick={() => {
-                    setShowCustomInput(false);
-                    setCustomModel("");
-                  }}
-                  className="text-[11px] text-text-secondary hover:text-text-primary"
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-all duration-300"
                 >
-                  Cancel
+                  {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-            ) : (
-              <button
-                onClick={() => setShowCustomInput(true)}
-                className="text-xs text-prism-cyan hover:underline"
-              >
-                Use a custom model ID not listed above
-              </button>
-            )}
-          </div>
-        </div>
+              <p className="text-[11px] text-on-surface-variant">
+                One key unlocks 100+ models from OpenAI, Anthropic, Google, Meta, DeepSeek, Mistral, and more.
+              </p>
+            </div>
 
-        {/* Scan Aggressiveness */}
-        <div className="border border-white/[0.08] bg-surface/30 p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <Zap className="h-5 w-5 text-orange-400" />
-            <h2 className="text-sm font-bold text-text-primary uppercase tracking-widest">
-              Scan Aggressiveness
-            </h2>
-            <ScanModeHelp trigger="icon" />
-          </div>
+            {/* Model Selector */}
+            <div className="mb-6">
+              <label className="text-[11px] font-bold text-on-surface uppercase tracking-wider mb-3 block font-headline">
+                Model Selection
+              </label>
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {OPENROUTER_MODELS.map((model) => {
+                  const isSelected = currentModel === model.id;
+                  return (
+                    <button
+                      key={model.id}
+                      onClick={() => {
+                        setSettings((p) => ({ ...p, preferred_ai_model: model.id }));
+                        setShowCustomInput(false);
+                      }}
+                      className={`w-full flex items-center gap-4 px-4 py-3 border rounded-lg transition-all duration-300 text-left ${
+                        isSelected
+                          ? "border-primary/40 bg-primary/10"
+                          : "border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/50 hover:border-primary/20"
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 border rounded flex items-center justify-center shrink-0 transition-all duration-300 ${
+                          isSelected ? "border-primary bg-primary" : "border-outline-variant dark:border-outline/30"
+                        }`}
+                      >
+                        {isSelected && <Check size={12} className="text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-sm font-medium ${isSelected ? "text-primary" : "text-on-surface"}`}
+                          >
+                            {model.name}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                              PROVIDER_COLORS[model.provider] ||
+                              "text-on-surface-variant bg-surface-container-high border-outline-variant"
+                            }`}
+                          >
+                            {model.provider}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-on-surface-variant mt-0.5">{model.description}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
 
-          <p className="text-xs text-text-secondary mb-6 leading-relaxed">
-            Control how deep and thorough the reconnaissance and scanning tools go.
-            Higher aggressiveness finds more attack surface but takes significantly longer.
-          </p>
+              {/* Custom Model Option */}
+              <div className="mt-4">
+                {showCustomInput || isCustomModel ? (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={customModel || (isCustomModel ? currentModel : "")}
+                      onChange={(e) => {
+                        setCustomModel(e.target.value);
+                        setSettings((p) => ({ ...p, preferred_ai_model: e.target.value }));
+                      }}
+                      placeholder="provider/model-name (e.g. google/gemini-2.0-pro)"
+                      className="flex-1 px-4 py-2 bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-sm font-mono text-on-surface outline-none focus:border-primary transition-all duration-300"
+                    />
+                    <button
+                      onClick={() => {
+                        setShowCustomInput(false);
+                        setCustomModel("");
+                      }}
+                      className="text-[11px] text-on-surface-variant hover:text-on-surface transition-all duration-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCustomInput(true)}
+                    className="text-xs text-primary hover:underline transition-all duration-300"
+                  >
+                    Use a custom model ID not listed above
+                  </button>
+                )}
+              </div>
+            </div>
 
-          <div className="space-y-3">
-            {AGGRESSIVENESS_PRESETS.map((preset) => {
-              const isSelected = settings.scan_aggressiveness === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  onClick={() => setSettings((p) => ({ ...p, scan_aggressiveness: preset.id }))}
-                  className={`w-full text-left border transition-all ${
-                    isSelected
-                      ? `${preset.borderColor} ${preset.bgColor}`
-                      : "border-structural bg-surface/20 hover:border-text-secondary/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-4 px-4 py-4">
-                    <div className={`${preset.color}`}>{preset.icon}</div>
-                    <div className="flex-1 min-w-0">
+            {/* Temperature Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-bold text-on-surface uppercase tracking-wider font-headline flex items-center gap-2">
+                  <Thermometer size={12} />
+                  Temperature
+                </label>
+                <span className="text-[11px] font-mono text-primary">{temperature.toFixed(1)}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                className="w-full h-2 bg-surface-container-high dark:bg-surface-container rounded-full appearance-none cursor-pointer accent-primary"
+              />
+              <div className="flex justify-between mt-1">
+                <span className="text-[9px] text-on-surface-variant">Precise</span>
+                <span className="text-[9px] text-on-surface-variant">Creative</span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Scan Aggressiveness */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-orange-400/10 border border-orange-400/20">
+                <Zap className="h-5 w-5 text-orange-400" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  Scan Aggressiveness
+                </h2>
+                <ScanModeHelp trigger="icon" />
+              </div>
+            </div>
+
+            <p className="text-xs text-on-surface-variant mb-6 leading-relaxed">
+              Control how deep and thorough the reconnaissance and scanning tools go. Higher aggressiveness finds
+              more attack surface but takes significantly longer.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {AGGRESSIVENESS_PRESETS.map((preset) => {
+                const isSelected = settings.scan_aggressiveness === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => setSettings((p) => ({ ...p, scan_aggressiveness: preset.id }))}
+                    className={`text-left border rounded-xl transition-all duration-300 ${
+                      isSelected
+                        ? `${preset.borderColor} ${preset.bgColor} shadow-glow`
+                        : "border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/50 hover:border-primary/20"
+                    }`}
+                  >
+                    <div className="flex flex-col items-start p-4">
+                      <div className={`${preset.color} mb-2`}>{preset.icon}</div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`text-sm font-bold ${preset.color}`}>{preset.name}</span>
                         {isSelected && (
-                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 bg-green-400/10 text-green-400 border border-green-400/20">
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 bg-green-500/10 text-green-500 border border-green-500/20 rounded">
                             Active
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-text-secondary">{preset.description}</p>
-                    </div>
-                    <div
-                      className={`w-5 h-5 border flex items-center justify-center shrink-0 ${
-                        isSelected ? "border-prism-cyan bg-prism-cyan" : "border-text-secondary/30"
-                      }`}
-                    >
-                      {isSelected && <Check size={12} className="text-void" />}
-                    </div>
-                  </div>
-                  {/* Expanded details when selected */}
-                  {isSelected && (
-                    <div className="px-4 pb-4 pt-1 border-t border-white/5">
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                        {preset.details.map((detail, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <div className={`w-1 h-1 ${preset.color.replace("text-", "bg-")} opacity-60`} />
-                            <span className="text-[10px] font-mono text-text-secondary">{detail}</span>
-                          </div>
-                        ))}
+                      <p className="text-[11px] text-on-surface-variant mb-3">{preset.description}</p>
+                      <div
+                        className={`w-5 h-5 border rounded flex items-center justify-center shrink-0 mt-auto ${
+                          isSelected ? "border-primary bg-primary" : "border-outline-variant dark:border-outline/30"
+                        }`}
+                      >
+                        {isSelected && <Check size={12} className="text-white" />}
                       </div>
                     </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Save Button */}
-        <div className="flex items-center justify-end">
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-8 py-3 bg-prism-cream text-void font-bold text-xs uppercase tracking-widest hover:bg-white transition-all disabled:opacity-50"
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {isSaving ? "CONFIGURING..." : "SAVE PARAMETERS"}
-          </button>
-        </div>
-
-        {/* Authorization Section */}
-        <div className="border border-red-500/20 bg-red-500/[0.03] p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <LogOut size={16} className="text-red-500" />
-              <h2 className="text-sm font-bold text-red-500 uppercase tracking-widest">
-                Authorization Termination
-              </h2>
+                    {/* Expanded details when selected */}
+                    {isSelected && (
+                      <div className="px-4 pb-4 pt-1 border-t border-white/5">
+                        <div className="space-y-1">
+                          {preset.details.map((detail, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <div className={`w-1 h-1 rounded-full ${preset.color.replace("text-", "bg-")} opacity-60`} />
+                              <span className="text-[10px] font-mono text-on-surface-variant">{detail}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Revoke local node access and terminate your current operational session.
-            </p>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="px-6 py-2.5 border border-red-500/30 text-red-500 text-[10px] font-bold uppercase tracking-[0.2em] hover:bg-red-500 hover:text-void transition-all duration-300"
-          >
-            Revoke Access
-          </button>
+          </motion.div>
         </div>
 
-        {/* Security Notice */}
-        <div className="border border-white/[0.08] bg-surface/10 p-5 flex gap-4 items-start">
-          <AlertCircle className="h-5 w-5 text-prism-muted mt-0.5" />
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
-              Cryptographic Security
-            </h3>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              All credentials are encrypted and stored within the Argus secure perimeter.
-              Intelligence keys are routed through hardened proxies to prevent exposure during analysis.
-            </p>
-          </div>
+        {/* Right Column - Security & Metadata */}
+        <div className="col-span-12 lg:col-span-4 space-y-6">
+          {/* Session & Security */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-primary/10 border border-primary/20">
+                <Shield className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  Session & Security
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">Account and access controls</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Recent Notices */}
+              <div className="p-3 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={14} className="text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <div className="text-[11px] font-bold text-on-surface">Cryptographic Security</div>
+                    <p className="text-[10px] text-on-surface-variant mt-0.5 leading-relaxed">
+                      All credentials are encrypted and stored within the Argus secure perimeter.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dark Mode Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                <div className="flex items-center gap-2">
+                  {isDark ? <Moon size={14} className="text-primary" /> : <Sun size={14} className="text-primary" />}
+                  <span className="text-xs text-on-surface font-body">Dark Mode</span>
+                </div>
+                <button
+                  onClick={toggleDarkMode}
+                  className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
+                    isDark ? "bg-primary" : "bg-surface-container-high dark:bg-surface-container"
+                  }`}
+                >
+                  <div
+                    className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300 ${
+                      isDark ? "left-6" : "left-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* MFA Placeholder */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30 opacity-60">
+                <div className="flex items-center gap-2">
+                  <Monitor size={14} className="text-on-surface-variant" />
+                  <span className="text-xs text-on-surface-variant font-body">Multi-Factor Auth</span>
+                </div>
+                <span className="text-[10px] font-mono text-on-surface-variant">Coming Soon</span>
+              </div>
+
+              {/* Logout */}
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-error/20 text-error text-xs font-bold uppercase tracking-widest hover:bg-error/10 transition-all duration-300 rounded-lg"
+              >
+                <LogOut size={14} />
+                Revoke Access
+              </button>
+            </div>
+          </motion.div>
+
+          {/* System Health */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-green-500/10 border border-green-500/20">
+                <Activity className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  System Health
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">Node status and resources</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-on-surface-variant font-body flex items-center gap-1">
+                    <Cpu size={10} />
+                    CPU Usage
+                  </span>
+                  <span className="text-[10px] font-mono text-primary">42%</span>
+                </div>
+                <div className="w-full h-1.5 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: "42%" }}
+                    transition={{ delay: 0.5, duration: 0.8 }}
+                    className="h-full bg-primary rounded-full"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-on-surface-variant font-body flex items-center gap-1">
+                    <Activity size={10} />
+                    RAM Usage
+                  </span>
+                  <span className="text-[10px] font-mono text-primary">68%</span>
+                </div>
+                <div className="w-full h-1.5 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: "68%" }}
+                    transition={{ delay: 0.6, duration: 0.8 }}
+                    className="h-full bg-primary rounded-full"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[11px] text-on-surface font-body">All nodes operational</span>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </div>
+
+      {/* Floating Action Footer */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-6 py-3 bg-surface dark:bg-surface-container-high border border-outline-variant dark:border-outline/30 rounded-2xl shadow-glow z-50"
+      >
+        <button
+          onClick={handleDiscard}
+          className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-on-surface-variant border border-outline-variant dark:border-outline/30 rounded-lg hover:bg-surface-container-high dark:hover:bg-surface-container transition-all duration-300"
+        >
+          <X size={14} />
+          Discard Changes
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="flex items-center gap-2 px-6 py-2 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow disabled:opacity-50"
+        >
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {isSaving ? "SAVING..." : "Commit Changes"}
+        </button>
+      </motion.div>
     </div>
   );
 }

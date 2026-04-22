@@ -85,7 +85,7 @@ test.describe('Deep Investigation of Findings Pipeline', () => {
         
         if (meta.stdout) {
           // Try to count JSON results
-          const lines = meta.stdout.split('\n').filter(l => l.trim().startsWith('{'));
+          const lines = meta.stdout.split('\n').filter((l: string) => l.trim().startsWith('{'));
           console.log(`JSON lines in output: ${lines.length}`);
           
           if (lines.length > 0) {

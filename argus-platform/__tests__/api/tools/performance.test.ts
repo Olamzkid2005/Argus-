@@ -29,7 +29,7 @@ describe("GET /api/tools/performance", () => {
     mockQuery = jest.fn();
     mockRequireAuth = requireAuth as jest.Mock;
 
-    (Pool as jest.Mock).mockImplementation(() => ({
+    (Pool as unknown as jest.Mock).mockImplementation(() => ({
       query: mockQuery,
     }));
   });

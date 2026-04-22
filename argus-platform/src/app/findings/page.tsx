@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Filter,
@@ -23,6 +24,10 @@ import {
   Sword,
   Target,
   X,
+  ChevronRight,
+  UserCheck,
+  Wrench,
+  Code2,
 } from "lucide-react";
 import ScannerReveal from "@/components/effects/ScannerReveal";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
@@ -57,9 +62,9 @@ interface Explanations {
 const severityConfig = {
   CRITICAL: { color: "#FF4444", bg: "rgba(255,68,68,0.08)", border: "rgba(255,68,68,0.2)" },
   HIGH: { color: "#FF8800", bg: "rgba(255,136,0,0.08)", border: "rgba(255,136,0,0.2)" },
-  MEDIUM: { color: "var(--prism-cream)", bg: "var(--bg-surface)", border: "var(--border-structural)" },
-  LOW: { color: "var(--text-secondary)", bg: "var(--bg-surface)", border: "var(--border-structural)" },
-  INFO: { color: "var(--prism-cyan)", bg: "var(--bg-surface)", border: "var(--border-structural)" },
+  MEDIUM: { color: "#F59E0B", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)" },
+  LOW: { color: "#10B981", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)" },
+  INFO: { color: "#6720FF", bg: "rgba(103,32,255,0.08)", border: "rgba(103,32,255,0.2)" },
 };
 
 function EvidenceBlock({ data }: { data: any }) {
@@ -71,16 +76,24 @@ function EvidenceBlock({ data }: { data: any }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <div className="relative bg-void border border-structural rounded overflow-hidden mt-3">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-structural">
-        <span className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Evidence / POC</span>
-        <button onClick={handleCopy} className="flex items-center gap-1 text-[10px] text-text-secondary hover:text-prism-cyan transition-colors">
+    <div className="relative bg-surface-container-low dark:bg-surface-container-high rounded-lg overflow-hidden mt-3 border border-outline-variant dark:border-outline/30">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-outline-variant dark:border-outline/30 bg-surface-container dark:bg-surface-container-high">
+        <span className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
+          <Code2 size={10} />
+          Evidence / POC
+        </span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-[10px] text-on-surface-variant hover:text-primary transition-all duration-300"
+        >
           {copied ? <Check size={10} /> : <Copy size={10} />}
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
       <div className="overflow-x-auto p-3 max-h-[300px]">
-        <pre className="text-[12px] font-mono leading-relaxed text-text-secondary"><code>{code}</code></pre>
+        <pre className="text-[12px] font-mono leading-relaxed text-on-surface-variant">
+          <code>{code}</code>
+        </pre>
       </div>
     </div>
   );
@@ -107,29 +120,36 @@ function AIAnalysisBanner({
   if (hasExplanations) return null;
 
   return (
-    <div className="mb-6 border border-prism-cyan/30 bg-surface/40 p-6 relative">
-      <button onClick={onDismiss} className="absolute top-3 right-3 text-text-secondary hover:text-text-primary transition-colors">
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-6 border border-primary/20 bg-surface dark:bg-surface-container-low rounded-xl p-6 relative shadow-sm"
+    >
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 text-on-surface-variant hover:text-on-surface transition-all duration-300"
+      >
         <X size={14} />
       </button>
-      
+
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 flex items-center justify-center border border-prism-cyan/30 bg-prism-cyan/10 shrink-0">
-          <Brain size={24} className="text-prism-cyan" />
+        <div className="w-12 h-12 flex items-center justify-center border border-primary/20 bg-primary/10 rounded-xl shrink-0">
+          <Brain size={24} className="text-primary" />
         </div>
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-text-primary tracking-tight mb-1">
+          <h3 className="text-lg font-semibold text-on-surface tracking-tight font-headline mb-1">
             AI Vulnerability Analysis Available
           </h3>
-          <p className="text-sm text-text-secondary mb-4 max-w-2xl">
-            Get instant, developer-friendly explanations for every vulnerability. Plus, discover how these weaknesses 
-            can be <span className="text-prism-cream font-medium">chained together</span> for a serious system takeover.
+          <p className="text-sm text-on-surface-variant mb-4 max-w-2xl font-body">
+            Get instant, developer-friendly explanations for every vulnerability. Plus, discover how these weaknesses
+            can be <span className="text-primary font-medium">chained together</span> for a serious system takeover.
           </p>
-          
+
           {aiConfigured === false ? (
             <div className="flex items-center gap-3">
               <button
-                onClick={() => window.location.href = "/settings"}
-                className="flex items-center gap-2 px-5 py-2.5 bg-red-500/20 text-red-400 border border-red-500/30 font-bold text-xs tracking-widest uppercase hover:bg-red-500/30 transition-all"
+                onClick={() => (window.location.href = "/settings")}
+                className="flex items-center gap-2 px-5 py-2.5 bg-error/10 text-error border border-error/20 font-bold text-xs tracking-widest uppercase hover:bg-error/20 transition-all duration-300 rounded-lg"
               >
                 <Zap size={14} />
                 CONFIGURE AI KEY IN SETTINGS
@@ -140,7 +160,7 @@ function AIAnalysisBanner({
               <button
                 onClick={onExplainAll}
                 disabled={isExplaining || isChaining}
-                className="flex items-center gap-2 px-5 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow-cream disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold text-xs tracking-widest uppercase hover:bg-primary/90 transition-all duration-300 rounded-lg shadow-glow disabled:opacity-50"
               >
                 {isExplaining ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 {isExplaining ? "ANALYZING..." : "EXPLAIN ALL VULNERABILITIES"}
@@ -148,7 +168,7 @@ function AIAnalysisBanner({
               <button
                 onClick={onChainAnalysis}
                 disabled={isExplaining || isChaining}
-                className="flex items-center gap-2 px-5 py-2.5 border border-prism-cyan/40 text-prism-cyan font-bold text-xs tracking-widest uppercase hover:bg-prism-cyan/10 transition-all disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 border border-primary/30 text-primary font-bold text-xs tracking-widest uppercase hover:bg-primary/10 transition-all duration-300 rounded-lg disabled:opacity-50"
               >
                 {isChaining ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
                 {isChaining ? "ANALYZING CHAINS..." : "ATTACK CHAIN ANALYSIS"}
@@ -157,7 +177,7 @@ function AIAnalysisBanner({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -172,23 +192,31 @@ function AttackChainPanel({
   if (!analysis) return null;
 
   return (
-    <div className="mb-6 border border-red-500/30 bg-red-500/5 p-6 relative">
-      <button onClick={onClose} className="absolute top-3 right-3 text-text-secondary hover:text-text-primary transition-colors">
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="mb-6 border border-error/20 bg-error/5 rounded-xl p-6 relative overflow-hidden"
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-3 right-3 text-on-surface-variant hover:text-on-surface transition-all duration-300"
+      >
         <X size={14} />
       </button>
-      
+
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-8 h-8 flex items-center justify-center border border-red-500/30 bg-red-500/10">
-          <Sword size={18} className="text-red-400" />
+        <div className="w-8 h-8 flex items-center justify-center border border-error/20 bg-error/10 rounded-lg">
+          <Sword size={18} className="text-error" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-text-primary tracking-tight">Attack Chain Analysis</h3>
-          <p className="text-xs text-text-secondary">How vulnerabilities can be chained for system takeover</p>
+          <h3 className="text-lg font-semibold text-on-surface tracking-tight font-headline">Attack Chain Analysis</h3>
+          <p className="text-xs text-on-surface-variant font-body">How vulnerabilities can be chained for system takeover</p>
         </div>
       </div>
-      
+
       <MarkdownRenderer content={analysis} variant="chain" />
-    </div>
+    </motion.div>
   );
 }
 
@@ -212,6 +240,8 @@ export default function FindingsPage() {
   const [isChaining, setIsChaining] = useState(false);
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [selectedEngagement, setSelectedEngagement] = useState<string>("all");
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("All");
 
   useEffect(() => {
     if (status === "unauthenticated") signIn();
@@ -222,13 +252,11 @@ export default function FindingsPage() {
     if (status !== "authenticated") return;
     const fetchAIStatus = async () => {
       try {
-        // Check if AI is configured
         const aiResponse = await fetch("/api/ai/explain");
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
           setAiConfigured(aiData.configured);
         }
-        // Get preferred model from settings
         const settingsResponse = await fetch("/api/settings");
         if (settingsResponse.ok) {
           const settingsData = await settingsResponse.json();
@@ -355,6 +383,7 @@ export default function FindingsPage() {
       if (response.ok) {
         showToast("success", "Finding deleted");
         setFindings((prev) => prev.filter((f) => f.id !== id));
+        if (selectedFindingId === id) setSelectedFindingId(null);
       }
     } catch (err) {
       showToast("error", "Failed to delete finding");
@@ -368,9 +397,15 @@ export default function FindingsPage() {
         f.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         f.endpoint.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesSeverity = severityFilter === "All" || f.severity === severityFilter;
-      return matchesSearch && matchesSeverity;
+      const matchesStatus =
+        statusFilter === "All"
+          ? true
+          : statusFilter === "Verified"
+          ? f.verified
+          : !f.verified;
+      return matchesSearch && matchesSeverity && matchesStatus;
     });
-  }, [findings, searchQuery, severityFilter]);
+  }, [findings, searchQuery, severityFilter, statusFilter]);
 
   const severityCounts = useMemo(() => {
     return findings.reduce((acc, f) => {
@@ -381,11 +416,12 @@ export default function FindingsPage() {
 
   const hasExplanations = Object.keys(explanations).length > 0;
   const explainedCount = filtered.filter((f) => explanations[f.id]).length;
+  const selectedFinding = findings.find((f) => f.id === selectedFindingId) || null;
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-background dark:bg-[#0A0A0F]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -393,40 +429,25 @@ export default function FindingsPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen px-8 py-8 bg-void">
+    <div className="min-h-screen px-6 py-6 bg-background dark:bg-[#0A0A0F] font-body">
       {/* Header */}
-      <div className="mb-8">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6"
+      >
         <div className="flex items-center gap-2 mb-2">
-          <Bug size={18} className="text-prism-cream" />
-          <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">Vulnerability Engine</span>
+          <Bug size={18} className="text-primary" />
+          <span className="text-[11px] font-mono text-on-surface-variant tracking-widest uppercase">
+            Vulnerability Engine
+          </span>
           <AIStatusBadge />
         </div>
-        <h1 className="text-4xl font-semibold text-text-primary tracking-tight">FINDINGS</h1>
-        <p className="text-sm text-text-secondary mt-2">
+        <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Findings</h1>
+        <p className="text-sm text-on-surface-variant mt-1 font-body">
           {findings.length} total vulnerabilities discovered across the target infrastructure
         </p>
-      </div>
-
-      {/* Severity Summary Bar */}
-      <div className="flex gap-3 mb-6">
-        {(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const).map((sev) => (
-          <button
-            key={sev}
-            onClick={() => setSeverityFilter(severityFilter === sev ? "All" : sev)}
-            className={`flex items-center gap-2 px-4 py-2 border transition-all duration-200 ${
-              severityFilter === sev
-                ? "border-prism-cream/40 bg-surface/50"
-                : "border-structural bg-surface/30 hover:border-text-secondary/20"
-            }`}
-          >
-            <AlertTriangle size={14} style={{ color: severityConfig[sev].color }} />
-            <span className="text-[10px] text-text-primary font-bold uppercase">{sev}</span>
-            <span className="text-[11px] font-mono px-1.5 py-0.5 ml-1" style={{ color: severityConfig[sev].color, backgroundColor: "var(--structural)" }}>
-              {severityCounts[sev] || 0}
-            </span>
-          </button>
-        ))}
-      </div>
+      </motion.div>
 
       {/* AI Analysis Banner */}
       {!bannerDismissed && (
@@ -445,234 +466,521 @@ export default function FindingsPage() {
       <AttackChainPanel analysis={chainAnalysis} onClose={() => setChainAnalysis(null)} />
 
       {/* AI Status Bar (when explanations exist) */}
-      {hasExplanations && (
-        <div className="flex items-center justify-between mb-4 px-4 py-3 border border-prism-cyan/20 bg-surface/20">
-          <div className="flex items-center gap-3">
-            <Brain size={16} className="text-prism-cyan" />
-            <span className="text-sm text-text-primary">
-              <span className="text-prism-cyan font-semibold">{explainedCount}</span> of <span className="font-semibold">{filtered.length}</span> findings analyzed by AI
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] font-mono text-text-secondary">
-              Model: <span className="text-prism-cyan">{selectedModel}</span>
-            </span>
-            <button
-              onClick={handleExplainAll}
-              disabled={isExplaining}
-              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-prism-cyan border border-prism-cyan/30 hover:bg-prism-cyan/10 transition-all disabled:opacity-50"
-            >
-              {isExplaining ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              RE-ANALYZE
-            </button>
-            <button
-              onClick={handleChainAnalysis}
-              disabled={isChaining}
-              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-red-400 border border-red-400/30 hover:bg-red-400/10 transition-all disabled:opacity-50"
-            >
-              {isChaining ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
-              CHAIN ANALYSIS
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex-1 flex items-center gap-2 px-3 py-2 border border-structural bg-surface/30 transition-all">
-          <Search size={14} className="text-text-secondary shrink-0" />
-          <input
-            type="text"
-            placeholder="Search patterns, endpoints, or identifiers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-secondary/60"
-          />
-        </div>
-
-        {/* Engagement Filter */}
-        <select
-          value={selectedEngagement}
-          onChange={(e) => setSelectedEngagement(e.target.value)}
-          className="px-3 py-2 border border-structural bg-surface/30 text-sm text-text-primary outline-none focus:border-prism-cream transition-colors font-mono text-xs"
-        >
-          <option value="all" className="bg-surface">All Engagements</option>
-          {engagements.map((eng) => (
-            <option key={eng.id} value={eng.id} className="bg-surface">
-              {eng.target_url} ({eng.findings_count} findings)
-            </option>
-          ))}
-        </select>
-
-        <button className="flex items-center gap-2 px-4 py-2 border border-structural text-text-secondary hover:text-text-primary hover:border-text-secondary/40 transition-all text-sm uppercase font-bold tracking-widest text-[10px]">
-          <Filter size={14} />
-          Filter
-        </button>
-      </div>
-
-      {/* Findings List */}
-      <div className="space-y-4">
-        {filtered.map((finding) => {
-          const sev = severityConfig[finding.severity];
-          const isExpanded = expandedRow === finding.id;
-          const hasExplanation = !!explanations[finding.id];
-
-          return (
-            <div key={finding.id} className="border border-structural bg-surface/10 hover:border-text-secondary/20 transition-colors">
-              {/* Main Row */}
-              <div
-                className="grid grid-cols-[100px_120px_1fr_120px_100px_40px] gap-4 px-5 py-4 items-center cursor-pointer"
-                onClick={() => setExpandedRow(isExpanded ? null : finding.id)}
+      <AnimatePresence>
+        {hasExplanations && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex items-center justify-between mb-4 px-4 py-3 border border-primary/10 bg-surface dark:bg-surface-container-low rounded-xl"
+          >
+            <div className="flex items-center gap-3">
+              <Brain size={16} className="text-primary" />
+              <span className="text-sm text-on-surface font-body">
+                <span className="text-primary font-semibold">{explainedCount}</span> of{" "}
+                <span className="font-semibold">{filtered.length}</span> findings analyzed by AI
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-mono text-on-surface-variant">
+                Model: <span className="text-primary">{selectedModel}</span>
+              </span>
+              <button
+                onClick={handleExplainAll}
+                disabled={isExplaining}
+                className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-primary border border-primary/20 hover:bg-primary/10 transition-all duration-300 rounded-lg disabled:opacity-50"
               >
-                <span className="text-[11px] font-mono text-text-secondary uppercase">{finding.id.split("-")[0]}</span>
-                <div>
-                  <span
-                    className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 border"
-                    style={{ color: sev.color, borderColor: "var(--border-structural)", backgroundColor: "transparent" }}
-                  >
-                    <Shield size={10} />
-                    {finding.severity}
+                {isExplaining ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                RE-ANALYZE
+              </button>
+              <button
+                onClick={handleChainAnalysis}
+                disabled={isChaining}
+                className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-error border border-error/20 hover:bg-error/10 transition-all duration-300 rounded-lg disabled:opacity-50"
+              >
+                {isChaining ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
+                CHAIN ANALYSIS
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Three Column Layout */}
+      <div className="grid grid-cols-12 gap-6">
+        {/* Left Sidebar - Filters */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+          className="col-span-12 lg:col-span-3 space-y-4"
+        >
+          {/* Search */}
+          <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-3">
+            <div className="flex items-center gap-2">
+              <Search size={14} className="text-on-surface-variant shrink-0" />
+              <input
+                type="text"
+                placeholder="Search findings..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 font-body"
+              />
+            </div>
+          </div>
+
+          {/* Severity Filters */}
+          <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-4">
+            <h3 className="text-[11px] font-bold text-on-surface uppercase tracking-wider mb-3 font-headline flex items-center gap-2">
+              <AlertTriangle size={12} />
+              Severity
+            </h3>
+            <div className="space-y-1.5">
+              {(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const).map((sev) => (
+                <button
+                  key={sev}
+                  onClick={() => setSeverityFilter(severityFilter === sev ? "All" : sev)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] font-bold uppercase transition-all duration-300 ${
+                    severityFilter === sev
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container border border-transparent"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Shield size={10} style={{ color: severityConfig[sev].color }} />
+                    {sev}
                   </span>
-                </div>
-                <div className="text-sm text-text-primary truncate flex items-center gap-3">
-                  {finding.type}
-                  {finding.severity === "CRITICAL" && (
-                    <ScannerReveal
-                      icon="/assets/holographic-lock.png"
-                      text="ALERT"
-                      scannedText="BREACH"
-                      className="w-16 h-7 shrink-0 border-structural"
-                      glowColor={sev.color}
-                    />
-                  )}
-                  {/* AI Badge */}
-                  {hasExplanation && (
-                    <span className="flex items-center gap-1 text-[10px] font-mono text-prism-cyan bg-prism-cyan/10 border border-prism-cyan/20 px-1.5 py-0.5">
-                      <Brain size={10} />
-                      AI
-                    </span>
-                  )}
-                </div>
-                <span className="text-[11px] font-mono text-text-secondary uppercase">{finding.source_tool}</span>
-                <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${finding.verified ? "bg-green-500" : "bg-red-500"}`} />
-                  <span className="text-[11px] text-text-secondary uppercase">{finding.verified ? "Verified" : "Unverified"}</span>
-                </div>
-                <ChevronDown size={14} className={`text-text-secondary transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-              </div>
+                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-surface-container-high dark:bg-surface-container text-on-surface-variant">
+                    {severityCounts[sev] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-              {/* AI Explanation Panel — visually separated from the finding card */}
-              {hasExplanation && (
-                <div className="mt-3 mb-1 mx-2">
-                  {/* Connector line */}
-                  <div className="flex justify-center mb-1">
-                    <div className="w-px h-3 bg-gradient-to-b from-transparent to-prism-cyan/30" />
-                  </div>
-                  <div className="border border-prism-cyan/15 bg-surface/[0.03] shadow-[0_0_20px_rgba(0,0,0,0.15)]">
-                    {/* Header bar */}
-                    <div className="px-4 py-2.5 border-b border-prism-cyan/10 bg-prism-cyan/[0.03] flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles size={12} className="text-prism-cyan" />
-                        <span className="text-[10px] font-bold font-mono text-prism-cyan uppercase tracking-widest">AI Analysis</span>
-                      </div>
-                      <span className="text-[9px] font-mono text-text-secondary/40 uppercase tracking-wider">OpenRouter</span>
-                    </div>
-                    {/* Content */}
-                    <div className="p-5">
-                      <MarkdownRenderer content={explanations[finding.id]} />
-                    </div>
-                  </div>
-                </div>
-              )}
+          {/* Status Filters */}
+          <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-4">
+            <h3 className="text-[11px] font-bold text-on-surface uppercase tracking-wider mb-3 font-headline flex items-center gap-2">
+              <UserCheck size={12} />
+              Status
+            </h3>
+            <div className="space-y-1.5">
+              {["All", "Verified", "Unverified"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold uppercase transition-all duration-300 ${
+                    statusFilter === s
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container border border-transparent"
+                  }`}
+                >
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      s === "Verified" ? "bg-green-500" : s === "Unverified" ? "bg-red-500" : "bg-on-surface-variant"
+                    }`}
+                  />
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              {/* No Explanation Yet — Inline Prompt */}
-              {!hasExplanation && !isExplaining && (
-                <div className="mt-2 mx-2 mb-1">
-                  <div className="flex justify-center mb-1">
-                    <div className="w-px h-3 bg-gradient-to-b from-transparent to-text-secondary/10" />
-                  </div>
-                  <div className="border border-dashed border-structural/40 bg-surface/[0.02] px-5 py-3">
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!aiConfigured) { showToast("error", "Configure AI API key in Settings"); return; }
-                        setIsExplaining(true);
-                        try {
-                          const response = await fetch("/api/ai/explain", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ findings: [finding], model: selectedModel }),
-                          });
-                          const data = await response.json();
-                          if (response.ok) {
-                            setExplanations((prev) => ({ ...prev, ...data.explanations }));
-                            showToast("success", "Explanation generated");
-                          }
-                        } catch (err) {
-                          showToast("error", "Failed to explain");
-                        } finally {
-                          setIsExplaining(false);
-                        }
-                      }}
-                      className="flex items-center gap-2 text-xs font-bold text-prism-cyan/50 hover:text-prism-cyan transition-colors"
-                    >
-                      <Brain size={14} />
-                      Click to get AI explanation for this vulnerability
-                    </button>
-                  </div>
-                </div>
-              )}
+          {/* Scan Targets / Engagements */}
+          <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-4">
+            <h3 className="text-[11px] font-bold text-on-surface uppercase tracking-wider mb-3 font-headline flex items-center gap-2">
+              <Target size={12} />
+              Scan Targets
+            </h3>
+            <select
+              value={selectedEngagement}
+              onChange={(e) => setSelectedEngagement(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30 text-xs text-on-surface outline-none focus:border-primary transition-all duration-300 font-mono"
+            >
+              <option value="all" className="bg-surface dark:bg-surface-container">
+                All Engagements
+              </option>
+              {engagements.map((eng) => (
+                <option key={eng.id} value={eng.id} className="bg-surface dark:bg-surface-container">
+                  {eng.target_url} ({eng.findings_count})
+                </option>
+              ))}
+            </select>
+          </div>
+        </motion.div>
 
-              {/* Expanded Technical Details */}
-              {isExpanded && (
-                <div className="px-5 pb-5 pt-2 border-t border-structural bg-surface/10">
-                  <div className="grid grid-cols-2 gap-6 mb-4">
-                    <div>
-                      <div className="text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-1">Target Endpoint</div>
-                      <div className="text-sm text-text-primary font-mono bg-surface/30 p-2 border border-structural">{finding.endpoint}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-1">Confidence Factor</div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-1.5 bg-surface/20">
-                          <div className="h-full bg-prism-cyan" style={{ width: `${(finding.confidence || 0) * 100}%` }} />
-                        </div>
-                        <span className="text-sm font-mono text-prism-cyan">{((finding.confidence || 0) * 100).toFixed(0)}%</span>
-                      </div>
-                    </div>
-                  </div>
+        {/* Center - Findings List */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="col-span-12 lg:col-span-5 space-y-3"
+        >
+          {filtered.map((finding, index) => {
+            const sev = severityConfig[finding.severity];
+            const isExpanded = expandedRow === finding.id;
+            const hasExplanation = !!explanations[finding.id];
+            const isSelected = selectedFindingId === finding.id;
 
-                  {finding.evidence && <EvidenceBlock data={finding.evidence} />}
-
-                  <div className="flex items-center gap-3 mt-4">
-                    {!finding.verified && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleVerify(finding.id); }}
-                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-prism-cream text-void border border-transparent hover:opacity-90 transition-all shadow-glow-cream"
+            return (
+              <motion.div
+                key={finding.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03 }}
+                className={`bg-surface dark:bg-surface-container-low rounded-xl border transition-all duration-300 overflow-hidden ${
+                  isSelected
+                    ? "border-primary/40 shadow-glow"
+                    : "border-outline-variant dark:border-outline/30 hover:border-primary/20"
+                }`}
+              >
+                {/* Main Row */}
+                <div
+                  className="px-4 py-3 cursor-pointer"
+                  onClick={() => {
+                    setExpandedRow(isExpanded ? null : finding.id);
+                    setSelectedFindingId(isSelected ? null : finding.id);
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded border"
+                        style={{
+                          color: sev.color,
+                          borderColor: sev.border,
+                          backgroundColor: sev.bg,
+                        }}
                       >
-                        <CheckCircle2 size={14} />
-                        VERIFY FINDING
+                        <Shield size={10} />
+                        {finding.severity}
+                      </span>
+                      {hasExplanation && (
+                        <span className="flex items-center gap-1 text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
+                          <Brain size={10} />
+                          AI
+                        </span>
+                      )}
+                      {finding.severity === "CRITICAL" && (
+                        <ScannerReveal
+                          icon="/assets/holographic-lock.png"
+                          text="ALERT"
+                          scannedText="BREACH"
+                          className="w-16 h-6 shrink-0 border-outline-variant dark:border-outline/30"
+                          glowColor={sev.color}
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-on-surface-variant uppercase">
+                        {finding.source_tool}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`text-on-surface-variant transition-transform duration-300 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-sm text-on-surface font-body truncate">{finding.type}</div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[11px] font-mono text-on-surface-variant">{finding.endpoint}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-16 h-1 rounded-full bg-surface-container-high dark:bg-surface-container overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${(finding.confidence || 0) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-primary">
+                          {((finding.confidence || 0) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          finding.verified ? "bg-green-500" : "bg-red-500"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Explanation Panel */}
+                <AnimatePresence>
+                  {hasExplanation && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mx-3 mb-3"
+                    >
+                      <div className="border border-primary/15 bg-surface-container-low/50 dark:bg-surface-container/50 rounded-lg overflow-hidden">
+                        <div className="px-4 py-2 border-b border-primary/10 bg-primary/[0.03] flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles size={12} className="text-primary" />
+                            <span className="text-[10px] font-bold font-mono text-primary uppercase tracking-widest">
+                              AI Analysis
+                            </span>
+                          </div>
+                          <span className="text-[9px] font-mono text-on-surface-variant/60 uppercase tracking-wider">
+                            OpenRouter
+                          </span>
+                        </div>
+                        <div className="p-4">
+                          <MarkdownRenderer content={explanations[finding.id]} />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* No Explanation Yet — Inline Prompt */}
+                {!hasExplanation && !isExplaining && (
+                  <div className="mx-3 mb-3">
+                    <div className="border border-dashed border-outline-variant dark:border-outline/30 bg-surface-container-low/30 dark:bg-surface-container/30 px-4 py-3 rounded-lg">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!aiConfigured) {
+                            showToast("error", "Configure AI API key in Settings");
+                            return;
+                          }
+                          setIsExplaining(true);
+                          try {
+                            const response = await fetch("/api/ai/explain", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ findings: [finding], model: selectedModel }),
+                            });
+                            const data = await response.json();
+                            if (response.ok) {
+                              setExplanations((prev) => ({ ...prev, ...data.explanations }));
+                              showToast("success", "Explanation generated");
+                            }
+                          } catch (err) {
+                            showToast("error", "Failed to explain");
+                          } finally {
+                            setIsExplaining(false);
+                          }
+                        }}
+                        className="flex items-center gap-2 text-xs font-bold text-primary/60 hover:text-primary transition-all duration-300"
+                      >
+                        <Brain size={14} />
+                        Click to get AI explanation for this vulnerability
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Expanded Technical Details */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="px-4 pb-4 pt-2 border-t border-outline-variant dark:border-outline/30 bg-surface-container-low/30 dark:bg-surface-container/30"
+                    >
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <div className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-1">
+                            Target Endpoint
+                          </div>
+                          <div className="text-sm text-on-surface font-mono bg-surface dark:bg-surface-container p-2 rounded border border-outline-variant dark:border-outline/30">
+                            {finding.endpoint}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-1">
+                            Confidence Factor
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 h-1.5 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary rounded-full"
+                                style={{ width: `${(finding.confidence || 0) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-mono text-primary">
+                              {((finding.confidence || 0) * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {finding.evidence && <EvidenceBlock data={finding.evidence} />}
+
+                      <div className="flex items-center gap-3 mt-4">
+                        {!finding.verified && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleVerify(finding.id);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow"
+                          >
+                            <CheckCircle2 size={14} />
+                            VERIFY FINDING
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(finding.id);
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-error border border-error/20 rounded-lg hover:bg-error/10 transition-all duration-300"
+                        >
+                          <Trash2 size={14} />
+                          PURGE DATA
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
+
+          {filtered.length === 0 && (
+            <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant dark:border-outline/30 rounded-xl bg-surface dark:bg-surface-container-low">
+              NO FINDINGS DETECTED IN SELECTED TELEMETRY
+            </div>
+          )}
+        </motion.div>
+
+        {/* Right Panel - Preview */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+          className="col-span-12 lg:col-span-4"
+        >
+          <div className="sticky top-6">
+            <AnimatePresence mode="wait">
+              {selectedFinding ? (
+                <motion.div
+                  key={selectedFinding.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 overflow-hidden"
+                >
+                  {/* Preview Header */}
+                  <div className="p-4 border-b border-outline-variant dark:border-outline/30">
+                    <div className="flex items-center justify-between mb-3">
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded border"
+                        style={{
+                          color: severityConfig[selectedFinding.severity].color,
+                          borderColor: severityConfig[selectedFinding.severity].border,
+                          backgroundColor: severityConfig[selectedFinding.severity].bg,
+                        }}
+                      >
+                        <Shield size={10} />
+                        {selectedFinding.severity}
+                      </span>
+                      <span className="text-[11px] font-mono text-on-surface-variant">
+                        {selectedFinding.id.split("-")[0]}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-on-surface font-headline">
+                      {selectedFinding.type}
+                    </h3>
+                    <p className="text-xs text-on-surface-variant mt-1 font-mono break-all">
+                      {selectedFinding.endpoint}
+                    </p>
+                  </div>
+
+                  {/* AI Insights */}
+                  {explanations[selectedFinding.id] && (
+                    <div className="p-4 border-b border-outline-variant dark:border-outline/30">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Brain size={14} className="text-primary" />
+                        <span className="text-[10px] font-bold font-mono text-primary uppercase tracking-widest">
+                          AI Insights
+                        </span>
+                      </div>
+                      <div className="text-xs text-on-surface-variant font-body max-h-[200px] overflow-y-auto">
+                        <MarkdownRenderer content={explanations[selectedFinding.id]} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Attack Chain Visualization placeholder */}
+                  {chainAnalysis && (
+                    <div className="p-4 border-b border-outline-variant dark:border-outline/30">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sword size={14} className="text-error" />
+                        <span className="text-[10px] font-bold font-mono text-error uppercase tracking-widest">
+                          Attack Chain
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-on-surface-variant">
+                        <span className="px-2 py-1 bg-surface-container-high dark:bg-surface-container rounded text-[10px] font-mono">
+                          {selectedFinding.type}
+                        </span>
+                        <ChevronRight size={12} />
+                        <span className="px-2 py-1 bg-error/10 text-error rounded text-[10px] font-mono">
+                          Exploit
+                        </span>
+                        <ChevronRight size={12} />
+                        <span className="px-2 py-1 bg-surface-container-high dark:bg-surface-container rounded text-[10px] font-mono">
+                          Impact
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Evidence */}
+                  {selectedFinding.evidence && (
+                    <div className="p-4 border-b border-outline-variant dark:border-outline/30">
+                      <EvidenceBlock data={selectedFinding.evidence} />
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="p-4 flex items-center gap-3">
+                    {!selectedFinding.verified && (
+                      <button
+                        onClick={() => handleVerify(selectedFinding.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow"
+                      >
+                        <Wrench size={14} />
+                        REMEDIATE
                       </button>
                     )}
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(finding.id); }}
-                      className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-500 border border-red-500/20 hover:bg-red-500/10 transition-all"
+                      onClick={() => handleDelete(selectedFinding.id)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-error border border-error/20 rounded-lg hover:bg-error/10 transition-all duration-300"
                     >
                       <Trash2 size={14} />
-                      PURGE DATA
                     </button>
                   </div>
-                </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-8 text-center"
+                >
+                  <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full bg-surface-container-high dark:bg-surface-container">
+                    <Target size={24} className="text-on-surface-variant" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-on-surface font-headline mb-1">
+                    Select a Finding
+                  </h3>
+                  <p className="text-xs text-on-surface-variant font-body">
+                    Click on any finding in the list to view detailed analysis and AI insights.
+                  </p>
+                </motion.div>
               )}
-            </div>
-          );
-        })}
-
-        {filtered.length === 0 && (
-          <div className="px-5 py-20 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase border border-structural">
-            NO FINDINGS DETECTED IN SELECTED TELEMETRY
+            </AnimatePresence>
           </div>
-        )}
+        </motion.div>
       </div>
     </div>
   );

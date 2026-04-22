@@ -112,7 +112,7 @@ test.describe('Fresh Vulnbank Scan', () => {
           
           console.log(`  Findings count: ${findings.rowCount}`);
           
-          if (findings.rowCount > 0) {
+          if ((findings.rowCount ?? 0) > 0) {
             console.log('\n=== ALL FINDINGS ===\n');
             for (const f of findings.rows) {
               console.log(`[${f.severity}] ${f.type}`);
@@ -126,7 +126,7 @@ test.describe('Fresh Vulnbank Scan', () => {
           
           // If status is awaiting_approval or complete, check findings one more time
           if (eng.status === 'awaiting_approval' || eng.status === 'complete') {
-            if (findings.rowCount === 0) {
+            if ((findings.rowCount ?? 0) === 0) {
               console.log('Scan completed but no findings stored');
             }
           }
@@ -165,7 +165,7 @@ test.describe('Fresh Vulnbank Scan', () => {
           ORDER BY created_at DESC
         `, [eng.id]);
         
-        if (findings.rowCount > 0) {
+        if ((findings.rowCount ?? 0) > 0) {
           console.log(`\nTotal Findings: ${findings.rowCount}\n`);
           for (const f of findings.rows) {
             console.log(`[${f.severity}] ${f.type} - ${f.endpoint} (${f.source_tool})`);

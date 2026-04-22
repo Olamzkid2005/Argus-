@@ -1,10 +1,10 @@
  
  -------------- celery@MacBook-Air.local v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-21 11:15:58
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-21 18:27:23
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x10b026ba0
+- ** ---------- .> app:         argus_workers:0x105af8ad0
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -25,45 +25,183 @@
   . tasks.recon.run_recon
   . tasks.repo_scan.expand_repo_scan
   . tasks.repo_scan.run_repo_scan
+  . tasks.report.generate_compliance_report
   . tasks.report.generate_report
+  . tasks.report.generate_scheduled_reports
+  . tasks.report.get_compliance_reports
   . tasks.report.get_findings_summary
   . tasks.scan.auth_focused_scan
   . tasks.scan.deep_scan
   . tasks.scan.run_scan
 
-[2026-04-21 11:16:00,060: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-04-21 11:16:00,071: INFO/MainProcess] mingle: searching for neighbors
-[2026-04-21 11:16:01,099: INFO/MainProcess] mingle: all alone
-[2026-04-21 11:16:01,302: INFO/MainProcess] celery@MacBook-Air.local ready.
-[2026-04-21 11:21:17,761: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
-[2026-04-21 11:21:18,290: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
-[2026-04-21 11:21:18,406: WARNING/ForkPoolWorker-2] Task df2dad8e-04b4-420f-9913-80c4b9a48425 retrying: No module named 'distributed_lock'
-[2026-04-21 11:21:18,410: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] retry: Retry in 0s: ModuleNotFoundError("No module named 'distributed_lock'")
-[2026-04-21 11:21:18,852: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
-[2026-04-21 11:21:18,863: WARNING/ForkPoolWorker-4] Task df2dad8e-04b4-420f-9913-80c4b9a48425 retrying: No module named 'distributed_lock'
-[2026-04-21 11:21:18,864: INFO/ForkPoolWorker-4] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] retry: Retry in 1s: ModuleNotFoundError("No module named 'distributed_lock'")
-[2026-04-21 11:21:19,476: INFO/MainProcess] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] received
-[2026-04-21 11:21:19,485: WARNING/ForkPoolWorker-2] Task df2dad8e-04b4-420f-9913-80c4b9a48425 retrying: No module named 'distributed_lock'
-[2026-04-21 11:21:19,486: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] retry: Retry in 4s: ModuleNotFoundError("No module named 'distributed_lock'")
-[2026-04-21 11:21:23,489: ERROR/ForkPoolWorker-2] Task df2dad8e-04b4-420f-9913-80c4b9a48425 failed: No module named 'distributed_lock'
-[2026-04-21 11:21:23,490: ERROR/ForkPoolWorker-2] Task tasks.recon.run_recon[df2dad8e-04b4-420f-9913-80c4b9a48425] raised unexpected: ModuleNotFoundError("No module named 'distributed_lock'")
+[2026-04-21 18:27:25,841: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-21 18:27:25,859: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-21 18:27:27,028: INFO/MainProcess] mingle: all alone
+[2026-04-21 18:27:27,195: INFO/MainProcess] celery@MacBook-Air.local ready.
+[2026-04-21 18:30:01,894: INFO/MainProcess] Task tasks.recon.run_recon[563c3544-b6ff-4200-a5c1-453cb2b88a76] received
+[2026-04-21 18:30:02,629: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py:784: RuntimeWarning: Exception raised outside body: ModuleNotFoundError("No module named 'error_classifier'"):
 Traceback (most recent call last):
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
     R = retval = fun(*args, **kwargs)
                  ~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 858, in __protected_call__
-    return self.run(*args, **kwargs)
-           ~~~~~~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
-    ret = task.retry(exc=exc, **retry_kwargs)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
-    raise_with_context(exc)
-    ~~~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
-    return task._orig_run(*args, **kwargs)
-           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/tasks/recon.py", line 41, in run_recon
-    from distributed_lock import LockContext, DistributedLock
-ModuleNotFoundError: No module named 'distributed_lock'
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 226, in __call__
+    from shutdown_handler import shutdown_handler
+ModuleNotFoundError: No module named 'shutdown_handler'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 605, in trace_task
+    I, R, state, retval = on_error(task_request, exc)
+                          ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 421, in on_error
+    R = I.handle_error_state(
+        task, request, eager=eager, call_errbacks=call_errbacks,
+    )
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 199, in handle_error_state
+    return {
+           ~
+        RETRY: self.handle_retry,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~
+        FAILURE: self.handle_failure,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    }[self.state](task, req,
+    ~~~~~~~~~~~~~^^^^^^^^^^^
+                  store_errors=store_errors,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  call_errbacks=call_errbacks)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 266, in handle_failure
+    task.on_failure(exc, req.id, req.args, req.kwargs, einfo)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 173, in on_failure
+    from error_classifier import classify_error, log_classified_error
+ModuleNotFoundError: No module named 'error_classifier'
+
+  warn(RuntimeWarning(
+
+[2026-04-21 18:30:02,881: ERROR/MainProcess] Task handler raised error: ModuleNotFoundError("No module named 'error_classifier'")
+billiard.einfo.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 226, in __call__
+    from shutdown_handler import shutdown_handler
+ModuleNotFoundError: No module named 'shutdown_handler'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 605, in trace_task
+    I, R, state, retval = on_error(task_request, exc)
+                          ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 421, in on_error
+    R = I.handle_error_state(
+        task, request, eager=eager, call_errbacks=call_errbacks,
+    )
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 199, in handle_error_state
+    return {
+           ~
+        RETRY: self.handle_retry,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~
+        FAILURE: self.handle_failure,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    }[self.state](task, req,
+    ~~~~~~~~~~~~~^^^^^^^^^^^
+                  store_errors=store_errors,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  call_errbacks=call_errbacks)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 266, in handle_failure
+    task.on_failure(exc, req.id, req.args, req.kwargs, einfo)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 173, in on_failure
+    from error_classifier import classify_error, log_classified_error
+ModuleNotFoundError: No module named 'error_classifier'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 362, in workloop
+    result = (True, prepare_result(fun(*args, **kwargs)))
+                                   ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 773, in fast_trace_task
+    R, I, T, Rstr = tasks[task].__trace__(
+                    ~~~~~~~~~~~~~~~~~~~~~^
+        uuid, args, kwargs, request,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 683, in trace_task
+    I, _, _, _ = on_error(task_request, exc)
+                 ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 421, in on_error
+    R = I.handle_error_state(
+        task, request, eager=eager, call_errbacks=call_errbacks,
+    )
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 199, in handle_error_state
+    return {
+           ~
+        RETRY: self.handle_retry,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~
+        FAILURE: self.handle_failure,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    }[self.state](task, req,
+    ~~~~~~~~~~~~~^^^^^^^^^^^
+                  store_errors=store_errors,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  call_errbacks=call_errbacks)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 266, in handle_failure
+    task.on_failure(exc, req.id, req.args, req.kwargs, einfo)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 173, in on_failure
+    from error_classifier import classify_error, log_classified_error
+ModuleNotFoundError: No module named 'error_classifier'
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 362, in workloop
+    result = (True, prepare_result(fun(*args, **kwargs)))
+                                   ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 773, in fast_trace_task
+    R, I, T, Rstr = tasks[task].__trace__(
+                    ~~~~~~~~~~~~~~~~~~~~~^
+        uuid, args, kwargs, request,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 683, in trace_task
+    I, _, _, _ = on_error(task_request, exc)
+                 ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 421, in on_error
+    R = I.handle_error_state(
+        task, request, eager=eager, call_errbacks=call_errbacks,
+    )
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 199, in handle_error_state
+    return {
+           ~
+        RETRY: self.handle_retry,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~
+        FAILURE: self.handle_failure,
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    }[self.state](task, req,
+    ~~~~~~~~~~~~~^^^^^^^^^^^
+                  store_errors=store_errors,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  call_errbacks=call_errbacks)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 266, in handle_failure
+    task.on_failure(exc, req.id, req.args, req.kwargs, einfo)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 173, in on_failure
+    from error_classifier import classify_error, log_classified_error
+ModuleNotFoundError: No module named 'error_classifier'
+
+worker: Warm shutdown (MainProcess)
 
 worker: Warm shutdown (MainProcess)

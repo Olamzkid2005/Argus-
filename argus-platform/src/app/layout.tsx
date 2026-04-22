@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
@@ -7,15 +7,16 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import ClientLayout from "@/components/ClientLayout";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 
 export const metadata: Metadata = {
-  title: "Argus Pentest Platform",
+  title: "Argus - Infrastructure for Intelligence",
   description: "AI-Powered Autonomous Penetration Testing Platform",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#6720FF",
   width: "device-width",
   initialScale: 1,
 };
@@ -31,14 +32,14 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
       </head>
-      <body className={`${inter.className} bg-void text-text-primary antialiased`}>
+      <body className={`${inter.variable} ${spaceGrotesk.variable} font-body bg-surface text-on-surface antialiased`}>
         <AuthProvider>
           <ToastProvider>
             <ThemeProvider
               attribute="class"
-              defaultTheme="dark"
-              enableSystem={false}
-              disableTransitionOnChange
+              defaultTheme="light"
+              enableSystem={true}
+              disableTransitionOnChange={false}
             >
               <ClientLayout>
                 {children}
@@ -51,4 +52,3 @@ export default function RootLayout({
     </html>
   );
 }
-
