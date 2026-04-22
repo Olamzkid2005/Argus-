@@ -61,6 +61,7 @@ export default function RulesPage() {
     rule_yaml: "rules:\n  - id: custom-rule-001\n    severity: MEDIUM\n    message: \"Custom vulnerability pattern detected\"\n    patterns:\n      - pattern: \"dangerous_function()\"\n",
     severity: "MEDIUM",
     category: "custom",
+    tags: [] as string[],
   });
   const [createMode, setCreateMode] = useState<"manual" | "ai">("manual");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -94,22 +95,49 @@ export default function RulesPage() {
   }, [status, statusFilter, fetchRules]);
 
   const createRule = async () => {
+    if (!newRule.name.trim()) {
+      showToast("error", "Rule name is required");
+      return;
+    }
+    if (!newRule.rule_yaml.trim()) {
+      showToast("error", "Rule YAML is required");
+      return;
+    }
+
     try {
       const res = await fetch("/api/rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newRule),
       });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        data = { error: `Server returned ${res.status} with invalid JSON` };
+      }
+
       if (res.ok) {
         showToast("success", "Rule created successfully");
         setShowCreateModal(false);
+        setNewRule({
+          name: "",
+          description: "",
+          rule_yaml: "rules:\n  - id: custom-rule-001\n    severity: MEDIUM\n    message: \"Custom vulnerability pattern detected\"\n    patterns:\n      - pattern: \"dangerous_function()\"\n",
+          severity: "MEDIUM",
+          category: "custom",
+          tags: [],
+        });
         fetchRules();
       } else {
-        const data = await res.json();
-        showToast("error", data.error || "Failed to create rule");
+        console.error("Create rule failed:", res.status, data);
+        const msg = data?.error || data?.message || `Failed to create rule (HTTP ${res.status})`;
+        showToast("error", msg);
       }
     } catch (e) {
-      showToast("error", "Failed to create rule");
+      console.error("Create rule network/error:", e);
+      showToast("error", "Network error — check your connection and try again");
     }
   };
 
@@ -148,6 +176,14 @@ export default function RulesPage() {
       setAiPrompt("");
       setAiError(null);
       setAiGenerating(false);
+      setNewRule({
+        name: "",
+        description: "",
+        rule_yaml: "rules:\n  - id: custom-rule-001\n    severity: MEDIUM\n    message: \"Custom vulnerability pattern detected\"\n    patterns:\n      - pattern: \"dangerous_function()\"\n",
+        severity: "MEDIUM",
+        category: "custom",
+        tags: [],
+      });
     }
   }, [showCreateModal]);
 

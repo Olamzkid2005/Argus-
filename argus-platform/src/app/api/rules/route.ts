@@ -100,6 +100,9 @@ export async function POST(req: NextRequest) {
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json({ error: "Failed to create rule" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create rule", details: err.message },
+      { status: 500 }
+    );
   }
 }
