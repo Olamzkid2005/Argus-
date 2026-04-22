@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import React from 'react';
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -49,7 +50,7 @@ jest.mock('next-themes', () => ({
 // Mock framer-motion to avoid animation issues in tests
 jest.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+    div: React.forwardRef(({ children, ...props }: any, ref: any) => <div ref={ref} {...props}>{children}</div>),
     span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
     article: ({ children, ...props }: any) => <article {...props}>{children}</article>,
     section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
@@ -147,43 +148,13 @@ jest.mock('framer-motion', () => ({
     track: ({ children, ...props }: any) => <track {...props} />,
     area: ({ children, ...props }: any) => <area {...props} />,
     map: ({ children, ...props }: any) => <map {...props}>{children}</map>,
-    math: ({ children, ...props }: any) => <math {...props}>{children}</math>,
-    maction: ({ children, ...props }: any) => <maction {...props}>{children}</maction>,
-    annotation: ({ children, ...props }: any) => <annotation {...props}>{children}</annotation>,
-    annotation_xml: ({ children, ...props }: any) => <annotation_xml {...props}>{children}</annotation_xml>,
-    menclose: ({ children, ...props }: any) => <menclose {...props}>{children}</menclose>,
-    merror: ({ children, ...props }: any) => <merror {...props}>{children}</merror>,
-    mfenced: ({ children, ...props }: any) => <mfenced {...props}>{children}</mfenced>,
-    mfrac: ({ children, ...props }: any) => <mfrac {...props}>{children}</mfrac>,
-    mi: ({ children, ...props }: any) => <mi {...props}>{children}</mi>,
-    mmultiscripts: ({ children, ...props }: any) => <mmultiscripts {...props}>{children}</mmultiscripts>,
-    mn: ({ children, ...props }: any) => <mn {...props}>{children}</mn>,
-    mo: ({ children, ...props }: any) => <mo {...props}>{children}</mo>,
-    mover: ({ children, ...props }: any) => <mover {...props}>{children}</mover>,
-    mpadded: ({ children, ...props }: any) => <mpadded {...props}>{children}</mpadded>,
-    mphantom: ({ children, ...props }: any) => <mphantom {...props}>{children}</mphantom>,
-    mprescripts: ({ children, ...props }: any) => <mprescripts {...props}>{children}</mprescripts>,
-    mroot: ({ children, ...props }: any) => <mroot {...props}>{children}</mroot>,
-    mrow: ({ children, ...props }: any) => <mrow {...props}>{children}</mrow>,
-    ms: ({ children, ...props }: any) => <ms {...props}>{children}</ms>,
-    mspace: ({ children, ...props }: any) => <mspace {...props} />,
-    msqrt: ({ children, ...props }: any) => <msqrt {...props}>{children}</msqrt>,
-    mstyle: ({ children, ...props }: any) => <mstyle {...props}>{children}</mstyle>,
-    msub: ({ children, ...props }: any) => <msub {...props}>{children}</msub>,
-    msubsup: ({ children, ...props }: any) => <msubsup {...props}>{children}</msubsup>,
-    msup: ({ children, ...props }: any) => <msup {...props}>{children}</msup>,
-    mtable: ({ children, ...props }: any) => <mtable {...props}>{children}</mtable>,
-    mtd: ({ children, ...props }: any) => <mtd {...props}>{children}</mtd>,
-    mtext: ({ children, ...props }: any) => <mtext {...props}>{children}</mtext>,
-    mtr: ({ children, ...props }: any) => <mtr {...props}>{children}</mtr>,
-    munder: ({ children, ...props }: any) => <munder {...props}>{children}</munder>,
-    munderover: ({ children, ...props }: any) => <munderover {...props}>{children}</munderover>,
-    none: ({ children, ...props }: any) => <none {...props}>{children}</none>,
-    semantics: ({ children, ...props }: any) => <semantics {...props}>{children}</semantics>,
+
   },
   AnimatePresence: ({ children }: any) => <>{children}</>,
   useScroll: () => ({ scrollYProgress: { get: () => 0 } }),
   useTransform: () => ({ get: () => 0 }),
+  useReducedMotion: () => false,
+  useInView: () => true,
 }));
 
 // Mock recharts

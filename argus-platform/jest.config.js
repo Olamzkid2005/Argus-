@@ -11,12 +11,18 @@ module.exports = {
   },
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
+    "^react$": "<rootDir>/node_modules/react",
+    "^react-dom$": "<rootDir>/node_modules/react-dom",
+    "^react-dom/test-utils$": "<rootDir>/node_modules/react-dom/test-utils",
+    "^react-dom/client$": "<rootDir>/node_modules/react-dom/client",
   },
-  testMatch: ["**/__tests__/**/*.test.{ts,tsx}"],
+  testMatch: ["**/__tests__/**/*.test.{ts,tsx}", "**/src/**/*.test.{ts,tsx}"],
   setupFilesAfterEnv: ["<rootDir>/jest.setup.tsx"],
   modulePathIgnorePatterns: [
     "<rootDir>/../",
     "<rootDir>/node_modules/",
+    "/Downloads/",
+    "/onepay-monitoring/",
   ],
   watchPathIgnorePatterns: [
     "<rootDir>/../",
@@ -29,4 +35,10 @@ module.exports = {
     throwOnModuleCollision: false,
     retainAllFiles: false,
   },
+  testPathIgnorePatterns: [
+    "<rootDir>/../",
+    "<rootDir>/node_modules/",
+    "/Downloads/",
+    "/onepay-monitoring/",
+  ],
 };

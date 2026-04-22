@@ -19,7 +19,7 @@ describe("SignUp Page", () => {
   it("renders signup form with all fields", () => {
     render(<SignUpPage />);
 
-    expect(screen.getByPlaceholderText(/name@company.com/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/you@company.com/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i) || screen.getByPlaceholderText(/••••••••/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
   });
@@ -46,7 +46,7 @@ describe("SignUp Page", () => {
 
     render(<SignUpPage />);
 
-    const emailInput = screen.getByPlaceholderText(/name@company.com/i);
+    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
     const passwordInputs = screen.getAllByPlaceholderText(/••••••••/i);
     const submitButton = screen.getByRole("button", { name: /create account/i });
 
@@ -70,7 +70,7 @@ describe("SignUp Page", () => {
   it("shows error when passwords do not match", async () => {
     render(<SignUpPage />);
 
-    const emailInput = screen.getByPlaceholderText(/name@company.com/i);
+    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
     const passwordInputs = screen.getAllByPlaceholderText(/••••••••/i);
     const submitButton = screen.getByRole("button", { name: /create account/i });
 
@@ -93,7 +93,7 @@ describe("SignUp Page", () => {
 
     render(<SignUpPage />);
 
-    const emailInput = screen.getByPlaceholderText(/name@company.com/i);
+    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
     const passwordInputs = screen.getAllByPlaceholderText(/••••••••/i);
     const submitButton = screen.getByRole("button", { name: /create account/i });
 

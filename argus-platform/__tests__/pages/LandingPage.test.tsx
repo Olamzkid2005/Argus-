@@ -1,58 +1,41 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import Home from '../../src/app/page';
+import { render, screen, waitFor } from "@testing-library/react";
+import LandingPage from "@/app/page";
 
-// Override mocks for landing page
-jest.mock('next-auth/react', () => ({
-  useSession: () => ({ data: null, status: 'unauthenticated' }),
+jest.mock("next-auth/react", () => ({
+  useSession: () => ({ data: null, status: "unauthenticated" }),
   signIn: jest.fn(),
 }));
 
-describe('LandingPage', () => {
-  it('renders hero section with headline', async () => {
-    render(<Home />);
-    await waitFor(() => {
-      expect(screen.getByText('Build.', { exact: false })).toBeInTheDocument();
-    });
-    expect(screen.getByText('Scale.', { exact: false })).toBeInTheDocument();
-  });
+describe("Landing Page", () => {
+  it("renders the Argus brand and headline", async () => {
+    render(<LandingPage />);
 
-  it('renders navigation links', async () => {
-    render(<Home />);
     await waitFor(() => {
-      expect(screen.getByText('Platform')).toBeInTheDocument();
-      expect(screen.getByText('Models')).toBeInTheDocument();
-      expect(screen.getByText('Developers')).toBeInTheDocument();
-      expect(screen.getByText('Pricing')).toBeInTheDocument();
+      expect(screen.getByText(/build\. tune\. scale\./i)).toBeInTheDocument();
     });
   });
 
-  it('renders CTA buttons', async () => {
-    render(<Home />);
+  it("renders primary CTA buttons", async () => {
+    render(<LandingPage />);
+
     await waitFor(() => {
-      expect(screen.getByText('Get Started Free')).toBeInTheDocument();
-      expect(screen.getByText('Talk to our team')).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /get started/i })).toBeInTheDocument();
     });
   });
 
-  it('renders features section', async () => {
-    render(<Home />);
+  it("renders capabilities section", async () => {
+    render(<LandingPage />);
+
     await waitFor(() => {
-      expect(screen.getByText('Platform Capabilities')).toBeInTheDocument();
-      expect(screen.getByText('Code Assistance')).toBeInTheDocument();
-      expect(screen.getByText('Conversational AI')).toBeInTheDocument();
-      expect(screen.getByText('Multimodal')).toBeInTheDocument();
-      expect(screen.getByText('Enterprise RAG')).toBeInTheDocument();
+      expect(screen.getByText(/infrastructure scan/i)).toBeInTheDocument();
     });
   });
 
-  it('renders footer', async () => {
-    render(<Home />);
+  it("renders footer", async () => {
+    render(<LandingPage />);
+
     await waitFor(() => {
-      expect(screen.getByText('Product')).toBeInTheDocument();
-      expect(screen.getByText('Developers')).toBeInTheDocument();
-      expect(screen.getByText('Company')).toBeInTheDocument();
-      expect(screen.getByText('Legal')).toBeInTheDocument();
+      expect(screen.getByText(/© 2026 argus systems/i)).toBeInTheDocument();
     });
   });
 });

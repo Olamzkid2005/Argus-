@@ -51,29 +51,52 @@ export function StaggerItem({
 }) {
   const shouldReduceMotion = useReducedMotion();
 
-  const getVariants = () => {
-    if (shouldReduceMotion) {
-      return {
-        hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { duration: 0.3 } },
-      };
-    }
+  if (shouldReduceMotion) {
+    return (
+      <motion.div
+        variants={{
+          hidden: { opacity: 0 },
+          visible: { opacity: 1, transition: { duration: 0.3 } },
+        }}
+        className={className}
+      >
+        {children}
+      </motion.div>
+    );
+  }
 
-    const axis = direction === "up" || direction === "down" ? "y" : "x";
-    const sign = direction === "up" || direction === "left" ? 1 : -1;
+  const sign = direction === "up" || direction === "left" ? 1 : -1;
 
-    return {
-      hidden: { opacity: 0, [axis]: distance * sign },
-      visible: {
-        opacity: 1,
-        [axis]: 0,
-        transition: { duration: 0.5, ease: "easeOut" },
-      },
-    };
-  };
+  if (direction === "up" || direction === "down") {
+    return (
+      <motion.div
+        variants={{
+          hidden: { opacity: 0, y: distance * sign },
+          visible: {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.5, ease: "easeOut" },
+          },
+        }}
+        className={className}
+      >
+        {children}
+      </motion.div>
+    );
+  }
 
   return (
-    <motion.div variants={getVariants()} className={className}>
+    <motion.div
+      variants={{
+        hidden: { opacity: 0, x: distance * sign },
+        visible: {
+          opacity: 1,
+          x: 0,
+          transition: { duration: 0.5, ease: "easeOut" },
+        },
+      }}
+      className={className}
+    >
       {children}
     </motion.div>
   );

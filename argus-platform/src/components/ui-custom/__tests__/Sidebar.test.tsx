@@ -7,7 +7,12 @@ jest.mock("next/navigation", () => ({
   usePathname: () => mockUsePathname(),
 }));
 
-// Mock next-themes
+// Mock AIStatusIndicator
+jest.mock("@/components/ui-custom/AIStatus", () => ({
+  AIStatusIndicator: () => <div data-testid="ai-status">AI Status</div>,
+}));
+
+// Mock next-themes (jest.setup.tsx also mocks this, but we need setTheme access here)
 const mockSetTheme = jest.fn();
 jest.mock("next-themes", () => ({
   useTheme: () => ({
@@ -15,11 +20,6 @@ jest.mock("next-themes", () => ({
     setTheme: mockSetTheme,
     resolvedTheme: "light",
   }),
-}));
-
-// Mock AIStatusIndicator
-jest.mock("@/components/ui-custom/AIStatus", () => ({
-  AIStatusIndicator: () => <div data-testid="ai-status">AI Status</div>,
 }));
 
 describe("Sidebar", () => {
