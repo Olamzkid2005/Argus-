@@ -156,7 +156,7 @@ jest.mock('framer-motion', () => ({
   useReducedMotion: () => false,
   useInView: () => true,
   useMotionValue: (val: any) => ({ get: () => val, set: jest.fn() }),
-  useSpring: (val: any) => ({ get: () => val }),
+  useSpring: (val: any) => ({ get: () => val, on: jest.fn(() => jest.fn()) }),
   useMotionTemplate: () => "",
   motionValue: (val: any) => ({ get: () => val, set: jest.fn() }),
 }));
@@ -199,10 +199,13 @@ jest.mock('recharts', () => ({
 }));
 
 // Mock useToast
-jest.mock('@/components/ui/Toast', () => ({
-  useToast: () => ({ showToast: jest.fn() }),
-  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+jest.mock('@/components/ui/Toast', () => {
+  const showToast = jest.fn();
+  return {
+    useToast: () => ({ showToast }),
+    ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 // Mock @/lib/use-engagement-events
 jest.mock('@/lib/use-engagement-events', () => ({

@@ -14,15 +14,15 @@ describe("Landing Page", () => {
   it("renders the Argus brand", async () => {
     render(<LandingPage />);
     await waitFor(() => {
-      expect(screen.getByText("ARGUS")).toBeInTheDocument();
+      expect(screen.getAllByText("Argus").length).toBeGreaterThanOrEqual(1);
     });
   });
 
   it("renders CTA buttons", async () => {
     render(<LandingPage />);
     await waitFor(() => {
-      const buttons = screen.getAllByRole("button");
-      expect(buttons.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByRole("link", { name: /get started/i }).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByRole("link", { name: /login/i })).toBeInTheDocument();
     });
   });
 

@@ -45,12 +45,12 @@ describe("SignUp Page", () => {
     render(<SignUpPage />);
 
     const emailInput = screen.getByPlaceholderText(/you@company.com/i);
-    const passwordInputs = screen.getAllByPlaceholderText(/••••••••/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
     const submitButton = screen.getByRole("button", { name: /create account/i });
 
     await userEvent.type(emailInput, "newuser@argus.io");
-    await userEvent.type(passwordInputs[0], "SecurePass123!");
-    await userEvent.type(passwordInputs[1], "SecurePass123!");
+    fireEvent.change(passwordInputs[0], { target: { value: "SecurePass123!" } });
+    fireEvent.change(passwordInputs[1], { target: { value: "SecurePass123!" } });
     fireEvent.click(submitButton);
 
     await waitFor(() => {
@@ -68,12 +68,12 @@ describe("SignUp Page", () => {
     render(<SignUpPage />);
 
     const emailInput = screen.getByPlaceholderText(/you@company.com/i);
-    const passwordInputs = screen.getAllByPlaceholderText(/••••••••/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
     const submitButton = screen.getByRole("button", { name: /create account/i });
 
     await userEvent.type(emailInput, "newuser@argus.io");
-    await userEvent.type(passwordInputs[0], "Password1");
-    await userEvent.type(passwordInputs[1], "Password2");
+    fireEvent.change(passwordInputs[0], { target: { value: "Password1" } });
+    fireEvent.change(passwordInputs[1], { target: { value: "Password2" } });
     fireEvent.click(submitButton);
 
     await waitFor(() => {

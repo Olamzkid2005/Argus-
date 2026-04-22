@@ -46,7 +46,7 @@ describe("Analytics Page", () => {
     render(<AnalyticsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Analytics")).toBeInTheDocument();
+      expect(screen.getByText(/System Intelligence/i)).toBeInTheDocument();
     });
   });
 
@@ -54,9 +54,9 @@ describe("Analytics Page", () => {
     render(<AnalyticsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/7 days/i)).toBeInTheDocument();
-      expect(screen.getByText(/30 days/i)).toBeInTheDocument();
-      expect(screen.getByText(/90 days/i)).toBeInTheDocument();
+      expect(screen.getByText(/7D/i)).toBeInTheDocument();
+      expect(screen.getByText(/30D/i)).toBeInTheDocument();
+      expect(screen.getByText(/90D/i)).toBeInTheDocument();
     });
   });
 

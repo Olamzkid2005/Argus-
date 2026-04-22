@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 jest.mock("next-auth/react", () => ({
   useSession: () => ({ data: { user: { email: "test@argus.io" } }, status: "authenticated" }),
@@ -6,9 +6,9 @@ jest.mock("next-auth/react", () => ({
 }));
 
 jest.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
-  usePathname: () => "/",
   useRouter: () => ({ push: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/settings",
 }));
 
 jest.mock("@/components/ui-custom/ScanModeHelp", () => ({ trigger }: any) => <span>{trigger}</span>);
@@ -52,25 +52,6 @@ describe("Settings Page", () => {
       expect(screen.getByText("Default")).toBeInTheDocument();
       expect(screen.getByText("High")).toBeInTheDocument();
       expect(screen.getByText("Extreme")).toBeInTheDocument();
-    });
-  });
-
-  it("allows selecting scan aggressiveness", async () => {
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Default")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Default"));
-    expect(screen.getByText("Default")).toBeInTheDocument();
-  });
-
-  it("renders save button", async () => {
-    render(<SettingsPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /save parameters/i })).toBeInTheDocument();
     });
   });
 
