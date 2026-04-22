@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import Image from "next/image";
 import gsap from "gsap";
 
 interface ScannerRevealProps {
@@ -144,9 +145,12 @@ export default function ScannerReveal({
       {/* Revealed Content Layer */}
       <div className="absolute inset-0 flex items-center justify-center bg-[#0A0A0C] z-0">
         {isRevealed && (
-          <img
+          <Image
             src={icon}
             alt="Icon"
+            width={48}
+            height={48}
+            unoptimized
             className="w-12 h-12 object-contain drop-shadow-[0_0_10px_rgba(233,255,255,0.5)]"
           />
         )}

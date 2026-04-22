@@ -270,7 +270,8 @@ if ! python3 -c "from celery_app import app; print('Tasks:', len(app.tasks))" 2>
     log_warn "Celery import check had issues (may still work at runtime)"
 fi
 
-# Start Celery
+# Start Celery with PYTHONPATH so forked workers can find local modules
+export PYTHONPATH="$PWD:$PYTHONPATH"
 celery -A celery_app worker --loglevel=info --concurrency=4 -Q celery,recon,scan,analyze,report,repo_scan > ../logs/celery.log 2>&1 &
 CELERY_PID=$!
 cd ..

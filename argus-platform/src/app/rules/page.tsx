@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
@@ -66,12 +66,7 @@ export default function RulesPage() {
     }
   }, [status, router]);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    fetchRules();
-  }, [status, statusFilter]);
-
-  const fetchRules = async () => {
+  const fetchRules = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/rules?status=${statusFilter}`);
@@ -84,7 +79,12 @@ export default function RulesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    fetchRules();
+  }, [status, statusFilter, fetchRules]);
 
   const createRule = async () => {
     try {

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
 
 // Redis client for job queue
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
@@ -140,7 +141,12 @@ export async function pushJob(job: JobMessage): Promise<string> {
     // Fixed path - go up from argus-platform to root
     const workersRoot = path.join(process.cwd(), "..");
     const dispatchScript = path.join(workersRoot, "argus-workers", "dispatch_task.py");
-    const pythonPath = path.join(workersRoot, "argus-workers", "venv", "bin", "python");
+    
+    // Try venv python first, fall back to system python
+    let pythonPath = path.join(workersRoot, "argus-workers", "venv", "bin", "python");
+    if (!fs.existsSync(pythonPath)) {
+      pythonPath = "python3";
+    }
 
     // Build the job payload matching dispatch_task.py expectations
     const jobPayload = {

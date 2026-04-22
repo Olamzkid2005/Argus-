@@ -6,6 +6,7 @@ Categorizes errors by type and severity for targeted handling and alerting.
 
 import logging
 import os
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
@@ -225,7 +226,7 @@ def send_alert(message: str, severity: ErrorSeverity):
                 json={
                     "text": message,
                     "severity": severity.value,
-                    "timestamp": __import__('datetime').datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(UTC).isoformat()
                 },
                 timeout=5
             )

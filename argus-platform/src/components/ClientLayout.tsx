@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { PanelLeftOpen } from "lucide-react";
 import Sidebar from "@/components/ui-custom/Sidebar";
 import CommandPalette from "@/components/ui-custom/CommandPalette";
 import { applyThreePatch } from "@/lib/three-patch";
@@ -12,6 +13,7 @@ applyThreePatch();
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -38,11 +40,32 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen bg-surface">
-      {!isFullBleedPage && (
-        <Sidebar onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+      {!isFullBleedPage && sidebarOpen && (
+        <Sidebar
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onClose={() => setSidebarOpen(false)}
+        />
       )}
 
-      <main className={`${!isFullBleedPage ? "ml-64" : ""}`}>
+      {/* Floating toggle button when sidebar is closed */}
+      {!isFullBleedPage && !sidebarOpen && (
+        <motion.button
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.2 }}
+          onClick={() => setSidebarOpen(true)}
+          className="fixed left-4 top-4 z-50 p-2.5 rounded-xl bg-surface dark:bg-zinc-900 border border-outline-variant/30 shadow-lg shadow-black/5 text-on-surface-variant hover:text-on-surface hover:border-primary/30 transition-all duration-200"
+          aria-label="Open sidebar"
+        >
+          <PanelLeftOpen size={20} />
+        </motion.button>
+      )}
+
+      <main
+        className={`transition-all duration-300 ease-in-out ${
+          !isFullBleedPage ? (sidebarOpen ? "lg:ml-64" : "ml-0") : ""
+        }`}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={pathname}

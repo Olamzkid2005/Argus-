@@ -19,11 +19,13 @@ import {
   HelpCircle,
   Terminal,
   Plus,
+  PanelLeftClose,
 } from "lucide-react";
 import { AIStatusIndicator } from "./AIStatus";
 
 interface SidebarProps {
   onOpenCommandPalette: () => void;
+  onClose: () => void;
 }
 
 const navItems = [
@@ -36,7 +38,7 @@ const navItems = [
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
-export default function Sidebar({ onOpenCommandPalette }: SidebarProps) {
+export default function Sidebar({ onOpenCommandPalette, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -48,20 +50,30 @@ export default function Sidebar({ onOpenCommandPalette }: SidebarProps) {
   if (!mounted) return null;
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 z-40 flex flex-col bg-surface dark:bg-zinc-950 shadow-[40px_0_64px_-20px_rgba(103,32,255,0.06)]">
+    <aside className="fixed left-0 top-0 h-full w-64 z-40 flex flex-col bg-surface dark:bg-zinc-950 shadow-[40px_0_64px_-20px_rgba(103,32,255,0.06)] transition-transform duration-300 ease-in-out">
       {/* Brand */}
-      <div className="flex items-center gap-3 px-4 py-5">
-        <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-          <ShieldCheck size={20} className="text-white" />
+      <div className="flex items-center justify-between px-4 py-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+            <ShieldCheck size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tighter text-on-surface dark:text-white font-headline">
+              ARGUS
+            </h1>
+            <p className="font-headline uppercase tracking-widest text-[10px] font-bold text-on-surface-variant">
+              SOC Infrastructure
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-black tracking-tighter text-on-surface dark:text-white font-headline">
-            ARGUS
-          </h1>
-          <p className="font-headline uppercase tracking-widest text-[10px] font-bold text-on-surface-variant">
-            SOC Infrastructure
-          </p>
-        </div>
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container border border-outline-variant/30 hover:border-outline-variant/60 transition-all duration-200 group"
+          aria-label="Close sidebar"
+        >
+          <PanelLeftClose size={16} className="group-hover:-translate-x-0.5 transition-transform duration-200" />
+          <span className="hidden xl:inline">Collapse</span>
+        </button>
       </div>
 
       {/* Navigation */}
@@ -142,10 +154,17 @@ export default function Sidebar({ onOpenCommandPalette }: SidebarProps) {
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/5 transition-all duration-200"
         >
-          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          <span className="font-headline text-xs uppercase tracking-widest">
-            {theme === "dark" ? "Light Mode" : "Dark Mode"}
-          </span>
+          {theme === "dark" ? (
+            <>
+              <Sun size={18} />
+              <span className="font-headline text-xs uppercase tracking-widest">Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Moon size={18} />
+              <span className="font-headline text-xs uppercase tracking-widest">Dark Mode</span>
+            </>
+          )}
         </button>
       </div>
 

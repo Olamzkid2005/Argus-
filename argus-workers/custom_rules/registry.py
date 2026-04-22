@@ -6,7 +6,7 @@ Requirements: 27.4, 27.5
 import json
 import os
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 
 
@@ -61,7 +61,7 @@ class RuleRegistry:
             "id": rule_id,
             "yaml": rule_yaml,
             "version": version,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "metadata": metadata or {},
         }
         
@@ -164,7 +164,7 @@ class RuleRegistry:
             "yaml": rule.get("yaml", ""),
             "author": author,
             "description": description,
-            "published_at": datetime.utcnow().isoformat(),
+            "published_at": datetime.now(UTC).isoformat(),
             "downloads": 0,
         }
         

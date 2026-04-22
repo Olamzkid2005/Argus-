@@ -170,6 +170,9 @@ class BaseTask(app.Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Called when task fails"""
+        # Ensure project root is in sys.path (needed for forked/spawned workers on macOS)
+        if PROJECT_ROOT not in sys.path:
+            sys.path.insert(0, PROJECT_ROOT)
         from error_classifier import classify_error, log_classified_error
         from dead_letter_queue import get_dlq
         from shutdown_handler import shutdown_handler
@@ -223,6 +226,9 @@ class BaseTask(app.Task):
     
     def __call__(self, *args, **kwargs):
         """Wrap task execution with shutdown checking"""
+        # Ensure project root is in sys.path (needed for forked/spawned workers on macOS)
+        if PROJECT_ROOT not in sys.path:
+            sys.path.insert(0, PROJECT_ROOT)
         from shutdown_handler import shutdown_handler
         from health_monitor import get_health_monitor
         

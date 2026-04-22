@@ -5,7 +5,7 @@ import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 import uuid
 from typing import Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 class CheckpointManager:
@@ -269,7 +269,7 @@ class CheckpointManager:
         cursor = conn.cursor()
         
         try:
-            cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+            cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
             
             cursor.execute(
                 """

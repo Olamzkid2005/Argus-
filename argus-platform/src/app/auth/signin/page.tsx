@@ -4,13 +4,12 @@ import { signIn } from "next-auth/react";
 import { useState, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
+import { ShieldCheck, Eye, EyeOff, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import MatrixDataRain from "@/components/effects/MatrixDataRain";
 
 function GoogleIcon() {
   return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
       <path
         d="M23.766 12.2764c0-.8151-.0732-1.5986-.2109-2.3527H12.252v4.4511h6.4727c-.2793 1.4883-1.123 2.748-2.3926 3.5933v2.9883h3.873c2.2695-2.0887 3.5602-5.1655 3.5602-8.68z"
         fill="#4285F4"
@@ -33,7 +32,7 @@ function GoogleIcon() {
 
 function GitHubIcon() {
   return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.82-.26.82-.577 0-.286-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.84 1.237 1.07 1.835 2.807 1.305 3.492.998.108-.776.42-1.305.763-1.605-2.665-.305-5.467-1.334-5.467-5.93 0-1.31.468-2.382 1.235-3.22-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.51 11.51 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.838 1.233 1.91 1.233 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.823 1.103.823 2.222 0 1.606-.015 2.898-.015 3.293 0 .32.218.694.825.577C20.565 21.795 24 17.298 24 12c0-6.627-5.373-12-12-12z" />
     </svg>
   );
@@ -41,7 +40,7 @@ function GitHubIcon() {
 
 function LinkedInIcon() {
   return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#0A66C2">
       <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
     </svg>
   );
@@ -83,148 +82,135 @@ function SignInForm() {
   };
 
   return (
-    <div className="min-h-screen flex bg-surface">
-      {/* Background Matrix (subtle, full page) */}
-      <div className="fixed inset-0 z-0 opacity-[0.04] pointer-events-none">
-        <MatrixDataRain />
-      </div>
-
-      {/* Left Side — Brand Visual (55%) */}
+    <div className="min-h-screen flex">
+      {/* Left Side — Brand Visual (50%) */}
       <motion.div
         initial={{ opacity: 0, x: -30 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.7, ease: "easeOut" }}
-        className="hidden lg:flex lg:w-[55%] relative flex-col justify-between p-12 xl:p-16 hero-mesh overflow-hidden"
+        className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 xl:p-16 overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 40%, #DDD6FE 70%, #C4B5FD 100%)",
+        }}
       >
+        {/* Subtle grid pattern overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
+
         <div className="relative z-10">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <ShieldCheck size={18} className="text-white" />
-            </div>
-            <span className="font-headline text-xl font-bold text-on-surface tracking-tight">
-              Argus
-            </span>
-          </Link>
+          {/* Small logo icon */}
+          <div className="w-10 h-10 rounded-lg bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+            <ShieldCheck size={20} className="text-[#6720FF]" />
+          </div>
         </div>
 
-        <div className="relative z-10 space-y-8 max-w-md">
-          <div>
-            <h2 className="text-4xl xl:text-5xl font-headline font-bold text-on-surface tracking-tight leading-[1.1]">
-              Build. Tune.{" "}
-              <span className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent">
-                Scale.
-              </span>
-            </h2>
-          </div>
-          <p className="text-base font-body text-on-surface-variant leading-relaxed">
-            The infrastructure for intelligence. Deploy, monitor, and scale
-            AI security operations with unified observability.
+        <div className="relative z-10 space-y-6 max-w-md">
+          <h2 className="text-5xl xl:text-6xl font-bold text-gray-900 tracking-tight leading-[1.05]">
+            Build.<br />
+            Tune.<br />
+            Scale.
+          </h2>
+
+          <p className="text-[11px] font-semibold text-[#6720FF] uppercase tracking-[0.2em]">
+            NEXT-GEN AI INFRASTRUCTURE
           </p>
 
-          {/* Abstract Infrastructure Blocks */}
-          <div className="flex items-end gap-3 pt-4">
+          {/* Decorative purple squares */}
+          <div className="flex items-end gap-4 pt-8">
             <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: 80 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="w-12 rounded-xl bg-primary/10 border border-primary/20"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+              className="w-16 h-16 rounded-2xl bg-[#A78BFA]/60"
             />
             <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: 120 }}
-              transition={{ duration: 0.8, delay: 0.5 }}
-              className="w-12 rounded-xl bg-primary/15 border border-primary/25"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.7 }}
+              className="w-20 h-20 rounded-2xl bg-[#8B5CF6]/50"
             />
             <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: 60 }}
-              transition={{ duration: 0.8, delay: 0.6 }}
-              className="w-12 rounded-xl bg-primary/10 border border-primary/20"
-            />
-            <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: 100 }}
-              transition={{ duration: 0.8, delay: 0.7 }}
-              className="w-12 rounded-xl bg-primary/20 border border-primary/30"
-            />
-            <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: 140 }}
-              transition={{ duration: 0.8, delay: 0.8 }}
-              className="w-12 rounded-xl primary-gradient border border-primary/30"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.9 }}
+              className="w-14 h-14 rounded-2xl bg-[#7C3AED]/40"
             />
           </div>
         </div>
 
         <div className="relative z-10">
-          <p className="text-xs font-body text-on-surface-variant/60">
+          <p className="text-xs text-gray-500">
             © 2026 Argus Systems
           </p>
         </div>
-
-        {/* Decorative gradient orb */}
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
       </motion.div>
 
-      {/* Right Side — Login Form (45%) */}
-      <div className="flex-1 lg:w-[45%] flex items-center justify-center p-6 md:p-12 relative z-10">
+      {/* Right Side — Login Form (50%) */}
+      <div className="flex-1 lg:w-1/2 flex items-center justify-center p-6 md:p-12 bg-white relative">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-[420px]"
+          className="w-full max-w-[400px]"
         >
           {/* Mobile Brand */}
           <div className="lg:hidden flex items-center gap-2.5 mb-10">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-[#6720FF] flex items-center justify-center">
               <ShieldCheck size={18} className="text-white" />
             </div>
-            <span className="font-headline text-xl font-bold text-on-surface">
+            <span className="text-xl font-bold text-gray-900">
               Argus
             </span>
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight mb-2">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-1">
               Welcome back
             </h1>
-            <p className="text-sm font-body text-on-surface-variant">
-              Sign in to your dashboard to continue
+            <p className="text-sm text-gray-500">
+              Log in to manage your neural clusters.
             </p>
           </div>
 
           {/* Social Login */}
-          <div className="grid grid-cols-3 gap-3 mb-8">
+          <div className="grid grid-cols-3 gap-3 mb-6">
             <button
               type="button"
               onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-outline/30 bg-surface hover:bg-surface-container transition-all duration-300"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-all duration-200 text-xs font-medium text-gray-700"
             >
               <GoogleIcon />
+              <span className="hidden sm:inline">Google</span>
             </button>
             <button
               type="button"
               onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-outline/30 bg-surface hover:bg-surface-container transition-all duration-300"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-all duration-200 text-xs font-medium text-gray-700"
             >
               <GitHubIcon />
+              <span className="hidden sm:inline">GitHub</span>
             </button>
             <button
               type="button"
               onClick={() => signIn("linkedin", { callbackUrl: "/dashboard" })}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-outline/30 bg-surface hover:bg-surface-container transition-all duration-300"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-all duration-200 text-xs font-medium text-gray-700"
             >
               <LinkedInIcon />
+              <span className="hidden sm:inline">LinkedIn</span>
             </button>
           </div>
 
-          <div className="relative mb-8">
+          <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-outline/20" />
+              <div className="w-full border-t border-gray-200" />
             </div>
             <div className="relative flex justify-center">
-              <span className="px-3 text-xs font-body text-on-surface-variant bg-surface">
-                or continue with email
+              <span className="px-3 text-[10px] font-medium text-gray-400 uppercase tracking-wider bg-white">
+                Or use email
               </span>
             </div>
           </div>
@@ -233,8 +219,8 @@ function SignInForm() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div>
-              <label className="block text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-2">
-                Email
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Email Address
               </label>
               <input
                 type="email"
@@ -244,24 +230,24 @@ function SignInForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 onFocus={() => setFocusedField("email")}
                 onBlur={() => setFocusedField(null)}
-                placeholder="you@company.com"
-                className={`w-full px-4 py-3 bg-surface-container-high rounded-xl text-sm font-body text-on-surface outline-none transition-all duration-300 placeholder:text-on-surface-variant/40 border ${
+                placeholder="architect@argus.ai"
+                className={`w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
                   focusedField === "email"
-                    ? "border-primary ring-2 ring-primary/20"
-                    : "border-outline/30 hover:border-outline/60"
+                    ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
+                    : "border-transparent hover:bg-gray-200"
                 }`}
               />
             </div>
 
             {/* Password */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-label font-semibold text-on-surface uppercase tracking-wider">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                   Password
                 </label>
                 <Link
                   href="/auth/reset-password"
-                  className="text-xs font-body text-primary hover:underline"
+                  className="text-[11px] text-[#6720FF] hover:underline font-medium"
                 >
                   Forgot?
                 </Link>
@@ -276,16 +262,16 @@ function SignInForm() {
                   onFocus={() => setFocusedField("password")}
                   onBlur={() => setFocusedField(null)}
                   placeholder="••••••••"
-                  className={`w-full px-4 py-3 pr-12 bg-surface-container-high rounded-xl text-sm font-body text-on-surface outline-none transition-all duration-300 placeholder:text-on-surface-variant/40 border ${
+                  className={`w-full px-4 py-2.5 pr-12 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
                     focusedField === "password"
-                      ? "border-primary ring-2 ring-primary/20"
-                      : "border-outline/30 hover:border-outline/60"
+                      ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
+                      : "border-transparent hover:bg-gray-200"
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -297,7 +283,7 @@ function SignInForm() {
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-xs font-body text-error bg-error-container/30 border border-error/20 px-4 py-3 rounded-xl"
+                className="text-xs text-red-600 bg-red-50 border border-red-100 px-4 py-3 rounded-lg"
               >
                 {error}
               </motion.div>
@@ -307,29 +293,26 @@ function SignInForm() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl primary-gradient text-white text-sm font-semibold shadow-glow hover:shadow-glow-strong transition-all duration-300 disabled:opacity-50 disabled:shadow-none"
+              className="w-full py-2.5 rounded-lg bg-[#6720FF] text-white text-sm font-semibold hover:bg-[#5a1be6] transition-all duration-200 disabled:opacity-50 shadow-sm"
             >
               {isLoading ? (
-                <span className="flex items-center gap-2">
+                <span className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Signing in...
                 </span>
               ) : (
-                <>
-                  Sign In to Dashboard
-                  <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
-                </>
+                "Sign In to Dashboard"
               )}
             </button>
           </form>
 
           {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-outline/10 text-center">
-            <p className="text-sm font-body text-on-surface-variant">
-              Don&apos;t have an account?{" "}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-500">
+              New to Argus?{" "}
               <Link
                 href="/auth/signup"
-                className="font-semibold text-primary hover:underline transition-colors"
+                className="font-semibold text-[#6720FF] hover:underline transition-colors"
               >
                 Create an account
               </Link>
@@ -345,8 +328,8 @@ export default function SignIn() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-surface text-primary">
-          <Loader2 className="animate-spin h-8 w-8" />
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <Loader2 className="animate-spin h-8 w-8 text-[#6720FF]" />
         </div>
       }
     >

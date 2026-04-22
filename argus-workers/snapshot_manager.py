@@ -6,7 +6,7 @@ from psycopg2.extras import Json, RealDictCursor
 from psycopg2 import sql
 import uuid
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 class SnapshotManager:
@@ -107,7 +107,7 @@ class SnapshotManager:
                 },
                 "loop_budget": loop_budget,
                 "engagement_state": engagement_state,
-                "snapshot_timestamp": datetime.utcnow().isoformat(),
+                "snapshot_timestamp": datetime.now(UTC).isoformat(),
             }
             
             # Store snapshot in database

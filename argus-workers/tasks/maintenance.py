@@ -2,6 +2,7 @@
 Celery tasks for maintenance operations
 """
 from celery_app import app
+from datetime import datetime, UTC, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def cleanup_old_results(self):
     cursor = conn.cursor()
 
     try:
-        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        cutoff_date = datetime.now(UTC) - timedelta(days=30)
 
         cursor.execute(
             """
@@ -103,7 +104,7 @@ def cleanup_failed_engagements(self):
     cursor = conn.cursor()
 
     try:
-        cutoff_date = datetime.utcnow() - timedelta(days=7)
+        cutoff_date = datetime.now(UTC) - timedelta(days=7)
 
         cursor.execute(
             """

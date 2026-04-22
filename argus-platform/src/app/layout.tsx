@@ -21,32 +21,40 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={true}
+          disableTransitionOnChange={true}
+        >
+          <ClientLayout>
+            {children}
+          </ClientLayout>
+        </ThemeProvider>
+      </ToastProvider>
+    </AuthProvider>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="light">
       <head>
         <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
       </head>
-      <body className={`${inter.variable} ${spaceGrotesk.variable} font-body bg-surface text-on-surface antialiased`}>
-        <AuthProvider>
-          <ToastProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="light"
-              enableSystem={true}
-              disableTransitionOnChange={false}
-            >
-              <ClientLayout>
-                {children}
-              </ClientLayout>
-            </ThemeProvider>
-          </ToastProvider>
-        </AuthProvider>
+      <body className={`${inter.variable} ${spaceGrotesk.variable} font-body bg-white text-gray-900 antialiased`}>
+        <Providers>
+          {children}
+        </Providers>
         <ServiceWorkerRegister />
       </body>
     </html>

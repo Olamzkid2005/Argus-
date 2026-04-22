@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
@@ -91,12 +91,7 @@ export default function AssetsPage() {
     }
   }, [status, router]);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    fetchAssets();
-  }, [status, typeFilter]);
-
-  const fetchAssets = async () => {
+  const fetchAssets = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/assets?type=${typeFilter}`);
@@ -110,7 +105,12 @@ export default function AssetsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [typeFilter]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    fetchAssets();
+  }, [status, typeFilter, fetchAssets]);
 
   const createAsset = async () => {
     try {

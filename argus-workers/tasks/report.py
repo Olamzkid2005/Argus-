@@ -8,7 +8,7 @@ import os
 import sys
 import json
 import importlib.util
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Dict, Any, Optional
 
 _workers_dir = "/Users/mac/Documents/Argus-/argus-workers"
@@ -301,7 +301,7 @@ def _generate_report_data(org_id: str, engagement_ids: Optional[List[str]], repo
 
     return {
         "report_type": report_type,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "findings_summary": findings,
         "engagements": engagements,
     }
@@ -316,7 +316,7 @@ def _send_report_email(recipients: List[str], report_name: str, report_data: Dic
 
 def _calculate_next_run(frequency: str) -> datetime:
     """Calculate the next run time based on frequency."""
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     if frequency == "daily":
         return now + timedelta(days=1)
     elif frequency == "weekly":

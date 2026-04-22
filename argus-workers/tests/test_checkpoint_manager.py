@@ -2,7 +2,7 @@
 Tests for checkpoint_manager.py
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, MagicMock
 
 from checkpoint_manager import CheckpointManager, CheckpointContext
@@ -228,7 +228,7 @@ class TestCheckpointManager:
         args = mock_cursor.execute.call_args[0][1]
         cutoff = args[0]
         assert isinstance(cutoff, datetime)
-        assert cutoff < datetime.utcnow()
+        assert cutoff < datetime.now(UTC)
         mock_conn.commit.assert_called_once()
 
     def test_cleanup_old_checkpoints_rollback_on_error(self, manager, mock_db_conn):

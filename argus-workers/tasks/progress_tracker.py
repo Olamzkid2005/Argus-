@@ -7,6 +7,7 @@ Tracks progress of Celery tasks and stores in Redis for frontend polling.
 import json
 import logging
 import os
+from datetime import datetime, UTC
 from typing import Optional, Dict, Any
 
 import redis
@@ -65,8 +66,8 @@ class ProgressTracker:
             "current_step": 0,
             "percent_complete": 0,
             "current_activity": "Initializing...",
-            "started_at": __import__('datetime').datetime.utcnow().isoformat(),
-            "updated_at": __import__('datetime').datetime.utcnow().isoformat(),
+            "started_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         
         key = self._get_key(task_id)
@@ -114,7 +115,7 @@ class ProgressTracker:
             data["percent_complete"] = min(100, int(
                 (current_step / data["total_steps"]) * 100
             ))
-            data["updated_at"] = __import__('datetime').datetime.utcnow().isoformat()
+            data["updated_at"] = datetime.now(UTC).isoformat()
             
             self.redis.setex(key, PROGRESS_TTL, json.dumps(data))
             
@@ -133,7 +134,7 @@ class ProgressTracker:
                 data["current_step"] = data["total_steps"]
                 data["percent_complete"] = 100
                 data["current_activity"] = "Complete"
-                data["completed_at"] = __import__('datetime').datetime.utcnow().isoformat()
+                data["completed_at"] = datetime.now(UTC).isoformat()
                 data["updated_at"] = data["completed_at"]
                 
                 if result:
@@ -154,7 +155,7 @@ class ProgressTracker:
                 data = json.loads(existing)
                 data["status"] = "failed"
                 data["error_message"] = error_message
-                data["updated_at"] = __import__('datetime').datetime.utcnow().isoformat()
+                data["updated_at"] = datetime.now(UTC).isoformat()
                 
                 self.redis.setex(key, PROGRESS_TTL, json.dumps(data))
                 
@@ -188,7 +189,7 @@ class ProgressTracker:
             if existing:
                 data = json.loads(existing)
                 data["status"] = "cancelled"
-                data["updated_at"] = __import__('datetime').datetime.utcnow().isoformat()
+                data["updated_at"] = datetime.now(UTC).isoformat()
                 
                 self.redis.setex(key, PROGRESS_TTL, json.dumps(data))
                 return True
