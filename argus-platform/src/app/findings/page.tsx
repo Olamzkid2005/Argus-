@@ -32,6 +32,8 @@ import {
 import ScannerReveal from "@/components/effects/ScannerReveal";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import { MarkdownRenderer } from "@/components/ui-custom/MarkdownRenderer";
+import { ScrollReveal } from "@/components/animations/ScrollReveal";
+import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 
 // ── Types ──
 interface Finding {
@@ -610,30 +612,24 @@ export default function FindingsPage() {
         </motion.div>
 
         {/* Center - Findings List */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="col-span-12 lg:col-span-5 space-y-3"
-        >
-          {filtered.map((finding, index) => {
-            const sev = severityConfig[finding.severity];
-            const isExpanded = expandedRow === finding.id;
-            const hasExplanation = !!explanations[finding.id];
-            const isSelected = selectedFindingId === finding.id;
+        <ScrollReveal direction="up" delay={0.15} className="col-span-12 lg:col-span-5">
+          <StaggerContainer className="space-y-3" staggerDelay={0.04}>
+            {filtered.map((finding) => {
+              const sev = severityConfig[finding.severity];
+              const isExpanded = expandedRow === finding.id;
+              const hasExplanation = !!explanations[finding.id];
+              const isSelected = selectedFindingId === finding.id;
 
-            return (
-              <motion.div
-                key={finding.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className={`bg-surface dark:bg-surface-container-low rounded-xl border transition-all duration-300 overflow-hidden ${
-                  isSelected
-                    ? "border-primary/40 shadow-glow"
-                    : "border-outline-variant dark:border-outline/30 hover:border-primary/20"
-                }`}
-              >
+              return (
+                <StaggerItem key={finding.id}>
+                  <motion.div
+                    layout
+                    className={`bg-surface dark:bg-surface-container-low rounded-xl border transition-all duration-300 overflow-hidden ${
+                      isSelected
+                        ? "border-primary/40 shadow-glow"
+                        : "border-outline-variant dark:border-outline/30 hover:border-primary/20"
+                    }`}
+                  >
                 {/* Main Row */}
                 <div
                   className="px-4 py-3 cursor-pointer"
@@ -711,9 +707,11 @@ export default function FindingsPage() {
                 <AnimatePresence>
                   {hasExplanation && (
                     <motion.div
+                      layout
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
                       className="mx-3 mb-3"
                     >
                       <div className="border border-primary/15 bg-surface-container-low/50 dark:bg-surface-container/50 rounded-lg overflow-hidden">
@@ -778,9 +776,11 @@ export default function FindingsPage() {
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div
+                      layout
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
                       className="px-4 pb-4 pt-2 border-t border-outline-variant dark:border-outline/30 bg-surface-container-low/30 dark:bg-surface-container/30"
                     >
                       <div className="grid grid-cols-2 gap-4 mb-4">
@@ -839,16 +839,18 @@ export default function FindingsPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </motion.div>
-            );
-          })}
+                  </motion.div>
+                </StaggerItem>
+              );
+            })}
 
-          {filtered.length === 0 && (
-            <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant dark:border-outline/30 rounded-xl bg-surface dark:bg-surface-container-low">
-              NO FINDINGS DETECTED IN SELECTED TELEMETRY
-            </div>
-          )}
-        </motion.div>
+            {filtered.length === 0 && (
+              <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant dark:border-outline/30 rounded-xl bg-surface dark:bg-surface-container-low">
+                NO FINDINGS DETECTED IN SELECTED TELEMETRY
+              </div>
+            )}
+          </StaggerContainer>
+        </ScrollReveal>
 
         {/* Right Panel - Preview */}
         <motion.div

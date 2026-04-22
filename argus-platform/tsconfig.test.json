@@ -10,8 +10,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "rootDir": ".",
-    "ignoreDeprecations": "6.0"
+    "rootDir": "."
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "__tests__/**/*"]
 }

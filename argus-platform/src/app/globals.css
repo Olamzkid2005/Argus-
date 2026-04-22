@@ -3,6 +3,23 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
   :root {
     /* Argus Light Theme - Default */
     --background: 260 100% 99%;
@@ -167,5 +184,24 @@
 
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Dark mode glow enhancements */
+  .dark .shadow-glow {
+    box-shadow: 0 0 24px rgba(139, 92, 246, 0.35);
+  }
+
+  .dark .shadow-glow-strong {
+    box-shadow: 0 0 48px rgba(139, 92, 246, 0.45);
+  }
+
+  /* High contrast preference for WCAG compliance */
+  @media (prefers-contrast: more) {
+    :root {
+      --muted-foreground: 250 8% 32%;
+    }
+    .dark {
+      --muted-foreground: 260 20% 78%;
+    }
   }
 }

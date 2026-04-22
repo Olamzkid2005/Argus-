@@ -33,6 +33,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { ScrollReveal } from "@/components/animations/ScrollReveal";
+import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 
 interface Engagement {
   id: string;
@@ -438,6 +440,7 @@ export default function EngagementsPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3, delay: idx * 0.05 }}
+                      whileHover={{ y: -4, transition: { duration: 0.25 } }}
                       className="p-4 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg transition-all duration-300 hover:border-primary/30 hover:shadow-glow group"
                     >
                       <div className="flex items-start justify-between mb-2">
@@ -509,67 +512,74 @@ export default function EngagementsPage() {
         </div>
 
         {/* ── Meta Info ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6"
-        >
-          <div className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Server size={18} className="text-primary" />
-              </div>
-              <div>
-                <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">VPC Tunneling</div>
-                <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">Active • us-east-1</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Cpu size={18} className="text-primary" />
-              </div>
-              <div>
-                <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Model Version</div>
-                <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">Argus v2.4.1</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Shield size={18} className="text-primary" />
-              </div>
-              <div>
-                <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Total Scans</div>
-                <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">{liveEngagements.length} engagements</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Activity size={18} className="text-primary" />
-              </div>
-              <div>
-                <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Active Scans</div>
-                <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">
-                  {liveEngagements.filter((e) => ["scanning", "analyzing", "recon", "reporting"].includes(e.status)).length} running
+        <ScrollReveal direction="up" delay={0.15}>
+          <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6" staggerDelay={0.06}>
+            <StaggerItem>
+              <motion.div whileHover={{ y: -3, transition: { duration: 0.25 } }} className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Server size={18} className="text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">VPC Tunneling</div>
+                    <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">Active • us-east-1</div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+              </motion.div>
+            </StaggerItem>
+            <StaggerItem>
+              <motion.div whileHover={{ y: -3, transition: { duration: 0.25 } }} className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Cpu size={18} className="text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Model Version</div>
+                    <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">Argus v2.4.1</div>
+                  </div>
+                </div>
+              </motion.div>
+            </StaggerItem>
+            <StaggerItem>
+              <motion.div whileHover={{ y: -3, transition: { duration: 0.25 } }} className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Shield size={18} className="text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Total Scans</div>
+                    <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">{liveEngagements.length} engagements</div>
+                  </div>
+                </div>
+              </motion.div>
+            </StaggerItem>
+            <StaggerItem>
+              <motion.div whileHover={{ y: -3, transition: { duration: 0.25 } }} className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 transition-all duration-300 hover:border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Activity size={18} className="text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Active Scans</div>
+                    <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">
+                      {liveEngagements.filter((e) => ["scanning", "analyzing", "recon", "reporting"].includes(e.status)).length} running
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </StaggerItem>
+          </StaggerContainer>
+        </ScrollReveal>
 
         {/* ── Analytics Preview ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-6 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-6 transition-all duration-300 hover:border-primary/20"
-        >
+        <ScrollReveal direction="up" delay={0.15}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            whileHover={{ y: -3, transition: { duration: 0.25 } }}
+            className="mt-6 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-6 transition-all duration-300 hover:border-primary/20"
+          >
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
             <div className="flex items-center gap-2">
               <BarChart3 size={18} className="text-primary" />
@@ -620,7 +630,8 @@ export default function EngagementsPage() {
               <p className="text-[11px] font-mono uppercase tracking-widest">No analytics data available</p>
             </div>
           )}
-        </motion.div>
+          </motion.div>
+        </ScrollReveal>
       </div>
     </div>
   );

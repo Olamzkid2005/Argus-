@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "@/components/ui-custom/Sidebar";
 import CommandPalette from "@/components/ui-custom/CommandPalette";
 import { applyThreePatch } from "@/lib/three-patch";
@@ -36,13 +37,23 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   );
 
   return (
-    <div className="min-h-screen bg-void">
+    <div className="min-h-screen bg-surface">
       {!isFullBleedPage && (
         <Sidebar onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
       )}
 
-      <main className={`${!isFullBleedPage ? "ml-[220px]" : ""}`}>
-        {children}
+      <main className={`${!isFullBleedPage ? "ml-64" : ""}`}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {commandPaletteOpen && (

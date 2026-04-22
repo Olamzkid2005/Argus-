@@ -6,7 +6,7 @@ import { useSession, signIn } from "next-auth/react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import { WebSocketEvent } from "@/lib/websocket-events";
 import { useToast } from "@/components/ui/Toast";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   ShieldAlert,
@@ -33,6 +33,9 @@ import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import ScannerActivityPanel from "@/components/ui-custom/ScannerActivityPanel";
 import { useScannerActivities } from "@/lib/use-scanner-activities";
+import { ScrollReveal } from "@/components/animations/ScrollReveal";
+import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
+import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
 
 // Lazy load heavy visualization components
 const AttackPathGraph = lazy(() => import("@/components/ui-custom/AttackPathGraph"));
@@ -54,11 +57,15 @@ function StatCard({
   color: string;
   index: number;
 }) {
+  const numericValue = typeof value === "number" ? value : parseInt(String(value), 10);
+  const isNumeric = !isNaN(numericValue);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.1 }}
+      whileHover={{ y: -2, transition: { duration: 0.25 } }}
       className="relative bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-5 overflow-hidden transition-all duration-300 hover:shadow-glow hover:border-primary/30 group"
       style={{ borderLeftWidth: 4, borderLeftColor: color }}
     >
@@ -69,7 +76,9 @@ function StatCard({
         </div>
         <Zap size={14} className="text-on-surface-variant dark:text-[#8A8A9E] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
-      <div className="text-3xl font-headline font-bold text-on-surface dark:text-[#F0F0F5] tracking-tight">{value}</div>
+      <div className="text-3xl font-headline font-bold text-on-surface dark:text-[#F0F0F5] tracking-tight">
+        {isNumeric ? <AnimatedCounter value={numericValue} /> : value}
+      </div>
       <div className="text-xs font-body text-on-surface-variant dark:text-[#8A8A9E] mt-1 tracking-wide uppercase">{label}</div>
     </motion.div>
   );
@@ -615,7 +624,11 @@ export default function DashboardPage() {
           className="mb-8"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className={`w-2 h-2 rounded-full ${wsConnected ? "bg-primary" : "bg-error"} animate-pulse`} />
+            <motion.div
+              className={`w-2 h-2 rounded-full ${wsConnected ? "bg-primary" : "bg-error"}`}
+              animate={{ scale: [1, 1.4, 1], opacity: [1, 0.7, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+            />
             <span className="text-xs font-body text-on-surface-variant dark:text-[#8A8A9E] tracking-widest uppercase">
               {wsConnected ? "System Online" : "Connection Standby"}
             </span>
@@ -666,13 +679,16 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* ── State Bar ── */}
-        {isConnected && currentState && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300"
-          >
+        <AnimatePresence>
+          {isConnected && currentState && (
+            <motion.div
+              key="state-bar"
+              initial={{ opacity: 0, scale: 0.98, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -8 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+              className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300"
+            >
             <div className="flex items-center gap-4">
               <div className="relative w-8 h-8 flex items-center justify-center">
                 <div className="absolute inset-0 border border-primary/30 rounded-full animate-spin [animation-duration:3s]" />
@@ -702,6 +718,7 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         )}
+        </AnimatePresence>
 
         {/* ── Stats Grid ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -734,10 +751,18 @@ export default function DashboardPage() {
               </button>
             </div>
             <div className="max-h-[600px] overflow-y-auto">
-              {!isConnected ? (
-                <div className="p-5">
-                  {/* System Overview */}
-                  <div className="grid grid-cols-3 gap-3 mb-5">
+              <AnimatePresence mode="wait">
+                {!isConnected ? (
+                  <motion.div
+                    key="overview"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.3 }}
+                    className="p-5"
+                  >
+                    {/* System Overview */}
+                    <div className="grid grid-cols-3 gap-3 mb-5">
                     <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
                       <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Total Findings</div>
                       <div className="text-xl font-headline font-semibold text-primary">{dbStats?.totalFindings ?? 0}</div>
@@ -818,9 +843,16 @@ export default function DashboardPage() {
                       View Findings
                     </button>
                   </div>
-                </div>
+                </motion.div>
               ) : findings.length === 0 ? (
-                <div className="p-5">
+                <motion.div
+                  key="scanning"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.3 }}
+                  className="p-5"
+                >
                   {/* Live scan status */}
                   <div className="flex items-center gap-3 mb-4 pb-4 border-b border-outline-variant dark:border-[#ffffff08]">
                     <div className="relative w-8 h-8 flex items-center justify-center">
@@ -889,10 +921,20 @@ export default function DashboardPage() {
                       })
                     )}
                   </div>
-                </div>
+                </motion.div>
               ) : (
-                findings.map((event, i) => <ThreatFeedRow key={i} event={event} />)
+                <motion.div
+                  key="feed"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="divide-y divide-outline-variant dark:divide-[#ffffff08]"
+                >
+                  {findings.map((event, i) => <ThreatFeedRow key={i} event={event} />)}
+                </motion.div>
               )}
+              </AnimatePresence>
             </div>
           </motion.div>
 
@@ -908,25 +950,46 @@ export default function DashboardPage() {
               <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Scanner Activity</h2>
               {isConnected && scannerActivities.some((a) => a.status === "started" || a.status === "in_progress") && (
                 <div className="ml-auto flex items-center gap-1.5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                  <motion.span
+                    className="relative flex h-2 w-2"
+                    animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                  </span>
+                  </motion.span>
                   <span className="text-[10px] font-mono text-primary uppercase">Live</span>
                 </div>
               )}
             </div>
             <div className="p-5">
-              {isConnected ? (
-                <ScanStepTimeline currentState={currentState} activities={scannerActivities} />
-              ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3">
-                  <Terminal size={24} />
-                  <p className="text-[10px] font-mono uppercase tracking-widest text-center">
-                    Connect to an engagement to view scanner activity
-                  </p>
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {isConnected ? (
+                  <motion.div
+                    key="timeline"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ScanStepTimeline currentState={currentState} activities={scannerActivities} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex flex-col items-center justify-center py-10 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3"
+                  >
+                    <Terminal size={24} />
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-center">
+                      Connect to an engagement to view scanner activity
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
 
@@ -942,20 +1005,37 @@ export default function DashboardPage() {
               <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Execution Timeline</h2>
             </div>
             <div className="p-1">
-              {isConnected && timelineEvents.length > 0 ? (
-                <Suspense fallback={
-                  <div className="h-[240px] flex items-center justify-center bg-surface-container dark:bg-[#1A1A24]">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                }>
-                  <ExecutionTimeline events={timelineEvents} engagementStart={engagementStart} />
-                </Suspense>
-              ) : (
-                <div className="h-[240px] flex flex-col items-center justify-center bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3 rounded-lg">
-                  <Clock size={24} />
-                  <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to view execution timeline</p>
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {isConnected && timelineEvents.length > 0 ? (
+                  <motion.div
+                    key="timeline-chart"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Suspense fallback={
+                      <div className="h-[240px] flex items-center justify-center bg-surface-container dark:bg-[#1A1A24]">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    }>
+                      <ExecutionTimeline events={timelineEvents} engagementStart={engagementStart} />
+                    </Suspense>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="timeline-empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="h-[240px] flex flex-col items-center justify-center bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3 rounded-lg"
+                  >
+                    <Clock size={24} />
+                    <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to view execution timeline</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </div>
@@ -977,20 +1057,37 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="p-1">
-              {isConnected && attackPaths.nodes ? (
-                <Suspense fallback={
-                  <div className="h-[420px] flex items-center justify-center bg-surface-container dark:bg-[#1A1A24]">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                }>
-                  <AttackPathGraph nodes={attackPaths.nodes} edges={attackPaths.edges} />
-                </Suspense>
-              ) : (
-                <div className="h-[420px] flex flex-col items-center justify-center bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3 rounded-lg">
-                  <GitBranch size={24} />
-                  <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to visualize attack paths</p>
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {isConnected && attackPaths.nodes ? (
+                  <motion.div
+                    key="attack-graph"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Suspense fallback={
+                      <div className="h-[420px] flex items-center justify-center bg-surface-container dark:bg-[#1A1A24]">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    }>
+                      <AttackPathGraph nodes={attackPaths.nodes} edges={attackPaths.edges} />
+                    </Suspense>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="attack-empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="h-[420px] flex flex-col items-center justify-center bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3 rounded-lg"
+                  >
+                    <GitBranch size={24} />
+                    <p className="text-[10px] font-mono uppercase tracking-widest">Connect to an engagement to visualize attack paths</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
 

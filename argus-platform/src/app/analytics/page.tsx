@@ -46,6 +46,9 @@ import {
   Brain,
   AlertTriangle,
 } from "lucide-react";
+import { ScrollReveal } from "@/components/animations/ScrollReveal";
+import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
+import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
 
 // ── Types ──
 interface TrendData {
@@ -303,28 +306,32 @@ export default function AnalyticsPage() {
         {[
           {
             label: "Mean Response Time",
-            value: `${avgDuration}m`,
+            value: avgDuration,
+            suffix: "m",
             icon: Timer,
             trend: "-12%",
             color: "text-primary",
           },
           {
             label: "Remediation Rate",
-            value: `${Math.max(0, 100 - parseFloat(criticalRate))}%`,
+            value: Math.max(0, 100 - parseFloat(criticalRate)),
+            suffix: "%",
             icon: CheckCircle2,
             trend: "+5%",
             color: "text-green-500",
           },
           {
             label: "System Uptime",
-            value: "99.9%",
+            value: 99.9,
+            suffix: "%",
             icon: Server,
             trend: "+0.1%",
             color: "text-primary",
           },
           {
             label: "Active Analysts",
-            value: "12",
+            value: 12,
+            suffix: "",
             icon: Users,
             trend: "+2",
             color: "text-primary",
@@ -335,13 +342,17 @@ export default function AnalyticsPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.05 }}
+            whileHover={{ y: -3, transition: { duration: 0.25 } }}
             className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-4 transition-all duration-300 hover:shadow-glow"
           >
             <div className="flex items-center justify-between mb-2">
               <metric.icon size={16} className={metric.color} />
               <span className="text-[10px] font-mono text-green-500">{metric.trend}</span>
             </div>
-            <div className="text-2xl font-bold text-on-surface font-headline">{metric.value}</div>
+            <div className="text-2xl font-bold text-on-surface font-headline">
+              <AnimatedCounter value={metric.value} />
+              {metric.suffix}
+            </div>
             <div className="text-[11px] text-on-surface-variant mt-0.5">{metric.label}</div>
           </motion.div>
         ))}
@@ -350,12 +361,13 @@ export default function AnalyticsPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Trends Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="lg:col-span-2 bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
-        >
+        <ScrollReveal direction="up" delay={0.15} className="lg:col-span-2">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
+          >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <TrendingUp size={14} className="text-primary" />
@@ -411,14 +423,16 @@ export default function AnalyticsPage() {
             </AreaChart>
           </ResponsiveContainer>
         </motion.div>
+        </ScrollReveal>
 
         {/* Severity Distribution */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
-        >
+        <ScrollReveal direction="up" delay={0.2}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
+          >
           <div className="flex items-center gap-2 mb-4">
             <ShieldAlert size={14} className="text-primary" />
             <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
@@ -468,130 +482,140 @@ export default function AnalyticsPage() {
             </div>
           </div>
         </motion.div>
+        </ScrollReveal>
       </div>
 
       {/* Engagement Comparison */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-        className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5 mb-6"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Activity size={14} className="text-primary" />
-          <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
-            Engagement Comparison
-          </h2>
-        </div>
-        <div className="space-y-2 max-h-[200px] overflow-y-auto">
-          {comparisons.length === 0 ? (
-            <p className="text-[10px] font-mono text-on-surface-variant/40 uppercase tracking-widest text-center py-8">
-              No engagement data
-            </p>
-          ) : (
-            comparisons.map((eng) => (
-              <motion.div
-                key={eng.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex items-center justify-between px-3 py-2 rounded-lg border border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/50 hover:bg-surface-container-high dark:hover:bg-surface-container transition-all duration-300"
-              >
-                <div className="min-w-0">
-                  <div className="text-[11px] text-on-surface font-mono truncate">{eng.target_url}</div>
-                  <div className="text-[9px] text-on-surface-variant">{Math.round(eng.duration_minutes)}m</div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-[9px] font-mono text-error">{eng.critical_count}C</span>
-                  <span className="text-[9px] font-mono text-orange-400">{eng.high_count}H</span>
-                  <span className="text-[9px] font-mono text-primary">{eng.findings_count} total</span>
-                </div>
-              </motion.div>
-            ))
-          )}
-        </div>
-      </motion.div>
+      <ScrollReveal direction="up" delay={0.15}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5 mb-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={14} className="text-primary" />
+            <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
+              Engagement Comparison
+            </h2>
+          </div>
+          <StaggerContainer className="space-y-2 max-h-[200px] overflow-y-auto" staggerDelay={0.04}>
+            {comparisons.length === 0 ? (
+              <p className="text-[10px] font-mono text-on-surface-variant/40 uppercase tracking-widest text-center py-8">
+                No engagement data
+              </p>
+            ) : (
+              comparisons.map((eng) => (
+                <StaggerItem key={eng.id}>
+                  <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/50 hover:bg-surface-container-high dark:hover:bg-surface-container transition-all duration-300">
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-on-surface font-mono truncate">{eng.target_url}</div>
+                      <div className="text-[9px] text-on-surface-variant">{Math.round(eng.duration_minutes)}m</div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[9px] font-mono text-error">{eng.critical_count}C</span>
+                      <span className="text-[9px] font-mono text-orange-400">{eng.high_count}H</span>
+                      <span className="text-[9px] font-mono text-primary">{eng.findings_count} total</span>
+                    </div>
+                  </div>
+                </StaggerItem>
+              ))
+            )}
+          </StaggerContainer>
+        </motion.div>
+      </ScrollReveal>
 
       {/* AI Anomalies Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5 mb-6"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Brain size={14} className="text-primary" />
-          <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
-            AI Anomalies
-          </h2>
-        </div>
-        <div className="space-y-3">
-          {totalFindings > 0 ? (
-            <>
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
-                <AlertTriangle size={14} className="text-orange-400 shrink-0" />
-                <div className="flex-1">
-                  <div className="text-xs text-on-surface font-body">
-                    Spike in <span className="font-semibold">{trendData[trendData.length - 1]?.critical || 0}</span> critical findings detected in latest scan cycle
+      <ScrollReveal direction="up" delay={0.15}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5 mb-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Brain size={14} className="text-primary" />
+            <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
+              AI Anomalies
+            </h2>
+          </div>
+          <StaggerContainer className="space-y-3" staggerDelay={0.06}>
+            {totalFindings > 0 ? (
+              <>
+                <StaggerItem>
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                    <AlertTriangle size={14} className="text-orange-400 shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-xs text-on-surface font-body">
+                        Spike in <span className="font-semibold">{trendData[trendData.length - 1]?.critical || 0}</span> critical findings detected in latest scan cycle
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-mono text-on-surface-variant">2h ago</span>
                   </div>
-                </div>
-                <span className="text-[9px] font-mono text-on-surface-variant">2h ago</span>
-              </div>
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
-                <Zap size={14} className="text-primary shrink-0" />
-                <div className="flex-1">
-                  <div className="text-xs text-on-surface font-body">
-                    Unusual pattern: {comparisons.length} engagements completed with above-average duration
+                </StaggerItem>
+                <StaggerItem>
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                    <Zap size={14} className="text-primary shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-xs text-on-surface font-body">
+                        Unusual pattern: {comparisons.length} engagements completed with above-average duration
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-mono text-on-surface-variant">5h ago</span>
                   </div>
-                </div>
-                <span className="text-[9px] font-mono text-on-surface-variant">5h ago</span>
-              </div>
-            </>
-          ) : (
-            <p className="text-[10px] font-mono text-on-surface-variant/40 uppercase tracking-widest text-center py-4">
-              No anomalies detected
-            </p>
-          )}
-        </div>
-      </motion.div>
+                </StaggerItem>
+              </>
+            ) : (
+              <p className="text-[10px] font-mono text-on-surface-variant/40 uppercase tracking-widest text-center py-4">
+                No anomalies detected
+              </p>
+            )}
+          </StaggerContainer>
+        </motion.div>
+      </ScrollReveal>
 
       {/* Team Workload */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.45 }}
-        className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5 mb-6"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Users size={14} className="text-primary" />
-          <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
-            Team Workload
-          </h2>
-        </div>
-        <div className="space-y-4">
-          {[
-            { name: "Critical Review", value: 78, total: 100 },
-            { name: "Remediation Tasks", value: 45, total: 80 },
-            { name: "Verification Queue", value: 32, total: 50 },
-          ].map((task, i) => (
-            <div key={task.name}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-on-surface font-body">{task.name}</span>
-                <span className="text-[10px] font-mono text-on-surface-variant">
-                  {task.value}/{task.total}
-                </span>
-              </div>
-              <div className="w-full h-2 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(task.value / task.total) * 100}%` }}
-                  transition={{ delay: 0.5 + i * 0.1, duration: 0.8 }}
-                  className="h-full bg-primary rounded-full"
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+      <ScrollReveal direction="up" delay={0.15}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5 mb-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={14} className="text-primary" />
+            <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase font-headline">
+              Team Workload
+            </h2>
+          </div>
+          <StaggerContainer className="space-y-4" staggerDelay={0.08}>
+            {[
+              { name: "Critical Review", value: 78, total: 100 },
+              { name: "Remediation Tasks", value: 45, total: 80 },
+              { name: "Verification Queue", value: 32, total: 50 },
+            ].map((task) => (
+              <StaggerItem key={task.name}>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-on-surface font-body">{task.name}</span>
+                    <span className="text-[10px] font-mono text-on-surface-variant">
+                      {task.value}/{task.total}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(task.value / task.total) * 100}%` }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="h-full bg-primary rounded-full"
+                    />
+                  </div>
+                </div>
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        </motion.div>
+      </ScrollReveal>
 
       {/* Scheduled Reports */}
       <motion.div

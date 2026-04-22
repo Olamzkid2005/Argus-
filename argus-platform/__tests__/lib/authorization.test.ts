@@ -8,6 +8,7 @@ import { Session } from "next-auth";
 jest.mock("pg", () => ({
   Pool: jest.fn().mockImplementation(() => ({
     query: jest.fn(),
+    on: jest.fn(),
   })),
 }));
 

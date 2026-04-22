@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   Server,
@@ -46,6 +47,24 @@ const assetTypeIcons: Record<string, React.ElementType> = {
   api: Code2,
   network: Network,
   cloud_resource: Cloud,
+};
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
+};
+
+const tableRowVariants = {
+  hidden: { opacity: 0, x: -10 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.3 } },
 };
 
 export default function AssetsPage() {
@@ -141,8 +160,8 @@ export default function AssetsPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-surface dark:bg-[#0A0A0F]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -150,68 +169,96 @@ export default function AssetsPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-void">
-      <div className="px-8 py-8">
+    <div className="min-h-screen bg-surface dark:bg-[#0A0A0F] font-body">
+      <div className="px-8 py-8 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8"
+        >
           <div>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight">
-              ASSET INVENTORY
+            <h1 className="font-headline text-2xl font-semibold text-on-surface dark:text-[#F0F0F5] tracking-tight">
+              Asset Inventory
             </h1>
-            <p className="text-xs text-text-secondary mt-1 font-mono uppercase tracking-wider">
-              Manage and monitor discovered assets across engagements
+            <p className="font-body text-xs text-outline dark:text-[#8A8A9E] mt-1">
+              Manage and monitor discovered assets
             </p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-prism-cream text-void text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow-cream"
+            className="flex items-center gap-2 px-4 py-2.5 primary-gradient text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:shadow-glow transition-all duration-300 self-start"
           >
             <Plus size={14} />
             Add Asset
           </button>
-        </div>
+        </motion.div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+        >
           {[
-            { label: "Total Assets", value: stats.total, icon: Server, color: "var(--prism-cyan)" },
-            { label: "Critical Risk", value: stats.critical, icon: ShieldAlert, color: "#FF4444" },
+            { label: "Total Assets", value: stats.total, icon: Server, color: "#6720FF" },
+            { label: "Critical Risk", value: stats.critical, icon: ShieldAlert, color: "#BA1A1A" },
             { label: "High Risk", value: stats.high, icon: AlertTriangle, color: "#FF8800" },
-            { label: "Active", value: stats.active, icon: CheckCircle2, color: "#00FF88" },
-          ].map((s, i) => (
-            <div key={s.label} className="border border-structural bg-surface/50 p-5">
+            { label: "Active", value: stats.active, icon: CheckCircle2, color: "#00C853" },
+          ].map((s) => (
+            <motion.div
+              key={s.label}
+              variants={itemVariants}
+              className="bg-white dark:bg-[#12121A] border border-outline-variant dark:border-white/[0.08] rounded-xl p-5 hover:shadow-md transition-all duration-300"
+            >
               <div className="flex items-start justify-between mb-4">
-                <div className="w-9 h-9 flex items-center justify-center border border-structural bg-surface/10">
+                <div className="w-10 h-10 rounded-lg bg-surface-container dark:bg-[#1A1A24] flex items-center justify-center border border-outline-variant dark:border-white/[0.08]">
                   <s.icon size={18} style={{ color: s.color }} />
                 </div>
-                <TrendingUp size={14} className="text-text-secondary" />
+                <TrendingUp size={14} className="text-outline dark:text-[#8A8A9E]" />
               </div>
-              <div className="text-2xl font-semibold text-text-primary tracking-tight">{s.value}</div>
-              <div className="text-xs text-text-secondary mt-1 tracking-wide uppercase">{s.label}</div>
-            </div>
+              <div className="text-2xl font-semibold text-on-surface dark:text-[#F0F0F5] tracking-tight font-headline">
+                {s.value}
+              </div>
+              <div className="text-xs text-outline dark:text-[#8A8A9E] mt-1 tracking-wide uppercase font-label">
+                {s.label}
+              </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
 
         {/* Filters */}
-        <div className="flex items-center gap-3 mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="flex flex-wrap items-center gap-2 mb-6"
+        >
           {["all", "domain", "endpoint", "repository", "container", "api"].map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
-              className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider border transition-all ${
+              className={`px-4 py-1.5 text-[11px] font-label uppercase tracking-wider rounded-full border transition-all duration-300 ${
                 typeFilter === t
-                  ? "border-prism-cream text-prism-cream bg-prism-cream/10"
-                  : "border-structural text-text-secondary hover:text-text-primary hover:border-text-secondary/40"
+                  ? "primary-gradient text-white border-transparent shadow-glow"
+                  : "bg-transparent border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:border-primary hover:text-primary"
               }`}
             >
               {t}
             </button>
           ))}
-        </div>
+        </motion.div>
 
         {/* Assets Table */}
-        <div className="border border-structural bg-surface/30">
-          <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-structural text-[10px] font-mono text-text-secondary uppercase tracking-wider">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="bg-white dark:bg-[#12121A] rounded-xl border border-outline-variant dark:border-white/[0.08] overflow-hidden shadow-xs"
+        >
+          <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-surface-container-high dark:bg-[#1A1A24] border-b border-outline-variant dark:border-white/[0.08] text-[10px] font-label uppercase tracking-wider text-outline dark:text-[#8A8A9E]">
             <div className="col-span-3">Asset</div>
             <div className="col-span-2">Type</div>
             <div className="col-span-2">Risk</div>
@@ -222,186 +269,210 @@ export default function AssetsPage() {
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-prism-cream" />
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : assets.length === 0 ? (
             <div className="py-12 text-center">
-              <Server size={32} className="text-text-secondary mx-auto mb-4" />
-              <h3 className="text-sm text-text-primary font-medium mb-2">No assets found</h3>
-              <p className="text-xs text-text-secondary font-mono">
+              <Server size={32} className="text-outline dark:text-[#8A8A9E] mx-auto mb-4" />
+              <h3 className="text-sm text-on-surface dark:text-[#F0F0F5] font-medium mb-2 font-headline">
+                No assets found
+              </h3>
+              <p className="text-xs text-outline dark:text-[#8A8A9E] font-body">
                 Add assets manually or run an engagement to discover them automatically
               </p>
             </div>
           ) : (
-            assets.map((asset) => {
-              const Icon = assetTypeIcons[asset.asset_type] || Server;
-              return (
-                <div
-                  key={asset.id}
-                  className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors items-center"
-                >
-                  <div className="col-span-3 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Icon size={14} className="text-text-secondary shrink-0" />
-                      <div className="min-w-0">
-                        <div className="text-xs text-text-primary truncate">{asset.display_name || asset.identifier}</div>
-                        <div className="text-[10px] text-text-secondary font-mono truncate">{asset.identifier}</div>
+            <motion.div variants={containerVariants} initial="hidden" animate="show">
+              {assets.map((asset) => {
+                const Icon = assetTypeIcons[asset.asset_type] || Server;
+                return (
+                  <motion.div
+                    key={asset.id}
+                    variants={tableRowVariants}
+                    className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-outline-variant dark:border-white/[0.08] last:border-b-0 hover:bg-surface-container dark:hover:bg-[#1A1A24]/50 transition-all duration-300 items-center"
+                  >
+                    <div className="col-span-3 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-md bg-surface-container dark:bg-[#1A1A24] flex items-center justify-center border border-outline-variant dark:border-white/[0.08] shrink-0">
+                          <Icon size={14} className="text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs text-on-surface dark:text-[#F0F0F5] truncate font-medium">
+                            {asset.display_name || asset.identifier}
+                          </div>
+                          <div className="text-[10px] text-outline dark:text-[#8A8A9E] font-label truncate">
+                            {asset.identifier}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[10px] font-mono text-text-secondary uppercase border border-structural px-2 py-0.5">
-                      {asset.asset_type}
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1 bg-surface/50 overflow-hidden">
-                        <div
-                          className="h-full"
-                          style={{
-                            width: `${Math.min(100, (asset.risk_score || 0) * 10)}%`,
-                            backgroundColor: getRiskColor(asset.risk_level),
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="text-[10px] font-mono"
-                        style={{ color: getRiskColor(asset.risk_level) }}
-                      >
-                        {asset.risk_level}
+                    <div className="col-span-2">
+                      <span className="text-[10px] font-label uppercase border border-outline-variant dark:border-white/[0.08] px-2 py-0.5 rounded-md bg-surface-container dark:bg-[#1A1A24] text-outline dark:text-[#8A8A9E]">
+                        {asset.asset_type}
                       </span>
                     </div>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="flex items-center gap-1.5 text-[10px] font-mono text-text-secondary">
-                      {getLifecycleIcon(asset.lifecycle_status)}
-                      {asset.lifecycle_status}
-                    </span>
-                  </div>
-                  <div className="col-span-2 text-[10px] font-mono text-text-secondary">
-                    {asset.last_scanned_at
-                      ? new Date(asset.last_scanned_at).toLocaleDateString()
-                      : "Never"}
-                  </div>
-                  <div className="col-span-1">
-                    {asset.verified ? (
-                      <CheckCircle2 size={14} className="text-green-400" />
-                    ) : (
-                      <span className="text-[10px] text-text-secondary">—</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+                    <div className="col-span-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-surface-container dark:bg-[#1A1A24] rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.min(100, (asset.risk_score || 0) * 10)}%`,
+                              backgroundColor: getRiskColor(asset.risk_level),
+                            }}
+                          />
+                        </div>
+                        <span
+                          className="text-[10px] font-label"
+                          style={{ color: getRiskColor(asset.risk_level) }}
+                        >
+                          {asset.risk_level}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="flex items-center gap-1.5 text-[10px] font-label text-outline dark:text-[#8A8A9E]">
+                        {getLifecycleIcon(asset.lifecycle_status)}
+                        {asset.lifecycle_status}
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-[10px] font-label text-outline dark:text-[#8A8A9E]">
+                      {asset.last_scanned_at
+                        ? new Date(asset.last_scanned_at).toLocaleDateString()
+                        : "Never"}
+                    </div>
+                    <div className="col-span-1">
+                      {asset.verified ? (
+                        <CheckCircle2 size={14} className="text-green-400" />
+                      ) : (
+                        <span className="text-[10px] text-outline dark:text-[#8A8A9E]">—</span>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {/* Create Asset Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="border border-structural bg-surface w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-structural">
-              <h2 className="text-sm font-medium text-text-primary uppercase tracking-wider">
-                Add Asset
-              </h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-text-secondary hover:text-text-primary transition-colors"
-              >
-                Close
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-mono text-text-secondary uppercase tracking-wider block mb-1.5">
-                    Asset Type
-                  </label>
-                  <select
-                    value={newAsset.asset_type}
-                    onChange={(e) => setNewAsset({ ...newAsset, asset_type: e.target.value })}
-                    className="w-full px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors"
-                  >
-                    <option value="domain">Domain</option>
-                    <option value="ip">IP Address</option>
-                    <option value="endpoint">Endpoint</option>
-                    <option value="repository">Repository</option>
-                    <option value="container">Container</option>
-                    <option value="api">API</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-mono text-text-secondary uppercase tracking-wider block mb-1.5">
-                    Criticality
-                  </label>
-                  <select
-                    value={newAsset.criticality}
-                    onChange={(e) => setNewAsset({ ...newAsset, criticality: e.target.value })}
-                    className="w-full px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-mono text-text-secondary uppercase tracking-wider block mb-1.5">
-                  Identifier
-                </label>
-                <input
-                  type="text"
-                  value={newAsset.identifier}
-                  onChange={(e) => setNewAsset({ ...newAsset, identifier: e.target.value })}
-                  className="w-full px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors"
-                  placeholder="e.g., example.com or 192.168.1.1"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-mono text-text-secondary uppercase tracking-wider block mb-1.5">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={newAsset.display_name}
-                  onChange={(e) => setNewAsset({ ...newAsset, display_name: e.target.value })}
-                  className="w-full px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors"
-                  placeholder="Optional display name"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-mono text-text-secondary uppercase tracking-wider block mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  value={newAsset.description}
-                  onChange={(e) => setNewAsset({ ...newAsset, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors resize-none"
-                  placeholder="Optional description"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-white dark:bg-[#12121A] w-full max-w-lg rounded-xl border border-outline-variant dark:border-white/[0.08] shadow-glow overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant dark:border-white/[0.08]">
+                <h2 className="font-headline text-sm font-medium text-on-surface dark:text-[#F0F0F5] uppercase tracking-wider">
+                  Add Asset
+                </h2>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 border border-structural text-text-secondary hover:text-text-primary text-xs font-bold uppercase tracking-widest transition-all"
+                  className="text-outline dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-colors text-xs font-label"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={createAsset}
-                  className="px-4 py-2 bg-prism-cream text-void text-xs font-bold uppercase tracking-widest hover:opacity-90 shadow-glow-cream transition-all"
-                >
-                  Add Asset
+                  Close
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                      Asset Type
+                    </label>
+                    <select
+                      value={newAsset.asset_type}
+                      onChange={(e) => setNewAsset({ ...newAsset, asset_type: e.target.value })}
+                      className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                    >
+                      <option value="domain">Domain</option>
+                      <option value="ip">IP Address</option>
+                      <option value="endpoint">Endpoint</option>
+                      <option value="repository">Repository</option>
+                      <option value="container">Container</option>
+                      <option value="api">API</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                      Criticality
+                    </label>
+                    <select
+                      value={newAsset.criticality}
+                      onChange={(e) => setNewAsset({ ...newAsset, criticality: e.target.value })}
+                      className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                    Identifier
+                  </label>
+                  <input
+                    type="text"
+                    value={newAsset.identifier}
+                    onChange={(e) => setNewAsset({ ...newAsset, identifier: e.target.value })}
+                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                    placeholder="e.g., example.com or 192.168.1.1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newAsset.display_name}
+                    onChange={(e) => setNewAsset({ ...newAsset, display_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                    placeholder="Optional display name"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                    Description
+                  </label>
+                  <textarea
+                    value={newAsset.description}
+                    onChange={(e) => setNewAsset({ ...newAsset, description: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300 resize-none"
+                    placeholder="Optional description"
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-4 py-2 border border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-on-surface dark:hover:border-[#F0F0F5] text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={createAsset}
+                    className="px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300"
+                  >
+                    Add Asset
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

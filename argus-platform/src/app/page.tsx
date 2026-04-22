@@ -37,6 +37,8 @@ import { signIn, useSession } from "next-auth/react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import MatrixDataRain from "@/components/effects/MatrixDataRain";
 import SurveillanceEye from "@/components/effects/SurveillanceEye";
+import { ScrollReveal } from "@/components/animations/ScrollReveal";
+import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 
 // ── Animation Variants ──
 
@@ -448,25 +450,26 @@ function LandingContent({ session }: { session: any }) {
       </section>
 
       {/* ── Logo Marquee ── */}
-      <section className="relative py-16 border-y border-outline/10 bg-surface-container/50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 text-center">
-          <motion.p
-            custom={0}
-            variants={fadeIn}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            className="text-xs font-label font-semibold text-on-surface-variant uppercase tracking-[0.2em] mb-10"
-          >
-            Trusted by the most innovative teams
-          </motion.p>
-          <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            className="flex flex-wrap justify-center items-center gap-x-12 gap-y-6"
-          >
+      <ScrollReveal direction="up" delay={0.1}>
+        <section className="relative py-16 border-y border-outline/10 bg-surface-container/50">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8 text-center">
+            <motion.p
+              custom={0}
+              variants={fadeIn}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="text-xs font-label font-semibold text-on-surface-variant uppercase tracking-[0.2em] mb-10"
+            >
+              Trusted by the most innovative teams
+            </motion.p>
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="flex flex-wrap justify-center items-center gap-x-12 gap-y-6"
+            >
             {["Vanguard", "Nexus Corp", "CyberDyne", "OmniSec", "Fortress"].map(
               (name, i) => (
                 <motion.div
@@ -482,21 +485,23 @@ function LandingContent({ session }: { session: any }) {
           </motion.div>
         </div>
       </section>
+      </ScrollReveal>
 
       {/* ── Capabilities Bento Grid ── */}
-      <section id="platform" className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-16 text-center space-y-4">
-            <motion.h2
-              custom={0}
-              variants={fadeInUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
-            >
-              Platform Capabilities
-            </motion.h2>
+      <ScrollReveal direction="up" delay={0.1}>
+        <section id="platform" className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-16 text-center space-y-4">
+              <motion.h2
+                custom={0}
+                variants={fadeInUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
+              >
+                Platform Capabilities
+              </motion.h2>
             <motion.p
               custom={0.1}
               variants={fadeInUp}
@@ -537,24 +542,26 @@ function LandingContent({ session }: { session: any }) {
           </div>
         </div>
       </section>
+      </ScrollReveal>
 
       {/* ── Model Library ── */}
-      <section
-        id="models"
-        className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24 bg-surface-container/30"
-      >
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-16 text-center space-y-4">
-            <motion.h2
-              custom={0}
-              variants={fadeInUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
-            >
-              Model Library
-            </motion.h2>
+      <ScrollReveal direction="up" delay={0.1}>
+        <section
+          id="models"
+          className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24 bg-surface-container/30"
+        >
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-16 text-center space-y-4">
+              <motion.h2
+                custom={0}
+                variants={fadeInUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
+              >
+                Model Library
+              </motion.h2>
             <motion.p
               custom={0.1}
               variants={fadeInUp}
@@ -599,23 +606,25 @@ function LandingContent({ session }: { session: any }) {
           </div>
         </div>
       </section>
+      </ScrollReveal>
 
       {/* ── Infrastructure ── */}
-      <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-            <motion.div
-              custom={0}
-              variants={fadeInUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="space-y-8"
-            >
-              <div>
-                <h2 className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em] mb-4">
-                  Global Infrastructure
-                </h2>
+      <ScrollReveal direction="up" delay={0.1}>
+        <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+              <motion.div
+                custom={0}
+                variants={fadeInUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                className="space-y-8"
+              >
+                <div>
+                  <h2 className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em] mb-4">
+                    Global Infrastructure
+                  </h2>
                 <p className="text-3xl md:text-4xl font-headline font-bold text-on-surface tracking-tight mb-6">
                   Built for scale, designed for security
                 </p>
@@ -692,21 +701,23 @@ function LandingContent({ session }: { session: any }) {
           </div>
         </div>
       </section>
+      </ScrollReveal>
 
       {/* ── Testimonials ── */}
-      <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24 bg-surface-container/30">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-16 text-center space-y-4">
-            <motion.h2
-              custom={0}
-              variants={fadeInUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
-            >
-              Customer Stories
-            </motion.h2>
+      <ScrollReveal direction="up" delay={0.1}>
+        <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24 bg-surface-container/30">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-16 text-center space-y-4">
+              <motion.h2
+                custom={0}
+                variants={fadeInUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
+              >
+                Customer Stories
+              </motion.h2>
             <motion.p
               custom={0.1}
               variants={fadeInUp}
@@ -735,21 +746,23 @@ function LandingContent({ session }: { session: any }) {
           </div>
         </div>
       </section>
+      </ScrollReveal>
 
       {/* ── Blog Section ── */}
-      <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-16 text-center space-y-4">
-            <motion.h2
-              custom={0}
-              variants={fadeInUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
-            >
-              From the Blog
-            </motion.h2>
+      <ScrollReveal direction="up" delay={0.1}>
+        <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
+          <div className="max-w-7xl mx-auto">
+            <div className="mb-16 text-center space-y-4">
+              <motion.h2
+                custom={0}
+                variants={fadeInUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                className="text-xs font-label font-bold text-primary uppercase tracking-[0.2em]"
+              >
+                From the Blog
+              </motion.h2>
             <motion.p
               custom={0.1}
               variants={fadeInUp}
@@ -784,16 +797,18 @@ function LandingContent({ session }: { session: any }) {
           </div>
         </div>
       </section>
+      </ScrollReveal>
 
       {/* ── Final CTA ── */}
-      <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7 }}
-          className="max-w-5xl mx-auto"
-        >
+      <ScrollReveal direction="up" delay={0.1}>
+        <section className="relative py-24 lg:py-32 px-6 md:px-12 lg:px-24">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="max-w-5xl mx-auto"
+          >
           <div className="relative overflow-hidden rounded-[2rem] primary-gradient p-10 md:p-16 text-center">
             <div className="absolute top-0 left-0 w-full h-full opacity-10">
               <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white blur-3xl" />
@@ -825,50 +840,33 @@ function LandingContent({ session }: { session: any }) {
           </div>
         </motion.div>
       </section>
+      </ScrollReveal>
 
       {/* ── Footer ── */}
-      <footer className="relative py-16 px-6 md:px-12 lg:px-24 border-t border-outline/10 bg-surface">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10 mb-12">
-            <div className="col-span-2 md:col-span-4 lg:col-span-1">
-              <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                  <ShieldCheck size={18} className="text-white" />
-                </div>
-                <span className="font-headline text-lg font-bold text-on-surface">
-                  Argus
-                </span>
-              </Link>
-              <p className="text-sm font-body text-on-surface-variant leading-relaxed">
-                Infrastructure for intelligence. Secure AI at scale.
-              </p>
-            </div>
+      <ScrollReveal direction="up" delay={0.1}>
+        <footer className="relative py-16 px-6 md:px-12 lg:px-24 border-t border-outline/10 bg-surface">
+          <div className="max-w-7xl mx-auto">
+            <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10 mb-12" staggerDelay={0.06}>
+              <StaggerItem className="col-span-2 md:col-span-4 lg:col-span-1">
+                <Link href="/" className="flex items-center gap-2.5 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                    <ShieldCheck size={18} className="text-white" />
+                  </div>
+                  <span className="font-headline text-lg font-bold text-on-surface">
+                    Argus
+                  </span>
+                </Link>
+                <p className="text-sm font-body text-on-surface-variant leading-relaxed">
+                  Infrastructure for intelligence. Secure AI at scale.
+                </p>
+              </StaggerItem>
 
-            <div>
-              <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
-                Product
-              </h4>
-              <ul className="space-y-3">
-                {["Platform", "Models", "Pricing", "Changelog"].map((item) => (
-                  <li key={item}>
-                    <a
-                      href="#"
-                      className="text-sm font-body text-on-surface-variant hover:text-on-surface transition-colors duration-300"
-                    >
-                      {item}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
-                Developers
-              </h4>
-              <ul className="space-y-3">
-                {["Documentation", "API Reference", "SDKs", "Status"].map(
-                  (item) => (
+              <StaggerItem>
+                <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
+                  Product
+                </h4>
+                <ul className="space-y-3">
+                  {["Platform", "Models", "Pricing", "Changelog"].map((item) => (
                     <li key={item}>
                       <a
                         href="#"
@@ -877,75 +875,95 @@ function LandingContent({ session }: { session: any }) {
                         {item}
                       </a>
                     </li>
-                  )
-                )}
-              </ul>
-            </div>
+                  ))}
+                </ul>
+              </StaggerItem>
 
-            <div>
-              <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
-                Company
-              </h4>
-              <ul className="space-y-3">
-                {["About", "Blog", "Careers", "Contact"].map((item) => (
-                  <li key={item}>
-                    <a
-                      href="#"
-                      className="text-sm font-body text-on-surface-variant hover:text-on-surface transition-colors duration-300"
-                    >
-                      {item}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <StaggerItem>
+                <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
+                  Developers
+                </h4>
+                <ul className="space-y-3">
+                  {["Documentation", "API Reference", "SDKs", "Status"].map(
+                    (item) => (
+                      <li key={item}>
+                        <a
+                          href="#"
+                          className="text-sm font-body text-on-surface-variant hover:text-on-surface transition-colors duration-300"
+                        >
+                          {item}
+                        </a>
+                      </li>
+                    )
+                  )}
+                </ul>
+              </StaggerItem>
 
-            <div>
-              <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
-                Legal
-              </h4>
-              <ul className="space-y-3">
-                {["Privacy", "Terms", "Security"].map((item) => (
-                  <li key={item}>
-                    <a
-                      href="#"
-                      className="text-sm font-body text-on-surface-variant hover:text-on-surface transition-colors duration-300"
-                    >
-                      {item}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+              <StaggerItem>
+                <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
+                  Company
+                </h4>
+                <ul className="space-y-3">
+                  {["About", "Blog", "Careers", "Contact"].map((item) => (
+                    <li key={item}>
+                      <a
+                        href="#"
+                        className="text-sm font-body text-on-surface-variant hover:text-on-surface transition-colors duration-300"
+                      >
+                        {item}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </StaggerItem>
+
+              <StaggerItem>
+                <h4 className="text-xs font-label font-semibold text-on-surface uppercase tracking-wider mb-4">
+                  Legal
+                </h4>
+                <ul className="space-y-3">
+                  {["Privacy", "Terms", "Security"].map((item) => (
+                    <li key={item}>
+                      <a
+                        href="#"
+                        className="text-sm font-body text-on-surface-variant hover:text-on-surface transition-colors duration-300"
+                      >
+                        {item}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </StaggerItem>
+            </StaggerContainer>
+
+            <div className="pt-8 border-t border-outline/10 flex flex-col md:flex-row justify-between items-center gap-4">
+              <span className="text-xs font-body text-on-surface-variant/60">
+                © 2026 Argus Systems. All rights reserved.
+              </span>
+              <div className="flex items-center gap-6">
+                <a
+                  href="#"
+                  className="text-xs font-body text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
+                >
+                  Directives
+                </a>
+                <a
+                  href="#"
+                  className="text-xs font-body text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
+                >
+                  SOC Docs
+                </a>
+                <a
+                  href="#"
+                  className="text-xs font-body text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
+                >
+                  Encrypted Support
+                </a>
+              </div>
             </div>
           </div>
-
-          <div className="pt-8 border-t border-outline/10 flex flex-col md:flex-row justify-between items-center gap-4">
-            <span className="text-xs font-body text-on-surface-variant/60">
-              © 2026 Argus Systems. All rights reserved.
-            </span>
-            <div className="flex items-center gap-6">
-              <a
-                href="#"
-                className="text-xs font-body text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
-              >
-                Directives
-              </a>
-              <a
-                href="#"
-                className="text-xs font-body text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
-              >
-                SOC Docs
-              </a>
-              <a
-                href="#"
-                className="text-xs font-body text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
-              >
-                Encrypted Support
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </ScrollReveal>
     </div>
   );
 }
