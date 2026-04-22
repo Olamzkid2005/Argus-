@@ -20,40 +20,41 @@
     }
   }
 
-  :root {
-    /* Argus Light Theme - Default */
-    --background: 260 100% 99%;
-    --foreground: 240 10% 12%;
-    --card: 260 50% 98%;
-    --card-foreground: 240 10% 12%;
-    --popover: 260 50% 98%;
-    --popover-foreground: 240 10% 12%;
-    --primary: 262 100% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 0%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 260 30% 94%;
-    --muted-foreground: 250 8% 46%;
-    --accent: 260 30% 94%;
-    --accent-foreground: 240 10% 12%;
-    --destructive: 0 72% 41%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 260 20% 88%;
-    --input: 260 20% 88%;
-    --ring: 262 100% 56%;
+  /* ── Light Theme ── */
+  :root,
+  .light {
+    --background: #FAF7FF;
+    --foreground: #1B1B21;
+    --card: #F8F5FF;
+    --card-foreground: #1B1B21;
+    --popover: #F8F5FF;
+    --popover-foreground: #1B1B21;
+    --primary: #6720FF;
+    --primary-foreground: #FFFFFF;
+    --secondary: #F4F3F9;
+    --secondary-foreground: #1B1B21;
+    --muted: #F0EDF7;
+    --muted-foreground: #7A7489;
+    --accent: #F0EDF7;
+    --accent-foreground: #1B1B21;
+    --destructive: #BA1A1A;
+    --destructive-foreground: #FFFFFF;
+    --border: #E6E0FA;
+    --input: #E6E0FA;
+    --ring: #6720FF;
     --radius: 0.25rem;
 
     /* Sidebar */
-    --sidebar-background: 260 100% 99%;
-    --sidebar-foreground: 240 10% 12%;
-    --sidebar-primary: 262 100% 56%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 260 30% 94%;
-    --sidebar-accent-foreground: 240 10% 12%;
-    --sidebar-border: 260 20% 88%;
-    --sidebar-ring: 262 100% 56%;
+    --sidebar-background: #FAF7FF;
+    --sidebar-foreground: #1B1B21;
+    --sidebar-primary: #6720FF;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #F0EDF7;
+    --sidebar-accent-foreground: #1B1B21;
+    --sidebar-border: #E6E0FA;
+    --sidebar-ring: #6720FF;
 
-    /* Legacy tokens for backward compatibility */
+    /* Legacy tokens */
     --bg-void: #FAF7FF;
     --bg-surface: #FFFFFF;
     --bg-glass: rgba(250, 247, 255, 0.8);
@@ -66,37 +67,37 @@
     --prism-surface: #F0EDF7;
   }
 
+  /* ── Dark Theme ── */
   .dark {
-    /* Argus Dark Theme */
-    --background: 240 10% 6%;
-    --foreground: 260 100% 98%;
-    --card: 240 10% 8%;
-    --card-foreground: 260 100% 98%;
-    --popover: 240 10% 8%;
-    --popover-foreground: 260 100% 98%;
-    --primary: 262 100% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 100%;
-    --secondary-foreground: 240 10% 6%;
-    --muted: 240 10% 15%;
-    --muted-foreground: 260 20% 65%;
-    --accent: 240 10% 15%;
-    --accent-foreground: 260 100% 98%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 10% 15%;
-    --input: 240 10% 15%;
-    --ring: 262 100% 56%;
+    --background: #0A0A0F;
+    --foreground: #F0F0F5;
+    --card: #12121A;
+    --card-foreground: #F0F0F5;
+    --popover: #12121A;
+    --popover-foreground: #F0F0F5;
+    --primary: #6720FF;
+    --primary-foreground: #FFFFFF;
+    --secondary: #1A1A24;
+    --secondary-foreground: #F0F0F5;
+    --muted: #1A1A24;
+    --muted-foreground: #8A8A9E;
+    --accent: #1A1A24;
+    --accent-foreground: #F0F0F5;
+    --destructive: #FF6B6B;
+    --destructive-foreground: #FFFFFF;
+    --border: #1A1A24;
+    --input: #1A1A24;
+    --ring: #6720FF;
 
     /* Sidebar */
-    --sidebar-background: 240 10% 6%;
-    --sidebar-foreground: 260 100% 98%;
-    --sidebar-primary: 262 100% 56%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 10% 15%;
-    --sidebar-accent-foreground: 260 100% 98%;
-    --sidebar-border: 240 10% 15%;
-    --sidebar-ring: 262 100% 56%;
+    --sidebar-background: #0A0A0F;
+    --sidebar-foreground: #F0F0F5;
+    --sidebar-primary: #6720FF;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #1A1A24;
+    --sidebar-accent-foreground: #F0F0F5;
+    --sidebar-border: #1A1A24;
+    --sidebar-ring: #6720FF;
 
     /* Legacy tokens */
     --bg-void: #0A0A0F;
@@ -111,28 +112,26 @@
     --prism-surface: #12121A;
   }
 
+  /* Body uses standard CSS variables (not Tailwind hsl syntax) */
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-family: 'Inter', sans-serif;
-    @apply antialiased;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 }
 
 @layer components {
   .glass-panel {
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--bg-glass);
     backdrop-filter: blur(32px);
     -webkit-backdrop-filter: blur(32px);
-  }
-
-  .dark .glass-panel {
-    background: rgba(18, 18, 26, 0.8);
   }
 
   .primary-gradient {
@@ -141,14 +140,16 @@
 
   .hero-mesh {
     background-color: #FAF7FF;
-    background-image: radial-gradient(at 0% 0%, hsla(261, 100%, 90%, 1) 0, transparent 50%),
-                      radial-gradient(at 100% 0%, hsla(261, 100%, 95%, 1) 0, transparent 50%);
+    background-image:
+      radial-gradient(at 0% 0%, rgba(103, 32, 255, 0.15) 0, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(103, 32, 255, 0.08) 0, transparent 50%);
   }
 
   .dark .hero-mesh {
     background-color: #0A0A0F;
-    background-image: radial-gradient(at 0% 0%, hsla(261, 100%, 20%, 1) 0, transparent 50%),
-                      radial-gradient(at 100% 0%, hsla(261, 100%, 15%, 1) 0, transparent 50%);
+    background-image:
+      radial-gradient(at 0% 0%, rgba(103, 32, 255, 0.12) 0, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(103, 32, 255, 0.06) 0, transparent 50%);
   }
 
   .ghost-border {
@@ -171,15 +172,15 @@
   }
 
   .font-headline {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 
   .font-body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   .font-label {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   .text-balance {
@@ -195,13 +196,13 @@
     box-shadow: 0 0 48px rgba(139, 92, 246, 0.45);
   }
 
-  /* High contrast preference for WCAG compliance */
+  /* High contrast preference */
   @media (prefers-contrast: more) {
     :root {
-      --muted-foreground: 250 8% 32%;
+      --muted-foreground: #4A4555;
     }
     .dark {
-      --muted-foreground: 260 20% 78%;
+      --muted-foreground: #C0BEC9;
     }
   }
 }

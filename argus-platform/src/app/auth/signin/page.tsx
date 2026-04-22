@@ -4,7 +4,7 @@ import { signIn } from "next-auth/react";
 import { useState, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ShieldCheck, Eye, EyeOff, Loader2, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 function GoogleIcon() {
@@ -318,6 +318,28 @@ function SignInForm() {
               </Link>
             </p>
           </div>
+        </motion.div>
+
+        {/* Sign Up Prompt Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="mt-8 p-6 rounded-xl bg-gray-50 border border-gray-200 text-center max-w-[400px] w-full"
+        >
+          <p className="text-sm text-gray-600 mb-3">
+            New here?
+          </p>
+          <Link
+            href="/auth/signup"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-100 hover:border-gray-400 transition-all duration-200 shadow-sm"
+          >
+            Sign up for Argus
+            <ArrowRight size={16} />
+          </Link>
+          <p className="text-[10px] text-gray-400 mt-3">
+            No credit card required. Free tier available.
+          </p>
         </motion.div>
       </div>
     </div>
