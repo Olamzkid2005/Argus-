@@ -292,6 +292,47 @@ else
     log_warn "Celery Redis connection not confirmed yet (check logs/celery.log)"
 fi
 
+# ── Step 5.5: Verify Celery can execute tasks (orchestrator health check) ──
+
+echo ""
+echo -e "${YELLOW}━━━ Verifying Worker Task Execution ━━━${NC}"
+
+# Dispatch a ping task and wait for result
+log_info "Dispatching health-check ping task..."
+PING_RESULT=$(cd argus-workers && PYTHONPATH="$PWD:$PYTHONPATH" python3 -c "
+from celery_app import app
+import time, json, sys
+
+result = app.send_task('tasks.health.ping', countdown=1)
+task_id = result.id
+
+# Wait up to 15 seconds for result
+for i in range(15):
+    time.sleep(1)
+    res = app.AsyncResult(task_id)
+    if res.ready():
+        if res.successful():
+            data = res.get()
+            print(json.dumps(data))
+            sys.exit(0)
+        else:
+            print('FAILED: ' + str(res.result))
+            sys.exit(1)
+
+print('TIMEOUT')
+sys.exit(1)
+" 2>&1)
+
+PING_EXIT=$?
+
+if [ $PING_EXIT -eq 0 ] && echo "$PING_RESULT" | grep -q '"status": "ok"' 2>/dev/null; then
+    WORKER_HOST=$(echo "$PING_RESULT" | python3 -c "import sys, json; print(json.load(sys.stdin).get('worker','unknown'))" 2>/dev/null || echo "unknown")
+    log_ok "Celery worker executed ping task successfully (worker: $WORKER_HOST)"
+else
+    log_warn "Celery task execution check failed or timed out"
+    log_info "The worker may still be initializing. Check logs/celery.log"
+fi
+
 # ── Step 6: Save state ──
 
 echo "$NEXTJS_PID" > logs/nextjs.pid

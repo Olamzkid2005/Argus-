@@ -257,5 +257,18 @@ class BaseTask(app.Task):
 # Set base task class
 app.Task = BaseTask
 
+# ── Health check task ──
+@app.task(bind=True, name="tasks.health.ping")
+def ping_task(self):
+    """Simple ping task to verify worker is alive and can execute tasks."""
+    import socket
+    return {
+        "status": "ok",
+        "worker": self.request.hostname,
+        "pid": os.getpid(),
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+    }
+
+
 if __name__ == "__main__":
     app.start()

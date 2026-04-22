@@ -79,14 +79,14 @@ function AttackNode({ data }: { data: AttackNodeData }) {
         <p className="text-[10px] text-text-secondary truncate">{data.description}</p>
       )}
       <div className="flex items-center gap-3 mt-2">
-        {data.cvss !== undefined && (
+        {Number.isFinite(data.cvss) && (
           <span className="text-[9px] font-mono" style={{ color: colors.text }}>
-            CVSS: {data.cvss.toFixed(1)}
+            CVSS: {data.cvss?.toFixed(1)}
           </span>
         )}
-        {data.confidence !== undefined && (
+        {Number.isFinite(data.confidence) && (
           <span className="text-[9px] font-mono text-text-secondary">
-            {Math.round(data.confidence * 100)}%
+            {Math.round((data.confidence || 0) * 100)}%
           </span>
         )}
       </div>
