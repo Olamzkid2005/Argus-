@@ -29,7 +29,9 @@ Argus-/
 │
 ├── docs/                   # Documentation
 │   ├── setup-progress.md  # Setup progress tracker
-│   └── database-setup.md  # Database setup guide
+│   ├── database-setup.md  # Database setup guide
+│   ├── IMPROVEMENTS.md    # Comprehensive improvement recommendations
+│   └── PENTEST-AGENTS-INTEGRATION.md  # Pentest agents integration guide
 │
 └── FINAL-ARCHITECTURE.md   # Complete architecture specification
 ```
@@ -616,8 +618,9 @@ rm -rf logs/*
 
 - [Setup Progress](docs/setup-progress.md) - Current implementation status
 - [Database Setup](docs/database-setup.md) - Database installation guide
+- [Improvement Recommendations](docs/IMPROVEMENTS.md) - Comprehensive improvement roadmap
+- [Pentest Agents Integration](docs/PENTEST-AGENTS-INTEGRATION.md) - Pentest agents integration guide
 - [Architecture](FINAL-ARCHITECTURE.md) - Complete system architecture
-- [Google Stitch Functional Prompt](google-stitch-functional-prompt.md) - Functional specification for platform recreation
 
 ## Contributing
 

@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   Clock,
   Info,
+  Sparkles,
+  PenLine,
 } from "lucide-react";
 
 interface CustomRule {
@@ -60,6 +62,10 @@ export default function RulesPage() {
     severity: "MEDIUM",
     category: "custom",
   });
+  const [createMode, setCreateMode] = useState<"manual" | "ai">("manual");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -106,6 +112,44 @@ export default function RulesPage() {
       showToast("error", "Failed to create rule");
     }
   };
+
+  const generateRuleWithAI = async () => {
+    if (!aiPrompt.trim()) {
+      setAiError("Please describe what vulnerability you want to detect");
+      return;
+    }
+    setAiGenerating(true);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/ai/generate-rule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: aiPrompt.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error || "Failed to generate rule");
+        return;
+      }
+      setNewRule((prev) => ({ ...prev, rule_yaml: data.rule_yaml }));
+      setCreateMode("manual");
+      showToast("success", "AI rule generated — review and refine below");
+    } catch (e) {
+      setAiError("Failed to generate rule. Please try again.");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // Reset modal state when opened
+  useEffect(() => {
+    if (showCreateModal) {
+      setCreateMode("manual");
+      setAiPrompt("");
+      setAiError(null);
+      setAiGenerating(false);
+    }
+  }, [showCreateModal]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity.toUpperCase()) {
@@ -160,6 +204,32 @@ export default function RulesPage() {
             <Plus size={14} />
             New Rule
           </button>
+        </motion.div>
+
+        {/* Info Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="bg-primary/[0.03] dark:bg-primary/[0.05] border border-primary/20 rounded-xl p-5 mb-6"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Info size={16} className="text-primary" />
+            </div>
+            <div>
+              <h2 className="text-sm font-medium text-on-surface dark:text-[#F0F0F5] font-headline mb-1">
+                What are Custom Rules?
+              </h2>
+              <p className="text-xs text-outline dark:text-[#8A8A9E] font-body leading-relaxed">
+                Custom rules are YAML-defined detection patterns that tell the scanner what vulnerabilities
+                to look for in your targets. Each rule specifies a severity, a message to report, and one or
+                more patterns (strings or regexes) to match against responses. Click{" "}
+                <span className="font-label text-primary">New Rule</span> to write your own, or browse
+                community-shared rules to get started.
+              </p>
+            </div>
+          </div>
         </motion.div>
 
         {/* Filters */}
@@ -293,90 +363,169 @@ export default function RulesPage() {
                   Close
                 </button>
               </div>
+
+              {/* Mode Tabs */}
+              <div className="px-6 pt-4 flex items-center gap-2">
+                <button
+                  onClick={() => setCreateMode("manual")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-label uppercase tracking-wider rounded-full border transition-all duration-300 ${
+                    createMode === "manual"
+                      ? "primary-gradient text-white border-transparent shadow-glow"
+                      : "bg-transparent border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <PenLine size={12} />
+                  Manual
+                </button>
+                <button
+                  onClick={() => setCreateMode("ai")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-label uppercase tracking-wider rounded-full border transition-all duration-300 ${
+                    createMode === "ai"
+                      ? "primary-gradient text-white border-transparent shadow-glow"
+                      : "bg-transparent border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  <Sparkles size={12} />
+                  AI Assist
+                </button>
+              </div>
+
               <div className="p-6 space-y-4">
-                <div>
-                  <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
-                    Rule Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newRule.name}
-                    onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
-                    placeholder="e.g., SQL Injection Detection"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
-                    Description
-                  </label>
-                  <input
-                    type="text"
-                    value={newRule.description}
-                    onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
-                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
-                    placeholder="Brief description of what this rule detects"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
-                      Severity
-                    </label>
-                    <select
-                      value={newRule.severity}
-                      onChange={(e) => setNewRule({ ...newRule, severity: e.target.value })}
-                      className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
-                    >
-                      <option value="INFO">INFO</option>
-                      <option value="LOW">LOW</option>
-                      <option value="MEDIUM">MEDIUM</option>
-                      <option value="HIGH">HIGH</option>
-                      <option value="CRITICAL">CRITICAL</option>
-                    </select>
+                {createMode === "ai" ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                        Describe the vulnerability
+                      </label>
+                      <textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        rows={6}
+                        className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300 resize-none"
+                        placeholder="e.g., Detect hardcoded API keys in source code where variables like api_key, secret, or password are assigned string literals longer than 8 characters"
+                      />
+                      <p className="text-[10px] text-outline/60 dark:text-[#8A8A9E]/60 mt-1.5 font-body">
+                        The AI will generate a YAML detection rule based on your description. You can review and edit it before saving.
+                      </p>
+                    </div>
+                    {aiError && (
+                      <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 text-xs text-red-400 font-body">
+                        {aiError}
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        onClick={() => setShowCreateModal(false)}
+                        className="px-4 py-2 border border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-on-surface dark:hover:border-[#F0F0F5] text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={generateRuleWithAI}
+                        disabled={aiGenerating}
+                        className="flex items-center gap-2 px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {aiGenerating ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={14} />
+                            Generate Rule
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
-                      Category
-                    </label>
-                    <select
-                      value={newRule.category}
-                      onChange={(e) => setNewRule({ ...newRule, category: e.target.value })}
-                      className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
-                    >
-                      <option value="custom">Custom</option>
-                      <option value="injection">Injection</option>
-                      <option value="auth">Authentication</option>
-                      <option value="crypto">Cryptography</option>
-                      <option value="secrets">Secrets</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
-                    Rule YAML
-                  </label>
-                  <textarea
-                    value={newRule.rule_yaml}
-                    onChange={(e) => setNewRule({ ...newRule, rule_yaml: e.target.value })}
-                    rows={12}
-                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300 resize-none"
-                  />
-                </div>
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 border border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-on-surface dark:hover:border-[#F0F0F5] text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={createRule}
-                    className="px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300"
-                  >
-                    Create Rule
-                  </button>
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                        Rule Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newRule.name}
+                        onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
+                        className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                        placeholder="e.g., SQL Injection Detection"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                        Description
+                      </label>
+                      <input
+                        type="text"
+                        value={newRule.description}
+                        onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
+                        className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                        placeholder="Brief description of what this rule detects"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                          Severity
+                        </label>
+                        <select
+                          value={newRule.severity}
+                          onChange={(e) => setNewRule({ ...newRule, severity: e.target.value })}
+                          className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                        >
+                          <option value="INFO">INFO</option>
+                          <option value="LOW">LOW</option>
+                          <option value="MEDIUM">MEDIUM</option>
+                          <option value="HIGH">HIGH</option>
+                          <option value="CRITICAL">CRITICAL</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                          Category
+                        </label>
+                        <select
+                          value={newRule.category}
+                          onChange={(e) => setNewRule({ ...newRule, category: e.target.value })}
+                          className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300"
+                        >
+                          <option value="custom">Custom</option>
+                          <option value="injection">Injection</option>
+                          <option value="auth">Authentication</option>
+                          <option value="crypto">Cryptography</option>
+                          <option value="secrets">Secrets</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-label text-outline dark:text-[#8A8A9E] uppercase tracking-wider block mb-1.5">
+                        Rule YAML
+                      </label>
+                      <textarea
+                        value={newRule.rule_yaml}
+                        onChange={(e) => setNewRule({ ...newRule, rule_yaml: e.target.value })}
+                        rows={12}
+                        className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-white/[0.08] text-xs text-on-surface dark:text-[#F0F0F5] font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-lg transition-all duration-300 resize-none"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        onClick={() => setShowCreateModal(false)}
+                        className="px-4 py-2 border border-outline-variant dark:border-white/[0.08] text-outline dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-on-surface dark:hover:border-[#F0F0F5] text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={createRule}
+                        className="px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300"
+                      >
+                        Create Rule
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>
