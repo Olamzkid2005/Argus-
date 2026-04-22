@@ -296,7 +296,10 @@ export default function DashboardPage() {
   const [toolMetrics, setToolMetrics] = useState<any[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
   const [attackPaths, setAttackPaths] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
-  const [engagementStart, setEngagementStart] = useState<string>(new Date().toISOString());
+  const [engagementStart, setEngagementStart] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return new Date().toISOString();
+  });
 
   // Persist active engagement to localStorage + URL so it survives navigation
   const connectEngagement = useCallback((id: string) => {
