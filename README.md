@@ -1,14 +1,14 @@
-# Argus Pentest Platform
+# Argus SOC Platform
 
-AI-powered penetration testing platform with autonomous reconnaissance, vulnerability scanning, and intelligent analysis.
+AI-powered cybersecurity operations center with autonomous vulnerability scanning, threat intelligence, and collaborative remediation workflows.
 
 ## Architecture
 
-- **Frontend/API:** Next.js 14 (TypeScript) with App Router
+- **Frontend:** Next.js 14 (TypeScript) with App Router
 - **Workers:** Python 3.11+ with Celery
 - **Database:** PostgreSQL 15 with pgvector
 - **Queue:** Redis
-- **AI:** OpenAI GPT-4 / Anthropic Claude
+- **AI:** OpenRouter API (Multi-provider: Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity)
 
 ## Project Structure
 
@@ -252,51 +252,77 @@ Argus is an AI-powered penetration testing platform that automates security asse
 ## Features
 
 ### Core Capabilities
-- ✅ Multi-tenant organization management
-- ✅ Autonomous reconnaissance (subdomain discovery, probing)
-- ✅ Vulnerability scanning (Nuclei, fuzzing, SQL injection)
-- ✅ AI-powered finding analysis and prioritization
-- ✅ Attack path construction and risk scoring
-- ✅ Intelligent decision-making with loop budgets
-- ✅ Comprehensive logging and observability
+- ✅ Real-time engagement monitoring with WebSocket connections
+- ✅ Vulnerability scanning with configurable aggressiveness (Default, High, Extreme)
+- ✅ AI-powered vulnerability explanations and attack chain analysis
+- ✅ Asset inventory management with risk scoring
+- ✅ Custom detection rule engine with YAML-based rules
+- ✅ Scheduled report generation with email delivery
+- ✅ Team collaboration with assignments, comments, and approvals
+- ✅ Activity feed and notification system
+- ✅ Comprehensive analytics with trend visualization
+- ✅ Multi-provider AI model selection (Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity)
+
+### Pages & Modules
+- **Dashboard**: Real-time intelligence hub with engagement monitoring, threat feed, execution timeline, and scanner activities
+- **Engagements**: Security assessment initiation with URL and repository scan types
+- **Findings**: Comprehensive vulnerability management with AI analysis, verification, and evidence display
+- **Analytics**: Vulnerability trends, severity distribution, and scheduled report management
+- **Reports**: Report generation (PDF, HTML, JSON) with status tracking and sharing
+- **Collaboration**: Team management, finding discussions, assignment workflows, and approval processes
+- **Settings**: API key configuration, AI model selection, and scan aggressiveness presets
+- **Rules**: Custom YAML-based detection rule creation and management
+- **Assets**: Asset inventory with type-based filtering, risk levels, and lifecycle tracking
 
 ### Security Features
+- Session management with NextAuth.js
 - Scope validation and enforcement
-- Rate limiting per target domain
-- Authorization proof requirements
+- Rate limiting with Upstash Redis
 - Audit logging for all operations
 - Secure credential management
 
-### AI Intelligence
-- Finding confidence scoring
-- False positive likelihood estimation
-- Tool agreement analysis
-- Attack path risk assessment
-- Autonomous decision-making with budget constraints
-
 ## Development Status
 
-**Current Phase:** Week 1 - Core Pipeline
+**Current Phase:** Production-Ready Frontend with Backend Infrastructure
 
 **Completed:**
-- ✅ Next.js project initialization
-- ✅ PostgreSQL database setup (18 tables)
-- ✅ Redis configuration
-- ✅ Python worker project structure
-- ✅ Celery configuration with task queues
+- ✅ Next.js 14 frontend with all pages implemented
+- ✅ PostgreSQL database setup with comprehensive schema
+- ✅ Redis configuration for caching and queuing
+- ✅ Python worker project structure with Celery
+- ✅ NextAuth.js authentication system
+- ✅ Real-time WebSocket connections for engagement monitoring
+- ✅ AI integration with OpenRouter multi-provider support
+- ✅ Comprehensive test suite (frontend, backend, E2E)
+- ✅ Automated start/stop scripts for services
 
-**In Progress:**
-- 🔄 Authentication implementation (NextAuth.js)
-- 🔄 Engagement management API
-- 🔄 Tool execution pipeline
+**Frontend Pages:**
+- ✅ Landing page with hero and features
+- ✅ Authentication (sign-in, sign-up)
+- ✅ Dashboard with real-time monitoring
+- ✅ Engagements (scan initiation)
+- ✅ Findings (vulnerability management)
+- ✅ Analytics (trends and reports)
+- ✅ Reports (generation and management)
+- ✅ Collaboration (team, comments, assignments)
+- ✅ Settings (API keys, AI models)
+- ✅ Rules (custom detection rules)
+- ✅ Assets (inventory management)
 
-**Upcoming:**
-- ⏳ Recon worker implementation
-- ⏳ Scan worker implementation
-- ⏳ Intelligence engine
-- ⏳ Report generation
+**Backend Infrastructure:**
+- ✅ API routes for all CRUD operations
+- ✅ WebSocket support for real-time updates
+- ✅ Rate limiting with Upstash Redis
+- ✅ Celery task queue system
+- ✅ Security tool wrappers (Nuclei, httpx, subfinder, ffuf, sqlmap)
+- ✅ Output parsers for security tools
+- ✅ Database models and migrations
 
-See [docs/setup-progress.md](docs/setup-progress.md) for detailed progress.
+**Testing:**
+- ✅ Frontend feature tests with Playwright
+- ✅ Backend unit tests with pytest
+- ✅ API integration tests
+- ✅ E2E test scenarios
 
 ## API Endpoints
 
@@ -307,12 +333,64 @@ See [docs/setup-progress.md](docs/setup-progress.md) for detailed progress.
 - `GET /api/auth/session` - Get current session
 
 ### Engagements
-- `POST /api/engagement/create` - Create new penetration test engagement
+- `POST /api/engagement/create` - Create new security engagement
 - `GET /api/engagement/[id]` - Get engagement details
 - `GET /api/engagement/[id]/findings` - Get findings for engagement
 - `GET /api/engagement/[id]/timeline` - Get engagement timeline
 - `GET /api/engagement/[id]/explainability` - Get AI analysis explanations
 - `POST /api/engagement/[id]/approve` - Approve engagement to start testing
+
+### Findings
+- `GET /api/findings` - List all findings with filtering
+- `GET /api/findings/[id]` - Get specific finding details
+- `POST /api/findings/[id]/verify` - Verify a finding
+- `DELETE /api/findings/[id]` - Delete a finding
+- `POST /api/findings/[id]/explain` - Request AI explanation
+
+### Analytics
+- `GET /api/analytics/trends` - Get vulnerability trends
+- `GET /api/analytics/distribution` - Get severity distribution
+- `POST /api/analytics/reports/schedule` - Schedule a report
+- `GET /api/analytics/reports` - List scheduled reports
+
+### Reports
+- `POST /api/reports/generate` - Generate a new report
+- `GET /api/reports` - List all reports
+- `GET /api/reports/[id]/download` - Download a report
+- `DELETE /api/reports/[id]` - Delete a report
+
+### Collaboration
+- `GET /api/collaboration/team` - Get team members
+- `POST /api/collaboration/team/invite` - Invite team member
+- `DELETE /api/collaboration/team/[id]` - Remove team member
+- `GET /api/collaboration/comments` - Get comments for finding
+- `POST /api/collaboration/comments` - Add comment
+- `GET /api/collaboration/assignments` - Get assignments
+- `POST /api/collaboration/assignments` - Create assignment
+- `GET /api/collaboration/approvals` - Get approval requests
+- `POST /api/collaboration/approvals/[id]/approve` - Approve request
+- `GET /api/collaboration/activity` - Get activity feed
+- `POST /api/collaboration/notifications/read` - Mark notifications as read
+
+### Settings
+- `GET /api/settings` - Get user settings
+- `PUT /api/settings` - Update user settings
+- `POST /api/settings/api-key` - Update API key
+- `POST /api/settings/model` - Update AI model preference
+
+### Rules
+- `GET /api/rules` - List custom rules
+- `POST /api/rules` - Create new rule
+- `GET /api/rules/[id]` - Get rule details
+- `PUT /api/rules/[id]` - Update rule
+- `DELETE /api/rules/[id]` - Delete rule
+
+### Assets
+- `GET /api/assets` - List assets with filtering
+- `POST /api/assets` - Create new asset
+- `GET /api/assets/[id]` - Get asset details
+- `PUT /api/assets/[id]` - Update asset
+- `DELETE /api/assets/[id]` - Delete asset
 
 ### Real-Time Updates
 - `GET /api/ws/engagement/[id]` - WebSocket connection for live updates
@@ -326,13 +404,20 @@ See [docs/setup-progress.md](docs/setup-progress.md) for detailed progress.
 ### Frontend
 - Next.js 14 (App Router)
 - TypeScript
-- Tailwind CSS
-- React Query (for data fetching)
+- Tailwind CSS with custom theme
+- Radix UI components
+- Framer Motion for animations
+- Lucide React icons
+- Recharts for data visualization
+- React Query for data fetching
+- NextAuth.js for authentication
+- next-themes for theme switching
 
 ### Backend
 - Next.js API Routes
 - PostgreSQL 15 (with pgvector for embeddings)
 - Redis (job queue and caching)
+- Upstash Redis for rate limiting
 
 ### Workers
 - Python 3.11+
@@ -348,9 +433,9 @@ See [docs/setup-progress.md](docs/setup-progress.md) for detailed progress.
 - sqlmap (SQL injection testing)
 
 ### AI/LLM
-- OpenAI GPT-4
-- Anthropic Claude
-- Custom intelligence engine
+- OpenRouter API (multi-provider gateway)
+- Supported providers: Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity
+- Custom intelligence engine for vulnerability analysis
 
 ## Configuration
 
@@ -376,9 +461,8 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
 
-# AI APIs (Optional)
-OPENAI_API_KEY=your_openai_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
+# AI APIs (Optional - OpenRouter)
+OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 
 **Workers (`argus-workers/.env`):**
@@ -390,9 +474,8 @@ DATABASE_URL=postgresql://argus_user:password@localhost:5432/argus_pentest
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
-# AI APIs
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
+# AI APIs (OpenRouter)
+OPENROUTER_API_KEY=your_openrouter_key
 ```
 
 ### Security Configuration
@@ -534,6 +617,7 @@ rm -rf logs/*
 - [Setup Progress](docs/setup-progress.md) - Current implementation status
 - [Database Setup](docs/database-setup.md) - Database installation guide
 - [Architecture](FINAL-ARCHITECTURE.md) - Complete system architecture
+- [Google Stitch Functional Prompt](google-stitch-functional-prompt.md) - Functional specification for platform recreation
 
 ## Contributing
 
