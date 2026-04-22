@@ -17,41 +17,24 @@ jest.mock("@/lib/redis", () => ({
   pushJob: jest.fn(),
 }));
 
-jest.mock("pg", () => {
-  const mockClient = {
-    query: jest.fn(),
-    release: jest.fn(),
-  };
-
-  const mockPool = {
-    connect: jest.fn(() => Promise.resolve(mockClient)),
-  };
-
-  return {
-    Pool: jest.fn(() => mockPool),
-  };
-});
-
 import { POST } from "@/app/api/engagement/[id]/approve/route";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
 import { pushJob } from "@/lib/redis";
-import { Pool } from "pg";
+import { pool } from "@/lib/db";
 
 describe("POST /api/engagement/[id]/approve", () => {
-  let mockPool: any;
   let mockClient: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup mock pool and client
-    mockPool = new Pool();
+    // Setup mock client and wire it to pool.connect
     mockClient = {
       query: jest.fn(),
       release: jest.fn(),
     };
-    (mockPool.connect as jest.Mock).mockResolvedValue(mockClient);
+    (pool.connect as jest.Mock).mockResolvedValue(mockClient);
 
     // Setup default auth mock
     (requireAuth as jest.Mock).mockResolvedValue({

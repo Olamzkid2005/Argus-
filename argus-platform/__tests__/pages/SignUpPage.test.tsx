@@ -1,5 +1,4 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
 const mockPush = jest.fn();
 jest.mock("next/navigation", () => ({
@@ -47,11 +46,12 @@ describe("SignUp Page", () => {
     const emailInput = screen.getByPlaceholderText(/you@company.com/i);
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     const submitButton = screen.getByRole("button", { name: /create account/i });
+    const form = submitButton.closest("form") as HTMLFormElement;
 
-    await userEvent.type(emailInput, "newuser@argus.io");
+    fireEvent.change(emailInput, { target: { value: "newuser@argus.io" } });
     fireEvent.change(passwordInputs[0], { target: { value: "SecurePass123!" } });
     fireEvent.change(passwordInputs[1], { target: { value: "SecurePass123!" } });
-    fireEvent.click(submitButton);
+    fireEvent.submit(form);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
@@ -70,11 +70,12 @@ describe("SignUp Page", () => {
     const emailInput = screen.getByPlaceholderText(/you@company.com/i);
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     const submitButton = screen.getByRole("button", { name: /create account/i });
+    const form = submitButton.closest("form") as HTMLFormElement;
 
-    await userEvent.type(emailInput, "newuser@argus.io");
+    fireEvent.change(emailInput, { target: { value: "newuser@argus.io" } });
     fireEvent.change(passwordInputs[0], { target: { value: "Password1" } });
     fireEvent.change(passwordInputs[1], { target: { value: "Password2" } });
-    fireEvent.click(submitButton);
+    fireEvent.submit(form);
 
     await waitFor(() => {
       expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();

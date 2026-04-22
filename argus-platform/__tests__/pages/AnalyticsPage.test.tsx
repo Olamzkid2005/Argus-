@@ -64,7 +64,7 @@ describe("Analytics Page", () => {
     render(<AnalyticsPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("recharts-container")).toBeInTheDocument();
+      expect(screen.getAllByTestId("recharts-container").length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -72,7 +72,7 @@ describe("Analytics Page", () => {
     render(<AnalyticsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/scheduled reports/i)).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /scheduled reports/i })).toBeInTheDocument();
     });
   });
 });

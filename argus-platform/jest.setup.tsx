@@ -302,6 +302,81 @@ jest.mock('@/components/effects/ScannerReveal', () => ({
   default: () => <div data-testid="scanner-reveal">Scanner Reveal</div>,
 }));
 
+// Mock uuid
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid'),
+}));
+
+// Mock @/lib/db for API route tests
+jest.mock('@/lib/db', () => ({
+  pool: {
+    on: jest.fn(),
+    connect: jest.fn(() => Promise.resolve({
+      query: jest.fn(() => Promise.resolve({ rows: [], rowCount: 0 })),
+      release: jest.fn(),
+    })),
+    query: jest.fn(() => Promise.resolve({ rows: [], rowCount: 0 })),
+    totalCount: 0,
+    idleCount: 0,
+    waitingCount: 0,
+  },
+  query: jest.fn(() => Promise.resolve({ rows: [], rowCount: 0 })),
+  withClient: jest.fn((cb) => cb({ query: jest.fn(), release: jest.fn() })),
+  getPoolStats: jest.fn(() => ({ totalCount: 0, idleCount: 0, waitingCount: 0, maxConnections: 20, minConnections: 2, queryMetrics: {} })),
+  setTenantContext: jest.fn(),
+  resetTenantContext: jest.fn(),
+}));
+
+// Minimal Request/Response polyfills for Next.js API route tests
+class MockRequest {
+  private _url: string;
+  method: string;
+  headers: Headers;
+  constructor(input: string | Request, init?: RequestInit) {
+    this._url = typeof input === 'string' ? input : (input as any).url;
+    this.method = init?.method || 'GET';
+    this.headers = new Headers(init?.headers);
+  }
+  get url() { return this._url; }
+}
+class MockResponse {
+  status: number;
+  statusText: string;
+  headers: Headers;
+  body: any;
+  constructor(body?: BodyInit | null, init?: ResponseInit) {
+    this.body = body;
+    this.status = init?.status || 200;
+    this.statusText = init?.statusText || '';
+    this.headers = new Headers(init?.headers);
+  }
+  json() { return Promise.resolve(this.body ? JSON.parse(this.body as string) : null); }
+  text() { return Promise.resolve(String(this.body)); }
+}
+if (typeof Request === 'undefined') {
+  global.Request = MockRequest as any;
+}
+if (typeof Response === 'undefined') {
+  global.Response = MockResponse as any;
+}
+
+// Mock next/server for API route tests
+jest.mock('next/server', () => ({
+  NextResponse: {
+    json: (body?: any, init?: ResponseInit) => {
+      const response = new Response(body ? JSON.stringify(body) : null, init);
+      // @ts-ignore
+      response.json = async () => body;
+      return response;
+    },
+  },
+  NextRequest: class NextRequest extends (global.Request || class { constructor(public input: any, public init?: any) {} }) {
+    nextUrl = new URL('http://localhost:3000');
+  },
+}));
+
+// window.location.origin defaults to 'http://localhost' in jsdom, sufficient for polling tests
+
 // Global fetch mock
 global.fetch = jest.fn();
 

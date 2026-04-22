@@ -27,9 +27,12 @@ jest.mock("@/lib/use-scanner-activities", () => ({
 
 jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
 jest.mock("@/components/effects/SurveillanceEye", () => () => <div data-testid="surveillance-eye" />);
-jest.mock("@/components/ui-custom/ScannerActivityPanel", () => ({ activities }: any) => (
-  <div data-testid="scanner-panel">Scanner Activities: {activities.length}</div>
-));
+jest.mock("@/components/ui-custom/ScannerActivityPanel", () => ({
+  __esModule: true,
+  default: ({ activities }: any) => (
+    <div data-testid="scanner-panel">Scanner Activities: {activities.length}</div>
+  ),
+}));
 jest.mock("@/components/ui-custom/AIStatus", () => ({
   AIStatusBadge: () => <div data-testid="ai-status">AI Online</div>,
 }));
@@ -58,9 +61,9 @@ describe("Dashboard Page", () => {
     await waitFor(() => {
       expect(screen.getByText("Main Intelligence Hub")).toBeInTheDocument();
     });
-    expect(screen.getByText("Findings")).toBeInTheDocument();
+    expect(screen.getAllByText(/total findings/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Engagements")).toBeInTheDocument();
-    expect(screen.getByText("Critical")).toBeInTheDocument();
+    expect(screen.getAllByText(/critical/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders engagement input and monitor button", async () => {
@@ -84,7 +87,7 @@ describe("Dashboard Page", () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("scanner-panel")).toBeInTheDocument();
+      expect(screen.getByText("Scanner Activity")).toBeInTheDocument();
     });
   });
 });

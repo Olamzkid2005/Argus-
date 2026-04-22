@@ -1,142 +1,211 @@
 /**
- * Tests for ResilientWebSocket
+ * Tests for ResilientWebSocket (HTTP polling implementation)
  */
 
-describe("ResilientWebSocket", () => {
-  let mockWebSocket: any;
+import { ResilientWebSocket } from "../websocket";
 
+const flushPromises = async () => {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+};
+
+describe("ResilientWebSocket", () => {
   beforeEach(() => {
-    mockWebSocket = {
-      send: jest.fn(),
-      close: jest.fn(),
-      readyState: 1, // OPEN
-      onopen: null,
-      onmessage: null,
-      onclose: null,
-      onerror: null,
-    };
-    global.WebSocket = jest.fn(() => mockWebSocket) as any;
+    jest.useFakeTimers({ doNotFake: ["nextTick"] });
+    global.fetch = jest.fn();
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
-  it("should connect on instantiation", () => {
-    const { ResilientWebSocket } = require("../websocket");
-    const ws = new ResilientWebSocket("wss://example.com/socket");
-    expect(global.WebSocket).toHaveBeenCalledWith("wss://example.com/socket");
-    ws.disconnect();
+  it("should initialize with disconnected status", () => {
+    const ws = new ResilientWebSocket({ engagementId: "eng-123" });
+    expect(ws.connectionStatus).toBe("disconnected");
   });
 
-  it("should call onMessage when message received", () => {
-    const { ResilientWebSocket } = require("../websocket");
-    const onMessage = jest.fn();
-    const ws = new ResilientWebSocket("wss://example.com/socket", {
-      onMessage,
+  it("should call onEvent when poll returns events", async () => {
+    const onEvent = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onEvent,
+      pollInterval: 2000,
     });
 
-    // Simulate message
-    const event = { data: JSON.stringify({ type: "test", data: {} }) };
-    if (mockWebSocket.onmessage) mockWebSocket.onmessage(event);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        events: [
+          { type: "finding_discovered", timestamp: new Date().toISOString(), data: { severity: "HIGH" } },
+        ],
+      }),
+    });
 
-    expect(onMessage).toHaveBeenCalled();
+    ws.connect();
+    await flushPromises();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/ws/engagement/eng-123/poll"),
+      expect.any(Object)
+    );
+    expect(onEvent).toHaveBeenCalledTimes(1);
     ws.disconnect();
   });
 
-  it("should reconnect on close", (done) => {
-    const { ResilientWebSocket } = require("../websocket");
-    const ws = new ResilientWebSocket("wss://example.com/socket", {
-      reconnectInterval: 50,
+  it("should update connection status on connect", () => {
+    const onStatusChange = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onStatusChange,
+    });
+
+    ws.connect();
+    expect(ws.connectionStatus).toBe("connecting");
+    expect(onStatusChange).toHaveBeenCalledWith("connecting");
+    ws.disconnect();
+  });
+
+  it("should disconnect and set status to disconnected", () => {
+    const onStatusChange = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onStatusChange,
+    });
+
+    ws.connect();
+    ws.disconnect();
+    expect(ws.connectionStatus).toBe("disconnected");
+    expect(onStatusChange).toHaveBeenCalledWith("disconnected");
+  });
+
+  it("should filter events by severity", async () => {
+    const onEvent = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onEvent,
+      minSeverity: "HIGH",
+      pollInterval: 2000,
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        events: [
+          { type: "finding", timestamp: new Date().toISOString(), data: { severity: "CRITICAL" } },
+          { type: "finding", timestamp: new Date().toISOString(), data: { severity: "LOW" } },
+          { type: "finding", timestamp: new Date().toISOString(), data: { severity: "HIGH" } },
+        ],
+      }),
+    });
+
+    ws.connect();
+    await flushPromises();
+
+    expect(onEvent).toHaveBeenCalledTimes(2);
+    ws.disconnect();
+  });
+
+  it("should filter events by type", async () => {
+    const onEvent = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onEvent,
+      eventTypes: ["finding_discovered"],
+      pollInterval: 2000,
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        events: [
+          { type: "finding_discovered", timestamp: new Date().toISOString(), data: {} },
+          { type: "state_transition", timestamp: new Date().toISOString(), data: {} },
+        ],
+      }),
+    });
+
+    ws.connect();
+    await flushPromises();
+
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    ws.disconnect();
+  });
+
+  it("should batch events from a single poll", async () => {
+    const onEvent = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onEvent,
+      batchSize: 5,
+      pollInterval: 2000,
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        events: [
+          { type: "finding", timestamp: new Date().toISOString(), data: { id: 1 } },
+          { type: "finding", timestamp: new Date().toISOString(), data: { id: 2 } },
+          { type: "finding", timestamp: new Date().toISOString(), data: { id: 3 } },
+        ],
+      }),
+    });
+
+    ws.connect();
+    await flushPromises();
+
+    expect(onEvent).toHaveBeenCalledTimes(3);
+    ws.disconnect();
+  });
+
+  it("should attempt reconnection on poll failure", async () => {
+    jest.spyOn(Math, "random").mockReturnValue(0);
+    const onStatusChange = jest.fn();
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      onStatusChange,
       maxReconnectAttempts: 2,
+      pollInterval: 2000,
     });
 
-    // Simulate close
-    setTimeout(() => {
-      if (mockWebSocket.onclose) mockWebSocket.onclose({ code: 1006 });
-    }, 10);
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("Network error"));
 
-    setTimeout(() => {
-      expect(global.WebSocket).toHaveBeenCalledTimes(2); // Initial + 1 reconnect
-      ws.disconnect();
-      done();
-    }, 150);
-  });
+    ws.connect();
+    await flushPromises();
 
-  it("should filter events by severity", () => {
-    const { ResilientWebSocket } = require("../websocket");
-    const onMessage = jest.fn();
-    const ws = new ResilientWebSocket("wss://example.com/socket", {
-      onMessage,
-      severityFilter: ["CRITICAL", "HIGH"],
-    });
+    expect(ws.connectionStatus).toBe("reconnecting");
 
-    const criticalEvent = { data: JSON.stringify({ type: "finding", data: { severity: "CRITICAL" } }) };
-    const lowEvent = { data: JSON.stringify({ type: "finding", data: { severity: "LOW" } }) };
+    // Fast-forward past first reconnection delay (1000ms)
+    jest.advanceTimersByTime(1000);
+    await flushPromises();
 
-    if (mockWebSocket.onmessage) {
-      mockWebSocket.onmessage(criticalEvent);
-      mockWebSocket.onmessage(lowEvent);
-    }
-
-    expect(onMessage).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
     ws.disconnect();
+    (Math.random as jest.Mock).mockRestore();
   });
 
-  it("should filter events by type", () => {
-    const { ResilientWebSocket } = require("../websocket");
-    const onMessage = jest.fn();
-    const ws = new ResilientWebSocket("wss://example.com/socket", {
-      onMessage,
-      typeFilter: ["finding_discovered"],
+  it("should stop polling when disconnected", async () => {
+    const ws = new ResilientWebSocket({
+      engagementId: "eng-123",
+      pollInterval: 2000,
     });
 
-    const findingEvent = { data: JSON.stringify({ type: "finding_discovered", data: {} }) };
-    const stateEvent = { data: JSON.stringify({ type: "state_transition", data: {} }) };
-
-    if (mockWebSocket.onmessage) {
-      mockWebSocket.onmessage(findingEvent);
-      mockWebSocket.onmessage(stateEvent);
-    }
-
-    expect(onMessage).toHaveBeenCalledTimes(1);
-    ws.disconnect();
-  });
-
-  it("should batch events", (done) => {
-    const { ResilientWebSocket } = require("../websocket");
-    const onMessage = jest.fn();
-    const ws = new ResilientWebSocket("wss://example.com/socket", {
-      onMessage,
-      batchSize: 3,
-      batchInterval: 100,
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ events: [] }),
     });
 
-    const event = { data: JSON.stringify({ type: "finding", data: { id: 1 } }) };
-
-    if (mockWebSocket.onmessage) {
-      mockWebSocket.onmessage(event);
-      mockWebSocket.onmessage(event);
-      mockWebSocket.onmessage(event);
-    }
-
-    setTimeout(() => {
-      expect(onMessage).toHaveBeenCalledTimes(3);
-      ws.disconnect();
-      done();
-    }, 200);
-  });
-
-  it("should track connection status", () => {
-    const { ResilientWebSocket } = require("../websocket");
-    const ws = new ResilientWebSocket("wss://example.com/socket");
-
-    expect(ws.getStatus()).toBe("connecting");
-
-    if (mockWebSocket.onopen) mockWebSocket.onopen({});
-    expect(ws.getStatus()).toBe("connected");
+    ws.connect();
+    await flushPromises();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
 
     ws.disconnect();
-    expect(ws.getStatus()).toBe("disconnected");
+    jest.advanceTimersByTime(10000);
+    await flushPromises();
+
+    // Should not have called fetch again after disconnect
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

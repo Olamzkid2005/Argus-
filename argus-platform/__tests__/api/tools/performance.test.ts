@@ -6,32 +6,22 @@
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/tools/performance/route";
 
-// Mock pg
-jest.mock("pg", () => ({
-  Pool: jest.fn().mockImplementation(() => ({
-    query: jest.fn(),
-  })),
-}));
-
 // Mock session
 jest.mock("@/lib/session", () => ({
   requireAuth: jest.fn(),
 }));
 
-import { Pool } from "pg";
 import { requireAuth } from "@/lib/session";
+import { pool } from "@/lib/db";
 
 describe("GET /api/tools/performance", () => {
   let mockQuery: jest.Mock;
   let mockRequireAuth: jest.Mock;
 
   beforeEach(() => {
-    mockQuery = jest.fn();
+    mockQuery = pool.query as jest.Mock;
     mockRequireAuth = requireAuth as jest.Mock;
-
-    (Pool as unknown as jest.Mock).mockImplementation(() => ({
-      query: mockQuery,
-    }));
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
