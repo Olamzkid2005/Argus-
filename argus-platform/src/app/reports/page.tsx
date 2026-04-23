@@ -195,7 +195,7 @@ export default function ReportsPage() {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Reports</h1>
+            <h1 className="text-3xl font-semibold text-on-surface dark:text-white tracking-tight font-headline">Reports</h1>
             <p className="text-sm text-on-surface-variant mt-1 font-body">
               Generate and manage vulnerability assessment reports
             </p>

@@ -127,7 +127,7 @@ export default function EngagementsPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface matrix-grid">
+      <div className="min-h-screen flex items-center justify-center bg-background dark:bg-[#0A0A0F] matrix-grid">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -228,7 +228,7 @@ export default function EngagementsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface matrix-grid">
+    <div className="min-h-screen bg-background dark:bg-[#0A0A0F] matrix-grid">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-8">
         {/* ── Header ── */}
         <motion.div
@@ -245,7 +245,7 @@ export default function EngagementsPage() {
               Operations Center
             </span>
           </div>
-          <h1 className="text-4xl font-headline font-semibold text-on-surface dark:text-[#F0F0F5] tracking-tight">
+          <h1 className="text-4xl font-headline font-semibold text-gray-900 dark:text-[#F0F0F5] tracking-tight">
             Security Engagements
           </h1>
           <p className="text-sm font-body text-on-surface-variant dark:text-[#8A8A9E] mt-1">

@@ -295,7 +295,7 @@ export default function SettingsPage() {
             Platform Configuration
           </span>
         </div>
-        <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Settings</h1>
+        <h1 className="text-3xl font-semibold text-on-surface dark:text-white tracking-tight font-headline">Settings</h1>
         <p className="text-sm text-on-surface-variant mt-1 font-body">
           Manage operational parameters and external intelligence integrations
         </p>
