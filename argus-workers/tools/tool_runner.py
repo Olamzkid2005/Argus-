@@ -114,7 +114,7 @@ class ToolRunner:
         self,
         tool: str,
         args: List[str],
-        timeout: int = 60
+        timeout: int = 180
     ) -> Dict:
         """
         Execute tool with safety validation
@@ -267,7 +267,7 @@ class ToolRunner:
         templates_path: Optional[str] = None,
         severity: Optional[str] = None,
         tags: Optional[str] = None,
-        timeout: int = 300,
+        timeout: int = 600,
     ) -> Dict:
         """
         Execute Nuclei with optional template path and filters
@@ -300,7 +300,7 @@ class ToolRunner:
         target: str,
         top_ports: Optional[str] = None,
         port_range: Optional[str] = None,
-        timeout: int = 120,
+        timeout: int = 300,
     ) -> Dict:
         """
         Execute Naabu port scanner
@@ -327,7 +327,7 @@ class ToolRunner:
         self,
         target: str,
         depth: int = 3,
-        timeout: int = 120,
+        timeout: int = 300,
     ) -> Dict:
         """
         Execute Gospider for JavaScript file and endpoint discovery
@@ -348,7 +348,7 @@ class ToolRunner:
         target: str,
         api_token: Optional[str] = None,
         enumerate_options: Optional[List[str]] = None,
-        timeout: int = 300,
+        timeout: int = 600,
     ) -> Dict:
         """
         Execute WPScan for WordPress security scanning
