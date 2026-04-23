@@ -306,18 +306,6 @@ function SignInForm() {
             </button>
           </form>
 
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500">
-              New to Argus?{" "}
-              <Link
-                href="/auth/signup"
-                className="font-semibold text-[#6720FF] hover:underline transition-colors"
-              >
-                Create an account
-              </Link>
-            </p>
-          </div>
         </motion.div>
 
       </div>
