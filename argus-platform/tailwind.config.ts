@@ -109,10 +109,10 @@ module.exports = {
         "text-secondary": "var(--text-secondary)",
       },
       fontFamily: {
-        headline: ["Space Grotesk", "sans-serif"],
-        body: ["Inter", "sans-serif"],
-        label: ["Inter", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        headline: ["system-ui", "sans-serif"],
+        body: ["system-ui", "sans-serif"],
+        label: ["system-ui", "sans-serif"],
+        mono: ["ui-monospace", "SFMono-Regular", "monospace"],
       },
       borderRadius: {
         xl: "0.5rem",

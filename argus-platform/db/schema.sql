@@ -156,6 +156,7 @@ CREATE TABLE execution_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
     trace_id UUID NOT NULL,
+    log_level VARCHAR(20) DEFAULT 'INFO', -- INFO, WARN, ERROR, DEBUG
     event_type VARCHAR(100) NOT NULL, -- job_started, tool_executed, parser_completed, intelligence_decision
     message TEXT NOT NULL,
     metadata JSONB,

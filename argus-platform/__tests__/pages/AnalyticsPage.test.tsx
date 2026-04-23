@@ -26,7 +26,7 @@ jest.mock("recharts", () => ({
   Bar: () => <div data-testid="bar" />,
 }));
 
-global.fetch = jest.fn(() =>
+(global.fetch as jest.Mock) = jest.fn(() =>
   Promise.resolve({
     ok: true,
     json: async () => ({

@@ -1,7 +1,13 @@
-/** @type {import('next').NextConfig} */
+/** @type {import('next').NextConfig } */
 const nextConfig = {
   // Enable production optimizations
   productionBrowserSourceMaps: false,
+
+  // Suppress Node.js deprecation warnings
+  onDemandEntries: {
+    // Reduce memory footprint during dev
+    maxRetentionBoxCount: 2,
+  },
 
   // Image optimization with CDN support
   images: {
@@ -47,6 +53,18 @@ const nextConfig = {
   experimental: {
     // Enable if using App Router optimizations
     // serverActions: true,
+  },
+
+  // Webpack configuration to handle pg-native
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // pg-native is server-only, never bundle it for the browser
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        "pg-native": false,
+      };
+    }
+    return config;
   },
 };
 

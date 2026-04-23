@@ -44,15 +44,15 @@ export async function GET(
       WHERE el.engagement_id = $1
     `;
 
-    // Get total count
-    const countQuery = baseQuery
-      .replace("SELECT DISTINCT es.id,", "SELECT COUNT(DISTINCT es.id)")
-      .replace(
-        "SELECT DISTINCT es.trace_id,",
-        "SELECT COUNT(DISTINCT es.trace_id),",
-      );
+    // Get total count of distinct spans for pagination metadata.
+    const countQuery = `
+      SELECT COUNT(DISTINCT es.id) AS count
+      FROM execution_spans es
+      INNER JOIN execution_logs el ON es.trace_id = el.trace_id
+      WHERE el.engagement_id = $1
+    `;
     const countResult = await pool.query(countQuery, [engagementId]);
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = Number.parseInt(String(countResult.rows[0]?.count ?? "0"), 10);
 
     // Apply ordering and pagination
     const query = baseQuery + " ORDER BY es.created_at ASC LIMIT $2 OFFSET $3";
@@ -77,6 +77,13 @@ export async function GET(
 
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+
+    if (err.message.startsWith("ServiceUnavailable")) {
+      return NextResponse.json(
+        { error: "Authorization service unavailable" },
+        { status: 503 },
+      );
     }
 
     return NextResponse.json(

@@ -296,6 +296,7 @@ export default function DashboardPage() {
   const [toolMetrics, setToolMetrics] = useState<any[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
   const [attackPaths, setAttackPaths] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
+  const accessDeniedNotifiedRef = useRef(false);
   const [engagementStart, setEngagementStart] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return new Date().toISOString();
@@ -305,6 +306,7 @@ export default function DashboardPage() {
   const connectEngagement = useCallback((id: string) => {
     setEngagementId(id);
     setIsConnected(true);
+    accessDeniedNotifiedRef.current = false;
     localStorage.setItem("argus:active_engagement", id);
     // Sync to URL so back/forward and bookmarks work
     const url = new URL(window.location.href);
@@ -316,12 +318,26 @@ export default function DashboardPage() {
     setEngagementId("");
     setIsConnected(false);
     setCurrentState("created");
+    accessDeniedNotifiedRef.current = false;
     localStorage.removeItem("argus:active_engagement");
     localStorage.removeItem("argus:active_state");
     const url = new URL(window.location.href);
     url.searchParams.delete("engagement");
     window.history.replaceState({}, "", url.toString());
   }, []);
+
+  const handleEngagementAccessDenied = useCallback(
+    (statusCode: number) => {
+      if (statusCode !== 401 && statusCode !== 403) return false;
+      if (!accessDeniedNotifiedRef.current) {
+        accessDeniedNotifiedRef.current = true;
+        showToast("error", "Access to this engagement was denied. Cleared stale selection.");
+      }
+      disconnectEngagement();
+      return true;
+    },
+    [disconnectEngagement, showToast],
+  );
 
   // Sync URL query param into state when it changes (back/forward navigation)
   useEffect(() => {
@@ -357,6 +373,7 @@ export default function DashboardPage() {
     const fetchFindings = async () => {
       try {
         const res = await fetch(`/api/engagement/${engagementId}/findings?limit=50`);
+        if (handleEngagementAccessDenied(res.status)) return;
         if (res.ok) {
           const data = await res.json();
           setDbFindings(data.findings || []);
@@ -457,6 +474,12 @@ export default function DashboardPage() {
           fetch(`/api/engagement/${engagementId}/timeline?limit=100`),
           fetch(`/api/engagement/${engagementId}`),
         ]);
+        if (
+          handleEngagementAccessDenied(timelineRes.status) ||
+          handleEngagementAccessDenied(engagementRes.status)
+        ) {
+          return;
+        }
         if (timelineRes.ok) {
           const data = await timelineRes.json();
           const spans = (data.spans || []).map((s: any) => ({
@@ -493,22 +516,49 @@ export default function DashboardPage() {
     const fetchPaths = async () => {
       try {
         const response = await fetch(`/api/engagement/${engagementId}/findings?limit=20`);
+        if (handleEngagementAccessDenied(response.status)) return;
         if (response.ok) {
           const data = await response.json();
           const findings = data.findings || [];
-          // Build synthetic attack path nodes from findings
-          const nodes = findings.slice(0, 6).map((f: any, i: number) => ({
-            id: `node-${i}`,
-            type: i === 0 ? "entry" : i === findings.length - 1 ? "target" : "exploit",
-            label: f.type,
-            description: f.endpoint,
-            cvss: f.cvss_score,
-            confidence: f.confidence,
-          }));
-          const edges = nodes.slice(0, -1).map((_: any, i: number) => ({
-            source: `node-${i}`,
-            target: `node-${i + 1}`,
-            label: "exploits",
+          const sortedFindings = [...findings]
+            .sort((a: any, b: any) => (Number(b.cvss_score || 0) - Number(a.cvss_score || 0)))
+            .slice(0, 4);
+
+          const firstFinding = sortedFindings[0];
+          const entryLabel = firstFinding?.endpoint || firstFinding?.target || firstFinding?.host || "External Surface";
+          const targetLabel = sortedFindings[sortedFindings.length - 1]?.endpoint || "Critical Asset";
+
+          const nodes = [
+            {
+              id: "node-entry",
+              type: "entry",
+              label: "Entry Point",
+              description: entryLabel,
+              cvss: null,
+              confidence: null,
+            },
+            ...sortedFindings.map((f: any, i: number) => ({
+              id: `node-exploit-${i}`,
+              type: "exploit",
+              label: f.finding_type || f.type || f.title || "Exploit Step",
+              description: f.endpoint || f.target || f.source_tool || "Unknown target",
+              cvss: f.cvss_score,
+              confidence: f.confidence,
+            })),
+            {
+              id: "node-target",
+              type: "target",
+              label: "Target",
+              description: targetLabel,
+              cvss: null,
+              confidence: null,
+            },
+          ];
+
+          const edges = nodes.slice(0, -1).map((node: any, i: number) => ({
+            source: node.id,
+            target: nodes[i + 1].id,
+            label: i === 0 ? "recon" : i === nodes.length - 2 ? "impact" : "exploit",
           }));
           setAttackPaths({ nodes, edges });
         }
@@ -525,6 +575,7 @@ export default function DashboardPage() {
     const fetchState = async () => {
       try {
         const res = await fetch(`/api/engagement/${engagementId}`);
+        if (handleEngagementAccessDenied(res.status)) return;
         if (res.ok) {
           const data = await res.json();
           if (data.engagement?.status) {

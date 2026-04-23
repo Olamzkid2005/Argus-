@@ -16,7 +16,7 @@ jest.mock("@/components/ui-custom/AIStatus", () => ({
 }));
 jest.mock("@/components/ui-custom/MarkdownRenderer", () => ({ content }: any) => <div>{content}</div>);
 
-global.fetch = jest.fn(() =>
+(global.fetch as jest.Mock) = jest.fn(() =>
   Promise.resolve({
     ok: true,
     json: async () => ({ findings: [], engagements: [], configured: true }),

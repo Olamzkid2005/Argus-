@@ -41,7 +41,7 @@ jest.mock("@/components/ui-custom/AttackPathGraph", () => () => <div data-testid
 jest.mock("@/components/ui-custom/ExecutionTimeline", () => () => <div data-testid="execution-timeline" />);
 jest.mock("@/components/ui-custom/ToolPerformanceMetrics", () => () => <div data-testid="tool-metrics" />);
 
-global.fetch = jest.fn(() =>
+(global.fetch as jest.Mock) = jest.fn(() =>
   Promise.resolve({
     ok: true,
     json: async () => ({

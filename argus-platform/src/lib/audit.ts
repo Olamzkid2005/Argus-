@@ -31,27 +31,57 @@ export interface AuditLogEntry {
 }
 
 export async function logAudit(entry: AuditLogEntry) {
+  const traceId = entry.metadata?.trace_id || crypto.randomUUID();
+  const metadata = JSON.stringify({
+    user_id: entry.userId,
+    org_id: entry.orgId,
+    target_id: entry.targetId,
+    ip_address: entry.ipAddress,
+    ...entry.metadata,
+  });
+
   try {
     await pool.query(
       `INSERT INTO execution_logs 
         (trace_id, engagement_id, log_level, event_type, message, metadata, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
       [
-        entry.metadata?.trace_id || crypto.randomUUID(),
+        traceId,
         entry.engagementId || null,
         "INFO",
         entry.action,
         formatAuditMessage(entry),
-        JSON.stringify({
-          user_id: entry.userId,
-          org_id: entry.orgId,
-          target_id: entry.targetId,
-          ip_address: entry.ipAddress,
-          ...entry.metadata,
-        }),
+        metadata,
       ],
     );
-  } catch (error) {
+  } catch (error: unknown) {
+    const pgError = error as { code?: string; message?: string };
+    const missingLogLevel =
+      pgError.code === "42703" &&
+      (pgError.message?.includes("log_level") ?? false);
+
+    // Backward compatibility for databases that haven't added execution_logs.log_level.
+    if (missingLogLevel) {
+      try {
+        await pool.query(
+          `INSERT INTO execution_logs 
+            (trace_id, engagement_id, event_type, message, metadata, created_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [
+            traceId,
+            entry.engagementId || null,
+            entry.action,
+            formatAuditMessage(entry),
+            metadata,
+          ],
+        );
+        return;
+      } catch (fallbackError) {
+        console.error("Failed to write audit log (fallback):", fallbackError);
+        return;
+      }
+    }
+
     console.error("Failed to write audit log:", error);
   }
 }

@@ -9,7 +9,6 @@ import {
   Position,
   type Node,
   type Edge,
-  type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ShieldAlert, Target, Lock, Bug, Crosshair } from "lucide-react";
@@ -19,8 +18,8 @@ interface AttackPathNode {
   type: "entry" | "exploit" | "privilege" | "target";
   label: string;
   description?: string;
-  cvss?: number;
-  confidence?: number;
+  cvss?: number | null;
+  confidence?: number | null;
 }
 
 interface AttackPathEdge {
@@ -51,14 +50,43 @@ const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> 
 interface AttackNodeData {
   label: string;
   description?: string;
-  cvss?: number;
-  confidence?: number;
+  cvss?: number | null;
+  confidence?: number | null;
   type: string;
 }
 
+function parseOptionalNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const normalized = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function formatCvss(value: number): string {
+  const roundedTenth = Math.round(value * 10) / 10;
+  return String(roundedTenth);
+}
+
 function AttackNode({ data }: { data: AttackNodeData }) {
+  if (!data) {
+    return null;
+  }
+
   const Icon = NODE_ICONS[data.type] || ShieldAlert;
   const colors = NODE_COLORS[data.type] || NODE_COLORS.exploit;
+
+  const cvssValue = parseOptionalNumber(data.cvss);
+  const cvssDisplay = cvssValue !== null ? (
+    <span className="text-[9px] font-mono" style={{ color: colors.text }}>
+      CVSS: {formatCvss(cvssValue)}
+    </span>
+  ) : null;
+
+  const confidenceValue = parseOptionalNumber(data.confidence);
+  const confidenceDisplay = confidenceValue !== null ? (
+    <span className="text-[9px] font-mono text-text-secondary">
+      {Math.round(confidenceValue * 100)}%
+    </span>
+  ) : null;
 
   return (
     <div
@@ -79,32 +107,38 @@ function AttackNode({ data }: { data: AttackNodeData }) {
         <p className="text-[10px] text-text-secondary truncate">{data.description}</p>
       )}
       <div className="flex items-center gap-3 mt-2">
-        {Number.isFinite(data.cvss) && (
-          <span className="text-[9px] font-mono" style={{ color: colors.text }}>
-            CVSS: {data.cvss?.toFixed(1)}
-          </span>
-        )}
-        {Number.isFinite(data.confidence) && (
-          <span className="text-[9px] font-mono text-text-secondary">
-            {Math.round((data.confidence || 0) * 100)}%
-          </span>
-        )}
+        {cvssDisplay}
+        {confidenceDisplay}
       </div>
       <Handle type="source" position={Position.Bottom} style={{ background: colors.border, width: 8, height: 8 }} />
     </div>
   );
 }
 
-const nodeTypes: any = { attackNode: AttackNode };
+const TYPE_ORDER = ["entry", "exploit", "privilege", "target"] as const;
 
-export default function AttackPathGraph({ nodes, edges }: AttackPathGraphProps) {
+const nodeTypes = { attackNode: AttackNode } as const;
+
+export default function AttackPathGraph({ nodes = [], edges = [] }: AttackPathGraphProps) {
   const flowNodes: Node[] = useMemo(() => {
-    return nodes.map((n, i) => ({
-      id: n.id,
-      type: "attackNode",
-      position: { x: 180 + (i % 3) * 220, y: 40 + Math.floor(i / 3) * 140 },
-      data: { label: n.label, description: n.description, cvss: n.cvss, confidence: n.confidence, type: n.type },
-    }));
+    const sorted = [...nodes].sort(
+      (a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type)
+    );
+    const seenByType: Record<string, number> = {};
+
+    return sorted.map((n) => {
+      const typeIndex = Math.max(0, TYPE_ORDER.indexOf(n.type));
+      const rowIndex = seenByType[n.type] ?? 0;
+      seenByType[n.type] = rowIndex + 1;
+
+      return {
+        id: n.id,
+        type: "attackNode",
+        // Render as a left-to-right path map grouped by attack stage.
+        position: { x: 70 + typeIndex * 240, y: 40 + rowIndex * 140 },
+        data: { label: n.label, description: n.description, cvss: n.cvss, confidence: n.confidence, type: n.type },
+      };
+    });
   }, [nodes]);
 
   const flowEdges: Edge[] = useMemo(() => {
@@ -123,6 +157,11 @@ export default function AttackPathGraph({ nodes, edges }: AttackPathGraphProps) 
 
   return (
     <div className="w-full h-[420px] bg-surface/20 border border-structural">
+      {flowNodes.length === 0 ? (
+        <div className="w-full h-full flex items-center justify-center text-xs text-text-secondary font-mono">
+          No attack path data yet. Run a scan or wait for findings.
+        </div>
+      ) : null}
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}

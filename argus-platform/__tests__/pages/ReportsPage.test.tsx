@@ -12,7 +12,7 @@ jest.mock("next/navigation", () => ({
 
 jest.mock("@/components/effects/ScannerReveal", () => ({ text }: any) => <span>{text}</span>);
 
-global.fetch = jest.fn(() =>
+(global.fetch as jest.Mock) = jest.fn(() =>
   Promise.resolve({
     ok: true,
     json: async () => ({ reports: [] }),

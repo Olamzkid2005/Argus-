@@ -15,7 +15,7 @@ jest.mock("next-auth/react", () => ({
 jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
 jest.mock("@/components/ui-custom/ScanModeHelp", () => ({ trigger }: any) => <span>{trigger}</span>);
 
-global.fetch = jest.fn(() =>
+(global.fetch as jest.Mock) = jest.fn(() =>
   Promise.resolve({
     ok: true,
     json: async () => ({ settings: { scan_aggressiveness: "default" } }),
