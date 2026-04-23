@@ -81,6 +81,14 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
 
                 state_machine.transition("analyzing", "Scan complete")
 
+                # Queue analysis phase immediately after successful scan.
+                # The worker already routes tasks.analyze.* to the "analyze" queue.
+                analyze_task = app.send_task(
+                    "tasks.analyze.run_analysis",
+                    args=[engagement_id, budget, trace_id],
+                )
+                result["analysis_task_id"] = analyze_task.id
+
                 return result
         except Exception as e:
             # Query actual current state from DB before transitioning to failed

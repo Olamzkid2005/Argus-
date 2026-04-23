@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     try {
       // Build query with filters
       let query = `
-        SELECT f.id, f.type, f.severity, f.endpoint, f.source_tool, 
+        SELECT f.id, f.engagement_id, e.target_url, f.type, f.severity, f.endpoint, f.source_tool, 
                f.verified, f.confidence, f.created_at, f.evidence
         FROM findings f
         JOIN engagements e ON f.engagement_id = e.id
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
 
       // Get total count
       const countQuery = query.replace(
-        "SELECT f.id, f.type, f.severity, f.endpoint, f.source_tool, f.verified, f.confidence, f.created_at, f.evidence",
+        "SELECT f.id, f.engagement_id, e.target_url, f.type, f.severity, f.endpoint, f.source_tool, f.verified, f.confidence, f.created_at, f.evidence",
         "SELECT COUNT(*)",
       );
       const countResult = await client.query(countQuery, params);

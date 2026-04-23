@@ -118,6 +118,12 @@ class IntelligenceEngine:
             
             # Get FP likelihood
             fp_likelihood = finding.get("fp_likelihood", 0.2)
+            if fp_likelihood is None:
+                fp_likelihood = 0.2
+            try:
+                fp_likelihood = float(fp_likelihood)
+            except (TypeError, ValueError):
+                fp_likelihood = 0.2
             
             # Calculate confidence
             confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
@@ -170,7 +176,8 @@ class IntelligenceEngine:
         Returns:
             Evidence strength score (0.6-1.0)
         """
-        evidence_strength = finding.get("evidence_strength", "MINIMAL")
+        evidence_strength = finding.get("evidence_strength") or "MINIMAL"
+        evidence_strength = str(evidence_strength).upper()
         
         scores = {
             "VERIFIED": 1.0,

@@ -92,10 +92,11 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         except Exception as e:
             # Query actual current state from DB before transitioning to failed
             current_state = _get_engagement_state(engagement_id, db_conn_string)
-            state_machine = EngagementStateMachine(
-                engagement_id, db_connection_string=db_conn_string, current_state=current_state
-            )
-            state_machine.transition("failed", f"Analysis failed: {str(e)}")
+            if current_state != "failed":
+                state_machine = EngagementStateMachine(
+                    engagement_id, db_connection_string=db_conn_string, current_state=current_state
+                )
+                state_machine.transition("failed", f"Analysis failed: {str(e)}")
             raise
 
 

@@ -228,9 +228,12 @@ function SignInForm() {
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+                onKeyDown={(e) => e.stopPropagation()}
                 onFocus={() => setFocusedField("email")}
                 onBlur={() => setFocusedField(null)}
                 placeholder="architect@argus.ai"
+                autoComplete="email"
                 className={`w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
                   focusedField === "email"
                     ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
@@ -259,9 +262,12 @@ function SignInForm() {
                   id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+                  onKeyDown={(e) => e.stopPropagation()}
                   onFocus={() => setFocusedField("password")}
                   onBlur={() => setFocusedField(null)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   className={`w-full px-4 py-2.5 pr-12 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
                     focusedField === "password"
                       ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"

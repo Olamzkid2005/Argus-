@@ -50,6 +50,14 @@ export async function GET(
       paramIndex++;
     }
 
+    // Filter by creation date (for active scan filtering)
+    const since = searchParams.get("since");
+    if (since) {
+      query += ` AND created_at >= $${paramIndex}`;
+      queryParams.push(since);
+      paramIndex++;
+    }
+
     query += " ORDER BY severity DESC, confidence DESC, created_at DESC";
 
     // Get total count

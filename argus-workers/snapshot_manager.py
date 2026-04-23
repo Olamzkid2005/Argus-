@@ -7,6 +7,7 @@ from psycopg2 import sql
 import uuid
 from typing import Dict, List, Optional
 from datetime import datetime, UTC
+from decimal import Decimal
 
 
 class SnapshotManager:
@@ -110,6 +111,10 @@ class SnapshotManager:
                 "snapshot_timestamp": datetime.now(UTC).isoformat(),
             }
             
+            # Convert DB-native types (e.g. Decimal) into JSON-safe values
+            # before persisting and returning snapshot data.
+            snapshot_data = self._to_jsonable(snapshot_data)
+
             # Store snapshot in database
             snapshot_id = self._store_snapshot(engagement_id, snapshot_data, cursor)
             
@@ -126,6 +131,18 @@ class SnapshotManager:
         finally:
             cursor.close()
             conn.close()
+
+    def _to_jsonable(self, value):
+        """Recursively convert values to JSON-safe types."""
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {k: self._to_jsonable(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._to_jsonable(v) for v in value]
+        return value
     
     def _store_snapshot(
         self,

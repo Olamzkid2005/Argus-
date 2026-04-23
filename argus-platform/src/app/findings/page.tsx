@@ -34,10 +34,13 @@ import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import { MarkdownRenderer } from "@/components/ui-custom/MarkdownRenderer";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
+import SecurityRating from "@/components/security/SecurityRating";
 
 // ── Types ──
 interface Finding {
   id: string;
+  engagement_id: string;
+  target_url?: string;
   type: string;
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
   endpoint: string;
@@ -281,14 +284,19 @@ export default function FindingsPage() {
         const response = await fetch("/api/engagements?limit=50");
         if (response.ok) {
           const data = await response.json();
-          setEngagements(data.engagements || []);
+          const nextEngagements: Engagement[] = data.engagements || [];
+          setEngagements(nextEngagements);
+          // Default to the most recent engagement to avoid cross-target blending.
+          if (selectedEngagement === "all" && nextEngagements.length > 0) {
+            setSelectedEngagement(nextEngagements[0].id);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch engagements:", err);
       }
     };
     fetchEngagements();
-  }, [status]);
+  }, [status, selectedEngagement]);
 
   // Fetch findings
   useEffect(() => {
@@ -416,6 +424,40 @@ export default function FindingsPage() {
     }, {} as Record<string, number>);
   }, [findings]);
 
+  const findingsListItems = useMemo(() => {
+    if (selectedEngagement !== "all") {
+      return filtered.map((finding) => ({
+        kind: "finding" as const,
+        key: `finding-${finding.id}`,
+        finding,
+      }));
+    }
+
+    const grouped = filtered.reduce(
+      (acc, finding) => {
+        const target = finding.target_url || "Unknown target";
+        if (!acc[target]) acc[target] = [];
+        acc[target].push(finding);
+        return acc;
+      },
+      {} as Record<string, Finding[]>,
+    );
+
+    return Object.entries(grouped).flatMap(([target, targetFindings]) => [
+      {
+        kind: "header" as const,
+        key: `header-${target}`,
+        target,
+        count: targetFindings.length,
+      },
+      ...targetFindings.map((finding) => ({
+        kind: "finding" as const,
+        key: `finding-${finding.id}`,
+        finding,
+      })),
+    ]);
+  }, [filtered, selectedEngagement]);
+
   const hasExplanations = Object.keys(explanations).length > 0;
   const explainedCount = filtered.filter((f) => explanations[f.id]).length;
   const selectedFinding = findings.find((f) => f.id === selectedFindingId) || null;
@@ -517,6 +559,12 @@ export default function FindingsPage() {
           transition={{ delay: 0.1 }}
           className="col-span-12 lg:col-span-3 space-y-4"
         >
+          {/* Security Rating */}
+          <SecurityRating
+            engagementId={selectedEngagement !== "all" ? selectedEngagement : undefined}
+            showDetails={true}
+          />
+
           {/* Search */}
           <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-3">
             <div className="flex items-center gap-2">
@@ -614,7 +662,28 @@ export default function FindingsPage() {
         {/* Center - Findings List */}
         <ScrollReveal direction="up" delay={0.15} className="col-span-12 lg:col-span-5">
           <StaggerContainer className="space-y-3" staggerDelay={0.04}>
-            {filtered.map((finding) => {
+            {findingsListItems.map((item) => {
+              if (item.kind === "header") {
+                return (
+                  <StaggerItem key={item.key}>
+                    <div className="px-4 py-2 rounded-lg border border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/40">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
+                          Target
+                        </span>
+                        <span className="text-[10px] font-mono text-on-surface-variant">
+                          {item.count} finding{item.count === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-on-surface break-all">
+                        {item.target}
+                      </div>
+                    </div>
+                  </StaggerItem>
+                );
+              }
+
+              const finding = item.finding;
               const sev = severityConfig[finding.severity];
               const isExpanded = expandedRow === finding.id;
               const hasExplanation = !!explanations[finding.id];
@@ -681,7 +750,9 @@ export default function FindingsPage() {
                   </div>
                   <div className="text-sm text-on-surface font-body truncate">{finding.type}</div>
                   <div className="flex items-center justify-between mt-2">
-                    <span className="text-[11px] font-mono text-on-surface-variant">{finding.endpoint}</span>
+                    <span className="text-[11px] font-mono text-on-surface-variant truncate max-w-[55%]">
+                      {finding.endpoint}
+                    </span>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5">
                         <div className="w-16 h-1 rounded-full bg-surface-container-high dark:bg-surface-container overflow-hidden">
@@ -700,6 +771,9 @@ export default function FindingsPage() {
                         }`}
                       />
                     </div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-mono text-on-surface-variant/80 truncate">
+                    Target: {finding.target_url || "Unknown target"}
                   </div>
                 </div>
 

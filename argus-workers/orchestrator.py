@@ -813,8 +813,11 @@ class Orchestrator:
         findings = []
         if self.finding_repo:
             try:
-                findings = self.finding_repo.get_findings_by_engagement(self.engagement_id)
-                findings = [f.to_dict() for f in findings]
+                raw_findings = self.finding_repo.get_findings_by_engagement(self.engagement_id)
+                findings = [
+                    f.to_dict() if hasattr(f, "to_dict") else dict(f) if isinstance(f, dict) else f
+                    for f in raw_findings
+                ]
             except Exception as e:
                 logger.warning(f"Failed to load findings: {e}")
         

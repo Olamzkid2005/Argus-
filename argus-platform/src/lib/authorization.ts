@@ -27,7 +27,7 @@ export async function canAccessEngagement(
   session: Session,
   engagementId: string,
 ): Promise<boolean> {
-  let result: Awaited<ReturnType<typeof pool.query>> | null = null;
+  let result: any = null;
   for (let attempt = 0; attempt <= AUTH_QUERY_RETRIES; attempt++) {
     try {
       result = await pool.query(

@@ -24,15 +24,17 @@ jest.mock("next-themes", () => ({
 
 describe("Sidebar", () => {
   const mockOpenCommandPalette = jest.fn();
+  const mockOnClose = jest.fn();
 
   beforeEach(() => {
     mockUsePathname.mockReturnValue("/dashboard");
     mockOpenCommandPalette.mockClear();
     mockSetTheme.mockClear();
+    mockOnClose.mockClear();
   });
 
   it("renders brand and navigation items", () => {
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
 
     expect(screen.getByText("ARGUS")).toBeInTheDocument();
     expect(screen.getByText("SOC Infrastructure")).toBeInTheDocument();
@@ -49,14 +51,14 @@ describe("Sidebar", () => {
 
   it("highlights active nav item based on pathname", () => {
     mockUsePathname.mockReturnValue("/findings");
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
 
     const findingsLink = screen.getByText("Findings").closest("a");
     expect(findingsLink).toHaveClass("bg-white");
   });
 
   it("triggers command palette on button click", () => {
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
 
     const cmdButton = screen.getByText("Command").closest("button");
     fireEvent.click(cmdButton!);
@@ -64,7 +66,7 @@ describe("Sidebar", () => {
   });
 
   it("toggles theme when dark mode button is clicked", () => {
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
 
     const themeButton = screen.getByText("Dark Mode").closest("button");
     fireEvent.click(themeButton!);
@@ -72,18 +74,18 @@ describe("Sidebar", () => {
   });
 
   it("renders Report Incident button", () => {
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
     expect(screen.getByText("Report Incident")).toBeInTheDocument();
   });
 
   it("renders user profile section", () => {
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
     expect(screen.getByText("Operator")).toBeInTheDocument();
     expect(screen.getByText("Admin Level")).toBeInTheDocument();
   });
 
   it("renders Support and Logs links", () => {
-    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} />);
+    render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
     expect(screen.getByText("Support")).toBeInTheDocument();
     expect(screen.getByText("Logs")).toBeInTheDocument();
   });

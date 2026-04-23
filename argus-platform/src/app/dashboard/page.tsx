@@ -301,6 +301,14 @@ export default function DashboardPage() {
     if (typeof window === "undefined") return "";
     return new Date().toISOString();
   });
+  
+  // Track scan start time - set when scan phase begins
+  // Clear when scan completes (no active scan = no findings shown)
+  const [scanStartTime, setScanStartTime] = useState<string | null>(null);
+  const [showCompletionBanner, setShowCompletionBanner] = useState(false);
+  const [completionCount, setCompletionCount] = useState(0);
+  const prevStateRef = useRef(currentState);
+  const findingsLengthRef = useRef(0);
 
   // Persist active engagement to localStorage + URL so it survives navigation
   const connectEngagement = useCallback((id: string) => {
@@ -318,6 +326,8 @@ export default function DashboardPage() {
     setEngagementId("");
     setIsConnected(false);
     setCurrentState("created");
+    setScanStartTime(null); // Clear active scan
+    setShowCompletionBanner(false); // Hide completion banner
     accessDeniedNotifiedRef.current = false;
     localStorage.removeItem("argus:active_engagement");
     localStorage.removeItem("argus:active_state");
@@ -367,12 +377,42 @@ export default function DashboardPage() {
     }
   }, [engagementId, isConnected]);
 
+  // Track scan start time - set when scan phase begins
+  // Don't clear when scan completes - keep showing those findings
+  useEffect(() => {
+    if (currentState === "scanning" && !scanStartTime) {
+      setScanStartTime(new Date().toISOString());
+    }
+    // Clear scan start time when engagement fails
+    if (currentState === "failed") {
+      setScanStartTime(null);
+    }
+    // Clear scan start time when user disconnects (handled in disconnectEngagement)
+  }, [currentState]);
+
+  // Detect scan completion and show banner/toast
+  useEffect(() => {
+    if (prevStateRef.current !== "complete" && currentState === "complete") {
+      setCompletionCount(findingsLengthRef.current);
+      setShowCompletionBanner(true);
+      showToast("success", `Scan completed! Found ${findingsLengthRef.current} findings.`);
+      // Auto-hide banner after 15 seconds
+      setTimeout(() => setShowCompletionBanner(false), 15000);
+    }
+    prevStateRef.current = currentState;
+  }, [currentState]);
+
   // Fetch findings from DB so they persist beyond Redis TTL
   useEffect(() => {
     if (!engagementId || !isConnected) return;
     const fetchFindings = async () => {
       try {
-        const res = await fetch(`/api/engagement/${engagementId}/findings?limit=50`);
+        let url = `/api/engagement/${engagementId}/findings?limit=50`;
+        // Only fetch findings from the active scan
+        if (scanStartTime) {
+          url += `&since=${encodeURIComponent(scanStartTime)}`;
+        }
+        const res = await fetch(url);
         if (handleEngagementAccessDenied(res.status)) return;
         if (res.ok) {
           const data = await res.json();
@@ -385,7 +425,7 @@ export default function DashboardPage() {
     fetchFindings();
     const interval = setInterval(fetchFindings, 5000);
     return () => clearInterval(interval);
-  }, [engagementId, isConnected]);
+  }, [engagementId, isConnected, scanStartTime]);
 
   const {
     events,
@@ -610,30 +650,47 @@ export default function DashboardPage() {
     }
   };
 
-  const wsFindings = useMemo(() => events.filter(e => e.type === "finding_discovered"), [events]);
+  const wsFindings = useMemo(() => {
+    const filtered = events.filter(e => e.type === "finding_discovered");
+    // Only show findings from the active scan
+    if (!scanStartTime) return [];
+    return filtered.filter(e => 
+      new Date(e.timestamp) >= new Date(scanStartTime)
+    );
+  }, [events, scanStartTime]);
+  
   // Merge DB findings (persistent) with WebSocket findings (real-time)
+  // Only include findings from the active scan
   const findings = useMemo(() => {
+    // No active scan = no findings to show
+    if (!scanStartTime) return [];
+    
     const wsIds = new Set(wsFindings.map((f: any) => f.data?.finding_id));
     const merged = [...wsFindings];
     dbFindings.forEach((df: any) => {
       if (!wsIds.has(df.id)) {
-        merged.push({
-          type: "finding_discovered",
-          engagement_id: engagementId,
-          timestamp: df.created_at,
-          data: {
-            finding_id: df.id,
-            finding_type: df.finding_type,
-            severity: df.severity,
-            confidence: df.confidence,
-            endpoint: df.endpoint,
-            source_tool: df.source_tool,
-          },
-        } as WebSocketEvent);
+        // Only include if it's from the active scan
+        if (new Date(df.created_at) >= new Date(scanStartTime)) {
+          merged.push({
+            type: "finding_discovered",
+            engagement_id: engagementId,
+            timestamp: df.created_at,
+            data: {
+              finding_id: df.id,
+              finding_type: df.finding_type,
+              severity: df.severity,
+              confidence: df.confidence,
+              endpoint: df.endpoint,
+              source_tool: df.source_tool,
+            },
+          } as WebSocketEvent);
+        }
       }
     });
+    // Update ref for completion detection
+    findingsLengthRef.current = merged.length;
     return merged;
-  }, [wsFindings, dbFindings, engagementId]);
+  }, [wsFindings, dbFindings, engagementId, scanStartTime]);
 
   // Timeline shows state transitions, jobs, errors — NOT scanner activities (they have their own panel)
   const otherEvents = useMemo(() => events.filter(e => e.type !== "finding_discovered" && e.type !== "scanner_activity"), [events]);
@@ -641,7 +698,7 @@ export default function DashboardPage() {
   const stats = [
     {
       label: "Total Findings",
-      value: dbStats?.totalFindings ?? findings.length,
+      value: dbStats?.totalFindings ?? 0,
       icon: Activity,
       color: "#6720FF",
     },
@@ -704,6 +761,47 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
+        {/* ── Scan Completion Banner ── */}
+        <AnimatePresence>
+          {showCompletionBanner && currentState === "complete" && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center gap-4"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+              >
+                <CheckCircle2 size={24} className="text-green-500" />
+              </motion.div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-green-500 uppercase tracking-wide">
+                  Scan Complete!
+                </h3>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Found {completionCount} findings •{" "}
+                    <button
+                    onClick={() => router.push(`/engagements/${engagementId}/report`)}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    View Full Report →
+                  </button>
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCompletionBanner(false)}
+                className="p-1 hover:bg-green-500/10 rounded-lg transition-all"
+              >
+                <XCircle size={16} className="text-on-surface-variant" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── Engagement Connection Bar ── */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -749,37 +847,66 @@ export default function DashboardPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: -8 }}
               transition={{ duration: 0.35, ease: "easeOut" }}
-              className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300"
+              className={`p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-300 ${
+                currentState === "complete" 
+                  ? "bg-green-500/5 border border-green-500/30 rounded-xl" 
+                  : "bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl"
+              }`}
             >
-            <div className="flex items-center gap-4">
-              <div className="relative w-8 h-8 flex items-center justify-center">
-                <div className="absolute inset-0 border border-primary/30 rounded-full animate-spin [animation-duration:3s]" />
-                <ShieldAlert className="h-4 w-4 text-primary" />
+              <div className="flex items-center gap-4">
+                <div className={`relative w-8 h-8 flex items-center justify-center ${
+                  currentState === "complete" ? "bg-green-500/10 rounded-full" : ""
+                }`}>
+                  {currentState === "complete" ? (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                    >
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    </motion.div>
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 border border-primary/30 rounded-full animate-spin [animation-duration:3s]" />
+                      <ShieldAlert className="h-4 w-4 text-primary" />
+                    </>
+                  )}
+                </div>
+                <span className="text-xs font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-widest font-body">
+                  Operational Phase: <span className={
+                    currentState === "complete" ? "text-green-500 font-bold" : "text-on-surface dark:text-[#F0F0F5]"
+                  }>{currentState.replace(/_/g, " ")}</span>
+                </span>
               </div>
-              <span className="text-xs font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-widest font-body">
-                Operational Phase: <span className="text-on-surface dark:text-[#F0F0F5]">{currentState.replace(/_/g, " ")}</span>
-              </span>
-            </div>
 
-            <div className="flex gap-3">
-              {currentState === "awaiting_approval" && (
-                <button
-                  onClick={handleApprove}
-                  disabled={isApproving}
-                  className="px-6 py-2 bg-primary text-on-primary font-bold text-[10px] tracking-widest uppercase hover:opacity-90 transition-all duration-300 disabled:opacity-50 rounded-lg shadow-glow"
-                >
-                  {isApproving ? "Authorizing..." : "Authorize Execution"}
+              <div className="flex gap-3">
+                {currentState === "awaiting_approval" && (
+                  <button
+                    onClick={handleApprove}
+                    disabled={isApproving}
+                    className="px-6 py-2 bg-primary text-on-primary font-bold text-[10px] tracking-widest uppercase hover:opacity-90 transition-all duration-300 disabled:opacity-50 rounded-lg shadow-glow"
+                  >
+                    {isApproving ? "Authorizing..." : "Authorize Execution"}
+                  </button>
+                )}
+                {currentState === "complete" && (
+                  <button
+                    onClick={() => router.push(`/engagements/${engagementId}/report`)}
+                    className="px-6 py-2 bg-green-500 text-white font-bold text-[10px] tracking-widest uppercase hover:bg-green-600 transition-all duration-300 rounded-lg shadow-glow"
+                  >
+                    <CheckCircle2 size={14} className="inline mr-2" />
+                    View Report
+                  </button>
+                )}
+                <button onClick={reconnect} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
+                  <RefreshCcw size={16} />
                 </button>
-              )}
-              <button onClick={reconnect} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
-                <RefreshCcw size={16} />
-              </button>
-              <button onClick={clearEvents} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-lg hover:bg-error/5">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </motion.div>
-        )}
+                <button onClick={clearEvents} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-lg hover:bg-error/5">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
 
         {/* ── Stats Grid ── */}
@@ -804,6 +931,11 @@ export default function DashboardPage() {
                 <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">
                   Network Intelligence Feed
                 </h2>
+                {scanStartTime && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-md">
+                    Active Scan Only
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => router.push(`/findings?engagement=${engagementId}`)}
