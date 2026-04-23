@@ -1,10 +1,10 @@
  
  -------------- celery@MacBook-Air.local v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-23 07:57:57
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-23 14:15:41
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x1076fcad0
+- ** ---------- .> app:         argus_workers:0x1110a4ad0
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -35,13 +35,13 @@
   . tasks.scan.deep_scan
   . tasks.scan.run_scan
 
-[2026-04-23 07:57:58,556: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-04-23 07:57:58,568: INFO/MainProcess] mingle: searching for neighbors
-[2026-04-23 07:57:59,763: INFO/MainProcess] mingle: all alone
-[2026-04-23 07:57:59,890: INFO/MainProcess] celery@MacBook-Air.local ready.
-[2026-04-23 07:57:59,937: INFO/MainProcess] Task tasks.health.ping[4dcf6e50-5c17-4318-b1d2-1135e9eeea43] received
-[2026-04-23 07:58:00,077: INFO/ForkPoolWorker-2] Task 4dcf6e50-5c17-4318-b1d2-1135e9eeea43 succeeded
-[2026-04-23 07:58:00,078: INFO/ForkPoolWorker-2] Task tasks.health.ping[4dcf6e50-5c17-4318-b1d2-1135e9eeea43] succeeded in 0.06696408599964343s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 97873, 'timestamp': '2026-04-23T06:58:00.075154'}
+[2026-04-23 14:15:42,251: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-23 14:15:42,263: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-23 14:15:43,336: INFO/MainProcess] mingle: all alone
+[2026-04-23 14:15:43,582: INFO/MainProcess] celery@MacBook-Air.local ready.
+[2026-04-23 14:15:43,660: INFO/MainProcess] Task tasks.health.ping[7981f332-563c-402e-ae15-87f291b8a10c] received
+[2026-04-23 14:15:43,864: INFO/ForkPoolWorker-2] Task 7981f332-563c-402e-ae15-87f291b8a10c succeeded
+[2026-04-23 14:15:43,866: INFO/ForkPoolWorker-2] Task tasks.health.ping[7981f332-563c-402e-ae15-87f291b8a10c] succeeded in 0.11420125799486414s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 42274, 'timestamp': '2026-04-23T13:15:43.779775'}
 
 worker: Warm shutdown (MainProcess)
 

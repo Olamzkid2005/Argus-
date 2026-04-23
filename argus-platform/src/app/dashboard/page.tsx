@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback, Suspense, lazy } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
-import { useEngagementEvents } from "@/lib/use-engagement-events";
-import { WebSocketEvent } from "@/lib/websocket-events";
 import { useToast } from "@/components/ui/Toast";
+import { useMobileDetect } from "@/hooks/useMobileDetect";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
@@ -18,7 +17,6 @@ import {
   Target,
   Lock,
   Database,
-  RefreshCcw,
   Trash2,
   Cpu,
   CheckCircle2,
@@ -27,12 +25,16 @@ import {
   Terminal,
   GitBranch,
   BarChart3,
+  StopCircle,
+  Eye,
+  History,
 } from "lucide-react";
 import ScannerReveal from "@/components/effects/ScannerReveal";
 import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import ScannerActivityPanel from "@/components/ui-custom/ScannerActivityPanel";
 import { useScannerActivities } from "@/lib/use-scanner-activities";
+import { useScanEstimates } from "@/hooks/useScanEstimates";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
@@ -159,45 +161,47 @@ function TimelineRow({ event }: { event: WebSocketEvent }) {
   );
 }
 
-function ScanStepTimeline({ currentState, activities }: { currentState: string; activities: any[] }) {
-  const steps = [
-    { id: "recon", label: "Reconnaissance" },
-    { id: "fingerprinting", label: "Fingerprinting" },
-    { id: "vuln_mapping", label: "Vulnerability Mapping" },
-    { id: "reporting", label: "Final Reporting" },
-  ];
+function ScanStepTimeline({
+  currentState,
+  activities,
+  engagementStart,
+}: {
+  currentState: string;
+  activities: any[];
+  engagementStart?: string;
+}) {
+  const {
+    phaseEstimates,
+    getPhaseStatus,
+    getPhaseElapsed,
+    getPhaseRemaining,
+    getPhaseProgress,
+    getPhaseCompletionTime,
+    phaseHistory,
+    formatDuration,
+  } = useScanEstimates(currentState, {}, engagementStart);
 
-  const getStepStatus = (stepId: string) => {
-    const stateOrder = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
-    const currentIdx = stateOrder.indexOf(currentState);
+  const steps = phaseEstimates;
 
-    if (stepId === "recon") {
-      if (currentState === "recon" || currentState === "awaiting_approval") return "in_progress";
-      if (currentIdx > stateOrder.indexOf("awaiting_approval")) return "completed";
-    }
-    if (stepId === "fingerprinting") {
-      if (currentState === "scanning") return "in_progress";
-      if (currentIdx > stateOrder.indexOf("scanning")) return "completed";
-    }
-    if (stepId === "vuln_mapping") {
-      if (currentState === "analyzing") return "in_progress";
-      if (currentIdx > stateOrder.indexOf("analyzing")) return "completed";
-    }
-    if (stepId === "reporting") {
-      if (currentState === "reporting") return "in_progress";
-      if (currentState === "complete") return "completed";
-    }
-    return "pending";
-  };
-
-  const completedCount = steps.filter((s) => getStepStatus(s.id) === "completed").length;
-  const inProgressCount = steps.filter((s) => getStepStatus(s.id) === "in_progress").length;
-  const progress = steps.length > 0 ? ((completedCount + (inProgressCount * 0.5)) / steps.length) * 100 : 0;
+  const completedCount = steps.filter((s) => getPhaseStatus(s.id) === "completed").length;
+  const inProgressCount = steps.filter((s) => getPhaseStatus(s.id) === "in_progress").length;
+  const progress = steps.length > 0 ? ((completedCount + inProgressCount * 0.5) / steps.length) * 100 : 0;
 
   const activeActivity = activities.find((a) => a.status === "started" || a.status === "in_progress");
 
+  const getStepIcon = (status: string) => {
+    if (status === "completed") {
+      return <CheckCircle2 size={14} className="text-primary shrink-0" />;
+    }
+    if (status === "in_progress") {
+      return <Loader2 size={14} className="text-primary animate-spin shrink-0" />;
+    }
+    return <Clock size={14} className="text-on-surface-variant dark:text-[#8A8A9E] shrink-0" />;
+  };
+
   return (
     <div className="space-y-5">
+      {/* Overall progress */}
       <div className="h-2 w-full bg-surface-container dark:bg-[#1A1A24] rounded-full overflow-hidden">
         <motion.div
           className="h-full bg-primary rounded-full"
@@ -207,44 +211,119 @@ function ScanStepTimeline({ currentState, activities }: { currentState: string; 
         />
       </div>
 
-      <div className="space-y-3">
+      {/* Steps */}
+      <div className="space-y-4">
         {steps.map((step, i) => {
-          const status = getStepStatus(step.id);
+          const status = getPhaseStatus(step.id);
+          const completionTime = getPhaseCompletionTime(step.id);
+          const phaseElapsed = getPhaseElapsed(step.id);
+          const phaseRemaining = getPhaseRemaining(step.id);
+          const phaseProgress = getPhaseProgress(step.id);
+
           return (
-            <div key={step.id} className="flex items-center gap-3">
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
-                  status === "completed"
-                    ? "bg-primary text-on-primary"
-                    : status === "in_progress"
-                    ? "bg-primary/10 text-primary border border-primary"
-                    : "bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant dark:text-[#8A8A9E]"
-                }`}
-              >
-                {status === "completed" ? <CheckCircle2 size={14} /> : i + 1}
+            <div key={step.id} className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 shrink-0 ${
+                    status === "completed"
+                      ? "bg-primary text-on-primary"
+                      : status === "in_progress"
+                      ? "bg-primary/10 text-primary border border-primary"
+                      : "bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant dark:text-[#8A8A9E]"
+                  }`}
+                >
+                  {status === "completed" ? <CheckCircle2 size={14} /> : i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-sm font-body transition-colors duration-300 ${
+                        status === "completed"
+                          ? "text-on-surface dark:text-[#F0F0F5]"
+                          : status === "in_progress"
+                          ? "text-primary font-medium"
+                          : "text-on-surface-variant dark:text-[#8A8A9E]"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {status === "in_progress" && phaseRemaining > 0 && (
+                        <span className="text-[10px] font-mono text-primary">
+                          {formatDuration(phaseRemaining)} remaining
+                        </span>
+                      )}
+                      {status === "completed" && completionTime && (
+                        <span className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E]">
+                          {completionTime.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      )}
+                      {getStepIcon(status)}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <span
-                className={`text-sm font-body transition-colors duration-300 ${
-                  status === "completed"
-                    ? "text-on-surface dark:text-[#F0F0F5]"
-                    : status === "in_progress"
-                    ? "text-primary font-medium"
-                    : "text-on-surface-variant dark:text-[#8A8A9E]"
-                }`}
-              >
-                {step.label}
-              </span>
-              {status === "in_progress" && (
-                <Loader2 size={14} className="text-primary animate-spin ml-auto" />
-              )}
-              {status === "completed" && (
-                <CheckCircle2 size={14} className="text-primary ml-auto" />
-              )}
+
+              {/* Phase progress bar and details */}
+              <div className="pl-10">
+                <div className="h-1 w-full bg-surface-container dark:bg-[#1A1A24] rounded-full overflow-hidden mb-1">
+                  <motion.div
+                    className="h-full bg-primary rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${phaseProgress}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-on-surface-variant dark:text-[#8A8A9E] font-mono">
+                  <span>
+                    {status === "completed"
+                      ? `Completed in ${formatDuration(phaseElapsed)}`
+                      : status === "in_progress"
+                      ? `${phaseProgress}% • ${formatDuration(phaseElapsed)} elapsed`
+                      : `Estimated ~${step.estimatedMinutes} min`}
+                  </span>
+                  <span>
+                    {status === "pending" ? `~${step.estimatedMinutes} min` : `${phaseProgress}%`}
+                  </span>
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
 
+      {/* Phase History */}
+      {phaseHistory.length > 0 && (
+        <div className="pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
+          <div className="flex items-center gap-1.5 mb-2">
+            <History size={12} className="text-on-surface-variant dark:text-[#8A8A9E]" />
+            <span className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">
+              Phase History
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {phaseHistory.map((phase) => (
+              <div key={phase.id} className="flex items-center gap-2 text-[11px]">
+                <CheckCircle2 size={12} className="text-primary shrink-0" />
+                <span className="text-on-surface dark:text-[#F0F0F5] font-body">{phase.label}</span>
+                <span className="text-on-surface-variant dark:text-[#8A8A9E] font-mono ml-auto">
+                  completed at{" "}
+                  {phase.completionTime?.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Current Operation */}
       {activeActivity && (
         <div className="pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
           <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1.5">
@@ -309,6 +388,10 @@ export default function DashboardPage() {
   const [completionCount, setCompletionCount] = useState(0);
   const prevStateRef = useRef(currentState);
   const findingsLengthRef = useRef(0);
+  const completionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const isMobile = useMobileDetect();
 
   // Persist active engagement to localStorage + URL so it survives navigation
   const connectEngagement = useCallback((id: string) => {
@@ -335,6 +418,61 @@ export default function DashboardPage() {
     url.searchParams.delete("engagement");
     window.history.replaceState({}, "", url.toString());
   }, []);
+
+  const handleStop = async (id: string) => {
+    if (!confirm("Stop this scan?")) return;
+    setStoppingId(id);
+    try {
+      const response = await fetch(`/api/engagement/${id}/stop`, {
+        method: "POST",
+      });
+      if (response.ok) {
+        showToast("success", "Scan stopped");
+        // Refresh recent engagements
+        const res = await fetch("/api/dashboard/stats");
+        if (res.ok) {
+          const data = await res.json();
+          setRecentEngagements(data.recent_engagements || []);
+        }
+        // If we're monitoring this engagement, disconnect
+        if (engagementId === id) {
+          disconnectEngagement();
+        }
+      } else {
+        const data = await response.json();
+        showToast("error", data.error || "Failed to stop scan");
+      }
+    } catch (err) {
+      showToast("error", "Failed to stop scan");
+    } finally {
+      setStoppingId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this engagement and all its findings?")) return;
+    setDeletingId(id);
+    try {
+      const response = await fetch(`/api/engagement/${id}/delete`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        showToast("success", "Engagement deleted");
+        setRecentEngagements((prev) => prev.filter((e) => e.id !== id));
+        // If we're monitoring this engagement, disconnect
+        if (engagementId === id) {
+          disconnectEngagement();
+        }
+      } else {
+        const data = await response.json();
+        showToast("error", data.error || "Failed to delete engagement");
+      }
+    } catch (err) {
+      showToast("error", "Failed to delete engagement");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleEngagementAccessDenied = useCallback(
     (statusCode: number) => {
@@ -695,6 +833,14 @@ export default function DashboardPage() {
   // Timeline shows state transitions, jobs, errors — NOT scanner activities (they have their own panel)
   const otherEvents = useMemo(() => events.filter(e => e.type !== "finding_discovered" && e.type !== "scanner_activity"), [events]);
 
+  // Calculate scan progress percentage from status
+  const getScanProgress = (status: string) => {
+    const order = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+    const idx = order.indexOf(status);
+    if (idx === -1) return 0;
+    return Math.round(((idx + 1) / order.length) * 100);
+  };
+
   const stats = [
     {
       label: "Total Findings",
@@ -889,6 +1035,20 @@ export default function DashboardPage() {
                     {isApproving ? "Authorizing..." : "Authorize Execution"}
                   </button>
                 )}
+                {["recon", "scanning", "analyzing", "reporting"].includes(currentState) && (
+                  <button
+                    onClick={() => handleStop(engagementId)}
+                    disabled={stoppingId === engagementId}
+                    className="px-6 py-2 bg-error/10 text-error border border-error/20 font-bold text-[10px] tracking-widest uppercase hover:bg-error/20 transition-all duration-300 disabled:opacity-50 rounded-lg"
+                  >
+                    {stoppingId === engagementId ? (
+                      <Loader2 size={14} className="inline mr-2 animate-spin" />
+                    ) : (
+                      <StopCircle size={14} className="inline mr-2" />
+                    )}
+                    Stop Scan
+                  </button>
+                )}
                 {currentState === "complete" && (
                   <button
                     onClick={() => router.push(`/engagements/${engagementId}/report`)}
@@ -899,7 +1059,7 @@ export default function DashboardPage() {
                   </button>
                 )}
                 <button onClick={reconnect} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
-                  <RefreshCcw size={16} />
+                  <Loader2 size={16} />
                 </button>
                 <button onClick={clearEvents} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-lg hover:bg-error/5">
                   <Trash2 size={16} />
@@ -982,40 +1142,123 @@ export default function DashboardPage() {
                         View All
                       </button>
                     </div>
-                    {recentEngagements.length === 0 ? (
+                    {recentEngagements.filter((eng) => eng.status !== "complete" && !["complete", "failed"].includes(eng.status)).length === 0 && recentEngagements.filter((eng) => ["complete", "failed"].includes(eng.status)).length === 0 ? (
                       <div className="text-center py-6 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 text-xs font-mono uppercase">
                         No engagements yet
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {recentEngagements.slice(0, 5).map((eng) => (
-                          <div
-                            key={eng.id}
-                            className="flex items-center justify-between px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:bg-surface-container-high dark:hover:bg-[#1A1A24] transition-all duration-300 cursor-pointer"
-                            onClick={() => {
-                              connectEngagement(eng.id);
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-2 h-2 rounded-full ${
-                                eng.status === 'complete' ? 'bg-green-500' :
-                                eng.status === 'failed' ? 'bg-error' :
-                                eng.status === 'scanning' ? 'bg-primary animate-pulse' :
-                                'bg-amber-400'
-                              }`} />
-                              <div>
-                                <div className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono truncate max-w-[200px]">{eng.target_url}</div>
-                                <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] uppercase">{eng.status.replace(/_/g, " ")}</div>
+                        {/* Active engagements with progress */}
+                        {recentEngagements.filter((eng) => !["complete", "failed"].includes(eng.status)).slice(0, 5).map((eng) => {
+                          const progress = getScanProgress(eng.status);
+                          const isStopping = stoppingId === eng.id;
+                          return (
+                            <div
+                              key={eng.id}
+                              className="px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:bg-surface-container-high dark:hover:bg-[#1A1A24] transition-all duration-300"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                    eng.status === 'complete' ? 'bg-green-500' :
+                                    eng.status === 'failed' ? 'bg-error' :
+                                    eng.status === 'scanning' || eng.status === 'recon' ? 'bg-primary animate-pulse' :
+                                    'bg-amber-400'
+                                  }`} />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono truncate">{eng.target_url}</div>
+                                    <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] uppercase">{eng.status.replace(/_/g, " ")} • {progress}%</div>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1 ml-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStop(eng.id);
+                                    }}
+                                    disabled={isStopping}
+                                    className="p-1.5 hover:bg-error/10 rounded text-error transition-all duration-300"
+                                    title="Stop scan"
+                                  >
+                                    {isStopping ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <StopCircle size={14} />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      connectEngagement(eng.id);
+                                    }}
+                                    className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
+                                    title="Monitor"
+                                  >
+                                    <Eye size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Progress bar */}
+                              <div className="h-1 w-full bg-surface-container-high dark:bg-[#1A1A24] rounded-full overflow-hidden">
+                                <motion.div
+                                  className="h-full bg-primary rounded-full"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${progress}%` }}
+                                  transition={{ duration: 0.6, ease: "easeOut" }}
+                                />
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              {eng.findings_count > 0 && (
-                                <span className="text-[10px] font-mono text-primary">{eng.findings_count} findings</span>
-                              )}
-                              <ChevronRight size={12} className="text-on-surface-variant dark:text-[#8A8A9E]" />
+                          );
+                        })}
+                        {/* Completed/Failed engagements with delete */}
+                        {recentEngagements.filter((eng) => ["complete", "failed"].includes(eng.status)).slice(0, 3).map((eng) => {
+                          const isDeleting = deletingId === eng.id;
+                          return (
+                            <div
+                              key={eng.id}
+                              className="px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:bg-surface-container-high dark:hover:bg-[#1A1A24] transition-all duration-300"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                    eng.status === 'complete' ? 'bg-green-500' : 'bg-error'
+                                  }`} />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono truncate">{eng.target_url}</div>
+                                    <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] uppercase">{eng.status.replace(/_/g, " ")}</div>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1 ml-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(eng.id);
+                                    }}
+                                    disabled={isDeleting}
+                                    className="p-1.5 hover:bg-red-500/10 rounded text-red-400 transition-all duration-300"
+                                    title="Delete"
+                                  >
+                                    {isDeleting ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Trash2 size={14} />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(`/dashboard?engagement=${eng.id}`);
+                                    }}
+                                    className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
+                                    title="View"
+                                  >
+                                    <Eye size={14} />
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1166,7 +1409,7 @@ export default function DashboardPage() {
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <ScanStepTimeline currentState={currentState} activities={scannerActivities} />
+                    <ScanStepTimeline currentState={currentState} activities={scannerActivities} engagementStart={engagementStart} />
                   </motion.div>
                 ) : (
                   <motion.div

@@ -628,6 +628,23 @@ export default function SettingsPage() {
                 <span className="text-[10px] font-mono text-on-surface-variant">Coming Soon</span>
               </div>
 
+              {/* Onboarding Tour */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} className="text-primary" />
+                  <span className="text-xs text-on-surface font-body">Onboarding Tour</span>
+                </div>
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent("argus:restart-onboarding"));
+                    showToast("info", "Onboarding tour restarted");
+                  }}
+                  className="text-[10px] font-bold text-primary uppercase tracking-wider hover:underline transition-all"
+                >
+                  Restart
+                </button>
+              </div>
+
               {/* Logout */}
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}

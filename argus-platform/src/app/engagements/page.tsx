@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
@@ -22,6 +22,9 @@ import {
   Activity,
   Server,
   Cpu,
+  X,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 import {
@@ -48,6 +51,74 @@ interface Engagement {
   critical_count: number;
 }
 
+interface URLHistoryItem {
+  url: string;
+  timestamp: number;
+  scanType: "url" | "repo";
+}
+
+const HISTORY_KEY = "argus:url-history";
+const MAX_HISTORY = 10;
+
+const getDomain = (url: string) => {
+  try {
+    return new URL(url.startsWith('http') ? url : `https://${url}`).hostname;
+  } catch {
+    return url;
+  }
+};
+
+const useURLHistory = () => {
+  const [history, setHistory] = useState<URLHistoryItem[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(HISTORY_KEY);
+      if (stored) {
+        setHistory(JSON.parse(stored));
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  const addToHistory = useCallback((url: string, scanType: "url" | "repo") => {
+    setHistory((prev) => {
+      const filtered = prev.filter((item) => item.url !== url);
+      const updated = [{ url, timestamp: Date.now(), scanType }, ...filtered].slice(0, MAX_HISTORY);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore storage errors
+      }
+      return updated;
+    });
+  }, []);
+
+  const removeFromHistory = useCallback((url: string) => {
+    setHistory((prev) => {
+      const updated = prev.filter((item) => item.url !== url);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      } catch {
+        // ignore storage errors
+      }
+      return updated;
+    });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  return { history, addToHistory, removeFromHistory, clearHistory };
+};
+
 const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
   created: { color: "text-blue-500", bg: "bg-blue-500/10", label: "Created" },
   recon: { color: "text-amber-500", bg: "bg-amber-500/10", label: "Recon" },
@@ -71,6 +142,9 @@ export default function EngagementsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [progressStep, setProgressStep] = useState("");
   const [error, setError] = useState("");
+  const [showAllHistory, setShowAllHistory] = useState(false);
+
+  const { history, addToHistory, removeFromHistory, clearHistory } = useURLHistory();
 
   // Live engagements state
   const [liveEngagements, setLiveEngagements] = useState<Engagement[]>([]);
@@ -89,7 +163,10 @@ export default function EngagementsPage() {
             setScanAggressiveness(data.settings.scan_aggressiveness);
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setSettingsLoading(false));
+    } else if (status === "unauthenticated") {
+      setSettingsLoading(false);
     }
   }, [status]);
 
@@ -193,6 +270,7 @@ export default function EngagementsPage() {
 
       setProgressStep("Redirecting to dashboard...");
       showToast("success", "Operation initiated");
+      addToHistory(target, scanType);
       router.push(`/dashboard?engagement=${engagementId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Handshake failed");
@@ -229,6 +307,17 @@ export default function EngagementsPage() {
 
   return (
     <div className="min-h-screen bg-background dark:bg-[#0A0A0F] matrix-grid">
+      <style jsx>{`
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .shimmer {
+          background: linear-gradient(90deg, transparent 0%, rgba(103, 32, 255, 0.08) 50%, transparent 100%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+        }
+      `}</style>
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-8">
         {/* ── Header ── */}
         <motion.div
@@ -298,23 +387,89 @@ export default function EngagementsPage() {
                 <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
                   Target Identifier
                 </label>
-                <div className="relative">
-                  <Target className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant dark:text-[#8A8A9E]" />
-                  <input
-                    type="text"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                    placeholder={scanType === "url" ? "https://target.com" : "username/repository"}
-                    className="w-full pl-10 pr-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-sm font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-300 placeholder:text-on-surface-variant/40 dark:placeholder:text-[#8A8A9E]/40"
-                    required
-                  />
-                </div>
-                {error && (
-                  <p className="mt-2 text-[11px] font-mono text-error uppercase tracking-widest font-bold">
-                    {error}
-                  </p>
+                {settingsLoading ? (
+                  <div className="w-full h-[46px] rounded-lg shimmer" />
+                ) : (
+                  <div className="relative">
+                    <Target className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant dark:text-[#8A8A9E]" />
+                    <input
+                      type="text"
+                      value={target}
+                      onChange={(e) => setTarget(e.target.value)}
+                      placeholder={scanType === "url" ? "https://target.com" : "username/repository"}
+                      className="w-full pl-10 pr-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-sm font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-300 placeholder:text-on-surface-variant/40 dark:placeholder:text-[#8A8A9E]/40"
+                      required
+                    />
+                  </div>
                 )}
-              </div>
+                 {error && (
+                   <p className="mt-2 text-[11px] font-mono text-error uppercase tracking-widest font-bold">
+                     {error}
+                   </p>
+                 )}
+               </div>
+
+               {/* Recent Targets */}
+               {history.length > 0 && (
+                 <div>
+                   <div className="flex items-center justify-between mb-2">
+                     <span className="text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] font-body">
+                       Recent Targets
+                     </span>
+                     <div className="flex items-center gap-2">
+                       {history.length > 5 && (
+                         <button
+                           type="button"
+                           onClick={() => setShowAllHistory(!showAllHistory)}
+                           className="text-[10px] text-primary hover:underline font-body flex items-center gap-1"
+                         >
+                           {showAllHistory ? (
+                             <>Show less <ChevronUp size={12} /></>
+                           ) : (
+                             <>Show all ({history.length}) <ChevronDown size={12} /></>
+                           )}
+                         </button>
+                       )}
+                       <button
+                         type="button"
+                         onClick={clearHistory}
+                         className="text-[10px] text-error hover:underline font-body"
+                       >
+                         Clear all
+                       </button>
+                     </div>
+                   </div>
+                   <div className="flex flex-wrap gap-2">
+                     {(showAllHistory ? history : history.slice(0, 5)).map((item) => (
+                       <span
+                         key={item.url}
+                         className="group flex items-center gap-1.5 px-3 py-1.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-md text-xs font-mono text-on-surface-variant hover:border-primary/30 cursor-pointer transition-all duration-200"
+                         onClick={() => {
+                           setTarget(item.url);
+                           setScanType(item.scanType);
+                         }}
+                       >
+                         {item.scanType === "repo" ? (
+                           <GitBranch size={12} className="text-on-surface-variant/60" />
+                         ) : (
+                           <Globe size={12} className="text-on-surface-variant/60" />
+                         )}
+                         <span className="max-w-[150px] truncate">{getDomain(item.url)}</span>
+                         <button
+                           type="button"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             removeFromHistory(item.url);
+                           }}
+                           className="ml-0.5 opacity-0 group-hover:opacity-100 text-on-surface-variant/40 hover:text-error transition-all duration-200"
+                         >
+                           <X size={10} />
+                         </button>
+                       </span>
+                     ))}
+                   </div>
+                 </div>
+               )}
 
               {/* Scan Aggressiveness */}
               <div>
@@ -324,34 +479,45 @@ export default function EngagementsPage() {
                   </label>
                   <ScanModeHelp trigger="icon" />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { id: "default", name: "Default", icon: <Target size={14} />, color: "text-primary", border: "border-primary", bg: "bg-primary/5" },
-                    { id: "high", name: "High", icon: <Zap size={14} />, color: "text-amber-500", border: "border-amber-500", bg: "bg-amber-500/5" },
-                    { id: "extreme", name: "Extreme", icon: <Bomb size={14} />, color: "text-error", border: "border-error", bg: "bg-error/5" },
-                  ].map((preset) => {
-                    const isSelected = scanAggressiveness === preset.id;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => setScanAggressiveness(preset.id)}
-                        className={`flex flex-col items-center gap-1.5 py-3 border rounded-xl transition-all duration-300 ${
-                          isSelected
-                            ? `${preset.border} ${preset.bg} shadow-glow`
-                            : "border-outline-variant dark:border-[#ffffff10] bg-surface-container dark:bg-[#1A1A24] hover:border-primary/30"
-                        }`}
-                      >
-                        <span className={isSelected ? preset.color : "text-on-surface-variant dark:text-[#8A8A9E]"}>
-                          {preset.icon}
-                        </span>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest font-body ${isSelected ? preset.color : "text-on-surface-variant dark:text-[#8A8A9E]"}`}>
-                          {preset.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {settingsLoading ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex flex-col items-center gap-1.5 py-3 border border-outline-variant dark:border-[#ffffff10] rounded-xl">
+                        <div className="w-4 h-4 rounded shimmer" />
+                        <div className="w-12 h-3 rounded shimmer" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: "default", name: "Default", icon: <Target size={14} />, color: "text-primary", border: "border-primary", bg: "bg-primary/5" },
+                      { id: "high", name: "High", icon: <Zap size={14} />, color: "text-amber-500", border: "border-amber-500", bg: "bg-amber-500/5" },
+                      { id: "extreme", name: "Extreme", icon: <Bomb size={14} />, color: "text-error", border: "border-error", bg: "bg-error/5" },
+                    ].map((preset) => {
+                      const isSelected = scanAggressiveness === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => setScanAggressiveness(preset.id)}
+                          className={`flex flex-col items-center gap-1.5 py-3 border rounded-xl transition-all duration-300 ${
+                            isSelected
+                              ? `${preset.border} ${preset.bg} shadow-glow`
+                              : "border-outline-variant dark:border-[#ffffff10] bg-surface-container dark:bg-[#1A1A24] hover:border-primary/30"
+                          }`}
+                        >
+                          <span className={isSelected ? preset.color : "text-on-surface-variant dark:text-[#8A8A9E]"}>
+                            {preset.icon}
+                          </span>
+                          <span className={`text-[10px] font-bold uppercase tracking-widest font-body ${isSelected ? preset.color : "text-on-surface-variant dark:text-[#8A8A9E]"}`}>
+                            {preset.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <button

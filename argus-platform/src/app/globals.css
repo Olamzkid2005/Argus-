@@ -205,4 +205,23 @@
       --muted-foreground: #C0BEC9;
     }
   }
+
+  /* ── Mobile Responsiveness ── */
+  @media (max-width: 768px) {
+    .grid-cols-12 > * {
+      grid-column: span 12 !important;
+    }
+
+    /* Ensure minimum 44px touch targets */
+    button, a, input[type="button"], input[type="submit"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Improve tap targets for checkboxes */
+    input[type="checkbox"] {
+      min-width: 20px;
+      min-height: 20px;
+    }
+  }
 }

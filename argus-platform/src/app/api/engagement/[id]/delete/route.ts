@@ -27,16 +27,17 @@ export async function DELETE(
         );
       }
 
-      // Only allow deletion of 'created' or 'failed' status engagements
+      // Allow deletion of non-active engagements
       const statusCheck = await client.query(
         "SELECT status FROM engagements WHERE id = $1",
         [engagementId],
       );
 
       const currentStatus = statusCheck.rows[0]?.status;
-      if (!["created", "failed", "paused"].includes(currentStatus)) {
+      const activeStates = ["recon", "awaiting_approval", "scanning", "analyzing", "reporting"];
+      if (activeStates.includes(currentStatus)) {
         return NextResponse.json(
-          { error: "Cannot delete engagement in progress" },
+          { error: "Cannot delete engagement in progress. Stop it first." },
           { status: 400 },
         );
       }

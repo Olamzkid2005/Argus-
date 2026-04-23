@@ -14,6 +14,7 @@ import {
   MoreVertical,
   GitBranch,
   Globe,
+  StopCircle,
 } from "lucide-react";
 
 interface Engagement {
@@ -40,6 +41,13 @@ const statusColors: Record<string, string> = {
   paused: "bg-gray-500/20 text-gray-400",
 };
 
+  const getScanProgress = (status: string) => {
+    const order = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+    const idx = order.indexOf(status);
+    if (idx === -1) return 0;
+    return Math.round(((idx + 1) / order.length) * 100);
+  };
+
 export default function EngagementsListPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -49,6 +57,7 @@ export default function EngagementsListPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -97,9 +106,36 @@ export default function EngagementsListPage() {
     }
   };
 
+  const handleStop = async (id: string) => {
+    if (!confirm("Stop this scan?")) return;
+    setStoppingId(id);
+    try {
+      const response = await fetch(`/api/engagement/${id}/stop`, {
+        method: "POST",
+      });
+      if (response.ok) {
+        showToast("success", "Scan stopped");
+        // Refresh engagements
+        const res = await fetch(`/api/engagements?page=${page}&limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          setEngagements(data.engagements || []);
+          setTotalPages(data.meta?.totalPages || 1);
+        }
+      } else {
+        const data = await response.json();
+        showToast("error", data.error || "Failed to stop scan");
+      }
+    } catch (err) {
+      showToast("error", "Failed to stop scan");
+    } finally {
+      setStoppingId(null);
+    }
+  };
+  
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen p-8">
+      <div className="min-h-screen bg-background dark:bg-[#0A0A0F] p-8">
         <div className="max-w-6xl mx-auto">
           <Skeleton className="w-[200px] h-8 mb-6" />
           <div className="space-y-4">
@@ -115,7 +151,7 @@ export default function EngagementsListPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen p-8">
+    <div className="min-h-screen bg-background dark:bg-[#0A0A0F] p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -169,29 +205,67 @@ export default function EngagementsListPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3">
                     <span
                       className={`px-2 py-1 rounded text-xs ${statusColors[eng.status] || "bg-gray-500/20"}`}
                     >
                       {eng.status.replace(/_/g, " ")}
                     </span>
 
+                    {/* Progress bar */}
+                    <div className="flex-1 max-w-[200px]">
+                      <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-1">
+                        <span>Progress</span>
+                        <span>{getScanProgress(eng.status)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full bg-primary rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${getScanProgress(eng.status)}%` }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex gap-1">
+                      {["recon", "scanning", "analyzing", "reporting"].includes(eng.status) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStop(eng.id);
+                          }}
+                          disabled={stoppingId === eng.id}
+                          className="p-2 hover:bg-error/10 rounded text-error transition-all duration-300"
+                          title="Stop scan"
+                        >
+                          {stoppingId === eng.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <StopCircle className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
                       <button
-                        onClick={() =>
-                          router.push(`/dashboard?engagement=${eng.id}`)
-                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/dashboard?engagement=${eng.id}`);
+                        }}
                         className="p-2 hover:bg-muted rounded"
                         title="View"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(eng.id)}
+                        onClick={(e) => handleDelete(eng.id)}
                         className="p-2 hover:bg-red-500/10 rounded text-red-400"
                         title="Delete"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deletingId === eng.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </button>
                     </div>
                   </div>

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Set } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { useMobileDetect } from "@/hooks/useMobileDetect";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -35,6 +36,7 @@ import { MarkdownRenderer } from "@/components/ui-custom/MarkdownRenderer";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 import SecurityRating from "@/components/security/SecurityRating";
+import { BulkActionBar } from "@/components/ui-custom/BulkActionBar";
 
 // ── Types ──
 interface Finding {
@@ -62,6 +64,8 @@ interface Engagement {
 interface Explanations {
   [findingId: string]: string;
 }
+
+type FindingTab = "overview" | "evidence" | "remediation" | "similar";
 
 // ── Helpers ──
 const severityConfig = {
@@ -247,6 +251,13 @@ export default function FindingsPage() {
   const [selectedEngagement, setSelectedEngagement] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [selectedFindings, setSelectedFindings] = useState<Set<string>>(new Set());
+  const [isBulkVerifying, setIsBulkVerifying] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkExporting, setIsBulkExporting] = useState(false);
+  const [activeTab, setActiveTab] = useState<FindingTab>("overview");
+  const [remediationContent, setRemediationContent] = useState<Record<string, string>>({});
+  const [similarFindings, setSimilarFindings] = useState<Finding[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") signIn();
@@ -394,9 +405,207 @@ export default function FindingsPage() {
         showToast("success", "Finding deleted");
         setFindings((prev) => prev.filter((f) => f.id !== id));
         if (selectedFindingId === id) setSelectedFindingId(null);
+        // Also remove from selection if present
+        setSelectedFindings((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       }
     } catch (err) {
       showToast("error", "Failed to delete finding");
+    }
+  };
+
+  const handleExplainFinding = async (id: string) => {
+    const finding = findings.find((f) => f.id === id);
+    if (!finding) return;
+    if (!aiConfigured) {
+      showToast("error", "Configure AI API key in Settings");
+      return;
+    }
+    setIsExplaining(true);
+    try {
+      const response = await fetch("/api/ai/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ findings: [finding], model: selectedModel }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setExplanations((prev) => ({ ...prev, ...data.explanations }));
+        showToast("success", "Explanation generated");
+      }
+    } catch (err) {
+      showToast("error", "Failed to explain");
+    } finally {
+      setIsExplaining(false);
+    }
+  };
+
+  const handleExplainFindingRef = useRef(handleExplainFinding);
+  handleExplainFindingRef.current = handleExplainFinding;
+
+  const handleVerifyRef = useRef(handleVerify);
+  handleVerifyRef.current = handleVerify;
+
+  useEffect(() => {
+    const handleExplainEvent = () => {
+      if (selectedFindingId) {
+        handleExplainFindingRef.current(selectedFindingId);
+      }
+    };
+    const handleVerifyEvent = () => {
+      if (selectedFindingId) {
+        handleVerifyRef.current(selectedFindingId);
+      }
+    };
+    window.addEventListener("shortcut:explain-finding", handleExplainEvent);
+    window.addEventListener("shortcut:verify-finding", handleVerifyEvent);
+    return () => {
+      window.removeEventListener("shortcut:explain-finding", handleExplainEvent);
+      window.removeEventListener("shortcut:verify-finding", handleVerifyEvent);
+    };
+  }, [selectedFindingId]);
+
+  useEffect(() => {
+    setActiveTab("overview");
+    setSimilarFindings([]);
+  }, [selectedFindingId]);
+
+  const handleSelectFinding = useCallback((id: string) => {
+    setSelectedFindings((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedFindings.size === filtered.length) {
+      // Deselect all
+      setSelectedFindings(new Set());
+    } else {
+      // Select all filtered findings
+      setSelectedFindings(new Set(filtered.map((f) => f.id)));
+    }
+  }, [selectedFindings.size, filtered]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedFindings(new Set());
+  }, []);
+
+  const handleBulkVerify = useCallback(async () => {
+    if (selectedFindings.size === 0) return;
+    setIsBulkVerifying(true);
+    try {
+      const promises = Array.from(selectedFindings).map((id) =>
+        fetch(`/api/findings/${id}/verify`, { method: "POST" })
+      );
+      const results = await Promise.all(promises);
+      const successCount = results.filter((r) => r.ok).length;
+      showToast("success", `Verified ${successCount} findings`);
+      // Update local state
+      setFindings((prev) =>
+        prev.map((f) => (selectedFindings.has(f.id) ? { ...f, verified: true } : f))
+      );
+      setSelectedFindings(new Set());
+    } catch (err) {
+      showToast("error", "Failed to verify findings");
+    } finally {
+      setIsBulkVerifying(false);
+    }
+  }, [selectedFindings, showToast]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedFindings.size === 0) return;
+    if (!confirm(`Delete ${selectedFindings.size} selected findings?`)) return;
+    setIsBulkDeleting(true);
+    try {
+      const promises = Array.from(selectedFindings).map((id) =>
+        fetch(`/api/findings/${id}`, { method: "DELETE" })
+      );
+      const results = await Promise.all(promises);
+      const successCount = results.filter((r) => r.ok).length;
+      showToast("success", `Deleted ${successCount} findings`);
+      // Update local state
+      setFindings((prev) => prev.filter((f) => !selectedFindings.has(f.id)));
+      setSelectedFindings(new Set());
+      if (selectedFindingId && selectedFindings.has(selectedFindingId)) {
+        setSelectedFindingId(null);
+      }
+    } catch (err) {
+      showToast("error", "Failed to delete findings");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  }, [selectedFindings, selectedFindingId, showToast]);
+
+  const handleBulkExport = useCallback(async () => {
+    if (selectedFindings.size === 0) return;
+    setIsBulkExporting(true);
+    try {
+      const selectedFindingsData = filtered.filter((f) => selectedFindings.has(f.id));
+      const csv = [
+        ["ID", "Type", "Severity", "Endpoint", "Verified", "Confidence"].join(","),
+        ...selectedFindingsData.map((f) =>
+          [f.id, f.type, f.severity, f.endpoint, f.verified, f.confidence || 0].join(",")
+        ),
+      ].join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `findings-export-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("success", `Exported ${selectedFindings.size} findings`);
+    } catch (err) {
+      showToast("error", "Failed to export findings");
+    } finally {
+      setIsBulkExporting(false);
+    }
+  }, [selectedFindings, filtered, showToast]);
+
+  const handleGenerateRemediation = async (findingId: string) => {
+    if (remediationContent[findingId]) return;
+    const finding = findings.find(f => f.id === findingId);
+    if (!finding) return;
+    try {
+      const response = await fetch("/api/ai/remediate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ finding, model: selectedModel }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setRemediationContent(prev => ({ ...prev, [findingId]: data.remediation }));
+        showToast("success", "Remediation steps generated");
+      } else {
+        showToast("error", data.error || "Failed to generate remediation");
+      }
+    } catch (err) {
+      showToast("error", "Failed to generate remediation");
+    }
+  };
+
+  const handleFetchSimilar = async (findingId: string) => {
+    setSimilarFindings([]);
+    try {
+      const response = await fetch(`/api/findings/similar?findingId=${findingId}`);
+      const data = await response.json();
+      if (response.ok) {
+        setSimilarFindings(data.findings || []);
+      } else {
+        showToast("error", data.error || "Failed to fetch similar findings");
+      }
+    } catch (err) {
+      showToast("error", "Failed to fetch similar findings");
     }
   };
 
@@ -551,14 +760,14 @@ export default function FindingsPage() {
       </AnimatePresence>
 
       {/* Three Column Layout */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Left Sidebar - Filters */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.1 }}
-          className="col-span-12 lg:col-span-3 space-y-4"
-        >
+        <div className={`grid gap-6 ${isMobile ? "grid-cols-1" : "grid-cols-12"}`}>
+          {/* Left Sidebar - Filters */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className={`${isMobile ? "order-2" : "col-span-12 lg:col-span-3 space-y-4"}`}
+          >
           {/* Security Rating */}
           <SecurityRating
             engagementId={selectedEngagement !== "all" ? selectedEngagement : undefined}
@@ -578,6 +787,27 @@ export default function FindingsPage() {
               />
             </div>
           </div>
+
+          {/* Bulk Selection */}
+          {filtered.length > 0 && (
+            <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="select-all"
+                  checked={selectedFindings.size === filtered.length && filtered.length > 0}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedFindings.size > 0 && selectedFindings.size < filtered.length;
+                  }}
+                  onChange={handleSelectAll}
+                  className="rounded border-outline-variant text-primary focus:ring-primary"
+                />
+                <label htmlFor="select-all" className="text-xs text-on-surface-variant cursor-pointer">
+                  Select All ({selectedFindings.size}/{filtered.length})
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* Severity Filters */}
           <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-4">
@@ -660,7 +890,7 @@ export default function FindingsPage() {
         </motion.div>
 
         {/* Center - Findings List */}
-        <ScrollReveal direction="up" delay={0.15} className="col-span-12 lg:col-span-5">
+        <ScrollReveal direction="up" delay={0.15} className={`${isMobile ? "order-1 col-span-1" : "col-span-12 lg:col-span-5"}`}>
           <StaggerContainer className="space-y-3" staggerDelay={0.04}>
             {findingsListItems.map((item) => {
               if (item.kind === "header") {
@@ -688,6 +918,7 @@ export default function FindingsPage() {
               const isExpanded = expandedRow === finding.id;
               const hasExplanation = !!explanations[finding.id];
               const isSelected = selectedFindingId === finding.id;
+              const isBulkSelected = selectedFindings.has(finding.id);
 
               return (
                 <StaggerItem key={finding.id}>
@@ -696,17 +927,30 @@ export default function FindingsPage() {
                     className={`bg-surface dark:bg-surface-container-low rounded-xl border transition-all duration-300 overflow-hidden ${
                       isSelected
                         ? "border-primary/40 shadow-glow"
+                        : isBulkSelected
+                        ? "border-primary/20 bg-primary/[0.02]"
                         : "border-outline-variant dark:border-outline/30 hover:border-primary/20"
                     }`}
                   >
                 {/* Main Row */}
-                <div
-                  className="px-4 py-3 cursor-pointer"
-                  onClick={() => {
-                    setExpandedRow(isExpanded ? null : finding.id);
-                    setSelectedFindingId(isSelected ? null : finding.id);
-                  }}
-                >
+                <div className="flex items-center gap-2 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={isBulkSelected}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleSelectFinding(finding.id);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded border-outline-variant text-primary focus:ring-primary shrink-0"
+                  />
+                  <div
+                    className="flex-1 cursor-pointer"
+                    onClick={() => {
+                      setExpandedRow(isExpanded ? null : finding.id);
+                      setSelectedFindingId(isSelected ? null : finding.id);
+                    }}
+                  >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span
@@ -775,6 +1019,7 @@ export default function FindingsPage() {
                   <div className="mt-2 text-[10px] font-mono text-on-surface-variant/80 truncate">
                     Target: {finding.target_url || "Unknown target"}
                   </div>
+                  </div>
                 </div>
 
                 {/* AI Explanation Panel */}
@@ -815,27 +1060,7 @@ export default function FindingsPage() {
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
-                          if (!aiConfigured) {
-                            showToast("error", "Configure AI API key in Settings");
-                            return;
-                          }
-                          setIsExplaining(true);
-                          try {
-                            const response = await fetch("/api/ai/explain", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ findings: [finding], model: selectedModel }),
-                            });
-                            const data = await response.json();
-                            if (response.ok) {
-                              setExplanations((prev) => ({ ...prev, ...data.explanations }));
-                              showToast("success", "Explanation generated");
-                            }
-                          } catch (err) {
-                            showToast("error", "Failed to explain");
-                          } finally {
-                            setIsExplaining(false);
-                          }
+                          await handleExplainFinding(finding.id);
                         }}
                         className="flex items-center gap-2 text-xs font-bold text-primary/60 hover:text-primary transition-all duration-300"
                       >
@@ -913,10 +1138,10 @@ export default function FindingsPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-                  </motion.div>
-                </StaggerItem>
-              );
-            })}
+              </motion.div>
+            </StaggerItem>
+          );
+        })}
 
             {filtered.length === 0 && (
               <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant dark:border-outline/30 rounded-xl bg-surface dark:bg-surface-container-low">
@@ -931,9 +1156,19 @@ export default function FindingsPage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3 }}
-          className="col-span-12 lg:col-span-4"
+          className={`${isMobile ? "fixed inset-0 z-50 bg-background/95 dark:bg-[#0A0A0F]/95 backdrop-blur-sm p-4 overflow-y-auto" : "col-span-12 lg:col-span-4"}`}
+          style={isMobile && !selectedFinding ? { display: "none" } : {}}
         >
-          <div className="sticky top-6">
+          <div className={isMobile ? "pt-12" : "sticky top-6"}>
+            {/* Mobile close button */}
+            {isMobile && selectedFinding && (
+              <button
+                onClick={() => setSelectedFindingId(null)}
+                className="fixed top-4 right-4 z-50 p-2 bg-surface-container-low dark:bg-surface-container rounded-lg shadow-glow min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            )}
             <AnimatePresence mode="wait">
               {selectedFinding ? (
                 <motion.div
@@ -967,74 +1202,160 @@ export default function FindingsPage() {
                     <p className="text-xs text-on-surface-variant mt-1 font-mono break-all">
                       {selectedFinding.endpoint}
                     </p>
-                  </div>
+                   </div>
 
-                  {/* AI Insights */}
-                  {explanations[selectedFinding.id] && (
-                    <div className="p-4 border-b border-outline-variant dark:border-outline/30">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Brain size={14} className="text-primary" />
-                        <span className="text-[10px] font-bold font-mono text-primary uppercase tracking-widest">
-                          AI Insights
-                        </span>
-                      </div>
-                      <div className="text-xs text-on-surface-variant font-body max-h-[200px] overflow-y-auto">
-                        <MarkdownRenderer content={explanations[selectedFinding.id]} />
-                      </div>
+                   {/* Tab Buttons */}
+                   <div className="flex gap-2 border-b border-outline-variant px-4 py-2">
+                     {["overview", "evidence", "remediation", "similar"].map((tab) => (
+                       <button
+                         key={tab}
+                         onClick={() => setActiveTab(tab as FindingTab)}
+                         className={`px-3 py-2 text-xs uppercase ${
+                           activeTab === tab ? "border-b-2 border-primary text-primary" : "text-on-surface-variant"
+                         }`}
+                       >
+                         {tab}
+                       </button>
+                     ))}
+                   </div>
+
+                   {/* Tab Content */}
+                   <div className="p-4">
+                     {activeTab === "overview" && (
+                       <div>
+                         {/* AI Insights */}
+                         {explanations[selectedFinding.id] && (
+                           <div className="mb-4">
+                             <div className="flex items-center gap-2 mb-2">
+                               <Brain size={14} className="text-primary" />
+                               <span className="text-[10px] font-bold font-mono text-primary uppercase tracking-widest">
+                                 AI Insights
+                               </span>
+                             </div>
+                             <div className="text-xs text-on-surface-variant font-body max-h-[200px] overflow-y-auto">
+                               <MarkdownRenderer content={explanations[selectedFinding.id]} />
+                             </div>
+                           </div>
+                         )}
+
+                         {/* Overview Details */}
+                         <div className="mb-4">
+                           <div className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-1">Endpoint</div>
+                           <div className="text-sm text-on-surface font-mono bg-surface dark:bg-surface-container p-2 rounded border border-outline-variant dark:border-outline/30">
+                             {selectedFinding.endpoint}
+                           </div>
+                         </div>
+
+                         <div className="mb-4">
+                           <div className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-1">Confidence</div>
+                           <div className="flex items-center gap-2">
+                             <div className="w-24 h-1.5 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
+                               <div className="h-full bg-primary rounded-full" style={{ width: `${(selectedFinding.confidence || 0) * 100}%` }} />
+                             </div>
+                             <span className="text-sm font-mono text-primary">{((selectedFinding.confidence || 0) * 100).toFixed(0)}%</span>
+                           </div>
+                         </div>
+
+                         {/* Verify Button */}
+                         {!selectedFinding.verified && (
+                           <button
+                             onClick={() => handleVerify(selectedFinding.id)}
+                             className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow mb-3"
+                           >
+                             <CheckCircle2 size={14} />
+                             VERIFY FINDING
+                           </button>
+                         )}
+
+                         {/* Copy as Curl Button */}
+                         <button
+                           onClick={() => {
+                             const baseUrl = selectedFinding.target_url || "";
+                             const endpoint = selectedFinding.endpoint.startsWith("/") ? selectedFinding.endpoint : `/${selectedFinding.endpoint}`;
+                             const url = `${baseUrl}${endpoint}`;
+                             const curl = `curl -X GET "${url}" -H "User-Agent: Argus-Scanner" -H "Accept: */*"`;
+                             navigator.clipboard.writeText(curl);
+                             showToast("success", "Curl command copied to clipboard");
+                           }}
+                           className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-primary border border-primary/20 rounded-lg hover:bg-primary/10 transition-all duration-300 mb-3"
+                         >
+                           <Copy size={14} />
+                           COPY AS CURL
+                         </button>
+
+                         {/* Attack Chain if available */}
+                         {chainAnalysis && (
+                           <div className="mt-4">
+                             <div className="flex items-center gap-2 mb-2">
+                               <Sword size={14} className="text-error" />
+                               <span className="text-[10px] font-bold font-mono text-error uppercase tracking-widest">
+                                 Attack Chain
+                               </span>
+                             </div>
+                             <div className="flex items-center gap-1 text-xs text-on-surface-variant">
+                               <span className="px-2 py-1 bg-surface-container-high dark:bg-surface-container rounded text-[10px] font-mono">
+                                 {selectedFinding.type}
+                               </span>
+                               <ChevronRight size={12} />
+                               <span className="px-2 py-1 bg-error/10 text-error rounded text-[10px] font-mono">
+                                 Exploit
+                               </span>
+                               <ChevronRight size={12} />
+                               <span className="px-2 py-1 bg-surface-container-high dark:bg-surface-container rounded text-[10px] font-mono">
+                                 Impact
+                               </span>
+                             </div>
+                           </div>
+                         )}
+                       </div>
+                     )}
+
+                     {activeTab === "evidence" && (
+                       <div>
+                         {selectedFinding.evidence ? (
+                           <EvidenceBlock data={selectedFinding.evidence} />
+                         ) : (
+                           <div className="text-xs text-on-surface-variant italic">No evidence available</div>
+                         )}
+                       </div>
+                     )}
+
+                     {activeTab === "remediation" && (
+                       <div>
+                         {remediationContent[selectedFinding.id] ? (
+                           <div className="text-xs text-on-surface-variant">
+                             <MarkdownRenderer content={remediationContent[selectedFinding.id]} />
+                           </div>
+                         ) : (
+                           <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                             <Loader2 size={14} className="animate-spin" />
+                             Generating remediation steps...
+                           </div>
+                         )}
+                       </div>
+                     )}
+
+                     {activeTab === "similar" && (
+                       <div>
+                         {similarFindings.length > 0 ? (
+                           <div className="space-y-2">
+                             {similarFindings.map(f => (
+                               <div key={f.id} className="p-2 border border-outline-variant rounded-lg cursor-pointer hover:border-primary/20" onClick={() => setSelectedFindingId(f.id)}>
+                                 <div className="text-xs font-semibold text-on-surface">{f.type}</div>
+                                 <div className="text-[10px] font-mono text-on-surface-variant truncate">{f.endpoint}</div>
+                               </div>
+                             ))}
+                           </div>
+                         ) : (
+                           <div className="text-xs text-on-surface-variant italic">No similar findings found</div>
+                         )}
                     </div>
                   )}
-
-                  {/* Attack Chain Visualization placeholder */}
-                  {chainAnalysis && (
-                    <div className="p-4 border-b border-outline-variant dark:border-outline/30">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sword size={14} className="text-error" />
-                        <span className="text-[10px] font-bold font-mono text-error uppercase tracking-widest">
-                          Attack Chain
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-on-surface-variant">
-                        <span className="px-2 py-1 bg-surface-container-high dark:bg-surface-container rounded text-[10px] font-mono">
-                          {selectedFinding.type}
-                        </span>
-                        <ChevronRight size={12} />
-                        <span className="px-2 py-1 bg-error/10 text-error rounded text-[10px] font-mono">
-                          Exploit
-                        </span>
-                        <ChevronRight size={12} />
-                        <span className="px-2 py-1 bg-surface-container-high dark:bg-surface-container rounded text-[10px] font-mono">
-                          Impact
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Evidence */}
-                  {selectedFinding.evidence && (
-                    <div className="p-4 border-b border-outline-variant dark:border-outline/30">
-                      <EvidenceBlock data={selectedFinding.evidence} />
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="p-4 flex items-center gap-3">
-                    {!selectedFinding.verified && (
-                      <button
-                        onClick={() => handleVerify(selectedFinding.id)}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow"
-                      >
-                        <Wrench size={14} />
-                        REMEDIATE
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(selectedFinding.id)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-error border border-error/20 rounded-lg hover:bg-error/10 transition-all duration-300"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
               ) : (
                 <motion.div
                   key="empty"
@@ -1058,6 +1379,38 @@ export default function FindingsPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* Mobile Bottom Action Bar */}
+      {isMobile && selectedFinding && (
+        <motion.div
+          initial={{ y: 100 }}
+          animate={{ y: 0 }}
+          className="fixed bottom-0 left-0 right-0 z-50 bg-surface dark:bg-surface-container-low border-t border-outline-variant dark:border-outline/30 p-3 flex items-center gap-3 safe-area-inset-bottom"
+        >
+          <button
+            onClick={() => {
+              handleVerify(selectedFinding.id);
+            }}
+            disabled={selectedFinding.verified}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow disabled:opacity-50 min-h-[44px]"
+          >
+            <Wrench size={16} />
+            {selectedFinding.verified ? "VERIFIED" : "REMEDIATE"}
+          </button>
+          <button
+            onClick={() => handleDelete(selectedFinding.id)}
+            className="px-4 py-3 text-xs font-bold text-error border border-error/20 rounded-lg hover:bg-error/10 transition-all duration-300 min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <Trash2 size={16} />
+          </button>
+          <button
+            onClick={() => setSelectedFindingId(null)}
+            className="px-4 py-3 text-xs font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container-high transition-all duration-300 min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <X size={16} />
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }

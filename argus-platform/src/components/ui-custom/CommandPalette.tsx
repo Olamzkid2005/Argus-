@@ -1,151 +1,193 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Shield, Terminal, FileText, Settings, Activity, Users, AlertTriangle } from "lucide-react";
+"use client";
 
-interface CommandItem {
-  id: string;
-  label: string;
-  shortcut?: string;
-  icon: React.ReactNode;
-  action: () => void;
-}
-
-const commands: CommandItem[] = [
-  { id: "dashboard", label: "Go to Dashboard", shortcut: "G D", icon: <Activity size={18} />, action: () => {} },
-  { id: "findings", label: "View Findings", shortcut: "G F", icon: <AlertTriangle size={18} />, action: () => {} },
-  { id: "engagements", label: "Active Engagements", shortcut: "G E", icon: <Shield size={18} />, action: () => {} },
-  { id: "reports", label: "Generate Report", shortcut: "G R", icon: <FileText size={18} />, action: () => {} },
-  { id: "terminal", label: "Open Terminal", shortcut: "G T", icon: <Terminal size={18} />, action: () => {} },
-  { id: "team", label: "Team Management", icon: <Users size={18} />, action: () => {} },
-  { id: "settings", label: "Settings", shortcut: "G S", icon: <Settings size={18} />, action: () => {} },
-];
+import { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandShortcut,
+  CommandSeparator,
+} from "@/components/ui/command";
+import {
+  LayoutDashboard,
+  Bug,
+  Target,
+  Settings,
+  Plus,
+  Square,
+  Download,
+  Activity,
+  ShieldCheck,
+} from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 
 interface CommandPaletteProps {
-  onNavigate?: (path: string) => void;
+  onNavigate: (path: string) => void;
   onClose: () => void;
+  currentEngagementId?: string | null;
 }
 
-export default function CommandPalette({ onNavigate, onClose }: CommandPaletteProps) {
-  const [search, setSearch] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+export function CommandPalette({
+  onNavigate,
+  onClose,
+  currentEngagementId,
+}: CommandPaletteProps) {
+  const router = useRouter();
+  const { showToast } = useToast();
 
-  const filtered = commands.filter((c) =>
-    c.label.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % Math.max(filtered.length, 1));
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + Math.max(filtered.length, 1)) % Math.max(filtered.length, 1));
-      }
-      if (e.key === "Enter" && filtered[selectedIndex]) {
-        const cmd = filtered[selectedIndex];
-        if (cmd.id === "dashboard") onNavigate?.("/");
-        if (cmd.id === "findings") onNavigate?.("/findings");
-        if (cmd.id === "engagements") onNavigate?.("/engagements");
-        if (cmd.id === "reports") onNavigate?.("/reports");
-        if (cmd.id === "settings") onNavigate?.("/settings");
-        onClose();
-      }
+  const runCommand = useCallback(
+    (command: () => void) => {
+      onClose();
+      command();
     },
-    [filtered, selectedIndex, onClose, onNavigate]
+    [onClose],
   );
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [search]);
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[20vh]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <CommandDialog
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
+      title="Command Palette"
+      description="Search for commands, navigation, and actions..."
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
+      <CommandInput placeholder="Type a command or search..." />
+      <CommandList>
+        <CommandEmpty>No results found.</CommandEmpty>
 
-      {/* Palette */}
-      <div
-        className="relative w-full max-w-xl mx-4 rounded-lg border border-white/10 overflow-hidden"
-        style={{
-          background: "rgba(18, 18, 26, 0.8)",
-          backdropFilter: "blur(24px)",
-          boxShadow: "0 0 40px rgba(233, 255, 255, 0.05)",
-        }}
-      >
-        {/* Search Input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
-          <Search size={18} className="text-text-secondary shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Type a command or search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-transparent text-text-primary text-sm outline-none placeholder:text-text-secondary/50"
-          />
-          <kbd className="text-[10px] text-text-secondary border border-white/10 rounded px-1.5 py-0.5 font-mono">
-            ESC
-          </kbd>
-        </div>
+        <CommandGroup heading="Navigation">
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/dashboard"))
+            }
+          >
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            <span>Dashboard</span>
+            <CommandShortcut>G D</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/findings"))
+            }
+          >
+            <Bug className="mr-2 h-4 w-4" />
+            <span>Findings</span>
+            <CommandShortcut>G F</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/engagements"))
+            }
+          >
+            <Target className="mr-2 h-4 w-4" />
+            <span>Engagements</span>
+            <CommandShortcut>G E</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/settings"))
+            }
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+            <CommandShortcut>G S</CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
 
-        {/* Results */}
-        <div className="max-h-[320px] overflow-y-auto py-2">
-          {filtered.length === 0 ? (
-            <div className="px-4 py-8 text-center text-text-secondary text-sm">
-              No results found for "{search}"
-            </div>
-          ) : (
-            filtered.map((cmd, i) => (
-              <button
-                key={cmd.id}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${
-                  i === selectedIndex ? "bg-white/5" : "hover:bg-white/[0.02]"
-                }`}
-                onClick={() => {
-                  if (cmd.id === "dashboard") onNavigate?.("/");
-                  if (cmd.id === "findings") onNavigate?.("/findings");
-                  if (cmd.id === "engagements") onNavigate?.("/engagements");
-                  if (cmd.id === "reports") onNavigate?.("/reports");
-                  if (cmd.id === "settings") onNavigate?.("/settings");
-                  onClose();
-                }}
-              >
-                <span className="text-text-secondary">{cmd.icon}</span>
-                <span className="flex-1 text-sm text-text-primary">{cmd.label}</span>
-                {cmd.shortcut && (
-                  <div className="flex gap-1">
-                    {cmd.shortcut.split(" ").map((key, j) => (
-                      <kbd
-                        key={j}
-                        className="text-[10px] text-text-secondary border border-white/10 rounded px-1 py-0.5 font-mono"
-                      >
-                        {key}
-                      </kbd>
-                    ))}
-                  </div>
-                )}
-              </button>
-            ))
+        <CommandSeparator />
+
+        <CommandGroup heading="Actions">
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/engagements"))
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            <span>New Scan</span>
+            <CommandShortcut>⌘N</CommandShortcut>
+          </CommandItem>
+          {currentEngagementId && (
+            <CommandItem
+              onSelect={() =>
+                runCommand(async () => {
+                  try {
+                    const response = await fetch(
+                      `/api/engagement/${currentEngagementId}/stop`,
+                      { method: "POST" },
+                    );
+                    if (response.ok) {
+                      showToast("success", "Scan stopped");
+                    }
+                  } catch {
+                    showToast("error", "Failed to stop scan");
+                  }
+                })
+              }
+            >
+              <Square className="mr-2 h-4 w-4" />
+              <span>Stop Current Scan</span>
+            </CommandItem>
           )}
-        </div>
-      </div>
-    </div>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => {
+                showToast("info", "Export feature coming soon");
+              })
+            }
+          >
+            <Download className="mr-2 h-4 w-4" />
+            <span>Export Report</span>
+            <CommandShortcut>⌘E</CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        <CommandGroup heading="Quick Access">
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/dashboard?engagement=latest"))
+            }
+          >
+            <Activity className="mr-2 h-4 w-4" />
+            <span>Latest Scan Status</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() =>
+              runCommand(() => onNavigate("/findings?verified=false"))
+            }
+          >
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            <span>Unverified Findings</span>
+          </CommandItem>
+        </CommandGroup>
+      </CommandList>
+    </CommandDialog>
   );
 }
+
+// Hook to manage command palette state
+function useCommandPalette() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen((open) => !open);
+      }
+    };
+
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  return { open, setOpen };
+}
+
+export { useCommandPalette };

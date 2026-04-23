@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { motion, useScroll, useTransform } from "framer-motion";
-import MatrixDataRain from "@/components/effects/MatrixDataRain";
 import SurveillanceEye from "@/components/effects/SurveillanceEye";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
@@ -346,9 +345,6 @@ function LandingContent({ session }: { session: any }) {
   return (
     <div className="min-h-screen bg-surface text-on-surface selection:bg-primary selection:text-white overflow-x-hidden relative">
       {/* ── Background Layer ── */}
-      <div className="fixed inset-0 z-0 opacity-[0.06] pointer-events-none">
-        <MatrixDataRain />
-      </div>
       <div className="fixed inset-0 z-0 bg-gradient-to-b from-transparent via-surface/50 to-surface pointer-events-none" />
 
       {/* ── Navigation ── */}

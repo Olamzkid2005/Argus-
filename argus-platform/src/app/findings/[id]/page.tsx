@@ -478,15 +478,54 @@ function FindingCard({ finding }: { finding: Finding }) {
             </div>
             {finding.cvss_score && (
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-lg">
-                CVSS{" "}
+                <a
+                  href={`https://nvd.nist.gov/vuln/detail/CVE-${finding.cve_id || 'UNKNOWN'}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-argus-magenta transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  CVSS
+                </a>
                 <span className="text-argus-magenta tracking-widest">
                   {finding.cvss_score.toFixed(1)}
                 </span>
+                {finding.cvss_vector && (
+                  <span className="text-[9px] font-mono text-muted-foreground/60 ml-1">
+                    ({finding.cvss_vector})
+                  </span>
+                )}
               </div>
             )}
             {finding.cwe_id && (
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-lg uppercase tracking-widest">
-                {finding.cwe_id}
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest">
+                <a
+                  href={`https://cwe.mitre.org/data/definitions/${finding.cwe_id.replace('CWE-', '')}.html`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-argus-amber hover:text-argus-amber/80 bg-argus-amber/10 px-2 py-1 rounded-lg border border-argus-amber/20 hover:border-argus-amber/40 transition-all flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {finding.cwe_id}
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1={5} y1={5} x2={21} y2={21} />
+                  </svg>
+                </a>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(finding.cwe_id);
+                  }}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  title="Copy CWE ID"
+                >
+                  <svg className="h-3 w-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <rect x={9} y={9} width={13} height={13} rx={2} ry={2} />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </button>
               </div>
             )}
           </div>

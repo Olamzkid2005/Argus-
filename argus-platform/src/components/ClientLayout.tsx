@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import Sidebar from "@/components/ui-custom/Sidebar";
 import CommandPalette from "@/components/ui-custom/CommandPalette";
+import { KeyboardShortcutsHelp } from "@/components/ui-custom/KeyboardShortcutsHelp";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { applyThreePatch } from "@/lib/three-patch";
 
 applyThreePatch();
@@ -19,13 +21,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   const isFullBleedPage = pathname === "/" || pathname.startsWith("/auth");
 
-  // Cmd+K for command palette
+  const { showHelp, setShowHelp } = useKeyboardShortcuts({
+    onToggleCommandPalette: () => setCommandPaletteOpen((prev) => !prev),
+    onClose: () => {
+      setCommandPaletteOpen(false);
+      setSidebarOpen(false);
+    },
+  });
+
+  // Cmd/Ctrl+B for sidebar toggle (not handled by the hook)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
-      }
       if ((e.metaKey || e.ctrlKey) && e.key === "b" && !isFullBleedPage) {
         e.preventDefault();
         setSidebarOpen((prev) => !prev);
@@ -95,6 +101,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           onClose={() => setCommandPaletteOpen(false)}
         />
       )}
+
+      <KeyboardShortcutsHelp open={showHelp} onOpenChange={setShowHelp} />
     </div>
   );
 }

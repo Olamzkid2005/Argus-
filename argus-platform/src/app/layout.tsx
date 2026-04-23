@@ -51,7 +51,7 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
       </head>
-      <body className={`${inter.variable} ${spaceGrotesk.variable} font-body bg-white text-gray-900 antialiased`}>
+      <body className={`${inter.variable} ${spaceGrotesk.variable} font-body text-gray-900 antialiased`}>
         <Providers>
           {children}
         </Providers>

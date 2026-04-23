@@ -1,130 +1,128 @@
 "use client";
 
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useMemo, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { shaderMaterial } from "@react-three/drei";
 import { easing } from "maath";
 
-/**
- * ── Neural Surveillance Eye ──
- * High-fidelity SOC monitoring visualizer.
- * Note: THREE.Clock is shimmed globally in ClientLayout.tsx via /lib/three-patch.
- */
+const irisVertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
 
-const IrisShaderMaterial = shaderMaterial(
-  { uTime: 0, uColor: new THREE.Color("#FFFDD0") },
-  `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  `
-    uniform float uTime;
-    uniform vec3 uColor;
-    varying vec2 vUv;
+const irisFragmentShader = `
+  uniform float uTime;
+  uniform vec3 uColor;
+  varying vec2 vUv;
 
-    void main() {
-      vec2 uv = vUv - 0.5;
-      float r = length(uv);
-      float theta = atan(uv.y, uv.x);
+  void main() {
+    vec2 uv = vUv - 0.5;
+    float r = length(uv);
+    float theta = atan(uv.y, uv.x);
 
-      float wave1 = pow(sin(theta * 12.0 + r * 18.0 - uTime * 2.0) * 0.5 + 0.5, 3.0);
-      float wave2 = pow(sin(theta * 8.0 - r * 12.0 + uTime * 1.5) * 0.5 + 0.5, 2.0);
-      float wave3 = pow(cos(r * 30.0 + uTime * 3.0) * 0.5 + 0.5, 4.0);
+    float wave1 = pow(sin(theta * 12.0 + r * 18.0 - uTime * 2.0) * 0.5 + 0.5, 3.0);
+    float wave2 = pow(sin(theta * 8.0 - r * 12.0 + uTime * 1.5) * 0.5 + 0.5, 2.0);
+    float wave3 = pow(cos(r * 30.0 + uTime * 3.0) * 0.5 + 0.5, 4.0);
 
-      float pattern = wave1 * 0.5 + wave2 * 0.3 + wave3 * 0.2;
+    float pattern = wave1 * 0.5 + wave2 * 0.3 + wave3 * 0.2;
 
-      float innerFade = smoothstep(0.0, 0.05, r);
-      float outerFade = 1.0 - smoothstep(0.15, 0.25, r);
-      float alpha = pattern * innerFade * outerFade;
+    float innerFade = smoothstep(0.0, 0.05, r);
+    float outerFade = 1.0 - smoothstep(0.15, 0.25, r);
+    float alpha = pattern * innerFade * outerFade;
 
-      vec3 col = vec3(0.0, 1.0, 1.0);
-      float coreGlow = smoothstep(0.0, 0.08, r) * (1.0 - smoothstep(0.08, 0.14, r));
-      vec3 coreColor = mix(col, vec3(0.8, 1.0, 1.0), coreGlow);
-      float edgeGlow = exp(-r * 10.0) * 2.0;
+    vec3 col = uColor;
+    float coreGlow = smoothstep(0.0, 0.08, r) * (1.0 - smoothstep(0.08, 0.14, r));
+    vec3 coreColor = mix(col, vec3(0.8, 1.0, 1.0), coreGlow);
+    float edgeGlow = exp(-r * 10.0) * 2.0;
 
-      gl_FragColor = vec4(coreColor, alpha + edgeGlow);
-    }
-  `
-);
+    gl_FragColor = vec4(coreColor, alpha + edgeGlow);
+  }
+`;
 
-const PupilShaderMaterial = shaderMaterial(
-  {},
-  `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  `
-    varying vec2 vUv;
-    void main() {
-      float r = length(vUv - 0.5);
-      float dist = r * 2.0;
-      vec3 color = vec3(0.04, 0.04, 0.06);
-      float alpha = smoothstep(0.8, 0.0, dist);
-      gl_FragColor = vec4(color, alpha);
-    }
-  `
-);
+const pupilVertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const pupilFragmentShader = `
+  varying vec2 vUv;
+  void main() {
+    float r = length(vUv - 0.5);
+    float dist = r * 2.0;
+    vec3 color = vec3(0.04, 0.04, 0.06);
+    float alpha = smoothstep(0.8, 0.0, dist);
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
 
 function Eyeball() {
   return (
     <mesh scale={2.5}>
       <sphereGeometry args={[0.5, 64, 64]} />
-      <meshPhysicalMaterial
-        transmission={1}
-        thickness={0.9}
-        roughness={0.0}
-        metalness={0.2}
-        ior={1.5}
-        clearcoat={1}
-        clearcoatRoughness={0.0}
-        color="#12121A"
-        depthWrite
-        transparent
-        depthTest
-        opacity={1}
-        reflectivity={0.5}
-        iridescence={1}
-        iridescenceIOR={1.9}
-        iridescenceThicknessRange={[100, 400]}
+      <meshStandardMaterial
+        color="#E8E5EF"
+        roughness={0.3}
+        metalness={0.1}
       />
     </mesh>
   );
 }
 
 function IrisMaterial() {
-  const material = useMemo(() => new IrisShaderMaterial(), []);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uColor: { value: new THREE.Color("#6720FF") },
+        },
+        vertexShader: irisVertexShader,
+        fragmentShader: irisFragmentShader,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    []
+  );
 
   useFrame((state, dt) => {
-    const time = (state.clock as any)?.getElapsedTime?.() || state.clock?.elapsedTime || performance.now() / 1000;
-    easing.damp(material, "uTime", time, 0.2, dt);
+    const time =
+      (state.clock as any)?.getElapsedTime?.() ||
+      (state.clock as any).elapsedTime ||
+      performance.now() / 1000;
+    easing.damp(material.uniforms.uTime, "value", time, 0.2, dt);
   });
 
-  return (
-    <primitive 
-      object={material} 
-      attach="material" 
-      transparent 
-      depthWrite={false} 
-      blending={THREE.AdditiveBlending} 
-      uColor={new THREE.Color("#FFFDD0")} 
-    />
-  );
+  return <primitive object={material} attach="material" />;
 }
 
 function Pupil({ pupilRef }: { pupilRef: React.RefObject<THREE.Mesh | null> }) {
-  const material = useMemo(() => new PupilShaderMaterial(), []);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: pupilVertexShader,
+        fragmentShader: pupilFragmentShader,
+        transparent: true,
+        depthWrite: false,
+      }),
+    []
+  );
 
   return (
-    <mesh ref={pupilRef as any} scale={1} position={[0, 0, 0.1]} rotation={[Math.PI / 2, 0, 0]}>
+    <mesh
+      ref={pupilRef as any}
+      scale={1}
+      position={[0, 0, 0.1]}
+      rotation={[Math.PI / 2, 0, 0]}
+    >
       <cylinderGeometry args={[0.4, 0.4, 0.1, 64]} />
-      <primitive object={material} attach="material" transparent depthWrite={false} />
+      <primitive object={material} attach="material" />
     </mesh>
   );
 }
@@ -155,14 +153,14 @@ function Eye({ target }: { target: React.RefObject<THREE.Vector3 | null> }) {
   const groupRef = useRef<THREE.Group>(null!);
   const pupilRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
-  const { camera, viewport } = useThree();
+  const { viewport } = useThree();
   const rotTarget = useRef(new THREE.Euler(0, 0, 0));
 
   useFrame((_state, dt) => {
-    if (!groupRef.current || !target.current || !camera) return;
+    if (!groupRef.current || !target.current) return;
 
-    const mouse = target.current.clone();
-    mouse.project(camera);
+    // target is already in NDC (-1 to 1) from pointer handler
+    const mouse = target.current;
 
     const angle = Math.atan2(mouse.y, mouse.x);
     const distance = Math.min(Math.sqrt(mouse.x ** 2 + mouse.y ** 2), 1);
@@ -210,8 +208,8 @@ export default function SurveillanceEye() {
         style={{ background: "transparent" }}
         gl={{ alpha: true, antialias: true, failIfMajorPerformanceCaveat: false }}
       >
-        <ambientLight intensity={0.3} />
-        <pointLight position={[10, 10, 10]} intensity={0.5} />
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} intensity={0.8} />
         <Eye target={target} />
       </Canvas>
     </div>
