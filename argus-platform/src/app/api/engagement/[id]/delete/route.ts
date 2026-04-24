@@ -14,47 +14,74 @@ export async function DELETE(
     const client = await pool.connect();
 
     try {
+      await client.query("BEGIN");
+
       // Check ownership
       const check = await client.query(
-        "SELECT id FROM engagements WHERE id = $1 AND org_id = $2",
+        "SELECT id, status FROM engagements WHERE id = $1 AND org_id = $2",
         [engagementId, session.user.orgId],
       );
 
       if (check.rowCount === 0) {
+        await client.query("ROLLBACK");
         return NextResponse.json(
           { error: "Engagement not found" },
           { status: 404 },
         );
       }
 
-      // Allow deletion of non-active engagements
-      const statusCheck = await client.query(
-        "SELECT status FROM engagements WHERE id = $1",
-        [engagementId],
-      );
-
-      const currentStatus = statusCheck.rows[0]?.status;
+      const currentStatus = check.rows[0]?.status;
       const activeStates = ["recon", "awaiting_approval", "scanning", "analyzing", "reporting"];
       if (activeStates.includes(currentStatus)) {
+        await client.query("ROLLBACK");
         return NextResponse.json(
           { error: "Cannot delete engagement in progress. Stop it first." },
           { status: 400 },
         );
       }
 
-      // Delete engagement (cascades to findings, states, etc.)
-      await client.query("DELETE FROM engagements WHERE id = $1", [
+      // Delete related records first (explicit deletion before engagement)
+      console.log(`[DELETE ENGAGEMENT] Deleting related records for ${engagementId}`);
+      await client.query("DELETE FROM findings WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM attack_paths WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM checkpoints WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM decision_snapshots WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM execution_logs WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM execution_failures WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM raw_outputs WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM scanner_activities WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM scope_violations WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM rate_limit_events WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM job_states WHERE engagement_id = $1", [engagementId]);
+      await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
+      console.log(`[DELETE ENGAGEMENT] Related records deleted, now deleting engagement`);
+
+      // Finally delete the engagement
+      const deleteResult = await client.query("DELETE FROM engagements WHERE id = $1", [
         engagementId,
       ]);
 
-      return NextResponse.json({ success: true });
+      await client.query("COMMIT");
+
+      console.log(`[DELETE ENGAGEMENT] Deleted engagement ${engagementId}, rows affected: ${deleteResult.rowCount}`);
+
+      return NextResponse.json({ 
+        success: true, 
+        deleted: deleteResult.rowCount,
+        engagementId 
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("[DELETE ENGAGEMENT] Transaction error:", error);
+      throw error;
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error("Delete engagement error:", error);
+    console.error("[DELETE ENGAGEMENT] Outer error:", error);
     return NextResponse.json(
-      { error: "Failed to delete engagement" },
+      { error: "Failed to delete engagement", details: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     );
   }

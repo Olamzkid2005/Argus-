@@ -452,24 +452,37 @@ export default function DashboardPage() {
   };
 
   const handleDelete = async (id: string) => {
+    console.log("[DEBUG] handleDelete called with id:", id);
     if (!confirm("Delete this engagement and all its findings?")) return;
     setDeletingId(id);
     try {
+      console.log("[DEBUG] Sending DELETE request for:", id);
       const response = await fetch(`/api/engagement/${id}/delete`, {
         method: "DELETE",
       });
+      console.log("[DEBUG] Delete response status:", response.status);
       if (response.ok) {
+        const result = await response.json();
+        console.log("[DEBUG] Delete success:", result);
         showToast("success", "Engagement deleted");
         setRecentEngagements((prev) => prev.filter((e) => e.id !== id));
         // If we're monitoring this engagement, disconnect
         if (engagementId === id) {
           disconnectEngagement();
         }
+        // Refresh stats to ensure sync with DB
+        const res = await fetch("/api/dashboard/stats", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setRecentEngagements(data.recent_engagements || []);
+        }
       } else {
         const data = await response.json();
+        console.error("[DEBUG] Delete failed:", data);
         showToast("error", data.error || "Failed to delete engagement");
       }
     } catch (err) {
+      console.error("[DEBUG] Delete error:", err);
       showToast("error", "Failed to delete engagement");
     } finally {
       setDeletingId(null);
@@ -1232,8 +1245,11 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="flex gap-1 ml-2">
                                   <button
+                                    type="button"
                                     onClick={(e) => {
+                                      e.preventDefault();
                                       e.stopPropagation();
+                                      console.log("[DEBUG] Delete button clicked for:", eng.id);
                                       handleDelete(eng.id);
                                     }}
                                     disabled={isDeleting}

@@ -58,6 +58,7 @@ export default function EngagementsListPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -90,7 +91,7 @@ export default function EngagementsListPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this engagement and all its findings?")) return;
-
+    setDeletingId(id);
     try {
       const response = await fetch(`/api/engagement/${id}/delete`, {
         method: "DELETE",
@@ -98,11 +99,20 @@ export default function EngagementsListPage() {
       if (response.ok) {
         showToast("success", "Engagement deleted");
         setEngagements((prev) => prev.filter((e) => e.id !== id));
+        // Refresh list from server to ensure sync
+        const res = await fetch(`/api/engagements?page=${page}&limit=10`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setEngagements(data.engagements || []);
+          setTotalPages(data.meta?.totalPages || 1);
+        }
       } else {
         showToast("error", "Cannot delete engagement in progress");
       }
     } catch (err) {
       showToast("error", "Failed to delete engagement");
+    } finally {
+      setDeletingId(null);
     }
   };
 

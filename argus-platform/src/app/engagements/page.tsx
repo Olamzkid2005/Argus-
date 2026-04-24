@@ -291,8 +291,15 @@ export default function EngagementsPage() {
       if (response.ok) {
         showToast("success", "Engagement deleted");
         setLiveEngagements((prev) => prev.filter((e) => e.id !== id));
+        // Refresh list from server to ensure sync
+        const res = await fetch("/api/engagements", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveEngagements(data.engagements || []);
+        }
       } else {
-        showToast("error", "Cannot delete engagement in progress");
+        const data = await response.json();
+        showToast("error", data.error || "Cannot delete engagement in progress");
       }
     } catch (err) {
       showToast("error", "Failed to delete engagement");
