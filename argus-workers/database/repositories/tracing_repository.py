@@ -4,6 +4,7 @@ Repository for execution logs and spans
 Provides database operations for the execution_logs and execution_spans tables.
 """
 import psycopg2
+from database.connection import connect
 from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -26,7 +27,7 @@ class TracingRepository:
     
     def _get_connection(self):
         """Get a database connection"""
-        return psycopg2.connect(self.connection_string)
+        return connect(self.connection_string)
     
     # =========================================================================
     # Execution Logs

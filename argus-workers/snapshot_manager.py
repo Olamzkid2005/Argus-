@@ -2,6 +2,7 @@
 Snapshot Manager - Creates immutable state snapshots for decision-making
 """
 import psycopg2
+from database.connection import connect
 from psycopg2.extras import Json, RealDictCursor
 from psycopg2 import sql
 import uuid
@@ -37,7 +38,7 @@ class SnapshotManager:
         Returns:
             Snapshot dictionary with all state data
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         
         try:
             # Set SERIALIZABLE isolation level
@@ -198,7 +199,7 @@ class SnapshotManager:
         Returns:
             Snapshot data or None if not found
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         try:
@@ -232,7 +233,7 @@ class SnapshotManager:
         Returns:
             Latest snapshot data or None
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         try:
@@ -268,7 +269,7 @@ class SnapshotManager:
         Returns:
             List of snapshot metadata (without full data)
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         try:

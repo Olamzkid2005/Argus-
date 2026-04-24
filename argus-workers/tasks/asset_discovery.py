@@ -4,25 +4,16 @@ Celery task for automatic asset discovery and classification
 Requirements: 28.1, 28.2, 28.3, 28.4
 """
 from celery_app import app
-import os
-import sys
-import importlib.util
+import psycopg2
+from database.connection import connect
 
-_workers_dir = "/Users/mac/Documents/Argus-/argus-workers"
+from loader import load_module
 
-# Robust module loader
-def _load_module(module_name: str, rel_path: str = None):
-    rel_path = rel_path or f"{module_name}.py"
-    file_path = os.path.join(_workers_dir, rel_path)
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-_tracing = _load_module("tracing")
+_tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
 
 import psycopg2
+from database.connection import connect
 
 
 @app.task(bind=True, name="tasks.asset_discovery.run_asset_discovery")
@@ -49,7 +40,7 @@ def run_asset_discovery(self, engagement_id: str, target: str, org_id: str, trac
         assets_discovered = []
         
         try:
-            conn = psycopg2.connect(db_conn_string)
+            conn = connect(db_conn_string)
             cursor = conn.cursor()
             
             # Discover domain asset
@@ -123,7 +114,7 @@ def update_asset_risk_scores(self, org_id: str):
     db_conn_string = os.getenv("DATABASE_URL")
     
     try:
-        conn = psycopg2.connect(db_conn_string)
+        conn = connect(db_conn_string)
         cursor = conn.cursor()
         
         # Get all assets with their engagement findings

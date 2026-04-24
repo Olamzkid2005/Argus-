@@ -1,5 +1,6 @@
 // Findings API route with pagination, filtering, sorting, and bulk operations
 import { NextRequest, NextResponse } from "next/server";
+import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 
@@ -161,11 +162,18 @@ export async function GET(req: NextRequest) {
     console.error("Findings API error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return createErrorResponse(
+        "Unauthorized",
+        ErrorCodes.UNAUTHORIZED,
+        undefined,
+        401,
+      );
     }
-    return NextResponse.json(
-      { error: "Failed to fetch findings" },
-      { status: 500 },
+    return createErrorResponse(
+      "Failed to fetch findings",
+      ErrorCodes.INTERNAL_ERROR,
+      undefined,
+      500,
     );
   }
 }
@@ -191,9 +199,11 @@ export async function POST(req: NextRequest) {
       !Array.isArray(finding_ids) ||
       finding_ids.length === 0
     ) {
-      return NextResponse.json(
-        { error: "Invalid request: action and finding_ids are required" },
-        { status: 400 },
+      return createErrorResponse(
+        "Invalid request: action and finding_ids are required",
+        ErrorCodes.BAD_REQUEST,
+        undefined,
+        400,
       );
     }
 
@@ -213,9 +223,11 @@ export async function POST(req: NextRequest) {
       ]);
 
       if (verifyResult.rows.length !== finding_ids.length) {
-        return NextResponse.json(
-          { error: "Some findings not found or access denied" },
-          { status: 403 },
+        return createErrorResponse(
+          "Some findings not found or access denied",
+          ErrorCodes.FORBIDDEN,
+          undefined,
+          403,
         );
       }
 
@@ -238,18 +250,20 @@ export async function POST(req: NextRequest) {
 
         case "update_severity":
           if (!severity) {
-            return NextResponse.json(
-              { error: "severity is required for update_severity action" },
-              { status: 400 },
+            return createErrorResponse(
+              "severity is required for update_severity action",
+              ErrorCodes.VALIDATION_ERROR,
+              undefined,
+              400,
             );
           }
           const validSeverities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
           if (!validSeverities.includes(severity)) {
-            return NextResponse.json(
-              {
-                error: `Invalid severity. Must be one of: ${validSeverities.join(", ")}`,
-              },
-              { status: 400 },
+            return createErrorResponse(
+              `Invalid severity. Must be one of: ${validSeverities.join(", ")}`,
+              ErrorCodes.VALIDATION_ERROR,
+              undefined,
+              400,
             );
           }
           result = await client.query(
@@ -259,9 +273,11 @@ export async function POST(req: NextRequest) {
           break;
 
         default:
-          return NextResponse.json(
-            { error: `Invalid action: ${action}` },
-            { status: 400 },
+          return createErrorResponse(
+            `Invalid action: ${action}`,
+            ErrorCodes.BAD_REQUEST,
+            undefined,
+            400,
           );
       }
 
@@ -277,11 +293,18 @@ export async function POST(req: NextRequest) {
     console.error("Findings bulk operation error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return createErrorResponse(
+        "Unauthorized",
+        ErrorCodes.UNAUTHORIZED,
+        undefined,
+        401,
+      );
     }
-    return NextResponse.json(
-      { error: "Failed to perform bulk operation" },
-      { status: 500 },
+    return createErrorResponse(
+      "Failed to perform bulk operation",
+      ErrorCodes.INTERNAL_ERROR,
+      undefined,
+      500,
     );
   }
 }

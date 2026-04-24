@@ -2,6 +2,7 @@
 Checkpoint Manager - Saves and recovers from checkpoints during long scans
 """
 import psycopg2
+from database.connection import connect
 from psycopg2.extras import Json, RealDictCursor
 import uuid
 from typing import Dict, Optional, List
@@ -39,7 +40,7 @@ class CheckpointManager:
         Returns:
             Checkpoint ID
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         
         try:
@@ -77,7 +78,7 @@ class CheckpointManager:
         Returns:
             Checkpoint data or None if no checkpoint exists
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         try:
@@ -113,7 +114,7 @@ class CheckpointManager:
         Returns:
             True if checkpoint exists
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         
         try:
@@ -142,7 +143,7 @@ class CheckpointManager:
         Returns:
             List of checkpoint metadata
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         try:
@@ -169,7 +170,7 @@ class CheckpointManager:
         Args:
             engagement_id: Engagement ID
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         
         try:
@@ -265,7 +266,7 @@ class CheckpointManager:
         """
         from datetime import datetime, timedelta
         
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         
         try:

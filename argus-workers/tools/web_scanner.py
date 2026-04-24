@@ -23,6 +23,8 @@ import time
 import re
 import json
 import base64
+import ssl
+import socket
 import logging
 from typing import Dict, List, Optional
 from urllib.parse import urlparse, urljoin
@@ -31,6 +33,12 @@ from requests.exceptions import RequestException, Timeout, ConnectionError
 
 logger = logging.getLogger(__name__)
 
+from config.constants import (
+    MAX_PAGES_TO_CRAWL,
+    MAX_PARAMETERS_TO_FUZZ,
+    RATE_LIMIT_DELAY_MS,
+    SSL_TIMEOUT,
+)
 
 class WebScanner:
     """
@@ -175,7 +183,7 @@ class WebScanner:
         "X-Original-Forwarded-For": "127.0.0.1",
     }
     
-    def __init__(self, timeout: int = 10, rate_limit: float = 0.1):
+    def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0):
         """
         Initialize web scanner.
         
@@ -219,6 +227,12 @@ class WebScanner:
         
         # 4. CORS analysis
         self.check_cors()
+        
+        # 4.5 Parameter discovery
+        self.parameter_discovery()
+        
+        # 4.6 Parameter fuzzing
+        self.parameter_fuzzing()
         
         # 5. Sensitive file detection
         self.check_sensitive_files()
@@ -276,6 +290,21 @@ class WebScanner:
         
         # 23. OpenAPI discovery
         self.check_openapi_discovery()
+        
+        # 24. Differential analysis
+        self.differential_analysis()
+        
+        # 25. WAF detection
+        self.detect_waf()
+        
+        # 26. Time-based vulnerability detection
+        self.time_based_detection()
+        
+        # 27. SSL/TLS verification
+        self.ssl_verify()
+        
+        # 28. Response analysis for information leakage
+        self.response_analysis()
         
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
@@ -545,7 +574,7 @@ class WebScanner:
                 self._scan_content_for_secrets(script, self.target_url + "/inline-script")
         
         # Scan external JS files (limit to first 10)
-        for js_url in js_urls[:10]:
+        for js_url in js_urls[:MAX_PAGES_TO_CRAWL]:
             if not js_url.startswith("http"):
                 js_url = urljoin(self.target_url, js_url)
             
@@ -775,7 +804,184 @@ class WebScanner:
                                 },
                                 confidence=0.7,
                             )
-                            break
+                break
+
+    def parameter_discovery(self):
+        """
+        Discover input parameters from forms, URLs, JSON, and JavaScript.
+
+        Crawls the target site (up to max_pages) and extracts URL query
+        parameters, form input names, JSON keys from inline scripts, and
+        JavaScript variable names. Discovered parameters are stored in
+        self.discovered_parameters for use by subsequent tests.
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running parameter discovery")
+
+        discovered = {
+            "url_parameters": set(),
+            "form_parameters": set(),
+            "json_parameters": set(),
+            "javascript_parameters": set(),
+        }
+
+        # Crawl main page and linked pages
+        to_crawl = [self.target_url]
+        crawled = set()
+        max_pages = MAX_PAGES_TO_CRAWL
+
+        while to_crawl and len(crawled) < max_pages:
+            url = to_crawl.pop(0)
+            if url in crawled:
+                continue
+            crawled.add(url)
+
+            resp = self._safe_request("GET", url)
+            if not resp:
+                continue
+
+            # Extract URL parameters
+            url_params = re.findall(r'[?&](\w+)=', url)
+            discovered["url_parameters"].update(url_params)
+
+            # Extract form parameters
+            form_inputs = re.findall(
+                r'<input[^>]*name=["\']([^"\']+)["\']',
+                resp.text,
+                re.IGNORECASE,
+            )
+            discovered["form_parameters"].update(form_inputs)
+
+            form_selects = re.findall(
+                r'<select[^>]*name=["\']([^"\']+)["\']',
+                resp.text,
+                re.IGNORECASE,
+            )
+            discovered["form_parameters"].update(form_selects)
+
+            # Extract JSON keys from inline scripts
+            json_keys = re.findall(
+                r'["\'](\w+)["\']\s*:\s*',
+                resp.text,
+            )
+            discovered["json_parameters"].update(json_keys)
+
+            # Extract JavaScript variables that might be parameters
+            js_vars = re.findall(
+                r'(?:var|let|const)\s+(\w+)\s*=',
+                resp.text,
+            )
+            discovered["javascript_parameters"].update(js_vars)
+
+            # Extract links to crawl further
+            links = re.findall(
+                r'href=["\']([^"\']+)["\']',
+                resp.text,
+                re.IGNORECASE,
+            )
+            for link in links:
+                absolute = urljoin(url, link)
+                if absolute.startswith(self.target_url) and absolute not in crawled:
+                    to_crawl.append(absolute)
+
+        # Store discovered parameters for use by other checks
+        self.discovered_parameters = {
+            key: list(values)
+            for key, values in discovered.items()
+        }
+
+        # Add finding if parameters were discovered
+        total = sum(len(v) for v in self.discovered_parameters.values())
+        if total > 0:
+            self._add_finding(
+                finding_type="PARAMETER_DISCOVERY",
+                severity="INFO",
+                endpoint=self.target_url,
+                evidence={
+                    "total_discovered": total,
+                    "url_parameters": self.discovered_parameters["url_parameters"][:20],
+                    "form_parameters": self.discovered_parameters["form_parameters"][:20],
+                    "json_parameters": self.discovered_parameters["json_parameters"][:20],
+                    "pages_crawled": len(crawled),
+                },
+                confidence=0.8,
+            )
+
+    def parameter_fuzzing(self):
+        """
+        Fuzz discovered parameters with a variety of injection payloads.
+
+        Uses parameters stored in self.discovered_parameters and tests
+        each with payloads for SQL injection, XSS, path traversal, command
+        injection, null bytes, large values, and special characters. Flags
+        server errors (500) and payload reflection as potential issues.
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running parameter fuzzing")
+
+        if not hasattr(self, "discovered_parameters"):
+            return
+
+        # Simple fuzz payloads to test parameter handling
+        fuzz_payloads = [
+            ("sqli", "' OR '1'='1"),
+            ("sqli_comment", "admin'--"),
+            ("xss", "<script>alert(1)</script>"),
+            ("path_traversal", "../../../etc/passwd"),
+            ("cmd_injection", "; id"),
+            ("null_byte", "test%00.jpg"),
+            ("large_value", "A" * 10000),
+            ("special_chars", "!@#$%^&*()"),
+        ]
+
+        all_params = []
+        for param_list in self.discovered_parameters.values():
+            all_params.extend(param_list)
+
+        tested = 0
+        for param in all_params[:MAX_PARAMETERS_TO_FUZZ]:  # Limit to first 20 params
+            for fuzz_type, payload in fuzz_payloads:
+                test_url = f"{self.target_url}?{param}={payload}"
+                resp = self._safe_request("GET", test_url)
+                tested += 1
+
+                if not resp:
+                    continue
+
+                # Check for interesting responses
+                if resp.status_code == 500:
+                    self._add_finding(
+                        finding_type="PARAMETER_FUZZ_500",
+                        severity="MEDIUM",
+                        endpoint=test_url,
+                        evidence={
+                            "parameter": param,
+                            "payload_type": fuzz_type,
+                            "payload": payload,
+                            "status_code": 500,
+                            "message": "Payload caused server error",
+                        },
+                        confidence=0.5,
+                    )
+                elif payload in resp.text:
+                    self._add_finding(
+                        finding_type="PARAMETER_REFLECTION",
+                        severity="LOW",
+                        endpoint=test_url,
+                        evidence={
+                            "parameter": param,
+                            "payload_type": fuzz_type,
+                            "payload": payload,
+                            "message": "Payload reflected in response",
+                        },
+                        confidence=0.6,
+                    )
+
+        logger.info(f"Parameter fuzzing complete: {tested} tests performed")
     
     def check_mass_assignment(self):
         """Check for mass assignment vulnerabilities."""
@@ -1196,3 +1402,598 @@ class WebScanner:
                     break
             except json.JSONDecodeError:
                 pass
+
+    def differential_analysis(self):
+        """
+        Compare baseline response against modified requests to detect
+        anomalies, parameter pollution, and method override issues.
+
+        Sends variations of the baseline request (method override headers,
+        parameter pollution, null byte injection, large content length) and
+        flags responses that differ significantly in status code, body length,
+        or response time.
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running differential analysis")
+
+        # Establish baseline
+        baseline = self._safe_request("GET", self.target_url)
+        if not baseline:
+            return
+
+        baseline_status = baseline.status_code
+        baseline_len = len(baseline.text)
+        baseline_time = baseline.elapsed.total_seconds()
+
+        # Test cases: method override, parameter pollution, header anomalies
+        test_cases = [
+            {
+                "name": "method_override_get",
+                "method": "POST",
+                "url": self.target_url,
+                "headers": {"X-HTTP-Method-Override": "GET"},
+                "data": "",
+            },
+            {
+                "name": "method_override_delete",
+                "method": "POST",
+                "url": self.target_url,
+                "headers": {"X-HTTP-Method-Override": "DELETE"},
+                "data": "",
+            },
+            {
+                "name": "parameter_pollution",
+                "method": "GET",
+                "url": f"{self.target_url}?id=1&id=2&id=3",
+                "headers": {},
+            },
+            {
+                "name": "null_byte_injection",
+                "method": "GET",
+                "url": f"{self.target_url}?file=test.txt%00.jpg",
+                "headers": {},
+            },
+            {
+                "name": "large_content_length",
+                "method": "POST",
+                "url": self.target_url,
+                "headers": {"Content-Length": "999999999"},
+                "data": "x",
+            },
+        ]
+
+        for test in test_cases:
+            try:
+                kwargs = {
+                    "headers": test.get("headers", {}),
+                }
+                if "data" in test:
+                    kwargs["data"] = test["data"]
+
+                resp = self._safe_request(test["method"], test["url"], **kwargs)
+                if not resp:
+                    continue
+
+                status_diff = resp.status_code != baseline_status
+                len_diff = abs(len(resp.text) - baseline_len) > 100
+                time_diff = abs(resp.elapsed.total_seconds() - baseline_time) > 2
+
+                if status_diff or len_diff or time_diff:
+                    self._add_finding(
+                        finding_type="DIFFERENTIAL_ANOMALY",
+                        severity="MEDIUM",
+                        endpoint=test["url"],
+                        evidence={
+                            "test_name": test["name"],
+                            "baseline_status": baseline_status,
+                            "modified_status": resp.status_code,
+                            "baseline_length": baseline_len,
+                            "modified_length": len(resp.text),
+                            "baseline_time": baseline_time,
+                            "modified_time": resp.elapsed.total_seconds(),
+                            "headers_sent": test.get("headers", {}),
+                        },
+                        confidence=0.6,
+                    )
+            except Exception as e:
+                logger.debug(f"Differential test failed: {e}")
+
+    def detect_waf(self):
+        """
+        Detect Web Application Firewalls (WAF) and identify their vendor type.
+
+        Sends trigger payloads that WAFs typically block, then inspects
+        response headers and body for known WAF signatures (Cloudflare,
+        AWS WAF, ModSecurity, Akamai, Sucuri, Imperva, F5 BIG-IP).
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running WAF detection")
+
+        # Trigger payloads that WAFs typically block
+        trigger_payloads = [
+            "' OR 1=1--",
+            "<script>alert(1)</script>",
+            "../../etc/passwd",
+            " UNION SELECT * FROM users--",
+        ]
+
+        waf_signatures = {
+            "Cloudflare": [
+                ("header", "cf-ray"),
+                ("header", "cloudflare"),
+                ("body", "cloudflare"),
+            ],
+            "AWS WAF": [
+                ("header", "x-amzn-requestid"),
+                ("body", "aws"),
+            ],
+            "ModSecurity": [
+                ("body", "mod_security"),
+                ("body", "not acceptable"),
+                ("status", 406),
+            ],
+            "Akamai": [
+                ("header", "akamai"),
+                ("body", "akamaighost"),
+            ],
+            "Sucuri": [
+                ("header", "x-sucuri"),
+                ("body", "sucuri"),
+            ],
+            "Imperva": [
+                ("header", "x-iinfo"),
+                ("body", "incapsula"),
+            ],
+            "F5 BIG-IP": [
+                ("header", "x-waf-event-info"),
+                ("body", "f5"),
+            ],
+        }
+
+        detected_wafs = set()
+        waf_response = None
+
+        for payload in trigger_payloads:
+            test_url = f"{self.target_url}?test={payload}"
+            resp = self._safe_request("GET", test_url)
+            if not resp:
+                continue
+
+            # WAF typically blocks with 403, 406, 419, 423
+            if resp.status_code in (403, 406, 419, 423, 501):
+                waf_response = resp
+                break
+
+        if not waf_response:
+            # Also check normal response for WAF headers
+            resp = self._safe_request("GET", self.target_url)
+            if resp:
+                waf_response = resp
+
+        if not waf_response:
+            return
+
+        # Check signatures
+        headers_str = str(waf_response.headers).lower()
+        body_str = waf_response.text.lower()
+
+        for waf_name, signatures in waf_signatures.items():
+            for sig_type, sig_value in signatures:
+                sig_value_lower = sig_value.lower()
+                if sig_type == "header" and sig_value_lower in headers_str:
+                    detected_wafs.add(waf_name)
+                elif sig_type == "body" and sig_value_lower in body_str:
+                    detected_wafs.add(waf_name)
+                elif sig_type == "status" and waf_response.status_code == sig_value:
+                    detected_wafs.add(waf_name)
+
+        if detected_wafs:
+            self._add_finding(
+                finding_type="WAF_DETECTED",
+                severity="INFO",
+                endpoint=self.target_url,
+                evidence={
+                    "waf_types": list(detected_wafs),
+                    "trigger_status": waf_response.status_code,
+                    "response_headers": dict(waf_response.headers),
+                },
+                confidence=0.8,
+            )
+        elif waf_response.status_code in (403, 406, 419, 423):
+            self._add_finding(
+                finding_type="WAF_DETECTED",
+                severity="INFO",
+                endpoint=self.target_url,
+                evidence={
+                    "waf_types": ["Unknown"],
+                    "trigger_status": waf_response.status_code,
+                    "message": "Blocking behavior detected but WAF type not identified",
+                },
+                confidence=0.5,
+            )
+
+    def time_based_detection(self):
+        """
+        Detect time-based vulnerabilities using deliberate timing delays.
+
+        Tests for blind SQL injection (MySQL, PostgreSQL, MSSQL, SQLite,
+        Oracle), command injection, and blind XXE by measuring whether
+        the response time exceeds a threshold after injecting delay
+        payloads.
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running time-based vulnerability detection")
+
+        delay_seconds = 5
+        threshold = delay_seconds * 0.8  # Allow 80% of delay to account for variance
+
+        # SQL injection time-based payloads
+        sqli_payloads = [
+            ("mysql", f"' OR SLEEP({delay_seconds})--"),
+            ("mysql_alt", f"'; SELECT SLEEP({delay_seconds})--"),
+            ("postgres", f"'; SELECT pg_sleep({delay_seconds})--"),
+            ("mssql", f"'; WAITFOR DELAY '0:0:{delay_seconds}'--"),
+            ("sqlite", f"' AND randomblob({delay_seconds}00000000)--"),
+            ("oracle", f"' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('RDS',{delay_seconds})--"),
+        ]
+
+        # Command injection time-based payloads
+        cmdi_payloads = [
+            ("; sleep", f"; sleep {delay_seconds}"),
+            ("| sleep", f"| sleep {delay_seconds}"),
+            ("&& sleep", f"&& sleep {delay_seconds}"),
+            ("`sleep", f"`sleep {delay_seconds}`"),
+            ("$(sleep", f"$(sleep {delay_seconds})"),
+        ]
+
+        # Test SQL injection
+        for db_type, payload in sqli_payloads:
+            test_url = f"{self.target_url}?id={payload}"
+            start = time.time()
+            resp = self._safe_request("GET", test_url)
+            elapsed = time.time() - start
+
+            if elapsed >= threshold:
+                self._add_finding(
+                    finding_type="TIME_BASED_SQL_INJECTION",
+                    severity="HIGH",
+                    endpoint=test_url,
+                    evidence={
+                        "db_type_tested": db_type,
+                        "payload": payload,
+                        "response_time_seconds": elapsed,
+                        "threshold_seconds": threshold,
+                        "message": f"Response delayed by {elapsed:.1f}s suggests time-based SQL injection",
+                    },
+                    confidence=0.7,
+                )
+                break  # Found one, likely enough
+
+        # Test command injection
+        for cmd_type, payload in cmdi_payloads:
+            test_url = f"{self.target_url}?input={payload}"
+            start = time.time()
+            resp = self._safe_request("GET", test_url)
+            elapsed = time.time() - start
+
+            if elapsed >= threshold:
+                self._add_finding(
+                    finding_type="TIME_BASED_COMMAND_INJECTION",
+                    severity="HIGH",
+                    endpoint=test_url,
+                    evidence={
+                        "payload_type": cmd_type,
+                        "payload": payload,
+                        "response_time_seconds": elapsed,
+                        "threshold_seconds": threshold,
+                        "message": f"Response delayed by {elapsed:.1f}s suggests command injection",
+                    },
+                    confidence=0.7,
+                )
+                break
+
+        # Blind XXE time-based test
+        xxe_payload = """<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE foo [
+          <!ENTITY xxe SYSTEM "http://127.0.0.1:9999/xxe">
+        ]>
+        <foo>&xxe;</foo>"""
+
+        start = time.time()
+        resp = self._safe_request(
+            "POST",
+            self.target_url,
+            data=xxe_payload,
+            headers={"Content-Type": "application/xml"},
+        )
+        elapsed = time.time() - start
+
+        if elapsed >= threshold:
+            self._add_finding(
+                finding_type="BLIND_XXE",
+                severity="HIGH",
+                endpoint=self.target_url,
+                evidence={
+                    "payload": xxe_payload[:100],
+                    "response_time_seconds": elapsed,
+                    "threshold_seconds": threshold,
+                    "message": "Long response time may indicate OOB XXE resolution attempt",
+                },
+                confidence=0.4,
+            )
+
+    def ssl_verify(self):
+        """
+        Verify SSL/TLS certificate and server-side configuration.
+
+        Checks for HTTPS usage, certificate expiry, self-signed certificates,
+        weak TLS versions (SSLv3, TLSv1, TLSv1.1), and weak cipher suites.
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running SSL/TLS verification")
+
+        import ssl
+        import socket
+
+        try:
+            parsed = urlparse(self.target_url)
+            hostname = parsed.hostname
+            port = parsed.port or 443
+
+            if not hostname:
+                return
+
+            if parsed.scheme != "https":
+                self._add_finding(
+                    finding_type="NO_HTTPS",
+                    severity="HIGH",
+                    endpoint=self.target_url,
+                    evidence={
+                        "scheme": parsed.scheme,
+                        "message": "Target does not use HTTPS",
+                    },
+                    confidence=0.95,
+                )
+                return
+
+            context = ssl.create_default_context()
+
+            with socket.create_connection((hostname, port), timeout=self.timeout) as sock:
+                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    cipher = ssock.cipher()
+                    version = ssock.version()
+
+                    # Check certificate expiry
+                    if cert:
+                        from datetime import datetime
+                        not_after = cert.get("notAfter")
+                        if not_after:
+                            expiry = ssl.cert_time_to_seconds(not_after)
+                            if expiry < time.time():
+                                self._add_finding(
+                                    finding_type="EXPIRED_SSL_CERTIFICATE",
+                                    severity="HIGH",
+                                    endpoint=f"{hostname}:{port}",
+                                    evidence={
+                                        "expiry_date": not_after,
+                                        "subject": cert.get("subject"),
+                                    },
+                                    confidence=0.95,
+                                )
+
+                        # Check if self-signed
+                        issuer = cert.get("issuer")
+                        subject = cert.get("subject")
+                        if issuer == subject:
+                            self._add_finding(
+                                finding_type="SELF_SIGNED_CERTIFICATE",
+                                severity="MEDIUM",
+                                endpoint=f"{hostname}:{port}",
+                                evidence={
+                                    "issuer": issuer,
+                                    "subject": subject,
+                                },
+                                confidence=0.9,
+                            )
+
+                    # Check TLS version
+                    weak_versions = ["SSLv3", "TLSv1", "TLSv1.1"]
+                    if version in weak_versions:
+                        self._add_finding(
+                            finding_type="WEAK_TLS_VERSION",
+                            severity="HIGH",
+                            endpoint=f"{hostname}:{port}",
+                            evidence={
+                                "tls_version": version,
+                                "message": f"{version} is deprecated and insecure",
+                            },
+                            confidence=0.95,
+                        )
+
+                    # Check cipher strength
+                    if cipher:
+                        cipher_name = cipher[0]
+                        weak_ciphers = [
+                            "RC4", "DES", "3DES", "MD5", "NULL",
+                            "EXPORT", "anon", "CBC"
+                        ]
+                        if any(wc in cipher_name for wc in weak_ciphers):
+                            self._add_finding(
+                                finding_type="WEAK_SSL_CIPHER",
+                                severity="HIGH",
+                                endpoint=f"{hostname}:{port}",
+                                evidence={
+                                    "cipher": cipher_name,
+                                    "message": f"Weak cipher detected: {cipher_name}",
+                                },
+                                confidence=0.85,
+                            )
+
+        except ssl.SSLError as e:
+            self._add_finding(
+                finding_type="SSL_ERROR",
+                severity="MEDIUM",
+                endpoint=self.target_url,
+                evidence={
+                    "error": str(e),
+                    "message": "SSL/TLS handshake failed",
+                },
+                confidence=0.8,
+            )
+        except socket.error as e:
+            logger.debug(f"SSL verification socket error: {e}")
+        except Exception as e:
+            logger.debug(f"SSL verification error: {e}")
+
+    def response_analysis(self):
+        """
+        Analyze HTTP responses for information leakage and debug exposure.
+
+        Detects server version headers, framework leaks (X-Powered-By,
+        X-AspNet-Version), stack traces, internal IP addresses, email
+        addresses, and debug mode indicators in response content.
+
+        Returns:
+            None. Findings are appended to self.findings.
+        """
+        logger.info("Running response analysis")
+
+        resp = self._safe_request("GET", self.target_url)
+        if not resp:
+            return
+
+        # Server information disclosure
+        server_header = resp.headers.get("Server", "")
+        powered_by = resp.headers.get("X-Powered-By", "")
+        asp_version = resp.headers.get("X-AspNet-Version", "")
+        asp_mvc = resp.headers.get("X-AspNetMvc-Version", "")
+
+        if server_header:
+            self._add_finding(
+                finding_type="SERVER_INFO_DISCLOSURE",
+                severity="LOW",
+                endpoint=self.target_url,
+                evidence={
+                    "header": "Server",
+                    "value": server_header,
+                    "message": "Server software version exposed",
+                },
+                confidence=0.9,
+            )
+
+        if powered_by:
+            self._add_finding(
+                finding_type="FRAMEWORK_VERSION_LEAK",
+                severity="LOW",
+                endpoint=self.target_url,
+                evidence={
+                    "header": "X-Powered-By",
+                    "value": powered_by,
+                    "message": "Framework version exposed",
+                },
+                confidence=0.9,
+            )
+
+        if asp_version or asp_mvc:
+            self._add_finding(
+                finding_type="FRAMEWORK_VERSION_LEAK",
+                severity="LOW",
+                endpoint=self.target_url,
+                evidence={
+                    "headers": {
+                        "X-AspNet-Version": asp_version,
+                        "X-AspNetMvc-Version": asp_mvc,
+                    },
+                    "message": "ASP.NET version information exposed",
+                },
+                confidence=0.9,
+            )
+
+        # Stack trace detection
+        stack_patterns = [
+            r"Traceback \(most recent call last\)",
+            r"at [\w\.]+\.[\w]+\([^)]*\)",
+            r"Exception in thread",
+            r"Fatal error:",
+            r"PHP Stack trace:",
+            r"in /[\w/]+ on line \d+",
+        ]
+
+        for pattern in stack_patterns:
+            if re.search(pattern, resp.text, re.IGNORECASE):
+                match = re.search(pattern, resp.text, re.IGNORECASE)
+                snippet = resp.text[max(0, match.start()-100):match.end()+200]
+                self._add_finding(
+                    finding_type="STACK_TRACE_EXPOSURE",
+                    severity="MEDIUM",
+                    endpoint=self.target_url,
+                    evidence={
+                        "pattern_matched": pattern,
+                        "snippet": snippet,
+                        "message": "Stack trace or debug information exposed in response",
+                    },
+                    confidence=0.8,
+                )
+                break
+
+        # Internal IP disclosure
+        internal_ip_pattern = r"(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})"
+        internal_ips = re.findall(internal_ip_pattern, resp.text)
+        if internal_ips:
+            self._add_finding(
+                finding_type="INTERNAL_IP_DISCLOSURE",
+                severity="LOW",
+                endpoint=self.target_url,
+                evidence={
+                    "internal_ips_found": list(set(internal_ips)),
+                    "message": "Internal IP addresses exposed in response",
+                },
+                confidence=0.8,
+            )
+
+        # Email address disclosure
+        email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+        emails = re.findall(email_pattern, resp.text)
+        if emails:
+            self._add_finding(
+                finding_type="EMAIL_DISCLOSURE",
+                severity="INFO",
+                endpoint=self.target_url,
+                evidence={
+                    "emails_found": list(set(emails))[:10],
+                    "count": len(set(emails)),
+                    "message": "Email addresses exposed in response",
+                },
+                confidence=0.7,
+            )
+
+        # Debug mode detection
+        debug_indicators = [
+            "DEBUG = True",
+            "debug mode",
+            "debug toolbar",
+            "flask-debug",
+            "django-debug",
+        ]
+        for indicator in debug_indicators:
+            if indicator.lower() in resp.text.lower():
+                self._add_finding(
+                    finding_type="DEBUG_MODE_ENABLED",
+                    severity="MEDIUM",
+                    endpoint=self.target_url,
+                    evidence={
+                        "indicator": indicator,
+                        "message": "Debug mode may be enabled",
+                    },
+                    confidence=0.7,
+                )
+                break

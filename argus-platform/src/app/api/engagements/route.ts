@@ -1,5 +1,6 @@
 // Engagements list API with pagination and sorting
 import { NextRequest, NextResponse } from "next/server";
+import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 
@@ -132,11 +133,18 @@ export async function GET(req: NextRequest) {
     console.error("Engagements API error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return createErrorResponse(
+        "Unauthorized",
+        ErrorCodes.UNAUTHORIZED,
+        undefined,
+        401,
+      );
     }
-    return NextResponse.json(
-      { error: "Failed to fetch engagements" },
-      { status: 500 },
+    return createErrorResponse(
+      "Failed to fetch engagements",
+      ErrorCodes.INTERNAL_ERROR,
+      undefined,
+      500,
     );
   }
 }

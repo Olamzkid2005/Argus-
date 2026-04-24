@@ -1,0 +1,8 @@
+  File "<stdin>", line 4
+    missing_func = """
+                   ^
+SyntaxError: unterminated triple-quoted string literal (detected at line 41)
+  File "<stdin>", line 4
+    missing_func = """
+                   ^
+SyntaxError: unterminated triple-quoted string literal (detected at line 41)

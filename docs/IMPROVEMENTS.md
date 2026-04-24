@@ -82,14 +82,14 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 2.1 | Missing modern vulns | `tools/web_scanner.py:34` | Add GraphQL introspection, JWT alg confusion, prototype pollution, cache poisoning, HTTP smuggling, DOM XSS, OpenAPI discovery | ~10h | High |
-| 2.2 | Blind payload firing | `tools/web_scanner.py` | `differential_check()`: baseline→payload→compare hash/reflectivity (~60% FP reduction) | 3h | High |
-| 2.3 | No WAF detection | `tools/web_scanner.py` | `detect_waf()`: check CF-RAY, x-mod-security, blocked strings. Tag findings `waf_interference: true` | 2h | High |
-| 2.4 | Hardcoded params | `tools/web_scanner.py` | Feed discovered forms/params from katana crawl into injection tests | 2h | Medium |
-| 2.5 | No time-based detection | `tools/web_scanner.py` | Add SLEEP payloads for SQL/Command injection timing attacks | 1.5h | Medium |
-| 2.6 | `verify=False` globally | `tools/web_scanner.py` | Remove `verify=False`, use proper SSL verification with option to disable per-target | 30m | High |
-| 2.7 | No rate limiting per endpoint | `tools/web_scanner.py` | Per-endpoint rate limiting (currently only global) | 1h | Medium |
-| 2.8 | Missing response analysis | `tools/web_scanner.py` | Parse HTTP status codes, content-type, response size for fingerprinting | 1h | Low |
+| 2.1 ✓ | **Modern vulnerability checks** | `tools/web_scanner.py:34` | Add GraphQL introspection, JWT alg confusion, prototype pollution, cache poisoning, HTTP smuggling, DOM XSS, OpenAPI discovery | ~10h | High |
+| 2.2 ✓ | **Differential analysis** | `tools/web_scanner.py` | `differential_check()`: baseline→payload→compare hash/reflectivity (~60% FP reduction) | 3h | High |
+| 2.3 ✓ | **WAF detection** | `tools/web_scanner.py` | `detect_waf()`: check CF-RAY, x-mod-security, blocked strings. Tag findings `waf_interference: true` | 2h | High |
+| 2.4 ✓ | **Parameter discovery & fuzzing** | `tools/web_scanner.py` | Feed discovered forms/params from katana crawl into injection tests | 2h | Medium |
+| 2.5 ✓ | **Time-based detection** | `tools/web_scanner.py` | Add SLEEP payloads for SQL/Command injection timing attacks | 1.5h | Medium |
+| 2.6 ✓ | **SSL verification** | `tools/web_scanner.py` | Remove `verify=False`, use proper SSL verification with option to disable per-target | 30m | High |
+| 2.7 ✓ | **Per-endpoint rate limiting** | `tools/web_scanner.py` | Per-endpoint rate limiting (currently only global) | 1h | Medium |
+| 2.8 ✓ | **Response analysis** | `tools/web_scanner.py` | Parse HTTP status codes, content-type, response size for fingerprinting | 1h | Low |
 
 ---
 
@@ -97,12 +97,12 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 3.1 | No dependency scanning (SCA) | `tasks/repo_scan.py` | Add npm audit, pip-audit, govulncheck, Maven Central checks. Store as `DEPENDENCY_VULNERABILITY` | 6h | High |
-| 3.2 | No git history secret scan | `tasks/repo_scan.py` | Run `git log --all --patch` for committed secrets (trufflehog-style) | 2h | High |
-| 3.3 | No commit blame timeline | `tasks/repo_scan.py` | `git blame` findings to show introduced_at, author, commit hash | 1.5h | Medium |
-| 3.4 | No SBOM generation | `tasks/repo_scan.py` | Generate CycloneDX/SPDX SBOM per engagement | 2h | Medium |
-| 3.5 | No license compliance | `tasks/repo_scan.py` | Check licenses against policy (GPL, MIT, Apache) | 1.5h | Low |
-| 3.6 | Only Semgrep | `tasks/repo_scan.py` | Add Bandit (Python), ESLint security plugins (JS), gosec (Go) | 3h | Medium |
+| 3.1 ✓ | **Dependency scanning (SCA)** | `tasks/repo_scan.py` | Add npm audit, pip-audit, govulncheck, Maven Central checks. Store as `DEPENDENCY_VULNERABILITY` | 6h | High |
+| 3.2 ✓ | **Git history secret scan** | `tasks/repo_scan.py` | Run `git log --all --patch` for committed secrets (trufflehog-style) | 2h | High |
+| 3.3 ✓ | **Commit blame timeline** | `tasks/repo_scan.py` | `git blame` findings to show introduced_at, author, commit hash | 1.5h | Medium |
+| 3.4 ✓ | **SBOM generation** | `tasks/repo_scan.py` | Generate CycloneDX/SPDX SBOM per engagement | 2h | Medium |
+| 3.5 ✓ | **License compliance** | `tasks/repo_scan.py` | Check licenses against policy (GPL, MIT, Apache) | 1.5h | Low |
+| 3.6 ✓ | **More SAST tools** | `tasks/repo_scan.py` | Add Bandit (Python), ESLint security plugins (JS), gosec (Go) | 3h | Medium |
 
 ---
 
@@ -110,16 +110,16 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 4.1 | Duplicated `_load_module` | `tasks/recon.py`, `scan.py`, `repo_scan.py`, `analyze.py` | Create `tasks/loader.py` with shared module loader | 1h | High |
-| 4.2 | No circuit breaker for tools | `tools/tool_runner.py` | Add `CircuitBreaker` class: 3 failures → 5min cooldown | 2h | High |
-| 4.3 | Sync AI calls block threads | `ai_explainer.py` | Convert to async with httpx.AsyncClient, 15s timeout, 2 retries | 2h | High |
-| 4.4 | Load entire tool output in memory | `parsers/parser.py` | Yield findings as generator, batch insert every 50 | 2h | Medium |
-| 4.5 | Hardcoded wordlist path | `orchestrator.py:261` | Use `Path(__file__).parent.parent / "wordlists"` or env var | 10m | High |
-| 4.6 | No engagement event sourcing | - | Add `engagement_events` table for audit trail | 2h | Medium |
-| 4.7 | No worker health endpoint | - | `GET /api/health/workers` querying Celery inspector stats | 1h | Medium |
-| 4.8 | WebSocket per orchestrator | `orchestrator.py` | Singleton WebSocket publisher via Redis pub/sub | 2h | Low |
-| 4.9 | No feature flags | - | Add feature flag system (env var + DB table) for gradual rollout | 3h | Low |
-| 4.10 | Duplicate validation files | `src/lib/validation.ts`, `src/lib/requestValidation.ts` | Consolidate into single Zod-based validation module | 2h | Medium |
+| 4.1 ✓ | **Shared module loader** | `tasks/recon.py`, `scan.py`, `repo_scan.py`, `analyze.py` | Create `tasks/loader.py` with shared module loader | 1h | High |
+| 4.2 ✓ | **Circuit breaker for tools** | `tools/tool_runner.py` | Add `CircuitBreaker` class: 3 failures → 5min cooldown | 2h | High |
+| 4.3 ✓ | **Async AI calls** | `ai_explainer.py` | Convert to async with httpx.AsyncClient, 15s timeout, 2 retries | 2h | High |
+| 4.4 ✓ | **Generator-based parsing** | `parsers/parser.py` | Yield findings as generator, batch insert every 50 | 2h | Medium |
+| 4.5 ✓ | **Configurable wordlist path** | `orchestrator.py:261` | Use `Path(__file__).parent.parent / "wordlists"` or env var | 10m | High |
+| 4.6 ✓ | **Engagement event sourcing** | - | Add `engagement_events` table for audit trail | 2h | Medium |
+| 4.7 ✓ | **Worker health endpoint** | - | `GET /api/health/workers` querying Celery inspector stats | 1h | Medium |
+| 4.8 ✓ | **Singleton WebSocket publisher** | `orchestrator.py` | Singleton WebSocket publisher via Redis pub/sub | 2h | Low |
+| 4.9 ✓ | **Feature flags system** | - | Add feature flag system (env var + DB table) for gradual rollout | 3h | Low |
+| 4.10 ✓ | **Consolidated Zod validation** | `src/lib/validation.ts`, `src/lib/requestValidation.ts` | Consolidate into single Zod-based validation module | 2h | Medium |
 
 ---
 
@@ -127,13 +127,13 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 5.1 | Duplicate validation logic | `src/lib/validation.ts`, `requestValidation.ts` | Use Zod (already in deps) for type-safe validation | 2h | Medium |
-| 5.2 | No TypeScript strict mode | `tsconfig.json` | Enable `strict: true`, fix resulting errors | 4h | High |
-| 5.3 | Missing JSDoc on key functions | Worker modules | Add JSDoc for complex functions (orchestrator, intelligence_engine) | 2h | Medium |
-| 5.4 | Inconsistent error handling | API routes | Standardize error response format: `{error, code, details}` | 3h | Medium |
-| 5.5 | Magic numbers | Loop budget, rate limits | Extract to named constants in config files | 1h | Low |
-| 5.6 | No linting for Python | - | Add `ruff` or `flake8` + pre-commit hook | 1h | Medium |
-| 5.7 | Mixed connection patterns | Repositories | Standardize on connection pool usage, remove direct psycopg2.connect | 2h | High |
+| 5.1 ✓ | **Zod-based validation** | `src/lib/validation.ts`, `requestValidation.ts` | Use Zod (already in deps) for type-safe validation | 2h | Medium |
+| 5.2 ✓ | **TypeScript strict mode** | `tsconfig.json` | Enable `strict: true`, fix resulting errors | 4h | High |
+| 5.3 ✓ | **JSDoc on worker functions** | Worker modules | Add JSDoc for complex functions (orchestrator, intelligence_engine) | 2h | Medium |
+| 5.4 ✓ | **Standardized error responses** | API routes | Standardize error response format: `{error, code, details}` | 3h | Medium |
+| 5.5 ✓ | **Named constants** | Loop budget, rate limits | Extract to named constants in config files | 1h | Low |
+| 5.6 ✓ | **Ruff + pre-commit hooks** | - | Add `ruff` or `flake8` + pre-commit hook | 1h | Medium |
+| 5.7 ✓ | **Connection pool standardization** | Repositories | Standardize on connection pool usage, remove direct psycopg2.connect | 2h | High |
 
 ---
 

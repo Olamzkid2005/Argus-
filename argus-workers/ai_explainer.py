@@ -271,11 +271,14 @@ Keep response under 500 tokens. Be factual and specific."""
     
     async def _generate_explanation(self, prompt: str) -> str:
         """
-        Generate explanation using LLM.
-        
+        Generate explanation using LLM with retry logic and timeout.
+
+        Uses httpx.AsyncClient for non-blocking HTTP calls.
+        Retries up to 2 times with 15s timeout per attempt.
+
         Args:
             prompt: Prompt string
-        
+
         Returns:
             Generated explanation
         """
@@ -283,35 +286,130 @@ Keep response under 500 tokens. Be factual and specific."""
             # Return placeholder if no LLM client configured
             logger.warning("No LLM client configured, returning placeholder")
             return "AI explanation not available (LLM client not configured)"
-        
+
+        # Try OpenAI/Anthropic SDK-style client first
+        if hasattr(self.llm_client, "chat") and hasattr(self.llm_client.chat, "completions"):
+            return await self._generate_with_sdk_client(prompt)
+
+        # Fallback to generic HTTP API with httpx
+        return await self._generate_with_httpx(prompt)
+
+    async def _generate_with_sdk_client(self, prompt: str) -> str:
+        """
+        Generate explanation using an SDK-style LLM client with retry logic.
+
+        Supports OpenAI, Anthropic, and compatible clients that expose a
+        ``chat.completions.create`` interface. Retries up to 2 times with
+        exponential backoff (1s, 2s) and a 15-second timeout per attempt.
+
+        Args:
+            prompt: Sanitized prompt string built from cluster data.
+
+        Returns:
+            Generated explanation text, or an error message if all retries fail.
+        """
+        last_error = None
+
+        for attempt in range(3):  # 3 attempts = initial + 2 retries
+            try:
+                import asyncio
+                response = await asyncio.wait_for(
+                    self.llm_client.chat.completions.create(
+                        model=self.model_version,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific."
+                            },
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens
+                    ),
+                    timeout=15
+                )
+
+                return response.choices[0].message.content
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"LLM call attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s
+
+        logger.error(f"All LLM retry attempts failed: {last_error}")
+        return f"Failed to generate explanation after retries: {str(last_error)}"
+
+    async def _generate_with_httpx(self, prompt: str) -> str:
+        """
+        Generate explanation using a generic HTTP API via httpx.AsyncClient.
+
+        Fallback for LLM providers without an SDK client. Extracts the
+        base URL and API key from the configured client or environment
+        variables. Retries up to 2 times with exponential backoff and
+        supports common response formats (OpenAI-style ``choices`` and
+        plain ``content`` fields).
+
+        Args:
+            prompt: Sanitized prompt string built from cluster data.
+
+        Returns:
+            Generated explanation text, or an error message if all retries fail.
+        """
         try:
-            # Call LLM API (implementation depends on client)
-            # This is a placeholder - actual implementation would use
-            # OpenAI, Anthropic, or other LLM API
-            
-            response = await self.llm_client.chat.completions.create(
-                model=self.model_version,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
-            )
-            
-            explanation = response.choices[0].message.content
-            
-            return explanation
-        
-        except Exception as e:
-            logger.error(f"Failed to generate explanation: {e}")
-            return f"Failed to generate explanation: {str(e)}"
+            import httpx
+        except ImportError:
+            logger.error("httpx not installed, cannot make async HTTP calls")
+            return "Failed: httpx not installed"
+
+        api_url = getattr(self.llm_client, "base_url", None) or os.getenv("LLM_API_URL")
+        api_key = getattr(self.llm_client, "api_key", None) or os.getenv("LLM_API_KEY")
+
+        if not api_url:
+            return "Failed: No LLM API URL configured"
+
+        payload = {
+            "model": self.model_version,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens
+        }
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        last_error = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    response = await client.post(api_url, json=payload, headers=headers)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    # Try common response formats
+                    if "choices" in data and len(data["choices"]) > 0:
+                        return data["choices"][0]["message"]["content"]
+                    elif "content" in data:
+                        return data["content"]
+                    else:
+                        return json.dumps(data)[:500]
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"HTTP LLM attempt {attempt + 1} failed: {e}")
+                if attempt < 2:
+                    import asyncio
+                    await asyncio.sleep(2 ** attempt)
+
+        logger.error(f"All HTTP LLM retry attempts failed: {last_error}")
+        return f"Failed to generate explanation after retries: {str(last_error)}"
     
     async def _store_explanation(
         self,

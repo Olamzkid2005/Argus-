@@ -12,6 +12,7 @@ import time
 
 from tracing import get_trace_id, StructuredLogger, ExecutionSpan
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
+from tools.circuit_breaker import CircuitBreaker, CircuitOpenError
 
 
 class SecurityException(Exception):
@@ -51,27 +52,37 @@ class ToolRunner:
         ":(){ :|:& };:",  # Fork bomb
     ]
     
-    def __init__(self, sandbox_dir: Optional[str] = None, connection_string: str = None):
+    def __init__(self, sandbox_dir: Optional[str] = None, connection_string: str = None,
+                 failure_threshold: int = 3, cooldown_seconds: int = 300):
         """
         Initialize Tool Runner
-        
+
         Args:
             sandbox_dir: Directory for tool execution (default: temp directory)
             connection_string: Database connection string for logging
+            failure_threshold: Failures before circuit breaker opens (default: 3)
+            cooldown_seconds: Circuit breaker cooldown (default: 300 = 5 min)
         """
         if sandbox_dir:
             self.sandbox_dir = Path(sandbox_dir)
             self.sandbox_dir.mkdir(parents=True, exist_ok=True)
         else:
             self.sandbox_dir = Path(tempfile.mkdtemp(prefix="argus_sandbox_"))
-        
+
         # Initialize tracing
         self.connection_string = connection_string or os.getenv("DATABASE_URL")
         self.logger = StructuredLogger(self.connection_string)
         self.span_recorder = ExecutionSpan(self.connection_string)
-        
+
         # Initialize metrics repository
         self.metrics_repo = ToolMetricsRepository(self.connection_string) if self.connection_string else None
+
+        # Initialize circuit breaker for resilience
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=failure_threshold,
+            cooldown_seconds=cooldown_seconds,
+            name="tool_runner"
+        )
     
     def is_dangerous(self, tool: str, args: List[str]) -> bool:
         """
@@ -378,3 +389,64 @@ class ToolRunner:
         import shutil
         if self.sandbox_dir.exists():
             shutil.rmtree(self.sandbox_dir)
+
+    def is_tool_available(self, tool: str) -> bool:
+        """
+        Check if a tool is currently available (circuit not open).
+
+        Args:
+            tool: Tool name to check
+
+        Returns:
+            True if tool can be called, False if circuit is open
+        """
+        return self._circuit_breaker.is_available()
+
+    def get_circuit_state(self) -> str:
+        """Get the current circuit breaker state."""
+        return self._circuit_breaker.state.value
+
+    def record_tool_success(self, tool: str):
+        """Record successful tool execution."""
+        self._circuit_breaker.record_success()
+
+    def record_tool_failure(self, tool: str):
+        """Record failed tool execution."""
+        self._circuit_breaker.record_failure()
+
+    def run_with_circuit_breaker(
+        self,
+        tool: str,
+        args: List[str],
+        timeout: int = 180
+    ) -> Dict:
+        """
+        Execute tool with circuit breaker protection.
+
+        If the circuit is open, raises CircuitOpenError.
+
+        Args:
+            tool: Tool name/path to execute
+            args: List of arguments
+            timeout: Timeout in seconds
+
+        Returns:
+            Dictionary with stdout, stderr, returncode, tool
+
+        Raises:
+            CircuitOpenError: If circuit breaker is open
+            SecurityException: If dangerous payload detected
+        """
+        if not self._circuit_breaker.is_available():
+            raise CircuitOpenError(
+                f"Circuit breaker is OPEN for tool '{tool}'. "
+                f"Wait {self._circuit_breaker._time_until_retry():.0f}s before retry."
+            )
+
+        try:
+            result = self.run(tool, args, timeout)
+            self._circuit_breaker.record_success()
+            return result
+        except Exception as e:
+            self._circuit_breaker.record_failure()
+            raise

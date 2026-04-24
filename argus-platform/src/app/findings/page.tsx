@@ -1349,14 +1349,11 @@ export default function FindingsPage() {
                          ) : (
                            <div className="text-xs text-on-surface-variant italic">No similar findings found</div>
                          )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
-              ) : (
+                     </div>
+                    )}
+                  </div>
+         </motion.div>
+               ) : (
                 <motion.div
                   key="empty"
                   initial={{ opacity: 0 }}

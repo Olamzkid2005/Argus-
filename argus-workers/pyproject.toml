@@ -1,0 +1,56 @@
+[tool.ruff]
+# Target Python version
+target-version = "py311"
+
+# Include all Python files in the workers directory
+include = ["*.py"]
+exclude = [
+    "venv",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "dist",
+    "build",
+    ".git",
+    ".tox",
+]
+
+[tool.ruff.lint]
+# Enable all recommended rules plus specific ones
+select = [
+    "E",   # pycodestyle errors
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "ARG001", # Unused function arguments (common in callbacks)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["database", "tracing", "tools", "tasks"]
+
+[tool.ruff.format]
+# Use single quotes for strings
+quote-style = "double"
+
+# Indent with 4 spaces
+indent-style = "space"
+
+# Respect magic trailing commas
+skip-magic-trailing-comma = false
+
+# Automatically detect line ending
+line-ending = "auto"

@@ -138,6 +138,16 @@ CREATE TABLE decision_snapshots (
     UNIQUE(engagement_id, version)
 );
 
+-- Engagement events table (event sourcing for engagement lifecycle)
+CREATE TABLE engagement_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+    event_type VARCHAR(100) NOT NULL, -- scan_started, finding_discovered, status_changed, scan_completed, etc.
+    event_data JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    actor VARCHAR(255)
+);
+
 -- Checkpoints table (for recovery)
 CREATE TABLE checkpoints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -297,6 +307,11 @@ CREATE INDEX idx_tool_metrics_created_at ON tool_metrics(created_at);
 CREATE INDEX idx_job_states_engagement_id ON job_states(engagement_id);
 CREATE INDEX idx_job_states_status ON job_states(status);
 CREATE INDEX idx_job_states_idempotency_key ON job_states(idempotency_key);
+
+-- Engagement events indexes
+CREATE INDEX idx_engagement_events_engagement_id ON engagement_events(engagement_id);
+CREATE INDEX idx_engagement_events_event_type ON engagement_events(event_type);
+CREATE INDEX idx_engagement_events_created_at ON engagement_events(created_at);
 
 -- Scanner activities indexes
 CREATE INDEX idx_scanner_activities_engagement_id ON scanner_activities(engagement_id);

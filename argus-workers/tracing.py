@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 import os
 import psycopg2
+from database.connection import connect
 from psycopg2.extras import RealDictCursor
 
 
@@ -148,7 +149,7 @@ class StructuredLogger:
             return
         
         try:
-            conn = psycopg2.connect(self.connection_string)
+            conn = connect(self.connection_string)
             cursor = conn.cursor()
             
             try:
@@ -314,7 +315,7 @@ class ExecutionSpan:
             return
         
         try:
-            conn = psycopg2.connect(self.connection_string)
+            conn = connect(self.connection_string)
             cursor = conn.cursor()
             
             try:

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob } from "@/lib/redis";
@@ -27,12 +28,11 @@ export async function POST(req: Request) {
       (!authorizedScope.domains || authorizedScope.domains.length === 0) &&
       (!authorizedScope.ipRanges || authorizedScope.ipRanges.length === 0)
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "authorized_scope must contain at least one domain or IP range",
-        },
-        { status: 400 },
+      return createErrorResponse(
+        "authorized_scope must contain at least one domain or IP range",
+        ErrorCodes.VALIDATION_ERROR,
+        undefined,
+        400,
       );
     }
 
@@ -46,9 +46,11 @@ export async function POST(req: Request) {
           requests_per_second < 1 ||
           requests_per_second > 20
         ) {
-          return NextResponse.json(
-            { error: "requests_per_second must be between 1 and 20" },
-            { status: 400 },
+          return createErrorResponse(
+            "requests_per_second must be between 1 and 20",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
           );
         }
       }
@@ -59,9 +61,11 @@ export async function POST(req: Request) {
           concurrent_requests < 1 ||
           concurrent_requests > 5
         ) {
-          return NextResponse.json(
-            { error: "concurrent_requests must be between 1 and 5" },
-            { status: 400 },
+          return createErrorResponse(
+            "concurrent_requests must be between 1 and 5",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
           );
         }
       }
@@ -187,12 +191,19 @@ export async function POST(req: Request) {
     const err = error as Error;
 
     if (err.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return createErrorResponse(
+        "Unauthorized",
+        ErrorCodes.UNAUTHORIZED,
+        undefined,
+        401,
+      );
     }
 
-    return NextResponse.json(
-      { error: "Failed to create engagement" },
-      { status: 500 },
+    return createErrorResponse(
+      "Failed to create engagement",
+      ErrorCodes.INTERNAL_ERROR,
+      undefined,
+      500,
     );
   }
 }

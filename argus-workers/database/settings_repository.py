@@ -3,6 +3,7 @@ Settings Repository - Retrieve user API keys and settings
 """
 import os
 import psycopg2
+from database.connection import connect
 from typing import Optional, Dict
 
 
@@ -24,7 +25,7 @@ class SettingsRepository:
             Setting value or None if not found
         """
         try:
-            conn = psycopg2.connect(self.connection_string)
+            conn = connect(self.connection_string)
             cursor = conn.cursor()
             
             cursor.execute(
@@ -52,7 +53,7 @@ class SettingsRepository:
             Dictionary of settings
         """
         try:
-            conn = psycopg2.connect(self.connection_string)
+            conn = connect(self.connection_string)
             cursor = conn.cursor()
             
             cursor.execute(
@@ -82,7 +83,7 @@ class SettingsRepository:
             True if successful
         """
         try:
-            conn = psycopg2.connect(self.connection_string)
+            conn = connect(self.connection_string)
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -113,7 +114,7 @@ class SettingsRepository:
             True if successful
         """
         try:
-            conn = psycopg2.connect(self.connection_string)
+            conn = connect(self.connection_string)
             cursor = conn.cursor()
             
             cursor.execute(

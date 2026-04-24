@@ -247,3 +247,28 @@ def db_cursor(commit: bool = True, org_id: Optional[str] = None):
     manager = get_db()
     with manager.cursor(commit=commit, org_id=org_id) as cursor:
         yield cursor
+
+
+def connect(connection_string: Optional[str] = None) -> psycopg2.extensions.connection:
+    """
+    Standardized database connection helper.
+
+    Prefer using get_db().get_connection() for pool connections.
+    This helper is for one-off connections when the pool is not available.
+
+    Args:
+        connection_string: Optional connection string. Defaults to DATABASE_URL env var.
+
+    Returns:
+        psycopg2 connection object
+
+    Raises:
+        DatabaseConnectionError: If connection string is missing or connection fails
+    """
+    conn_string = connection_string or os.getenv("DATABASE_URL")
+    if not conn_string:
+        raise DatabaseConnectionError("DATABASE_URL environment variable not set")
+    try:
+        return psycopg2.connect(conn_string)
+    except psycopg2.Error as e:
+        raise DatabaseConnectionError(f"Failed to connect to database: {e}") from e

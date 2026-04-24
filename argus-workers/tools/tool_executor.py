@@ -6,6 +6,7 @@ import time
 from typing import List, Dict, Optional
 from datetime import datetime
 import psycopg2
+from database.connection import connect
 from psycopg2.extras import Json
 import uuid
 
@@ -246,7 +247,7 @@ class ToolExecutor:
         if not findings:
             return 0
         
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         
         try:
@@ -313,7 +314,7 @@ class ToolExecutor:
             raw_output: Raw tool output
             error_message: Error message
         """
-        conn = psycopg2.connect(self.db_conn_string)
+        conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         
         try:

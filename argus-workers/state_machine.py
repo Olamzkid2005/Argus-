@@ -6,6 +6,7 @@ Supports passing an external connection for transaction support.
 """
 from typing import Dict, List, Optional
 import psycopg2
+from database.connection import connect
 import uuid
 
 from database.connection import get_db
@@ -71,7 +72,7 @@ class EngagementStateMachine:
         if self._external_conn:
             return self._external_conn
         if self._db_conn_string:
-            return psycopg2.connect(self._db_conn_string)
+            return connect(self._db_conn_string)
         return get_db().get_connection()
 
     def _release_connection(self, conn):

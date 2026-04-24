@@ -4,22 +4,12 @@ Celery tasks for reconnaissance phase
 Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
 from celery_app import app
-import os
-import sys
-import importlib.util
+import psycopg2
+from database.connection import connect
 
-_workers_dir = "/Users/mac/Documents/Argus-/argus-workers"
+from loader import load_module
 
-# Robust module loader — avoids sys.path issues in Celery fork pool workers
-def _load_module(module_name: str, rel_path: str = None):
-    rel_path = rel_path or f"{module_name}.py"
-    file_path = os.path.join(_workers_dir, rel_path)
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-_orchestrator = _load_module("orchestrator")
+_orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
 
 _tracing = _load_module("tracing")
@@ -27,6 +17,7 @@ TracingManager = _tracing.TracingManager
 TraceContext = _tracing.TraceContext
 
 import psycopg2
+from database.connection import connect
 
 _distributed_lock = _load_module("distributed_lock")
 LockContext = _distributed_lock.LockContext
@@ -146,7 +137,7 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
         Current engagement status string
     """
     try:
-        conn = psycopg2.connect(db_conn_string)
+        conn = connect(db_conn_string)
         cursor = conn.cursor()
         cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
         row = cursor.fetchone()
