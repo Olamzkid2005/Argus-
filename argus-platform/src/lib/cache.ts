@@ -1,171 +1,208 @@
 /**
- * Enhanced caching layer with TTL strategies and invalidation
- *
- * Provides Redis-based caching for frequently accessed data
- * with support for cache tags, invalidation patterns, and CDN integration.
+ * Simple in-memory cache with TTL for API route responses.
+ * Uses Redis if available, falls back to Map.
  */
 
-import redis from "./redis";
-
-const DEFAULT_TTL = 300; // 5 minutes
-
-interface CacheOptions {
-  ttl?: number;
-  key?: string;
-  tags?: string[];
-}
+import redis from "@/lib/redis";
 
 interface CacheEntry<T> {
   data: T;
-  tags: string[];
-  createdAt: number;
+  expiresAt: number;
 }
 
+interface CacheOptions {
+  ttlSeconds: number;
+  keyGenerator?: (...args: any[]) => string;
+}
+
+const memoryCache = new Map<string, CacheEntry<any>>();
+
 /**
- * Set cache entry with optional tags for targeted invalidation
+ * Check if Redis is connected and available.
  */
-export async function setCache<T>(
-  key: string,
-  value: T,
-  options: CacheOptions = {}
-): Promise<void> {
-  const { ttl = DEFAULT_TTL, tags = [] } = options;
-
+async function isRedisAvailable(): Promise<boolean> {
   try {
-    if (!redis) return;
-
-    const entry: CacheEntry<T> = {
-      data: value,
-      tags,
-      createdAt: Date.now(),
-    };
-
-    await redis.setex(key, ttl, JSON.stringify(entry));
-
-    // Add key to tag sets for invalidation
-    for (const tag of tags) {
-      await redis.sadd(`tag:${tag}`, key);
-      await redis.expire(`tag:${tag}`, ttl * 2);
-    }
+    await redis.ping();
+    return true;
   } catch {
-    // Ignore cache write errors
+    return false;
   }
 }
 
 /**
- * Get cache entry
+ * Get a value from the cache (Redis or in-memory fallback).
  */
-export async function getCache<T>(key: string): Promise<T | null> {
+async function getCache<T>(key: string): Promise<T | null> {
   try {
-    if (!redis) return null;
+    if (await isRedisAvailable()) {
+      const value = await redis.get(key);
+      if (value) {
+        return JSON.parse(value) as T;
+      }
+    }
+  } catch {
+    // Redis error — fall through to in-memory
+  }
 
-    const cached = await redis.get(key);
-    if (!cached) return null;
-
-    const entry: CacheEntry<T> = JSON.parse(cached);
+  const entry = memoryCache.get(key);
+  if (entry && entry.expiresAt > Date.now()) {
     return entry.data;
-  } catch {
-    return null;
   }
+
+  // Expired or missing — clean up
+  memoryCache.delete(key);
+  return null;
 }
 
 /**
- * Delete cache entry
+ * Set a value in the cache (Redis or in-memory fallback).
  */
-export async function deleteCache(key: string): Promise<void> {
+async function setCache<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
   try {
-    if (!redis) return;
-    await redis.del(key);
-  } catch {
-    // Ignore
-  }
-}
-
-/**
- * Invalidate cache by tag
- */
-export async function invalidateByTag(tag: string): Promise<number> {
-  try {
-    if (!redis) return 0;
-
-    const keys = await redis.smembers(`tag:${tag}`);
-    if (keys.length === 0) return 0;
-
-    await redis.del(...keys);
-    await redis.del(`tag:${tag}`);
-
-    return keys.length;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Invalidate cache by multiple tags
- */
-export async function invalidateByTags(tags: string[]): Promise<number> {
-  let total = 0;
-  for (const tag of tags) {
-    total += await invalidateByTag(tag);
-  }
-  return total;
-}
-
-/**
- * Invalidate cache by pattern
- */
-export async function invalidateByPattern(pattern: string): Promise<void> {
-  try {
-    if (!redis) return;
-
-    const keys = await redis.keys(pattern);
-    if (keys.length > 0) {
-      await redis.del(...keys);
+    if (await isRedisAvailable()) {
+      await redis.setex(key, ttlSeconds, JSON.stringify(value));
+      return;
     }
   } catch {
-    // Ignore
+    // Redis error — fall through to in-memory
   }
+
+  memoryCache.set(key, {
+    data: value,
+    expiresAt: Date.now() + ttlSeconds * 1000,
+  });
 }
 
 /**
- * Cache decorator with tag-based invalidation
+ * Method decorator that caches the result of an async function.
+ *
+ * Uses Redis when available, otherwise falls back to an in-memory Map.
+ * Stale entries are evicted lazily on access.
+ *
+ * @example
+ * class MyService {
+ *   @withCache({ ttlSeconds: 60, keyGenerator: (id) => `user:${id}` })
+ *   async getUser(id: string) {
+ *     return db.user.findById(id);
+ *   }
+ * }
  */
-export async function withCache<T>(
-  fn: () => Promise<T>,
+export function withCache<T>(options: CacheOptions) {
+  return function (
+    target: any,
+    propertyKey: string,
+    descriptor: PropertyDescriptor
+  ) {
+    const original = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      const key = options.keyGenerator
+        ? options.keyGenerator(...args)
+        : `${propertyKey}:${JSON.stringify(args)}`;
+
+      const cached = await getCache<T>(key);
+      if (cached !== null) {
+        return cached;
+      }
+
+      const result = await original.apply(this, args);
+      await setCache(key, result, options.ttlSeconds);
+
+      return result;
+    };
+  };
+}
+
+/**
+ * Execute a fetcher and cache its result.
+ *
+ * If the key exists in the cache and hasn't expired, the cached value
+ * is returned immediately. Otherwise the fetcher is executed and the
+ * result is stored for the given TTL.
+ *
+ * @param key        Cache key
+ * @param fetcher    Function that produces the value to cache
+ * @param ttlSeconds Time-to-live in seconds (default: 60)
+ *
+ * @example
+ * const data = await cacheResponse(
+ *   `dashboard:stats:${engagementId}`,
+ *   () => fetchDashboardStats(engagementId),
+ *   120
+ * );
+ */
+export async function cacheResponse<T>(
   key: string,
-  options: CacheOptions = {}
+  fetcher: () => Promise<T>,
+  ttlSeconds: number = 60
 ): Promise<T> {
   const cached = await getCache<T>(key);
   if (cached !== null) {
     return cached;
   }
 
-  const result = await fn();
-  await setCache(key, result, options);
+  const result = await fetcher();
+  await setCache(key, result, ttlSeconds);
   return result;
 }
 
 /**
- * Get cache statistics
+ * Wrap a Next.js API route handler with response caching.
+ *
+ * The wrapped handler will return a cached Response when available,
+ * otherwise it runs the handler and caches the JSON response.
+ *
+ * @param handler  Original route handler: (req: Request) => Promise<Response>
+ * @param options  Cache options
+ *
+ * @example
+ * export const GET = cachedRouteHandler(
+ *   async (req: Request) => {
+ *     const data = await expensiveQuery();
+ *     return Response.json(data);
+ *   },
+ *   {
+ *     ttlSeconds: 300,
+ *     keyFromRequest: (req) => `api:reports:${req.url}`,
+ *   }
+ * );
  */
-export async function getCacheStats(): Promise<{
-  status: string;
-  keys?: number;
-  memory?: string;
-}> {
-  try {
-    if (!redis) return { status: "unavailable" };
+export function cachedRouteHandler<T>(
+  handler: (req: Request) => Promise<Response>,
+  options: { ttlSeconds: number; keyFromRequest?: (req: Request) => string }
+) {
+  return async function (req: Request): Promise<Response> {
+    const cacheKey = options.keyFromRequest
+      ? options.keyFromRequest(req)
+      : `route:${req.method}:${req.url}`;
 
-    const info = await redis.info("keyspace");
-    const lines = info.split("\r\n");
-    const dbLine = lines.find((l) => l.startsWith("db0:"));
+    const cached = await getCache<{ body: string; status: number; headers: Record<string, string> }>(cacheKey);
+    if (cached !== null) {
+      return new Response(cached.body, {
+        status: cached.status,
+        headers: cached.headers,
+      });
+    }
 
-    return {
-      status: "available",
-      keys: dbLine ? parseInt(dbLine.split(",")[0].split("=")[1]) : 0,
-      memory: "N/A",
-    };
-  } catch {
-    return { status: "error" };
-  }
+    const response = await handler(req);
+
+    // Only cache successful JSON responses
+    const contentType = response.headers.get("content-type") || "";
+    if (response.ok && contentType.includes("application/json")) {
+      const body = await response.text();
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+
+      await setCache(cacheKey, { body, status: response.status, headers }, options.ttlSeconds);
+
+      return new Response(body, {
+        status: response.status,
+        headers,
+      });
+    }
+
+    return response;
+  };
 }

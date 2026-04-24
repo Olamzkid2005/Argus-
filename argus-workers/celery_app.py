@@ -21,12 +21,18 @@ if PROJECT_ROOT not in sys.path:
 
 # Configure logging
 def setup_logging():
-    """Configure structured logging for the application"""
+    """Configure structured logging for the application with secrets redaction"""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    # Enable automatic secrets redaction in logs
+    try:
+        from utils.logging_utils import setup_logging as setup_redaction
+        setup_redaction()
+    except ImportError:
+        pass  # Redaction not available, continue without it
     return logging.getLogger(__name__)
 
 logger = setup_logging()

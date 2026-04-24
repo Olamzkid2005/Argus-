@@ -35,16 +35,46 @@ export async function GET(
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
 
-    // Get last event timestamp from query parameter
+    // Parse query parameters
     const { searchParams } = new URL(req.url);
     const since = searchParams.get("since");
+    const cursor = searchParams.get("cursor");
+    const direction = searchParams.get("direction") || "newer";
     const limit = parseInt(searchParams.get("limit") || "50", 10);
 
-    // Fetch recent events from Redis
+    // Fetch events from Redis
     const eventsKey = `events:engagement:${engagementId}`;
-    const rawEvents = await redis.lrange(eventsKey, 0, limit - 1);
+    let rawEvents: string[] = [];
+    let nextCursor: string | null = null;
 
-    // Parse and filter events
+    if (cursor) {
+      // Cursor-based pagination: find position in list and fetch from there
+      const allRaw = await redis.lrange(eventsKey, 0, MAX_EVENTS_PER_ENGAGEMENT - 1);
+      const cursorIndex = allRaw.findIndex((raw) => {
+        try {
+          const ev = JSON.parse(raw) as WebSocketEvent;
+          return `${ev.type}-${ev.timestamp}` === cursor;
+        } catch {
+          return false;
+        }
+      });
+
+      if (cursorIndex !== -1) {
+        if (direction === "older") {
+          rawEvents = allRaw.slice(cursorIndex + 1, cursorIndex + 1 + limit);
+        } else {
+          rawEvents = allRaw.slice(0, cursorIndex).reverse().slice(0, limit);
+        }
+      } else {
+        // Cursor not found, fall back to first page
+        rawEvents = allRaw.slice(0, limit);
+      }
+    } else {
+      // No cursor: fetch first page
+      rawEvents = await redis.lrange(eventsKey, 0, limit - 1);
+    }
+
+    // Parse events
     let events: WebSocketEvent[] = rawEvents
       .map((raw) => {
         try {
@@ -55,14 +85,27 @@ export async function GET(
       })
       .filter((e): e is WebSocketEvent => e !== null);
 
-    // Filter by timestamp if provided
-    if (since) {
+    // Reverse so oldest first
+    events = events.reverse();
+
+    // Filter by timestamp if provided (fallback for non-cursor clients)
+    if (since && !cursor) {
       const sinceTime = new Date(since).getTime();
       events = events.filter((e) => {
         const eventTime = new Date(e.timestamp).getTime();
         return eventTime > sinceTime;
       });
     }
+
+    // Compute next cursor from last event
+    if (events.length > 0) {
+      const lastEvent = events[events.length - 1];
+      nextCursor = `${lastEvent.type}-${lastEvent.timestamp}`;
+    }
+
+    // Check if there are more events
+    const totalEvents = await redis.llen(eventsKey);
+    const hasMore = totalEvents > limit && events.length === limit;
 
     // Get current engagement state
     const stateKey = `state:engagement:${engagementId}`;
@@ -74,6 +117,8 @@ export async function GET(
       current_state: currentState || null,
       timestamp: new Date().toISOString(),
       count: events.length,
+      nextCursor,
+      hasMore,
     });
   } catch (error: unknown) {
     console.error("Polling endpoint error:", error);

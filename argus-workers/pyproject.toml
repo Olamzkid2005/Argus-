@@ -54,3 +54,59 @@ skip-magic-trailing-comma = false
 
 # Automatically detect line ending
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+# Test discovery
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Skip tests that require optional dependencies
+# Use: pytest -m "not requires_db" to run only tests that don't need DB
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-ra",
+    "-p", "no:faulthandler",
+]
+
+# Markers for test categories
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
+    "requires_db: marks tests that require psycopg2 database connection",
+    "requires_redis: marks tests that require redis connection",
+]
+
+[tool.coverage.run]
+# What to measure
+source = ["."]
+omit = [
+    "venv/*",
+    ".venv/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "*__pycache__*",
+    "*.egg-info/*",
+]
+
+[tool.coverage.report]
+# Minimum coverage threshold
+fail_under = 70
+
+# Exclude lines from coverage
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+
+# Skip files with no executable code
+skip_empty = true

@@ -54,6 +54,25 @@ export async function middleware(request: NextRequest) {
       response.headers.set("X-API-Version", "1.0.0");
     }
     response.headers.set("X-API-Deprecated", "false");
+
+    // CORS origin validation for production
+    const origin = request.headers.get("origin");
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
+
+    // Only validate origins in production
+    if (process.env.NODE_ENV === "production" && allowedOrigins.length > 0) {
+      if (origin && !allowedOrigins.some((o) => o.trim() === origin)) {
+        // Invalid origin - still process but don't expose CORS headers
+        response.headers.set("X-Origin-Validated", "invalid");
+      } else if (origin) {
+        response.headers.set("X-Origin-Validated", "valid");
+        response.headers.set("Access-Control-Allow-Origin", origin);
+        response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
+      } else {
+        response.headers.set("X-Origin-Validated", "none");
+      }
+    }
   }
 
   // Apply rate limiting to API routes
@@ -93,6 +112,32 @@ export async function middleware(request: NextRequest) {
               },
             },
           );
+        }
+
+        // Stricter rate limit for authentication endpoints (brute force protection)
+        if (path.startsWith("/api/auth/signin") || path.startsWith("/api/auth/")) {
+          const authRatelimit = new Ratelimit({
+            redis,
+            limiter: Ratelimit.slidingWindow(5, "60s"),
+            prefix: "ratelimit:auth:",
+          });
+
+          const { success: authSuccess } = await authRatelimit.limit(ip);
+
+          if (!authSuccess) {
+            return NextResponse.json(
+              { error: "Too many sign-in attempts. Please try again in 60 seconds." },
+              {
+                status: 429,
+                headers: {
+                  "Retry-After": "60",
+                  "X-RateLimit-Limit": "5",
+                  "X-RateLimit-Remaining": "0",
+                  "X-RateLimit-Scope": "auth",
+                },
+              },
+            );
+          }
         }
 
         // Organization-level rate limiting

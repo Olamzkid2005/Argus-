@@ -47,8 +47,8 @@ class ConnectionManager:
         self._initialized = True
         self._pool: Optional[pool.ThreadedConnectionPool] = None
         self._pool_lock = threading.Lock()
-        self._min_connections = int(os.getenv("DB_POOL_MIN", "1"))
-        self._max_connections = int(os.getenv("DB_POOL_MAX", "10"))
+        self._min_connections = int(os.getenv("DB_POOL_MIN", "2"))
+        self._max_connections = int(os.getenv("DB_POOL_MAX", "20"))
         self._slow_query_threshold_ms = int(os.getenv("DB_SLOW_QUERY_MS", "500"))
         self._pgbouncer_mode = os.getenv("PGBOUNCER_MODE", "session")  # session or transaction
         self._metrics: Dict[str, Any] = {

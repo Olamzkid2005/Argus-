@@ -2,22 +2,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { generateSecret, generateOtpAuthUrl, verifyTOTP } from "@/lib/totp";
 
-// Simple TOTP implementation (in production use a proper library)
-function generateSecret(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let secret = "";
-  for (let i = 0; i < 16; i++) {
-    secret += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return secret;
-}
-
-function generateQRCodeURL(secret: string, email: string): string {
-  // Google Authenticator compatible otpauth URL
-  const label = "ArgusPentest";
-  return `otpauth://totp/${label}:${email}?secret=${secret}&issuer=${label}`;
-}
+// Import requireAuth type
+type AuthUser = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  role?: string;
+  orgId?: string;
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,8 +22,8 @@ export async function POST(req: NextRequest) {
 
     try {
       if (action === "setup") {
-        // Generate new 2FA secret
-        const secret = generateSecret();
+        // Generate new 2FA secret (20 characters for proper entropy)
+        const secret = generateSecret(20);
 
         // Store temporary secret (not enabled until verified)
         await client.query(
@@ -40,10 +34,11 @@ export async function POST(req: NextRequest) {
               updated_at = NOW()
           WHERE id = $2
         `,
-          [secret, session.user.id],
+          [secret, (session.user as AuthUser).id],
         );
 
-        const qrUrl = generateQRCodeURL(secret, session.user.email!);
+        const userEmail = (session.user as AuthUser).email || 'user@example.com';
+        const qrUrl = generateOtpAuthUrl(secret, userEmail, 'Argus');
 
         return NextResponse.json({
           secret,
@@ -55,10 +50,17 @@ export async function POST(req: NextRequest) {
       if (action === "verify") {
         const { code } = await req.json();
 
+        if (!code || code.length !== 6) {
+          return NextResponse.json(
+            { error: "Invalid verification code - must be 6 digits" },
+            { status: 400 },
+          );
+        }
+
         // Get stored secret
         const result = await client.query(
           "SELECT two_factor_secret FROM users WHERE id = $1",
-          [session.user.id],
+          [(session.user as AuthUser).id],
         );
 
         const secret = result.rows[0]?.two_factor_secret;
@@ -70,9 +72,10 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // In production, verify the TOTP code properly
-        // For now, accept any 6-digit code for demo
-        if (code && code.length === 6) {
+        // Verify the TOTP code using proper algorithm
+        const isValid = await verifyTOTP(secret, code, 30, 1);
+
+        if (isValid) {
           await client.query(
             `
             UPDATE users 
@@ -80,7 +83,7 @@ export async function POST(req: NextRequest) {
                 updated_at = NOW()
             WHERE id = $1
           `,
-            [session.user.id],
+            [(session.user as AuthUser).id],
           );
 
           return NextResponse.json({
@@ -104,7 +107,7 @@ export async function POST(req: NextRequest) {
               updated_at = NOW()
           WHERE id = $1
         `,
-          [session.user.id],
+          [(session.user as AuthUser).id],
         );
 
         return NextResponse.json({

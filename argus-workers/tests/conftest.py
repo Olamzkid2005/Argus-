@@ -8,6 +8,9 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Add tasks directory for loader imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tasks')))
+
 
 @pytest.fixture
 def sample_finding():

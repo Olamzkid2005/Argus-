@@ -41,6 +41,8 @@ export class ResilientWebSocket {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastEventTime: string | null = null;
+  private cursor: string | null = null;
+  private hasMore = true;
   private abortController: AbortController | null = null;
   private eventBuffer: WebSocketEvent[] = [];
 
@@ -103,7 +105,16 @@ export class ResilientWebSocket {
     }
   }
 
-  private async poll(): Promise<void> {
+  /**
+   * Load more historical events using cursor-based pagination.
+   * Call this when user scrolls up or explicitly requests history.
+   */
+  async loadMore(): Promise<void> {
+    if (!this.hasMore || this.status === "disconnected") return;
+    await this.poll(true);
+  }
+
+  private async poll(historical = false): Promise<void> {
     if (this.status === "disconnected") return;
 
     try {
@@ -111,10 +122,17 @@ export class ResilientWebSocket {
         `/api/ws/engagement/${this.engagementId}/poll`,
         window.location.origin
       );
-      if (this.lastEventTime) {
+
+      // Prefer cursor-based pagination; fall back to time-based
+      if (this.cursor) {
+        url.searchParams.set("cursor", this.cursor);
+      } else if (this.lastEventTime) {
         url.searchParams.set("since", this.lastEventTime);
       }
       url.searchParams.set("limit", this.batchSize.toString());
+      if (historical) {
+        url.searchParams.set("direction", "older");
+      }
 
       const response = await fetch(url.toString(), {
         signal: this.abortController?.signal,
@@ -139,7 +157,15 @@ export class ResilientWebSocket {
         }
         this.flushBuffer();
 
-        // Update last event time
+        // Update cursor for next pagination request
+        if (data.nextCursor) {
+          this.cursor = data.nextCursor;
+        }
+        if (data.hasMore !== undefined) {
+          this.hasMore = data.hasMore;
+        }
+
+        // Update last event time (fallback for non-cursor servers)
         if (data.events.length > 0) {
           this.lastEventTime = data.events[data.events.length - 1].timestamp;
         }

@@ -39,6 +39,22 @@ const recentQueries: Array<{ text: string; duration: number; timestamp: number }
 const N1_DETECTION_WINDOW_MS = 5000;
 const N1_THRESHOLD = 5;
 
+/**
+ * N+1 alert event structure
+ */
+export type N1AlertEvent = {
+  queryText: string;
+  similarCount: number;
+  threshold: number;
+  windowMs: number;
+  timestamp: number;
+};
+
+const n1AlertBuffer: N1AlertEvent[] = [];
+const MAX_N1_ALERTS = 50;
+
+let lastN1Detected: { queryText: string; timestamp: number } | null = null;
+
 pool.on("error", (err) => {
   console.error("Unexpected database pool error:", err);
 });
@@ -62,9 +78,29 @@ export function getPoolStats() {
 }
 
 /**
+ * Get N+1 detection metrics
+ */
+export function getN1Metrics() {
+  return {
+    warningCount: queryMetrics.n1WarningCount,
+    lastDetected: lastN1Detected,
+  };
+}
+
+/**
+ * Get recent N+1 alerts from the in-memory buffer
+ */
+export function getRecentN1Alerts(): N1AlertEvent[] {
+  return n1AlertBuffer.slice();
+}
+
+/**
  * Detect potential N+1 query patterns
  */
-function detectN1Query(queryText: string): void {
+function detectN1Query(
+  queryText: string,
+  onN1Detected?: (alert: N1AlertEvent) => void
+): void {
   const now = Date.now();
   const windowStart = now - N1_DETECTION_WINDOW_MS;
 
@@ -82,9 +118,29 @@ function detectN1Query(queryText: string): void {
 
   if (similarCount >= N1_THRESHOLD) {
     queryMetrics.n1WarningCount++;
+
+    const alert: N1AlertEvent = {
+      queryText,
+      similarCount,
+      threshold: N1_THRESHOLD,
+      windowMs: N1_DETECTION_WINDOW_MS,
+      timestamp: now,
+    };
+
+    lastN1Detected = { queryText, timestamp: now };
+
+    n1AlertBuffer.push(alert);
+    if (n1AlertBuffer.length > MAX_N1_ALERTS) {
+      n1AlertBuffer.shift();
+    }
+
     console.warn(
       `N+1 query pattern detected (${similarCount} similar queries in ${N1_DETECTION_WINDOW_MS}ms): ${queryText.substring(0, 100)}`
     );
+
+    if (onN1Detected) {
+      onN1Detected(alert);
+    }
   }
 
   recentQueries.push({ text: queryText, duration: 0, timestamp: now });
@@ -97,7 +153,7 @@ function detectN1Query(queryText: string): void {
 export async function query<T = unknown>(
   text: string,
   params?: unknown[],
-  options?: { orgId?: string; skipN1Detection?: boolean }
+  options?: { orgId?: string; skipN1Detection?: boolean; onN1Detected?: (alert: N1AlertEvent) => void }
 ): Promise<{ rows: T[]; rowCount: number }> {
   const start = performance.now();
 
@@ -127,7 +183,7 @@ export async function query<T = unknown>(
     }
 
     if (!options?.skipN1Detection) {
-      detectN1Query(text);
+      detectN1Query(text, options?.onN1Detected);
     }
   }
 }

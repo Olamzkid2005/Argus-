@@ -9,6 +9,7 @@ from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 import uuid
+import re
 
 from database.connection import get_db
 
@@ -23,6 +24,87 @@ ALLOWED_COLUMNS = {
     "engagement_states": ["from_state", "to_state", "reason"],
     "job_states": ["status", "worker_id", "error_message", "started_at", "completed_at"],
 }
+
+# Cache for schema columns to avoid repeated introspection
+_schema_cache: Dict[str, List[str]] = {}
+
+
+def _get_table_columns(table_name: str) -> List[str]:
+    """
+    Get actual column names from database schema.
+    Uses cache to avoid repeated introspection.
+
+    Args:
+        table_name: Name of the table
+
+    Returns:
+        List of column names
+    """
+    if table_name in _schema_cache:
+        return _schema_cache[table_name]
+
+    try:
+        conn = get_db().get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Query information_schema for column names
+            cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s
+                AND table_schema = 'public'
+            """, (table_name,))
+
+            columns = [row[0] for row in cursor.fetchall()]
+            _schema_cache[table_name] = columns
+            return columns
+        finally:
+            cursor.close()
+            get_db().release_connection(conn)
+    except Exception:
+        # Fall back to allowlist if schema introspection fails
+        return ALLOWED_COLUMNS.get(table_name, [])
+
+
+def validate_columns(table_name: str, columns: List[str]) -> List[str]:
+    """
+    Validate columns against database schema.
+
+    This implements 7.5 - validates column names against actual schema
+    rather than just a static allowlist, preventing SQL injection via
+    column name manipulation.
+
+    Args:
+        table_name: Name of the table
+        columns: List of column names to validate
+
+    Returns:
+        List of valid columns
+
+    Raises:
+        ValueError: If any columns are not in the schema
+    """
+    # Get valid columns from schema
+    valid_columns = _get_table_columns(table_name)
+
+    if not valid_columns:
+        # Fall back to allowlist validation
+        allowed = ALLOWED_COLUMNS.get(table_name, [])
+        if not allowed:
+            raise ValueError(f"No column validation available for table {table_name}")
+
+        unauthorized = [c for c in columns if c not in allowed]
+        if unauthorized:
+            raise ValueError(f"Unauthorized columns: {unauthorized}")
+        return columns
+
+    # Validate against schema
+    invalid = [c for c in columns if c not in valid_columns]
+    if invalid:
+        raise ValueError(f"Invalid columns for table {table_name}: {invalid}")
+
+    return columns
 
 
 class BaseRepository:
@@ -170,7 +252,7 @@ class BaseRepository:
 
         Args:
             id: Record ID
-            updates: Dictionary of field updates (validated against allowlist)
+            updates: Dictionary of field updates (validated against schema)
 
         Returns:
             Updated record dictionary or None
@@ -181,14 +263,19 @@ class BaseRepository:
         if not updates:
             return self.find_by_id(id)
 
-        # Validate columns against allowlist (prevents SQL injection)
-        allowed = ALLOWED_COLUMNS.get(self.table_name, [])
-        if not allowed:
-            raise ValueError(f"No column allowlist defined for table {self.table_name}")
+        # Validate columns against database schema (prevents SQL injection)
+        # This uses schema introspection with fallback to allowlist
+        try:
+            validate_columns(self.table_name, list(updates.keys()))
+        except ValueError:
+            # Fall back to allowlist validation
+            allowed = ALLOWED_COLUMNS.get(self.table_name, [])
+            if not allowed:
+                raise ValueError(f"No column allowlist defined for table {self.table_name}")
 
-        unauthorized = [k for k in updates.keys() if k not in allowed]
-        if unauthorized:
-            raise ValueError(f"Unauthorized columns: {unauthorized}")
+            unauthorized = [k for k in updates.keys() if k not in allowed]
+            if unauthorized:
+                raise ValueError(f"Unauthorized columns: {unauthorized}")
 
         set_clauses = [f"{key} = %s" for key in updates.keys()]
         values = list(updates.values()) + [id]

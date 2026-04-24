@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
+import { verifyTOTP } from "@/lib/totp";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,13 +13,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Get user ID from session
+    const userId = (session.user as { id?: string }).id;
+    if (!userId) {
+      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+    }
+
     // Check if user has 2FA pending
     const client = await pool.connect();
 
     try {
       const result = await client.query(
         "SELECT two_factor_enabled, two_factor_secret FROM users WHERE id = $1",
-        [(session.user as { id?: string }).id],
+        [userId],
       );
 
       if (result.rows.length === 0) {
@@ -27,7 +34,7 @@ export async function POST(req: NextRequest) {
 
       const user = result.rows[0];
 
-      if (!user.two_factor_enabled) {
+      if (!user.two_factor_enabled || !user.two_factor_secret) {
         return NextResponse.json(
           { error: "2FA not enabled for this user" },
           { status: 400 },
@@ -37,16 +44,22 @@ export async function POST(req: NextRequest) {
       const body = await req.json();
       const { code } = body;
 
-      if (!code || code.length !== 6) {
+      if (!code || code.length !== 6 || !/^\d+$/.test(code)) {
         return NextResponse.json(
-          { error: "Invalid verification code" },
+          { error: "Invalid verification code - must be 6 digits" },
           { status: 400 },
         );
       }
 
-      // In production, implement proper TOTP verification
-      // For demo, accept any 6-digit code after 2FA is enabled
-      // This would use a library like 'totp-generator' in production
+      // Verify the TOTP code using proper algorithm
+      const isValid = await verifyTOTP(user.two_factor_secret, code, 30, 1);
+
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Invalid verification code" },
+          { status: 401 },
+        );
+      }
 
       return NextResponse.json({
         success: true,

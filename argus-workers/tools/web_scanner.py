@@ -322,14 +322,22 @@ class WebScanner:
             logger.debug(f"Request failed: {e}")
             return None
     
-    def _add_finding(self, finding_type: str, severity: str, endpoint: str, 
+    def _add_finding(self, finding_type: str, severity: str, endpoint: str,
                      evidence: Dict, confidence: float = 0.8):
-        """Add a finding to the results."""
+        """Add a finding to the results with sanitized evidence."""
+        # Import sanitization utilities
+        try:
+            from utils.sanitization import sanitize_evidence
+            sanitized_evidence = sanitize_evidence(evidence)
+        except ImportError:
+            # If sanitization not available, use evidence as-is
+            sanitized_evidence = evidence
+
         self.findings.append({
             "type": finding_type,
             "severity": severity,
             "endpoint": endpoint,
-            "evidence": evidence,
+            "evidence": sanitized_evidence,
             "confidence": confidence,
         })
     

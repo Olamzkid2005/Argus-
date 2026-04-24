@@ -54,10 +54,23 @@ export const signupSchema = z
       .email("Invalid email format"),
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
-        "Password must contain uppercase, lowercase, number, and special character"
+      .min(12, "Password must be at least 12 characters")
+      .max(128, "Password must be less than 128 characters")
+      .refine(
+        (pwd) => /[A-Z]/.test(pwd),
+        "Password must contain at least one uppercase letter"
+      )
+      .refine(
+        (pwd) => /[a-z]/.test(pwd),
+        "Password must contain at least one lowercase letter"
+      )
+      .refine(
+        (pwd) => /\d/.test(pwd),
+        "Password must contain at least one number"
+      )
+      .refine(
+        (pwd) => /[@$!%*?&]/.test(pwd),
+        "Password must contain at least one special character (@$!%*?&)"
       ),
     passwordConfirm: z.string().min(1, "Password confirmation is required"),
     orgName: z

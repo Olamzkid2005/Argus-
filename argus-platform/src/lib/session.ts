@@ -3,7 +3,7 @@ import { authOptions } from "./auth";
 import { NextResponse } from "next/server";
 import redis from "./redis";
 
-const SESSION_TTL = 30 * 24 * 60 * 60; // 30 days
+const SESSION_TTL = 24 * 60 * 60; // 24 hours (reduced from 30 days for security)
 
 export async function getSession() {
   return await getServerSession(authOptions);
