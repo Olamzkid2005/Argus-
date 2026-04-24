@@ -79,6 +79,54 @@ export async function markJobComplete(idempotencyKey: string): Promise<void> {
   await redis.setex(`idempotency:${idempotencyKey}`, 3600, "complete");
 }
 
+// ============================================
+// API Idempotency for POST/PUT operations
+// ============================================
+
+/**
+ * Generate idempotency key for API operations (POST/PUT)
+ * 
+ * Combines user ID, endpoint, and request body hash to create a unique key
+ */
+export function generateAPIIdempotencyKey(
+  userId: string,
+  endpoint: string,
+  body: Record<string, unknown>
+): string {
+  const bodyHash = crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
+  const data = `${userId}:${endpoint}:${bodyHash}`;
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
+/**
+ * Check if an API request has already been processed
+ * Returns the previous response if found, null otherwise
+ */
+export async function getAPIIdempotencyResult(key: string): Promise<string | null> {
+  return await redis.get(`api_idempotency:${key}`);
+}
+
+/**
+ * Store API response for idempotency (TTL: 24 hours)
+ */
+export async function setAPIIdempotencyResult(key: string, response: string): Promise<void> {
+  await redis.setex(`api_idempotency:${key}`, 86400, response);
+}
+
+/**
+ * Check if request is a retry (has idempotency key) and return cached result if exists
+ */
+export async function checkIdempotency(
+  userId: string,
+  endpoint: string,
+  body: Record<string, unknown>,
+  idempotencyKey?: string
+): Promise<string | null> {
+  // Use provided key or generate one
+  const key = idempotencyKey || generateAPIIdempotencyKey(userId, endpoint, body);
+  return await getAPIIdempotencyResult(key);
+}
+
 /**
  * Build positional args for a Celery task based on job type
  */

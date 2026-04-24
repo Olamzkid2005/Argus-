@@ -43,9 +43,17 @@ async function logAuditEvent(
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
+  // Generate or extract request ID for tracing
+  const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
+  response.headers.set("X-Request-ID", requestId);
+
   // API Version headers
   const path = request.nextUrl.pathname;
   if (path.startsWith("/api/")) {
+    // Add default rate limit headers to all API responses
+    response.headers.set("X-RateLimit-Limit", "100");
+    response.headers.set("X-RateLimit-Window", "60s");
+
     if (path.startsWith("/api/v2/")) {
       response.headers.set("X-API-Version", "2.0.0");
     } else if (path.startsWith("/api/v1/")) {
@@ -98,7 +106,11 @@ export async function middleware(request: NextRequest) {
           prefix: "ratelimit:global:",
         });
 
-        const { success: globalSuccess } = await globalRatelimit.limit(ip);
+        const { success: globalSuccess, limit: globalLimit, remaining: globalRemaining } = await globalRatelimit.limit(ip);
+
+        // Set rate limit headers
+        response.headers.set("X-RateLimit-Limit", String(globalLimit));
+        response.headers.set("X-RateLimit-Remaining", String(globalRemaining));
 
         if (!globalSuccess) {
           return NextResponse.json(

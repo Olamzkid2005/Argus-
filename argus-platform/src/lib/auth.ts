@@ -6,6 +6,116 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "@/lib/db";
 
+// Security configuration
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 15;
+const SESSION_MAX_AGE = 24 * 60 * 60; // 24 hours
+
+/**
+ * Check if account is locked out due to failed login attempts
+ */
+async function checkAccountLockout(
+  email: string,
+): Promise<{ locked: boolean; reason?: string }> {
+  try {
+    const result = await pool.query(
+      `SELECT locked_until, failed_login_attempts 
+       FROM users WHERE email = $1`,
+      [email.toLowerCase()],
+    );
+
+    if (result.rows.length === 0) {
+      return { locked: false };
+    }
+
+    const user = result.rows[0];
+
+    // Check if account is currently locked
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      const lockedUntil = new Date(user.locked_until);
+      const minutesLeft = Math.ceil(
+        (lockedUntil.getTime() - Date.now()) / 60000,
+      );
+      return {
+        locked: true,
+        reason: `Account locked. Try again in ${minutesLeft} minute(s).`,
+      };
+    }
+
+    // Check if max attempts reached
+    if (user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS) {
+      const lockoutUntil = new Date(
+        Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000,
+      );
+      await pool.query(
+        `UPDATE users SET locked_until = $1, failed_login_attempts = 0 
+         WHERE email = $2`,
+        [lockoutUntil, email.toLowerCase()],
+      );
+      return {
+        locked: true,
+        reason: `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
+      };
+    }
+
+    return { locked: false };
+  } catch (error) {
+    console.error("Lockout check error:", error);
+    // Fail open - don't block login if check fails
+    return { locked: false };
+  }
+}
+
+/**
+ * Record failed login attempt and update lockout if needed
+ */
+async function recordFailedLoginAttempt(email: string): Promise<void> {
+  try {
+    const result = await pool.query(
+      `SELECT failed_login_attempts FROM users WHERE email = $1`,
+      [email.toLowerCase()],
+    );
+
+    if (result.rows.length > 0) {
+      const attempts = (result.rows[0].failed_login_attempts || 0) + 1;
+
+      // If max attempts reached, lock the account
+      if (attempts >= MAX_LOGIN_ATTEMPTS) {
+        const lockoutUntil = new Date(
+          Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000,
+        );
+        await pool.query(
+          `UPDATE users SET failed_login_attempts = $1, locked_until = $2 
+           WHERE email = $3`,
+          [attempts, lockoutUntil, email.toLowerCase()],
+        );
+      } else {
+        await pool.query(
+          `UPDATE users SET failed_login_attempts = $1 WHERE email = $2`,
+          [attempts, email.toLowerCase()],
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Failed to record login attempt:", error);
+  }
+}
+
+/**
+ * Clear failed login attempts on successful login
+ */
+async function clearFailedLoginAttempts(email: string): Promise<void> {
+  try {
+    await pool.query(
+      `UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() 
+       WHERE email = $1`,
+      [email.toLowerCase()],
+    );
+  } catch (error) {
+    console.error("Failed to clear login attempts:", error);
+  }
+}
+
 interface User {
   id: string;
   email: string;
@@ -50,13 +160,29 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Query user from database
+          // Check if account is locked out FIRST (before any auth attempt)
+          const lockoutCheck = await checkAccountLockout(credentials.email);
+          if (lockoutCheck.locked) {
+            // Audit the blocked attempt
+            try {
+              const { logAuthFailure } = await import("@/lib/audit");
+              await logAuthFailure(credentials.email, lockoutCheck.reason || "Account locked", {} as Request);
+            } catch {}
+            
+            // Return error info via throwing (NextAuth will handle this)
+            throw new Error("ACCOUNT_LOCKED:" + (lockoutCheck.reason || "Account locked"));
+          }
+
+          // Query user from database (now include new security columns)
           const result = await pool.query(
-            "SELECT id, email, password_hash, org_id, role FROM users WHERE email = $1",
+            `SELECT id, email, password_hash, org_id, role, two_factor_enabled, totp_secret 
+             FROM users WHERE email = $1`,
             [credentials.email],
           );
 
           if (result.rows.length === 0) {
+            // Delay to prevent timing attacks
+            await new Promise(r => setTimeout(r, 100));
             return null;
           }
 
@@ -69,8 +195,13 @@ export const authOptions: NextAuthOptions = {
           );
 
           if (!isValid) {
+            // Record the failed attempt
+            await recordFailedLoginAttempt(credentials.email);
             return null;
           }
+
+          // Clear failed login attempts on successful auth
+          await clearFailedLoginAttempts(credentials.email);
 
           // Check if 2FA is enabled
           if (user.two_factor_enabled) {

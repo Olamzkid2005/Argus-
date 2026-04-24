@@ -175,7 +175,7 @@
 | 8.4 | Python tests have no coverage report | `argus-workers/tests/` | Add `pytest-cov` config, set 70% threshold | 1h | Medium | ✅ |
 | 8.5 | No contract testing (API ↔ Workers) | - | Add JSON schema validation for Celery job messages | 2h | Low | ✅ |
 
-**Test Status**: 418 tests passing (all tests pass when run individually, some failures in combined run due to test isolation)
+**Test Status**: 435+ tests passing (pytest + vitest combined) (all tests pass when run individually, some failures in combined run due to test isolation)
 
 ---
 
@@ -183,12 +183,12 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 9.1 | Missing ARIA labels | Interactive components | Add `aria-label`, `role`, `aria-live` where needed | 2h | Medium |
-| 9.2 | No focus trap in modals | Dialog components | Implement focus trap for keyboard navigation | 1h | Medium |
-| 9.3 | No error boundary | App root | Add React ErrorBoundary with fallback UI ✓ | 1h | High |
-| 9.4 | State scattered across components | - | Consider Zustand or Jotai for global state (engagements, findings) | 4h | Low |
-| 9.5 | No image optimization | - | Use Next.js `Image` component for all images | 2h | Low |
-| 9.6 | Bundle size not monitored | - | Add `@next/bundle-analyzer` and size limits | 1h | Medium |
+| 9.1 | Missing ARIA labels | Interactive components | Add `aria-label`, `role`, `aria-live` where needed | 2h | Medium | ✅ |
+| 9.2 | No focus trap in modals | Dialog components | Implement focus trap for keyboard navigation | 1h | Medium | ✅ |
+| 9.3 | No error boundary | App root | Add React ErrorBoundary with fallback UI | 1h | High | ✅ |
+| 9.4 | State scattered across components | - | Consider Zustand or Jotai for global state (engagements, findings) | 4h | Low | ❌ Not needed |
+| 9.5 | No image optimization | - | Use Next.js `Image` component for all images | 2h | Low | ✅ |
+| 9.6 | Bundle size not monitored | - | Add `@next/bundle-analyzer` and size limits | 1h | Medium | ✅ |
 
 ---
 
@@ -196,12 +196,12 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 10.1 | No API versioning strategy | `src/app/api/` | Add `/api/v1/` prefix structure | 2h | Low |
-| 10.2 | Inconsistent error responses | API routes | Standardize: `{error: string, code: string, details?: any}` | 3h | Medium |
-| 10.3 | No request ID tracing | API routes | Add `X-Request-ID` header generation and propagation | 1h | High |
-| 10.4 | Missing rate limit headers | `src/middleware.ts` | Add `X-RateLimit-Limit`, `X-RateLimit-Remaining` | 30m | Medium |
-| 10.5 | No API documentation | - | Add OpenAPI/Swagger spec (optional) | 4h | Low |
-| 10.6 | Idempotency key only for jobs | `src/lib/redis.ts:47` | Extend to POST/PUT API operations | 2h | Medium |
+| 10.1 | No API versioning strategy | `src/app/api/` | Add `/api/v1/` prefix structure | 2h | Low | ⏳ |
+| 10.2 | Inconsistent error responses | API routes | Standardize: `{error: string, code: string, details?: any}` | 3h | Medium | ✅ |
+| 10.3 | No request ID tracing | API routes | Add `X-Request-ID` header generation and propagation | 1h | High | ✅ |
+| 10.4 | Missing rate limit headers | `src/middleware.ts` | Add `X-RateLimit-Limit`, `X-RateLimit-Remaining` | 30m | Medium | ✅ |
+| 10.5 | No API documentation | - | Add OpenAPI/Swagger spec (optional) | 4h | Low | ⏳ |
+| 10.6 | Idempotency key only for jobs | `src/lib/redis.ts:47` | Extend to POST/PUT API operations | 2h | Medium | ✅ |
 
 ---
 
@@ -209,12 +209,19 @@
 
 | # | Issue | File | Fix | Effort | Priority |
 |---|-------|------|-----|--------|----------|
-| 11.1 | No index on findings.created_at | `db/schema.sql` | Add index for time-based queries | 10m | High |
-| 11.2 | No index on findings.severity | `db/schema.sql` | Add index for severity filtering | 10m | High |
-| 11.3 | JSONB columns not indexed | `db/schema.sql` | Add GIN indexes on `findings.evidence`, `engagements.authorized_scope` | 30m | Medium |
-| 11.4 | No partitioning for large tables | `db/schema.sql` | Consider partitioning `findings` by created_at (quarterly) | 2h | Low |
-| 11.5 | No foreign key cascade rules | `db/schema.sql` | Define ON DELETE behavior for engagements → findings | 30m | Medium |
-| 11.6 | pgvector index missing | `db/schema.sql` | Add HNSW index for similarity search | 20m | Medium |
+| 11.1 | No index on findings.created_at | `db/schema.sql` | Add index for time-based queries | 10m | High | ✅ |
+| 11.2 | No index on findings.severity | `db/schema.sql` | Add index for severity filtering | 10m | High | ✅ |
+| 11.3 | JSONB columns not indexed | `db/schema.sql` | Add GIN indexes on `findings.evidence`, `engagements.authorized_scope` | 30m | Medium | ✅ |
+| 11.4 | No partitioning for large tables | `db/schema.sql` | Consider partitioning `findings` by created_at (quarterly) | 2h | Low | ⏳ |
+| 11.5 | No foreign key cascade rules | `db/schema.sql` | Define ON DELETE behavior for engagements → findings | 30m | Medium | ✅ |
+| 11.6 | pgvector index missing | `db/schema.sql`, `database/migrations/005_add_pgvector.sql` | Add pgvector extension + HNSW index for similarity search | 20m | Medium | ✅ |
+
+**Note**: All indexes (11.1-11.3, 11.5) already exist. pgvector (11.6) now fully implemented:
+- Extension installed: vector 0.8.2
+- Migration run: `005_add_pgvector.sql`
+- Column added: `findings.embedding` (vector(15360))
+- Index created: `idx_findings_embedding_hnsw`
+- Code integration: `pgvector_repository.py`, `ai_explainer.py`
 
 ---
 

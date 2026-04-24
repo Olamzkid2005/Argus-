@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "NODE_NO_DEPRECATION_WARNING=1 next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@auth/pg-adapter": "^1.11.2",
     "@hookform/resolvers": "^5.2.2",
+    "@next/bundle-analyzer": "^14.3.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
