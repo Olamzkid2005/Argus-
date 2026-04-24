@@ -22,6 +22,7 @@ Integrates advanced web scanning capabilities:
 import time
 import re
 import json
+import base64
 import logging
 from typing import Dict, List, Optional
 from urllib.parse import urlparse, urljoin
@@ -144,6 +145,36 @@ class WebScanner:
         ("admin", "letmein"),
     ]
     
+    # GraphQL endpoints to check
+    GRAPHQL_ENDPOINTS = [
+        "/graphql",
+        "/api/graphql",
+        "/v1/graphql",
+        "/query",
+    ]
+    
+    # OpenAPI/Swagger paths to check
+    OPENAPI_PATHS = [
+        "/.well-known/openapi",
+        "/api-docs",
+        "/swagger.json",
+        "/openapi.json",
+        "/api/swagger.json",
+        "/api/openapi.json",
+    ]
+    
+    # Prototype pollution payloads
+    PROTOTYPE_POLLUTION_PAYLOADS = [
+        "?__proto__[isAdmin]=true",
+        "?constructor[prototype][isAdmin]=true",
+    ]
+    
+    # Cache poisoning headers
+    CACHE_POISONING_HEADERS = {
+        "X-Forwarded-For": "127.0.0.1",
+        "X-Original-Forwarded-For": "127.0.0.1",
+    }
+    
     def __init__(self, timeout: int = 10, rate_limit: float = 0.1):
         """
         Initialize web scanner.
@@ -224,6 +255,27 @@ class WebScanner:
         
         # 16. XXE testing
         self.check_xxe()
+        
+        # 17. GraphQL introspection
+        self.check_graphql_introspection()
+        
+        # 18. JWT algorithm confusion
+        self.check_jwt_algorithm_confusion()
+        
+        # 19. Prototype pollution
+        self.check_prototype_pollution()
+        
+        # 20. Cache poisoning
+        self.check_cache_poisoning()
+        
+        # 21. HTTP request smuggling
+        self.check_http_request_smuggling()
+        
+        # 22. DOM XSS
+        self.check_dom_xss()
+        
+        # 23. OpenAPI discovery
+        self.check_openapi_discovery()
         
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
@@ -905,3 +957,242 @@ class WebScanner:
                 },
                 confidence=0.8,
             )
+    
+    def check_graphql_introspection(self):
+        """Check for enabled GraphQL introspection."""
+        for path in self.GRAPHQL_ENDPOINTS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            # Check if endpoint exists
+            resp = self._safe_request("GET", url)
+            if not resp or resp.status_code not in (200, 400, 405):
+                continue
+            
+            # Send introspection query (fixed syntax from user's example)
+            introspection_query = {
+                "query": "{__schema{kind,fields{name}}}"
+            }
+            resp = self._safe_request(
+                "POST", url,
+                json=introspection_query,
+                headers={"Content-Type": "application/json"}
+            )
+            if resp and resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    if "__schema" in data.get("data", {}):
+                        self._add_finding(
+                            finding_type="GRAPHQL_INTROSPECTION_ENABLED",
+                            severity="HIGH",
+                            endpoint=url,
+                            evidence={
+                                "message": "GraphQL introspection is enabled",
+                                "response_preview": json.dumps(data)[:200],
+                            },
+                            confidence=0.9,
+                        )
+                        break
+                except json.JSONDecodeError:
+                    pass
+    
+    def check_jwt_algorithm_confusion(self):
+        """Check for JWT algorithm confusion vulnerabilities."""
+        jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+        resp = self._safe_request("GET", self.target_url)
+        if not resp:
+            return
+        
+        jwts = re.findall(jwt_pattern, resp.text)
+        # Check JS files for JWTs
+        js_urls = re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']', resp.text)
+        for js_url in js_urls[:5]:
+            if not js_url.startswith("http"):
+                js_url = urljoin(self.target_url, js_url)
+            js_resp = self._safe_request("GET", js_url)
+            if js_resp and js_resp.status_code == 200:
+                jwts.extend(re.findall(jwt_pattern, js_resp.text))
+        
+        jwts = list(set(jwts))[:3]  # Deduplicate, limit to 3
+        for jwt_token in jwts:
+            parts = jwt_token.split(".")
+            if len(parts) != 3:
+                continue
+            try:
+                header = json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
+            except:
+                continue
+            
+            # Test alg:none
+            none_header = base64.urlsafe_b64encode(
+                json.dumps({"alg": "none", "typ": "JWT"}).encode()
+            ).decode().rstrip("=")
+            none_jwt = f"{none_header}.{parts[1]}."
+            
+            for auth_header in ["Authorization", "X-Access-Token", "Token"]:
+                test_resp = self._safe_request(
+                    "GET", self.target_url,
+                    headers={auth_header: f"Bearer {none_jwt}"}
+                )
+                if test_resp and test_resp.status_code == 200:
+                    self._add_finding(
+                        finding_type="JWT_ALGORITHM_CONFUSION",
+                        severity="HIGH",
+                        endpoint=self.target_url,
+                        evidence={
+                            "original_jwt": jwt_token[:20] + "...",
+                            "test_algorithm": "none",
+                            "auth_header": auth_header,
+                            "message": "Server accepted JWT with alg:none",
+                        },
+                        confidence=0.7,
+                    )
+                    return
+    
+    def check_prototype_pollution(self):
+        """Check for prototype pollution vulnerabilities."""
+        for payload in self.PROTOTYPE_POLLUTION_PAYLOADS:
+            test_url = f"{self.target_url}{payload}"
+            resp = self._safe_request("GET", test_url)
+            if not resp:
+                continue
+            if resp.status_code == 200 and ("isAdmin" in resp.text or "true" in resp.text.lower()):
+                self._add_finding(
+                    finding_type="PROTOTYPE_POLLUTION",
+                    severity="MEDIUM",
+                    endpoint=test_url,
+                    evidence={
+                        "payload": payload,
+                        "response_status": resp.status_code,
+                        "message": "Potential prototype pollution via query parameter",
+                    },
+                    confidence=0.6,
+                )
+                break
+    
+    def check_cache_poisoning(self):
+        """Check for cache poisoning vulnerabilities."""
+        resp = self._safe_request("GET", self.target_url, headers=self.CACHE_POISONING_HEADERS)
+        if not resp:
+            return
+        
+        # Check if response is cacheable
+        cache_control = resp.headers.get("Cache-Control", "")
+        expires = resp.headers.get("Expires", "")
+        if not cache_control and not expires:
+            return
+        
+        if "127.0.0.1" in resp.text:
+            self._add_finding(
+                finding_type="CACHE_POISONING",
+                severity="MEDIUM",
+                endpoint=self.target_url,
+                evidence={
+                    "headers_sent": self.CACHE_POISONING_HEADERS,
+                    "response_preview": resp.text[:200],
+                    "message": "Cacheable response includes poisoned headers",
+                },
+                confidence=0.7,
+            )
+    
+    def check_http_request_smuggling(self):
+        """Check for HTTP request smuggling (CL.TE and TE.CL)."""
+        # CL.TE Test
+        cl_te_headers = {"Content-Length": "6", "Transfer-Encoding": "chunked"}
+        resp = self._safe_request(
+            "POST", self.target_url,
+            headers=cl_te_headers,
+            data="0\r\n\r\n"
+        )
+        if resp and resp.status_code in (400, 500, 502, 504):
+            self._add_finding(
+                finding_type="HTTP_REQUEST_SMUGGLING_CL_TE",
+                severity="HIGH",
+                endpoint=self.target_url,
+                evidence={
+                    "technique": "CL.TE",
+                    "status_code": resp.status_code,
+                    "message": "Potential CL.TE desync detected",
+                },
+                confidence=0.6,
+            )
+        
+        # TE.CL Test
+        te_cl_headers = {"Transfer-Encoding": "chunked", "Content-Length": "6"}
+        resp = self._safe_request(
+            "POST", self.target_url,
+            headers=te_cl_headers,
+            data="0\r\n\r\n"
+        )
+        if resp and resp.status_code in (400, 500, 502, 504):
+            self._add_finding(
+                finding_type="HTTP_REQUEST_SMUGGLING_TE_CL",
+                severity="HIGH",
+                endpoint=self.target_url,
+                evidence={
+                    "technique": "TE.CL",
+                    "status_code": resp.status_code,
+                    "message": "Potential TE.CL desync detected",
+                },
+                confidence=0.6,
+            )
+    
+    def check_dom_xss(self):
+        """Check for DOM-based XSS."""
+        resp = self._safe_request("GET", self.target_url)
+        if not resp:
+            return
+        
+        # Check for DOM sinks
+        dom_sinks = ["document.write", "innerHTML", "eval(", "setTimeout(", "setInterval("]
+        if not any(sink in resp.text for sink in dom_sinks):
+            return
+        
+        # Test payloads
+        dom_payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>"]
+        for payload in dom_payloads:
+            test_url = f"{self.target_url}?q={payload}"
+            test_resp = self._safe_request("GET", test_url)
+            if test_resp and payload in test_resp.text:
+                self._add_finding(
+                    finding_type="DOM_XSS",
+                    severity="HIGH",
+                    endpoint=test_url,
+                    evidence={
+                        "payload": payload,
+                        "reflected": True,
+                        "dom_sinks_present": True,
+                        "message": "Payload reflected without encoding, DOM sinks detected",
+                    },
+                    confidence=0.7,
+                )
+                break
+    
+    def check_openapi_discovery(self):
+        """Check for exposed OpenAPI/Swagger specifications."""
+        for path in self.OPENAPI_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp = self._safe_request("GET", url)
+            if not resp or resp.status_code != 200:
+                continue
+            
+            content_type = resp.headers.get("Content-Type", "")
+            if "json" not in content_type:
+                continue
+            
+            try:
+                spec = resp.json()
+                if "openapi" in spec or "swagger" in spec or "paths" in spec:
+                    endpoints = list(spec.get("paths", {}).keys())[:10]
+                    self._add_finding(
+                        finding_type="OPENAPI_SPEC_EXPOSED",
+                        severity="MEDIUM",
+                        endpoint=url,
+                        evidence={
+                            "spec_type": "openapi" if "openapi" in spec else "swagger",
+                            "endpoints_exposed": endpoints,
+                            "spec_preview": json.dumps(spec)[:200],
+                        },
+                        confidence=0.9,
+                    )
+                    break
+            except json.JSONDecodeError:
+                pass
