@@ -12,7 +12,7 @@ const nextConfig = {
   // Suppress Node.js deprecation warnings
   onDemandEntries: {
     // Reduce memory footprint during dev
-    maxRetentionBoxCount: 2,
+    pagesBufferLength: 2,
   },
 
   // Image optimization with CDN support

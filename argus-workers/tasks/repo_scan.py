@@ -6,38 +6,30 @@ with custom rules based on vibe-security-ultra framework.
 
 Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
+import subprocess
+import logging
+import json
+from datetime import datetime
+import uuid
 from celery_app import app
-import psycopg2
 from database.connection import connect
 
-from loader import load_module
+from tasks.loader import load_module
 
 _orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
 
-_tracing = _load_module("tracing")
+_tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
-TraceContext = _tracing.TraceContext
-
-import subprocess
-import logging
-import psycopg2
-from database.connection import connect
-import json
-from datetime import datetime
-import uuid
 
 logger = logging.getLogger(__name__)
 
-_distributed_lock = _load_module("distributed_lock")
+_distributed_lock = load_module("distributed_lock")
 LockContext = _distributed_lock.LockContext
 DistributedLock = _distributed_lock.DistributedLock
 
-_state_machine = _load_module("state_machine")
+_state_machine = load_module("state_machine")
 EngagementStateMachine = _state_machine.EngagementStateMachine
-
-_snapshot_manager = _load_module("snapshot_manager")
-SnapshotManager = _snapshot_manager.SnapshotManager
 
 
 @app.task(bind=True, name="tasks.repo_scan.run_repo_scan")

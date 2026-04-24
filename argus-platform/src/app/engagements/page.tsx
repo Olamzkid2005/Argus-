@@ -143,6 +143,7 @@ export default function EngagementsPage() {
   const [progressStep, setProgressStep] = useState("");
   const [error, setError] = useState("");
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   const { history, addToHistory, removeFromHistory, clearHistory } = useURLHistory();
 

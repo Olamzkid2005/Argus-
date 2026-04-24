@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import Sidebar from "@/components/ui-custom/Sidebar";
-import CommandPalette from "@/components/ui-custom/CommandPalette";
+import { CommandPalette } from "@/components/ui-custom/CommandPalette";
 import { KeyboardShortcutsHelp } from "@/components/ui-custom/KeyboardShortcutsHelp";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { applyThreePatch } from "@/lib/three-patch";

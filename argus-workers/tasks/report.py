@@ -3,35 +3,28 @@ Celery tasks for reporting phase
 
 Requirements: 20.1, 20.2, 20.3, 23.4, 23.5, 17.1, 17.2, 17.3, 17.4
 """
-from celery_app import app
-import psycopg2
-from database.connection import connect
 import os
+from celery_app import app
+from database.connection import connect
+from psycopg2.extras import RealDictCursor
 
-from loader import load_module
-
-_workers_dir = "/Users/mac/Documents/Argus-/argus-workers"
+from tasks.loader import load_module
 
 _orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
 
-_tracing = _load_module("tracing")
+_tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
-TraceContext = _tracing.TraceContext
 
-import psycopg2
-from database.connection import connect
-from psycopg2.extras import RealDictCursor
-
-_distributed_lock = _load_module("distributed_lock")
+_distributed_lock = load_module("distributed_lock")
 LockContext = _distributed_lock.LockContext
 DistributedLock = _distributed_lock.DistributedLock
 
-_state_machine = _load_module("state_machine")
+_state_machine = load_module("state_machine")
 EngagementStateMachine = _state_machine.EngagementStateMachine
 
 # Load compliance reporting
-_compliance = _load_module("compliance_reporting")
+_compliance = load_module("compliance_reporting")
 ComplianceReportGenerator = _compliance.ComplianceReportGenerator
 ComplianceStandard = _compliance.ComplianceStandard
 

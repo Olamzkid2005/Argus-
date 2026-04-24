@@ -157,6 +157,41 @@ export default function SettingsPage() {
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<AITestResult | null>(null);
 
+  // Chrome tab memory tracking
+  const [memoryUsage, setMemoryUsage] = useState({
+    used: 0,
+    total: 0,
+    limit: 0,
+    percent: 0,
+  });
+
+  // Track Chrome tab memory usage (estimated from JS heap)
+  const JS_HEAP_MULTIPLIER = 2.5; // Rough estimate: JS heap is ~40% of total tab memory
+
+  useEffect(() => {
+    const updateMemory = () => {
+      // @ts-ignore - performance.memory is Chrome-only
+      const memory = performance.memory;
+      if (memory) {
+        const jsHeapUsed = memory.usedJSHeapSize;
+        const jsHeapLimit = memory.jsHeapSizeLimit;
+        // Estimate total tab memory from JS heap
+        const estimatedUsed = Math.round((jsHeapUsed * JS_HEAP_MULTIPLIER) / 1024 / 1024);
+        const estimatedLimit = Math.round((jsHeapLimit * JS_HEAP_MULTIPLIER) / 1024 / 1024);
+        setMemoryUsage({
+          used: estimatedUsed,
+          total: Math.round((jsHeapLimit * JS_HEAP_MULTIPLIER) / 1024 / 1024),
+          limit: estimatedLimit,
+          percent: Math.round((jsHeapUsed / jsHeapLimit) * 100),
+        });
+      }
+    };
+
+    updateMemory();
+    const interval = setInterval(updateMemory, 2000); // Update every 2 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsDark(document.documentElement.classList.contains("dark"));
@@ -201,6 +236,9 @@ export default function SettingsPage() {
       });
       if (!response.ok) throw new Error("Failed to save settings");
       showToast("success", "Parameters updated");
+
+      // Notify AI status indicator to refresh immediately
+      window.dispatchEvent(new CustomEvent("ai:settings-saved"));
 
       if (settings.openrouter_api_key && !settings.openrouter_api_key.includes("•")) {
         setSettings((prev) => ({ ...prev, openrouter_api_key: "sk-or-" + "•".repeat(20) }));
@@ -656,7 +694,7 @@ export default function SettingsPage() {
             </div>
           </motion.div>
 
-          {/* System Health */}
+          {/* System Health - Chrome Tab Memory */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -669,9 +707,9 @@ export default function SettingsPage() {
               </div>
               <div>
                 <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
-                  System Health
+                  Tab Memory
                 </h2>
-                <p className="text-[11px] text-on-surface-variant">Node status and resources</p>
+                <p className="text-[11px] text-on-surface-variant">Estimated from JS heap</p>
               </div>
             </div>
 
@@ -679,40 +717,25 @@ export default function SettingsPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[11px] text-on-surface-variant font-body flex items-center gap-1">
-                    <Cpu size={10} />
-                    CPU Usage
-                  </span>
-                  <span className="text-[10px] font-mono text-primary">42%</span>
-                </div>
-                <div className="w-full h-1.5 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: "42%" }}
-                    transition={{ delay: 0.5, duration: 0.8 }}
-                    className="h-full bg-primary rounded-full"
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-on-surface-variant font-body flex items-center gap-1">
                     <Activity size={10} />
-                    RAM Usage
+                    Estimated Tab Memory
                   </span>
-                  <span className="text-[10px] font-mono text-primary">68%</span>
+                  <span className="text-[10px] font-mono text-primary">~{memoryUsage.used}MB</span>
                 </div>
                 <div className="w-full h-1.5 bg-surface-container-high dark:bg-surface-container rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: "68%" }}
-                    transition={{ delay: 0.6, duration: 0.8 }}
-                    className="h-full bg-primary rounded-full"
+                    animate={{ width: `${memoryUsage.percent}%` }}
+                    transition={{ delay: 0.5, duration: 0.8 }}
+                    className={`h-full rounded-full ${memoryUsage.percent > 80 ? 'bg-red-500' : memoryUsage.percent > 60 ? 'bg-orange-500' : 'bg-primary'}`}
                   />
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-2">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-[11px] text-on-surface font-body">All nodes operational</span>
+                <div className={`w-2 h-2 rounded-full animate-pulse ${memoryUsage.percent > 80 ? 'bg-red-500' : 'bg-green-500'}`} />
+                <span className="text-[11px] text-on-surface font-body">
+                  {memoryUsage.percent > 80 ? 'High memory usage' : 'Memory usage normal'}
+                </span>
               </div>
             </div>
           </motion.div>
@@ -739,7 +762,7 @@ export default function SettingsPage() {
           className="flex items-center gap-2 px-6 py-2 bg-primary text-white text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-primary/90 transition-all duration-300 shadow-glow disabled:opacity-50"
         >
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {isSaving ? "SAVING..." : "Commit Changes"}
+          {isSaving ? "SAVING..." : "Save Changes"}
         </button>
       </motion.div>
     </div>

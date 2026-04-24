@@ -3,30 +3,23 @@ Celery tasks for reconnaissance phase
 
 Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
+import os
 from celery_app import app
-import psycopg2
 from database.connection import connect
 
-from loader import load_module
+from tasks.loader import load_module
 
 _orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
 
-_tracing = _load_module("tracing")
+_tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
-TraceContext = _tracing.TraceContext
 
-import psycopg2
-from database.connection import connect
-
-_distributed_lock = _load_module("distributed_lock")
+_distributed_lock = load_module("distributed_lock")
 LockContext = _distributed_lock.LockContext
 DistributedLock = _distributed_lock.DistributedLock
 
-_snapshot_manager = _load_module("snapshot_manager")
-SnapshotManager = _snapshot_manager.SnapshotManager
-
-_state_machine = _load_module("state_machine")
+_state_machine = load_module("state_machine")
 EngagementStateMachine = _state_machine.EngagementStateMachine
 
 

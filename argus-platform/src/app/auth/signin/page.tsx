@@ -82,7 +82,7 @@ function SignInForm() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div suppressHydrationWarning className="min-h-screen flex">
       {/* Left Side — Brand Visual (50%) */}
       <motion.div
         initial={{ opacity: 0, x: -30 }}
@@ -311,6 +311,16 @@ function SignInForm() {
               )}
             </button>
           </form>
+
+          <div className="text-center text-sm text-gray-600 mt-6">
+            Don&apos;t have an account?{" "}
+            <Link
+              href="/auth/signup"
+              className="text-[#6720FF] font-semibold hover:underline"
+            >
+              Sign up
+            </Link>
+          </div>
 
         </motion.div>
 

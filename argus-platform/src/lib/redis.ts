@@ -420,4 +420,5 @@ export async function getTaskProgress(
   }
 }
 
+export { redis };
 export default redis;

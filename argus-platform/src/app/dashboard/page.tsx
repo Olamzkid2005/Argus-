@@ -35,6 +35,8 @@ import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import ScannerActivityPanel from "@/components/ui-custom/ScannerActivityPanel";
 import { useScannerActivities } from "@/lib/use-scanner-activities";
 import { useScanEstimates } from "@/hooks/useScanEstimates";
+import { useEngagementEvents } from "@/lib/use-engagement-events";
+import { WebSocketEvent } from "@/lib/websocket-events";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 import { AnimatedCounter } from "@/components/animations/AnimatedCounter";

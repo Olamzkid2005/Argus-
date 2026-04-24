@@ -9,6 +9,7 @@ interface AIStatus {
   model: string;
   checking: boolean;
   error: string | null;
+  healthy: boolean; // Actually tested connection
 }
 
 export function useAIStatus() {
@@ -17,11 +18,13 @@ export function useAIStatus() {
     model: "",
     checking: true,
     error: null,
+    healthy: false,
   });
 
   useEffect(() => {
     const checkAI = async () => {
       try {
+        // First check configuration
         const [aiRes, settingsRes] = await Promise.all([
           fetch("/api/ai/explain"),
           fetch("/api/settings"),
@@ -43,13 +46,35 @@ export function useAIStatus() {
           }
         }
 
-        setStatus({ configured, model, checking: false, error: null });
+        // If configured, test actual connection health
+        let healthy = false;
+        let error = null;
+        if (configured && model) {
+          try {
+            const healthRes = await fetch("/api/ai/test", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ model }),
+            });
+            const healthData = await healthRes.json();
+            healthy = healthRes.ok && healthData.ok;
+            if (!healthy) {
+              error = healthData.error || "Connection failed";
+            }
+          } catch (e) {
+            healthy = false;
+            error = "Connection test failed";
+          }
+        }
+
+        setStatus({ configured, model, checking: false, error, healthy });
       } catch (err) {
         setStatus({
           configured: false,
           model: "",
           checking: false,
           error: "Failed to check AI status",
+          healthy: false,
         });
       }
     };
@@ -57,7 +82,17 @@ export function useAIStatus() {
     checkAI();
     // Refresh every 30 seconds
     const interval = setInterval(checkAI, 30000);
-    return () => clearInterval(interval);
+
+    // Refresh immediately when settings are saved
+    const handleSettingsSaved = () => {
+      checkAI();
+    };
+    window.addEventListener("ai:settings-saved", handleSettingsSaved);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("ai:settings-saved", handleSettingsSaved);
+    };
   }, []);
 
   return status;
@@ -106,6 +141,29 @@ export function AIStatusIndicator({ showLabel = true, compact = false }: { showL
         .join(" ") || status.model
     : "Unknown";
 
+  // Show error state if configured but unhealthy
+  if (status.configured && !status.healthy) {
+    return (
+      <button
+        onClick={() => router.push("/settings")}
+        className={`flex items-center gap-2 border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 transition-all w-full text-left ${
+          compact ? "px-2 py-1" : "px-3 py-2"
+        }`}
+        title={`AI Connection Failed: ${status.error || "Click to diagnose"}`}
+      >
+        <AlertCircle size={compact ? 12 : 14} className="text-orange-400 shrink-0" />
+        {showLabel && (
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-mono text-orange-400 uppercase block truncate">Connection Failed</span>
+            {!compact && (
+              <span className="text-[9px] text-text-secondary block truncate">{modelName}</span>
+            )}
+          </div>
+        )}
+      </button>
+    );
+  }
+
   return (
     <div
       className={`flex items-center gap-2 border border-green-500/30 bg-green-500/10 ${
@@ -150,6 +208,19 @@ export function AIStatusBadge() {
       >
         <AlertCircle size={10} />
         AI Offline
+      </button>
+    );
+  }
+
+  // Show error state if configured but unhealthy
+  if (!status.healthy) {
+    return (
+      <button
+        onClick={() => router.push("/settings")}
+        className="inline-flex items-center gap-1.5 text-[10px] font-mono text-orange-400 hover:text-orange-300 transition-colors"
+      >
+        <AlertCircle size={10} />
+        AI Error
       </button>
     );
   }
