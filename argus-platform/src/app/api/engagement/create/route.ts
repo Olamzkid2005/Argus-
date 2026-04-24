@@ -2,13 +2,26 @@ import { NextResponse } from "next/server";
 import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
-import { pushJob } from "@/lib/redis";
+import { pushJob, checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
 import { pool } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
     const session = await requireAuth();
     const body = await req.json();
+
+    // Check idempotency - return cached response if duplicate request
+    const idempotencyKey = req.headers.get("x-idempotency-key");
+    const cachedResult = await checkIdempotency(
+      session.user.id,
+      "/api/engagement/create",
+      body,
+      idempotencyKey || undefined
+    );
+
+    if (cachedResult) {
+      return NextResponse.json(JSON.parse(cachedResult), { status: 200 });
+    }
 
     const {
       targetUrl,
@@ -176,10 +189,23 @@ export async function POST(req: Request) {
         throw new Error("Failed to queue scan job");
       }
 
-      return NextResponse.json({
+      const response = {
         engagement: engagementResult.rows[0],
         trace_id: traceId,
-      });
+      };
+
+      // Store result for idempotency (24h TTL)
+      const cacheKey = idempotencyKey || generateAPIIdempotencyKey(
+        session.user.id,
+        "/api/engagement/create",
+        body
+      );
+      await setAPIIdempotencyResult(
+        cacheKey,
+        JSON.stringify(response)
+      );
+
+      return NextResponse.json(response);
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

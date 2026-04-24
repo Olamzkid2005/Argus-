@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import Redis from "ioredis";
+import { checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
 
 // Redis client for settings storage
 function getRedisClient() {
@@ -75,6 +76,20 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { openrouter_api_key, preferred_ai_model, ...otherSettings } = body;
     const email = session.user.email;
+    const userId = (session.user as { id?: string }).id || email;
+
+    // Check idempotency
+    const idempotencyKey = request.headers.get("x-idempotency-key");
+    const cachedResult = await checkIdempotency(
+      userId,
+      "/api/settings",
+      body,
+      idempotencyKey || undefined
+    );
+
+    if (cachedResult) {
+      return NextResponse.json(JSON.parse(cachedResult), { status: 200 });
+    }
     
     redis = getRedisClient();
     
@@ -95,8 +110,21 @@ export async function PUT(request: NextRequest) {
       }
     }
     
-    return NextResponse.json({ success: true });
-    
+    const response = { success: true };
+
+    // Store result for idempotency (24h TTL)
+    const cacheKey = idempotencyKey || generateAPIIdempotencyKey(
+      userId,
+      "/api/settings",
+      body
+    );
+    await setAPIIdempotencyResult(
+      cacheKey,
+      JSON.stringify(response)
+    );
+
+    return NextResponse.json(response);
+
   } catch (error) {
     console.error("Settings PUT error:", error);
     return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
