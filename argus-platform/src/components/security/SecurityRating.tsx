@@ -121,7 +121,7 @@ export default function SecurityRating({
           {/* Center content */}
           <div className="absolute flex flex-col items-center justify-center">
             <span
-              className="text-4xl font-bold"
+              className="text-3xl font-bold"
               style={{ color }}
             >
               {rating}%

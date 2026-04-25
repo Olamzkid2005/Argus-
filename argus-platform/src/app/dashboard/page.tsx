@@ -393,6 +393,8 @@ export default function DashboardPage() {
   const completionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [rescannings, setRescannings] = useState<Set<string>>(new Set());
+  const intentionalDisconnectRef = useRef(false);
   const isMobile = useMobileDetect();
 
   // Persist active engagement to localStorage + URL so it survives navigation
@@ -408,6 +410,7 @@ export default function DashboardPage() {
   }, []);
 
   const disconnectEngagement = useCallback(() => {
+    intentionalDisconnectRef.current = true;
     setEngagementId("");
     setIsConnected(false);
     setCurrentState("created");
@@ -419,6 +422,8 @@ export default function DashboardPage() {
     const url = new URL(window.location.href);
     url.searchParams.delete("engagement");
     window.history.replaceState({}, "", url.toString());
+    // Clear the flag after React has had a chance to re-render
+    setTimeout(() => { intentionalDisconnectRef.current = false; }, 500);
   }, []);
 
   const handleStop = async (id: string) => {
@@ -489,6 +494,39 @@ export default function DashboardPage() {
     }
   };
 
+  const handleRescan = async (id: string) => {
+    if (!confirm("Start a new scan with the same target?")) return;
+    setRescannings((prev) => new Set(prev).add(id));
+    try {
+      const response = await fetch(`/api/engagement/${id}/rescan`, {
+        method: "POST",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        showToast("success", "New scan queued");
+        // Auto-connect to the new engagement
+        connectEngagement(data.engagement.id);
+        // Refresh recent engagements
+        const res = await fetch("/api/dashboard/stats");
+        if (res.ok) {
+          const statsData = await res.json();
+          setRecentEngagements(statsData.recent_engagements || []);
+        }
+      } else {
+        const data = await response.json();
+        showToast("error", data.error || "Failed to rescan");
+      }
+    } catch (err) {
+      showToast("error", "Failed to rescan");
+    } finally {
+      setRescannings((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
   const handleEngagementAccessDenied = useCallback(
     (statusCode: number) => {
       if (statusCode !== 401 && statusCode !== 403) return false;
@@ -504,6 +542,8 @@ export default function DashboardPage() {
 
   // Sync URL query param into state when it changes (back/forward navigation)
   useEffect(() => {
+    // Skip reconnection during an intentional disconnect (e.g. 403 access denied)
+    if (intentionalDisconnectRef.current) return;
     const urlId = searchParams.get("engagement");
     if (urlId && urlId !== engagementId) {
       setEngagementId(urlId);
@@ -597,7 +637,11 @@ export default function DashboardPage() {
     },
     onError: (err: Error) => {
       console.error("WebSocket error:", err);
-      showToast("error", "Connection lost");
+      if (err.message.includes("403")) {
+        handleEngagementAccessDenied(403);
+      } else {
+        showToast("error", "Connection lost");
+      }
     },
   });
 
@@ -1050,7 +1094,7 @@ export default function DashboardPage() {
                     {isApproving ? "Authorizing..." : "Authorize Execution"}
                   </button>
                 )}
-                {["recon", "scanning", "analyzing", "reporting"].includes(currentState) && (
+                {["recon", "awaiting_approval", "scanning", "analyzing", "reporting"].includes(currentState) && (
                   <button
                     onClick={() => handleStop(engagementId)}
                     disabled={stoppingId === engagementId}
@@ -1071,6 +1115,34 @@ export default function DashboardPage() {
                   >
                     <CheckCircle2 size={14} className="inline mr-2" />
                     View Report
+                  </button>
+                )}
+                {["complete", "failed"].includes(currentState) && (
+                  <button
+                    onClick={() => handleRescan(engagementId)}
+                    disabled={rescannings.has(engagementId)}
+                    className="px-6 py-2 bg-primary/10 text-primary border border-primary/20 font-bold text-[10px] tracking-widest uppercase hover:bg-primary/20 transition-all duration-300 disabled:opacity-50 rounded-lg"
+                  >
+                    {rescannings.has(engagementId) ? (
+                      <Loader2 size={14} className="inline mr-2 animate-spin" />
+                    ) : (
+                      <Loader2 size={14} className="inline mr-2" />
+                    )}
+                    Rescan
+                  </button>
+                )}
+                {["created", "complete", "failed"].includes(currentState) && (
+                  <button
+                    onClick={() => handleDelete(engagementId)}
+                    disabled={deletingId === engagementId}
+                    className="px-6 py-2 bg-red-500/10 text-red-400 border border-red-500/20 font-bold text-[10px] tracking-widest uppercase hover:bg-red-500/20 transition-all duration-300 disabled:opacity-50 rounded-lg"
+                  >
+                    {deletingId === engagementId ? (
+                      <Loader2 size={14} className="inline mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 size={14} className="inline mr-2" />
+                    )}
+                    Delete
                   </button>
                 )}
                 <button onClick={reconnect} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
@@ -1244,6 +1316,21 @@ export default function DashboardPage() {
                                   </div>
                                 </div>
                                 <div className="flex gap-1 ml-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRescan(eng.id);
+                                    }}
+                                    disabled={rescannings.has(eng.id)}
+                                    className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
+                                    title="Rescan"
+                                  >
+                                    {rescannings.has(eng.id) ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Loader2 size={14} />
+                                    )}
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={(e) => {

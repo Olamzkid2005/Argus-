@@ -75,10 +75,16 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Assets API error:", error);
     const err = error as Error;
+    console.error("Assets API error:", err.message);
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Detect common DB schema issue
+    if (err.message?.includes("relation") && err.message?.includes("does not exist")) {
+      return NextResponse.json({
+        error: "Asset inventory table not found. Run '011_add_assets_table.sql' migration.",
+      }, { status: 500 });
     }
     return NextResponse.json({ error: "Failed to fetch assets" }, { status: 500 });
   }

@@ -188,6 +188,7 @@ CREATE TABLE tool_metrics (
     tool_name VARCHAR(100) NOT NULL,
     duration_ms INTEGER NOT NULL,
     success BOOLEAN NOT NULL,
+    engagement_id UUID REFERENCES engagements(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

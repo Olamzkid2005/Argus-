@@ -24,7 +24,8 @@ class ToolMetricsRepository(BaseRepository):
         self,
         tool_name: str,
         duration_ms: int,
-        success: bool
+        success: bool,
+        engagement_id: str = None
     ) -> str:
         """
         Record a tool execution metric
@@ -33,6 +34,7 @@ class ToolMetricsRepository(BaseRepository):
             tool_name: Name of the tool (e.g., 'nuclei', 'httpx')
             duration_ms: Execution duration in milliseconds
             success: Whether the execution succeeded
+            engagement_id: Optional engagement ID for org-scoped metrics
             
         Returns:
             The ID of the created metric record
@@ -45,11 +47,11 @@ class ToolMetricsRepository(BaseRepository):
             
             cursor.execute(
                 """
-                INSERT INTO tool_metrics (id, tool_name, duration_ms, success, created_at)
-                VALUES (%s, %s, %s, %s, NOW())
+                INSERT INTO tool_metrics (id, tool_name, duration_ms, success, engagement_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
                 RETURNING id
                 """,
-                (metric_id, tool_name, duration_ms, success)
+                (metric_id, tool_name, duration_ms, success, engagement_id)
             )
             
             result = cursor.fetchone()

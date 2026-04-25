@@ -108,7 +108,7 @@ class Orchestrator:
         self.ws_publisher = get_websocket_publisher()
         
         # Initialize execution components
-        self.tool_runner = ToolRunner(connection_string=db_conn)
+        self.tool_runner = ToolRunner(connection_string=db_conn, engagement_id=self.engagement_id)
         self.parser = Parser(connection_string=db_conn)
         self.normalizer = FindingNormalizer()
         self.finding_repo = FindingRepository(db_conn) if db_conn else None

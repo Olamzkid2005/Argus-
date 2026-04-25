@@ -709,7 +709,7 @@ export default function EngagementsPage() {
                   </div>
                   <div>
                     <div className="text-[10px] font-body text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">Model Version</div>
-                    <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">Argus v2.4.1</div>
+                    <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] font-medium">Argus v1.0.0</div>
                   </div>
                 </div>
               </motion.div>

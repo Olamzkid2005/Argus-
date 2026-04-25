@@ -24,6 +24,7 @@ import {
   Cpu,
   Search,
   Wand2,
+  Server,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -49,7 +50,7 @@ const STEPS: TourStep[] = [
     id: "ai-features",
     title: "AI-Powered Analysis",
     description:
-      "Argus integrates with OpenRouter to provide intelligent vulnerability explanations, attack path analysis, and contextual security insights. Configure your preferred AI model in settings for customized analysis depth.",
+      "Argus integrates with Artificial Intelligence to provide intelligent vulnerability explanations, attack path analysis, and contextual security insights. Configure your preferred AI model in settings for customized analysis depth.",
     icon: <Brain size={20} />,
   },
   {
@@ -70,7 +71,7 @@ const STEPS: TourStep[] = [
     id: "scan-types",
     title: "Scan Types & Modes",
     description:
-      "Choose between URL scanning for web applications or Repository scanning for source code analysis. Adjust scan aggressiveness (Stealthy, Default, Aggressive) based on your target environment and testing requirements.",
+      "Choose between URL scanning for web applications or Repository scanning for source code analysis. Adjust scan aggressiveness (Default, High, Aggressive) based on your target environment and testing requirements.",
     icon: <Target size={20} />,
   },
   {
@@ -101,6 +102,13 @@ const STEPS: TourStep[] = [
       "Review discovered vulnerabilities with CVSS scores, CWE classifications, severity ratings (Critical/High/Medium/Low), and detailed evidence including request/response data and remediation guidance.",
     targetSelector: '[data-tour="findings"]',
     icon: <AlertTriangle size={20} />,
+  },
+  {
+    id: "asset-inventory",
+    title: "Asset Inventory",
+    description:
+      "View and manage your organization's discovered assets including domains, IP addresses, endpoints, repositories, containers, APIs, and cloud resources. Filter by type, risk level, and lifecycle status. Assets are automatically discovered during scans and can also be added manually.",
+    icon: <Server size={20} />,
   },
   {
     id: "attack-paths",
@@ -147,7 +155,7 @@ const STEPS: TourStep[] = [
   },
 ];
 
-export function useOnboarding() {
+export function useOnboarding(pathname?: string) {
   const [isCompleted, setIsCompleted] = useState<boolean>(true);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -155,10 +163,10 @@ export function useOnboarding() {
     if (typeof window === "undefined") return;
     const completed = window.localStorage.getItem(STORAGE_KEY) === "true";
     setIsCompleted(completed);
-    if (!completed) {
+    if (!completed && pathname === "/dashboard") {
       setIsOpen(true);
     }
-  }, []);
+  }, [pathname]);
 
   const startTour = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -202,13 +210,13 @@ function getElementRect(selector: string): DOMRect | null {
 }
 
 export default function OnboardingTour() {
-  const { isOpen, setIsOpen, completeTour, skipTour } = useOnboarding();
+  const pathname = usePathname();
+  const { isOpen, setIsOpen, completeTour, skipTour } = useOnboarding(pathname);
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [showAllSteps, setShowAllSteps] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const pathname = usePathname();
 
   const step = STEPS[currentStep];
   const totalSteps = STEPS.length;

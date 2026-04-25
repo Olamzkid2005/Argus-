@@ -5,7 +5,8 @@ import { pool } from "@/lib/db";
 /**
  * GET /api/tools/performance
  *
- * Returns tool performance statistics over the last 7 days.
+ * Returns tool performance statistics over the last 7 days,
+ * scoped to the authenticated user's organization.
  *
  * Query Parameters:
  * - days: Number of days to look back (default: 7)
@@ -15,8 +16,9 @@ import { pool } from "@/lib/db";
  */
 export async function GET(req: Request) {
   try {
-    // Verify authentication
-    await requireAuth();
+    // Verify authentication and get session with org context
+    const session = await requireAuth();
+    const orgId = session.user.orgId;
 
     // Parse query parameters
     const { searchParams } = new URL(req.url);
@@ -36,18 +38,21 @@ export async function GET(req: Request) {
       const result = await pool.query(
         `
         SELECT 
-          tool_name,
+          tm.tool_name,
           COUNT(*) as total_executions,
-          SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count,
-          ROUND(AVG(duration_ms)::numeric, 2) as avg_duration_ms,
-          ROUND((SUM(CASE WHEN success THEN 1 ELSE 0 END)::float / COUNT(*) * 100)::numeric, 2) as success_rate,
-          MIN(duration_ms) as min_duration_ms,
-          MAX(duration_ms) as max_duration_ms
-        FROM tool_metrics
-        WHERE tool_name = $1 AND created_at >= NOW() - INTERVAL '1 day' * $2
-        GROUP BY tool_name
+          SUM(CASE WHEN tm.success THEN 1 ELSE 0 END) as success_count,
+          ROUND(AVG(tm.duration_ms)::numeric, 2) as avg_duration_ms,
+          ROUND((SUM(CASE WHEN tm.success THEN 1 ELSE 0 END)::float / COUNT(*) * 100)::numeric, 2) as success_rate,
+          MIN(tm.duration_ms) as min_duration_ms,
+          MAX(tm.duration_ms) as max_duration_ms
+        FROM tool_metrics tm
+        JOIN engagements e ON tm.engagement_id = e.id
+        WHERE tm.tool_name = $1
+          AND e.org_id = $2
+          AND tm.created_at >= NOW() - INTERVAL '1 day' * $3
+        GROUP BY tm.tool_name
         `,
-        [toolName, days],
+        [toolName, orgId, days],
       );
 
       if (result.rows.length === 0) {
@@ -65,23 +70,25 @@ export async function GET(req: Request) {
       });
     }
 
-    // Get performance stats for all tools
+    // Get performance stats for all tools scoped to user's org
     const result = await pool.query(
       `
       SELECT 
-        tool_name,
+        tm.tool_name,
         COUNT(*) as total_executions,
-        SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count,
-        ROUND(AVG(duration_ms)::numeric, 2) as avg_duration_ms,
-        ROUND((SUM(CASE WHEN success THEN 1 ELSE 0 END)::float / COUNT(*) * 100)::numeric, 2) as success_rate,
-        MIN(duration_ms) as min_duration_ms,
-        MAX(duration_ms) as max_duration_ms
-      FROM tool_metrics
-      WHERE created_at >= NOW() - INTERVAL '1 day' * $1
-      GROUP BY tool_name
+        SUM(CASE WHEN tm.success THEN 1 ELSE 0 END) as success_count,
+        ROUND(AVG(tm.duration_ms)::numeric, 2) as avg_duration_ms,
+        ROUND((SUM(CASE WHEN tm.success THEN 1 ELSE 0 END)::float / COUNT(*) * 100)::numeric, 2) as success_rate,
+        MIN(tm.duration_ms) as min_duration_ms,
+        MAX(tm.duration_ms) as max_duration_ms
+      FROM tool_metrics tm
+      JOIN engagements e ON tm.engagement_id = e.id
+      WHERE e.org_id = $1
+        AND tm.created_at >= NOW() - INTERVAL '1 day' * $2
+      GROUP BY tm.tool_name
       ORDER BY total_executions DESC
       `,
-      [days],
+      [orgId, days],
     );
 
     // Calculate summary statistics

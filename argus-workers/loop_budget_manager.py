@@ -41,13 +41,13 @@ class LoopBudgetManager:
         config = config or {}
         self.max_cycles = config.get("max_cycles", 5)
         self.max_depth = config.get("max_depth", 3)
-        self.cost_limit = config.get("max_cost", 0.50)
+        self.cost_limit = float(config.get("max_cost", 0.50))
         
         # Initialize current values
         self.current_cycles = 0
         self.current_depth = 0
         self.current_cost = 0.0
-        self.max_llm_cost = config.get("max_llm_cost", 0.50)
+        self.max_llm_cost = float(config.get("max_llm_cost", 0.50))
         self.current_llm_cost = 0.0
     
     def can_continue(self, action: Dict) -> Tuple[bool, str]:

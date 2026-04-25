@@ -5,6 +5,21 @@ import OnboardingTour, {
   STORAGE_KEY,
 } from "@/components/ui-custom/OnboardingTour";
 
+// Override the global mock to return /dashboard so auto-open works in tests
+jest.mock("next/navigation", () => ({
+  useRouter: jest.fn(() => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    refresh: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    prefetch: jest.fn(),
+    pathname: "/",
+  })),
+  usePathname: jest.fn(() => "/dashboard"),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 const mockGetItem = jest.fn();
 const mockSetItem = jest.fn();
 const mockRemoveItem = jest.fn();
@@ -28,7 +43,10 @@ describe("OnboardingTour - First-time detection", () => {
   });
 
   it("does not open the tour for returning users", async () => {
-    mockGetItem.mockReturnValue("true");
+    mockGetItem.mockImplementation((key: string) => {
+      if (key === STORAGE_KEY) return "true";
+      return null;
+    });
     render(<OnboardingTour />);
     await waitFor(() => {
       expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument();
@@ -37,7 +55,7 @@ describe("OnboardingTour - First-time detection", () => {
 });
 
 describe("OnboardingTour - Step progression", () => {
-  const TOTAL_STEPS = 13;
+  const TOTAL_STEPS = 15;
 
   it("shows step 1 initially", async () => {
     mockGetItem.mockReturnValue(null);
@@ -92,7 +110,7 @@ describe("OnboardingTour - Step progression", () => {
 });
 
 describe("OnboardingTour - Completion", () => {
-  const TOTAL_STEPS = 13;
+  const TOTAL_STEPS = 15;
 
   it("sets localStorage flag when Done is clicked", async () => {
     mockGetItem.mockReturnValue(null);
@@ -156,7 +174,10 @@ describe("OnboardingTour - Skip functionality", () => {
   });
 
   it("responds to the custom restart event by showing the overview grid", async () => {
-    mockGetItem.mockReturnValue("true");
+    mockGetItem.mockImplementation((key: string) => {
+      if (key === STORAGE_KEY) return "true";
+      return null;
+    });
     render(<OnboardingTour />);
     await waitFor(() => {
       expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument();

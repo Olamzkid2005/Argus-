@@ -288,7 +288,8 @@ class TracingRepository:
         self,
         tool_name: str,
         duration_ms: int,
-        success: bool
+        success: bool,
+        engagement_id: str = None
     ) -> Dict:
         """
         Insert a tool execution metric.
@@ -297,6 +298,7 @@ class TracingRepository:
             tool_name: Name of the tool
             duration_ms: Duration in milliseconds
             success: Whether execution succeeded
+            engagement_id: Optional engagement ID for org-scoped metrics
             
         Returns:
             Inserted metric entry
@@ -307,13 +309,14 @@ class TracingRepository:
         try:
             cursor.execute("""
                 INSERT INTO tool_metrics 
-                (tool_name, duration_ms, success)
-                VALUES (%s, %s, %s)
+                (tool_name, duration_ms, success, engagement_id)
+                VALUES (%s, %s, %s, %s)
                 RETURNING *
             """, (
                 tool_name,
                 duration_ms,
                 success,
+                engagement_id,
             ))
             
             row = cursor.fetchone()

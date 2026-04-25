@@ -1,10 +1,10 @@
  
- -------------- celery@MacBook-Air.local v5.6.3 (recovery)
+ -------------- celery@MacBook-Air v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-24 13:18:30
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-25 11:48:55
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x10a70d550
+- ** ---------- .> app:         argus_workers:0x104721550
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -22,6 +22,11 @@
   . tasks.analyze.evaluate_findings
   . tasks.analyze.run_analysis
   . tasks.health.ping
+  . tasks.maintenance.cleanup_checkpoints
+  . tasks.maintenance.cleanup_failed_engagements
+  . tasks.maintenance.cleanup_old_results
+  . tasks.maintenance.refresh_views
+  . tasks.maintenance.worker_health_check
   . tasks.recon.expand_recon
   . tasks.recon.run_recon
   . tasks.repo_scan.expand_repo_scan
@@ -34,120 +39,900 @@
   . tasks.scan.auth_focused_scan
   . tasks.scan.deep_scan
   . tasks.scan.run_scan
+  . tasks.security.run_self_scan
 
-[2026-04-24 13:18:32,201: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-04-24 13:18:32,207: INFO/MainProcess] mingle: searching for neighbors
-[2026-04-24 13:18:33,718: INFO/MainProcess] mingle: all alone
-[2026-04-24 13:18:34,069: INFO/MainProcess] celery@MacBook-Air.local ready.
-[2026-04-24 13:18:34,109: INFO/MainProcess] Task tasks.health.ping[c77736fc-5051-43b8-834b-012281c64142] received
-[2026-04-24 13:18:34,196: INFO/MainProcess] Task tasks.health.ping[4a9209ba-071c-4e8e-8475-996323aec80d] received
-[2026-04-24 13:18:34,269: INFO/ForkPoolWorker-2] Task c77736fc-5051-43b8-834b-012281c64142 succeeded
-[2026-04-24 13:18:34,270: INFO/ForkPoolWorker-2] Task tasks.health.ping[c77736fc-5051-43b8-834b-012281c64142] succeeded in 0.06891255499795079s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 43155, 'timestamp': '2026-04-24T12:18:34.244534'}
-[2026-04-24 13:18:34,355: INFO/ForkPoolWorker-2] Task 4a9209ba-071c-4e8e-8475-996323aec80d succeeded
-[2026-04-24 13:18:34,356: INFO/ForkPoolWorker-2] Task tasks.health.ping[4a9209ba-071c-4e8e-8475-996323aec80d] succeeded in 0.002796465007122606s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 43155, 'timestamp': '2026-04-24T12:18:34.354481'}
-[2026-04-24 13:29:20,913: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
-[2026-04-24 13:29:21,294: WARNING/ForkPoolWorker-2] Failed to store log: invalid input syntax for type uuid: "test-123"
-LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
-                                    ^
-[2026-04-24 13:29:21,296: WARNING/ForkPoolWorker-2] [test-tra] job_started: Job started: recon
-[2026-04-24 13:29:21,613: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '94cad237-9f59-4ca0-9ae1-fba4df6f17cc', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:21,766: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '600e33b7-e5d0-43f2-8b0a-80eaea5174d4', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:21,820: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
-[2026-04-24 13:29:21,824: WARNING/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 retrying (attempt 0): invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '600e33b7-e5d0-43f2-8b0a-80eaea5174d4', 'test-123'...
-                                                             ^
+[2026-04-25 11:48:57,796: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-25 11:48:57,878: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-25 11:48:58,970: INFO/MainProcess] mingle: all alone
+[2026-04-25 11:48:59,513: INFO/MainProcess] celery@MacBook-Air ready.
+[2026-04-25 11:48:59,761: INFO/MainProcess] Task tasks.health.ping[5ee0cfac-6095-4fd1-aca1-e5e82d67b47e] received
+[2026-04-25 11:48:59,985: INFO/ForkPoolWorker-2] Task 5ee0cfac-6095-4fd1-aca1-e5e82d67b47e succeeded
+[2026-04-25 11:48:59,986: INFO/ForkPoolWorker-2] Task tasks.health.ping[5ee0cfac-6095-4fd1-aca1-e5e82d67b47e] succeeded in 0.21752020000712946s: {'status': 'ok', 'worker': 'celery@MacBook-Air', 'pid': 14906, 'timestamp': '2026-04-25T10:48:59.983149+00:00'}
+[2026-04-25 12:26:38,359: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[605cf6a5-c1c3-431d-9588-abfc3552b2a9] received
+[2026-04-25 12:26:39,318: WARNING/ForkPoolWorker-2] [24609ccc] job_started: Job started: repo_scan
+[2026-04-25 12:26:39,524: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-25 12:26:39,619: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: repo_scan
+[2026-04-25 12:27:17,813: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: gitleaks
+[2026-04-25 12:27:17,819: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 248ms
+[2026-04-25 12:31:38,514: WARNING/MainProcess] Soft time limit (300s) exceeded for tasks.repo_scan.run_repo_scan[605cf6a5-c1c3-431d-9588-abfc3552b2a9]
+[2026-04-25 12:31:38,784: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: trivy
+[2026-04-25 12:31:38,792: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 260756ms
+[2026-04-25 12:31:38,961: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: bandit
+[2026-04-25 12:31:38,962: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 46ms
+[2026-04-25 12:31:39,088: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: snyk
+[2026-04-25 12:31:39,090: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 33ms
+[2026-04-25 12:31:39,232: ERROR/ForkPoolWorker-2] pip-audit failed: [Errno 2] No such file or directory: 'pip-audit'
+[2026-04-25 12:31:39,340: ERROR/ForkPoolWorker-2] govulncheck failed: [Errno 2] No such file or directory: 'govulncheck'
+[2026-04-25 12:32:23,659: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: semgrep
+[2026-04-25 12:32:23,661: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 44193ms
+[2026-04-25 12:32:23,662: WARNING/ForkPoolWorker-2] Semgrep scan failed: 
+[2026-04-25 12:32:24,145: INFO/ForkPoolWorker-2] Task 605cf6a5-c1c3-431d-9588-abfc3552b2a9 succeeded
+[2026-04-25 12:32:24,146: INFO/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[605cf6a5-c1c3-431d-9588-abfc3552b2a9] succeeded in 345.64197310298914s: {'phase': 'repo_scan', 'status': 'completed', 'findings_count': 0, 'next_state': 'awaiting_approval', 'trace_id': None}
+[2026-04-25 12:32:48,380: INFO/MainProcess] Task tasks.scan.run_scan[33b00496-abd2-446d-98cc-01272f1bbd11] received
+[2026-04-25 12:32:48,660: WARNING/ForkPoolWorker-2] [122d677f] job_started: Job started: scan
+[2026-04-25 12:32:48,754: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-25 12:32:48,755: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: scan
+[2026-04-25 12:32:48,837: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: nuclei
+[2026-04-25 12:32:48,838: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 44ms
+[2026-04-25 12:32:48,866: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: dalfox
+[2026-04-25 12:32:48,867: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 27ms
+[2026-04-25 12:32:48,922: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: sqlmap
+[2026-04-25 12:32:48,924: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 53ms
+[2026-04-25 12:32:48,966: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: arjun
+[2026-04-25 12:32:48,969: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 42ms
+[2026-04-25 12:32:49,023: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: jwt_tool
+[2026-04-25 12:32:49,024: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 52ms
+[2026-04-25 12:32:49,112: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: commix
+[2026-04-25 12:32:49,114: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 87ms
+[2026-04-25 12:32:49,181: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: testssl
+[2026-04-25 12:32:49,185: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 68ms
+[2026-04-25 12:32:49,306: INFO/ForkPoolWorker-2] Starting comprehensive web scan: https://github.com/Ed1s0nZ/CyberStrikeAI.git
+[2026-04-25 12:32:52,317: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
 
-[2026-04-24 13:29:21,824: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] retry: Retry in 1s: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'600e33b7-e5d0-43f2-8b0a-80eaea5174d4\', \'test-123\'...\n                                                             ^\n')
-[2026-04-24 13:29:22,792: WARNING/ForkPoolWorker-2] Failed to store log: invalid input syntax for type uuid: "test-123"
-LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
-                                    ^
-[2026-04-24 13:29:22,793: WARNING/ForkPoolWorker-2] [test-tra] job_started: Job started: recon
-[2026-04-24 13:29:22,808: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '9b734d3c-41aa-4fe8-88d8-c42cdfc121a2', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:22,836: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '801d35b8-abe0-4396-803e-843fbdea2034', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:22,840: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
-[2026-04-24 13:29:22,843: WARNING/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 retrying (attempt 1): invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '801d35b8-abe0-4396-803e-843fbdea2034', 'test-123'...
-                                                             ^
+[2026-04-25 12:32:52,732: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
 
-[2026-04-24 13:29:22,844: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] retry: Retry in 0s: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'801d35b8-abe0-4396-803e-843fbdea2034\', \'test-123\'...\n                                                             ^\n')
-[2026-04-24 13:29:22,985: WARNING/ForkPoolWorker-4] Failed to store log: invalid input syntax for type uuid: "test-123"
-LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
-                                    ^
-[2026-04-24 13:29:22,987: WARNING/ForkPoolWorker-4] [test-tra] job_started: Job started: recon
-[2026-04-24 13:29:23,006: WARNING/ForkPoolWorker-4] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          'c3a807f7-2643-4792-bf08-4da31a976ce0', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:23,042: WARNING/ForkPoolWorker-4] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '713b6d56-4f8f-437b-956c-189ea326ecc2', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:23,261: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
-[2026-04-24 13:29:23,283: WARNING/ForkPoolWorker-4] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 retrying (attempt 2): invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '713b6d56-4f8f-437b-956c-189ea326ecc2', 'test-123'...
-                                                             ^
+[2026-04-25 12:32:54,818: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
 
-[2026-04-24 13:29:23,283: INFO/ForkPoolWorker-4] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] retry: Retry in 1s: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'713b6d56-4f8f-437b-956c-189ea326ecc2\', \'test-123\'...\n                                                             ^\n')
-[2026-04-24 13:29:24,258: WARNING/ForkPoolWorker-2] Failed to store log: invalid input syntax for type uuid: "test-123"
-LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
-                                    ^
-[2026-04-24 13:29:24,258: WARNING/ForkPoolWorker-2] [test-tra] job_started: Job started: recon
-[2026-04-24 13:29:24,275: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          'cbed0041-71f7-4f81-b40a-120e7ce19244', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:24,301: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '98c1ac16-786a-41b1-bdc1-a3375d5109c2', 'test-123'...
-                                                             ^
-[2026-04-24 13:29:24,320: INFO/ForkPoolWorker-2] LOW ERROR: {'task_id': 'bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25', 'task_name': 'tasks.recon.run_recon', 'error_type': 'InvalidTextRepresentation', 'error_message': 'invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'98c1ac16-786a-41b1-bdc1-a3375d5109c2\', \'test-123\'...\n                                                             ^\n', 'category': 'validation', 'severity': 'low', 'should_retry': False, 'retry_delay': 0, 'context': {'args': "['test-123', 'example.com', {'max_depth': 2}, 'test-trace-123']", 'kwargs': '{}'}}
-[2026-04-24 13:29:24,366: WARNING/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 (tasks.recon.run_recon) added to DLQ after 3 retries
-[2026-04-24 13:29:24,367: ERROR/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 failed: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '98c1ac16-786a-41b1-bdc1-a3375d5109c2', 'test-123'...
-                                                             ^
+[2026-04-25 12:32:55,154: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
 
-[2026-04-24 13:29:24,367: ERROR/ForkPoolWorker-2] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] raised unexpected: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'98c1ac16-786a-41b1-bdc1-a3375d5109c2\', \'test-123\'...\n                                                             ^\n')
+[2026-04-25 12:32:55,880: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:56,212: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:56,760: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:57,074: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:57,560: INFO/ForkPoolWorker-2] Running parameter discovery
+[2026-04-25 12:32:57,562: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:57,795: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:58,425: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:58,672: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:59,413: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:32:59,783: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:00,377: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:00,709: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:01,290: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:01,531: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:04,355: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:04,570: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:05,190: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:05,518: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:06,469: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:08,189: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:09,239: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:09,616: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:10,208: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:10,435: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:11,485: INFO/ForkPoolWorker-2] Running parameter fuzzing
+[2026-04-25 12:33:11,490: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:11,969: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:13,311: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:13,620: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:14,850: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:15,179: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:16,833: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:17,294: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:18,532: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:19,242: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:20,913: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:22,209: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:23,784: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:24,873: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:25,489: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:27,451: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:27,845: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:28,717: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:29,050: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:30,346: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:31,048: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:32,346: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:32,809: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:33,665: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:34,094: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:34,949: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:36,238: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:37,473: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:38,593: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:38,910: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:41,607: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:41,936: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:43,321: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:43,712: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:44,676: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:45,075: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:45,951: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:46,375: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:47,383: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:48,423: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:49,470: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:49,860: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:50,859: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:51,821: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:52,219: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:54,172: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:54,663: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:59,483: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:33:59,891: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:01,023: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:01,452: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:02,548: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:02,965: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:04,659: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:05,217: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:06,401: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:06,866: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:07,722: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:10,335: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:10,643: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:12,793: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:13,121: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:14,749: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:15,246: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:16,869: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:17,284: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:18,564: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:19,033: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:20,392: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:20,700: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:22,321: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:22,634: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:23,692: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:24,670: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:24,987: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:26,923: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:27,274: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:28,510: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:29,485: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:30,739: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:31,028: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:32,704: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:33,101: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:35,051: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:35,730: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:37,571: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:38,060: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:42,484: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:44,843: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:45,216: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:47,095: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:47,617: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:48,648: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:48,991: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:50,066: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:50,430: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:51,253: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:51,806: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:52,837: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:53,260: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:54,135: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:54,432: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:55,407: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:56,722: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:57,223: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:58,975: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:34:59,338: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:00,423: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:01,021: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:02,422: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:05,017: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:06,174: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:06,760: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:08,960: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:09,493: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:10,692: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:11,263: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:12,359: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:17,260: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:18,944: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:22,014: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:22,839: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:24,093: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:24,899: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:25,980: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:26,421: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:27,257: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:27,608: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:28,588: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:28,979: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:31,978: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:32,938: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:34,465: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:36,560: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:37,375: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:39,524: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:39,948: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:40,845: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:41,212: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:42,080: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:42,391: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:43,980: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:44,311: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:45,229: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:45,874: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:46,672: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:47,204: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:48,597: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:50,293: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:50,694: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:52,467: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:52,773: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:53,699: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:54,167: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:55,238: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:55,578: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:57,168: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:35:58,877: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:01,170: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:01,464: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:02,978: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:03,299: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:04,550: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:06,045: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:06,377: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:09,219: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:09,716: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:12,335: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:13,350: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:14,248: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:14,548: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:15,878: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:16,491: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:17,546: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:18,027: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:19,165: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:19,477: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:20,715: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:24,479: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:25,707: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:33,813: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:34,205: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:35,507: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:35,909: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:37,179: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:38,301: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:43,116: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:46,802: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:49,773: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:51,035: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:52,858: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:54,581: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:55,574: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:57,758: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:36:58,213: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:01,522: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:02,472: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:08,922: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:10,659: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:13,135: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:14,250: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:16,306: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:18,239: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:19,440: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:19,978: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:21,545: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:21,947: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:24,113: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:25,200: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:25,613: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:27,367: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:27,966: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:31,035: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:31,856: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:33,177: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:33,737: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:34,651: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:35,135: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:36,090: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:36,701: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:38,000: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:38,615: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:39,973: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:41,275: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:41,790: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:44,349: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:44,758: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:46,088: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:46,398: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:47,371: WARNING/ForkPoolWorker-2] /Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'github.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+[2026-04-25 12:37:48,404: WARNING/MainProcess] Soft time limit (300s) exceeded for tasks.scan.run_scan[33b00496-abd2-446d-98cc-01272f1bbd11]
+[2026-04-25 12:37:48,406: WARNING/ForkPoolWorker-2] WebScanner failed for https://github.com/Ed1s0nZ/CyberStrikeAI.git: SoftTimeLimitExceeded()
+[2026-04-25 12:37:48,467: INFO/ForkPoolWorker-2] Enqueued LLM review for engagement f9674e43-e88d-4147-8def-54f3f4237c20
+[2026-04-25 12:37:48,471: ERROR/MainProcess] Received unregistered task of type 'tasks.llm_review.run_llm_review'.
+The message has been ignored and discarded.
+
+Did you remember to import the module containing this task?
+Or maybe you're using relative imports?
+
+Please see
+https://docs.celeryq.dev/en/latest/internals/protocol.html
+for more information.
+
+The full contents of the message body was:
+b'[[], {"engagement_id": "f9674e43-e88d-4147-8def-54f3f4237c20", "budget": {"max_cycles": 5, "max_depth": 3, "max_cost": "0.50"}, "trace_id": null}, {"callbacks": null, "errbacks": null, "chain": null, "chord": null}]' (215b)
+
+The full contents of the message headers:
+{'lang': 'py', 'task': 'tasks.llm_review.run_llm_review', 'id': 'b08c35ad-fcf2-4582-bc4f-7373e7911ce3', 'shadow': None, 'eta': None, 'expires': None, 'group': None, 'group_index': None, 'retries': 0, 'timelimit': [None, None], 'root_id': '33b00496-abd2-446d-98cc-01272f1bbd11', 'parent_id': '33b00496-abd2-446d-98cc-01272f1bbd11', 'argsrepr': '()', 'kwargsrepr': "{'engagement_id': 'f9674e43-e88d-4147-8def-54f3f4237c20', 'budget': {'max_cycles': 5, 'max_depth': 3, 'max_cost': '0.50'}, 'trace_id': None}", 'origin': 'gen14906@MacBook-Air', 'ignore_result': False, 'replaced_task_nesting': 0, 'stamped_headers': None, 'stamps': {}}
+
+The delivery info for this task is:
+{'exchange': '', 'routing_key': 'celery'}
 Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/tasks/recon.py", line 65, in run_recon
-    state_machine.transition("recon", "Starting reconnaissance")
-    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 115, in transition
-    self._persist_state_and_budget(
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
-        from_state=old_state,
-        ^^^^^^^^^^^^^^^^^^^^^
-        to_state=new_state,
-        ^^^^^^^^^^^^^^^^^^^
-        reason=reason or f"Transition to {new_state}"
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 142, in _persist_state_and_budget
-    cursor.execute(
-    ~~~~~~~~~~~~~~^
-        """
-        ^^^
-    ...<6 lines>...
-        (transition_id, self.engagement_id, from_state, to_state, reason)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          'cbed0041-71f7-4f81-b40a-120e7ce19244', 'test-123'...
-                                                             ^
-
-
-During handling of the above exception, another exception occurred:
-
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 668, in on_task_received
+    strategy = strategies[type_]
+               ~~~~~~~~~~^^^^^^^
+KeyError: 'tasks.llm_review.run_llm_review'
+[2026-04-25 12:37:48,796: INFO/MainProcess] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] received
+[2026-04-25 12:37:48,800: INFO/ForkPoolWorker-2] Task 33b00496-abd2-446d-98cc-01272f1bbd11 succeeded
+[2026-04-25 12:37:48,801: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[33b00496-abd2-446d-98cc-01272f1bbd11] succeeded in 300.40012998704333s: {'phase': 'scan', 'status': 'completed', 'findings_count': 0, 'next_state': 'analyzing', 'trace_id': None, 'analysis_task_id': 'b569fa71-2be4-45b5-a256-7978cbb61712'}
+[2026-04-25 12:37:49,876: WARNING/ForkPoolWorker-4] [122d677f] job_started: Job started: analyze
+[2026-04-25 12:37:49,935: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-04-25 12:37:49,945: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: analyze
+[2026-04-25 12:37:49,946: WARNING/ForkPoolWorker-4] Failed to load findings: 'FindingRepository' object has no attribute 'get_findings_by_engagement'
+[2026-04-25 12:37:50,127: WARNING/ForkPoolWorker-4] [NO_TRACE] intelligence_decision: Intelligence decision: 1 actions generated
+[2026-04-25 12:37:50,133: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN intelligence_evaluation: 6ms
+[2026-04-25 12:37:50,362: INFO/MainProcess] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] received
+[2026-04-25 12:37:50,434: WARNING/ForkPoolWorker-4] Task b569fa71-2be4-45b5-a256-7978cbb61712 retrying (attempt 0): '>' not supported between instances of 'float' and 'str'
+[2026-04-25 12:37:50,435: INFO/ForkPoolWorker-4] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] retry: Retry in 1s: TypeError("'>' not supported between instances of 'float' and 'str'")
+[2026-04-25 12:37:51,273: WARNING/ForkPoolWorker-2] [122d677f] job_started: Job started: analyze
+[2026-04-25 12:37:51,294: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-25 12:37:51,297: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: analyze
+[2026-04-25 12:37:51,298: WARNING/ForkPoolWorker-2] Failed to load findings: 'FindingRepository' object has no attribute 'get_findings_by_engagement'
+[2026-04-25 12:37:51,342: WARNING/ForkPoolWorker-2] [NO_TRACE] intelligence_decision: Intelligence decision: 1 actions generated
+[2026-04-25 12:37:51,343: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN intelligence_evaluation: 0ms
+[2026-04-25 12:37:51,377: INFO/MainProcess] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] received
+[2026-04-25 12:37:51,392: WARNING/ForkPoolWorker-2] Task b569fa71-2be4-45b5-a256-7978cbb61712 retrying (attempt 1): '>' not supported between instances of 'float' and 'str'
+[2026-04-25 12:37:51,392: INFO/ForkPoolWorker-2] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] retry: Retry in 0s: TypeError("'>' not supported between instances of 'float' and 'str'")
+[2026-04-25 12:37:51,407: WARNING/ForkPoolWorker-4] [122d677f] job_started: Job started: analyze
+[2026-04-25 12:37:51,420: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-04-25 12:37:51,422: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: analyze
+[2026-04-25 12:37:51,422: WARNING/ForkPoolWorker-4] Failed to load findings: 'FindingRepository' object has no attribute 'get_findings_by_engagement'
+[2026-04-25 12:37:51,469: WARNING/ForkPoolWorker-4] [NO_TRACE] intelligence_decision: Intelligence decision: 1 actions generated
+[2026-04-25 12:37:51,469: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN intelligence_evaluation: 0ms
+[2026-04-25 12:37:51,501: INFO/MainProcess] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] received
+[2026-04-25 12:37:51,507: WARNING/ForkPoolWorker-4] Task b569fa71-2be4-45b5-a256-7978cbb61712 retrying (attempt 2): '>' not supported between instances of 'float' and 'str'
+[2026-04-25 12:37:51,508: INFO/ForkPoolWorker-4] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] retry: Retry in 0s: TypeError("'>' not supported between instances of 'float' and 'str'")
+[2026-04-25 12:37:51,530: WARNING/ForkPoolWorker-2] [122d677f] job_started: Job started: analyze
+[2026-04-25 12:37:51,552: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-25 12:37:51,557: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: analyze
+[2026-04-25 12:37:51,558: WARNING/ForkPoolWorker-2] Failed to load findings: 'FindingRepository' object has no attribute 'get_findings_by_engagement'
+[2026-04-25 12:37:51,593: WARNING/ForkPoolWorker-2] [NO_TRACE] intelligence_decision: Intelligence decision: 1 actions generated
+[2026-04-25 12:37:51,593: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN intelligence_evaluation: 0ms
+[2026-04-25 12:37:51,646: WARNING/ForkPoolWorker-2] MEDIUM ERROR: {'task_id': 'b569fa71-2be4-45b5-a256-7978cbb61712', 'task_name': 'tasks.analyze.run_analysis', 'error_type': 'TypeError', 'error_message': "'>' not supported between instances of 'float' and 'str'", 'category': 'unknown', 'severity': 'medium', 'should_retry': True, 'retry_delay': 30, 'context': {'args': "['f9674e43-e88d-4147-8def-54f3f4237c20', {'max_cycles': 5, 'max_depth': 3, 'max_cost': '0.50'}, '122d677f-9251-4e89-9b25-3b51d5922d3e']", 'kwargs': '{}'}}
+[2026-04-25 12:37:51,647: ERROR/ForkPoolWorker-2] Task b569fa71-2be4-45b5-a256-7978cbb61712 failed: '>' not supported between instances of 'float' and 'str'
+[2026-04-25 12:37:51,648: ERROR/ForkPoolWorker-2] Task tasks.analyze.run_analysis[b569fa71-2be4-45b5-a256-7978cbb61712] raised unexpected: TypeError("'>' not supported between instances of 'float' and 'str'")
 Traceback (most recent call last):
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
     R = retval = fun(*args, **kwargs)
                  ~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 259, in __call__
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 262, in __call__
     return self.run(*args, **kwargs)
            ~~~~~~~~^^^^^^^^^^^^^^^^^
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
@@ -158,39 +943,12 @@ Traceback (most recent call last):
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
     return task._orig_run(*args, **kwargs)
            ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/tasks/recon.py", line 79, in run_recon
-    state_machine.transition("failed", f"Recon failed: {str(e)}")
-    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 115, in transition
-    self._persist_state_and_budget(
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
-        from_state=old_state,
-        ^^^^^^^^^^^^^^^^^^^^^
-        to_state=new_state,
-        ^^^^^^^^^^^^^^^^^^^
-        reason=reason or f"Transition to {new_state}"
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 142, in _persist_state_and_budget
-    cursor.execute(
-    ~~~~~~~~~~~~~~^
-        """
-        ^^^
-    ...<6 lines>...
-        (transition_id, self.engagement_id, from_state, to_state, reason)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type uuid: "test-123"
-LINE 5: ...          '98c1ac16-786a-41b1-bdc1-a3375d5109c2', 'test-123'...
-                                                             ^
-
-
-worker: Warm shutdown (MainProcess)
-
-worker: Warm shutdown (MainProcess)
-
-worker: Warm shutdown (MainProcess)
-
-worker: Warm shutdown (MainProcess)
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/analyze.py", line 71, in run_analysis
+    result = orchestrator.run_analysis(job)
+  File "/Users/mac/Documents/Argus-/argus-workers/orchestrator.py", line 927, in run_analysis
+    can_continue, reason = budget_mgr.can_continue(action)
+                           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/loop_budget_manager.py", line 77, in can_continue
+    if self.current_cost + estimated_cost > self.cost_limit:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: '>' not supported between instances of 'float' and 'str'

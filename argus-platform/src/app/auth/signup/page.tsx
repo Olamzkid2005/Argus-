@@ -3,7 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Loader2, ArrowRight, UserCheck } from "lucide-react";
+import { ShieldCheck, Loader2, ArrowRight, UserCheck, Eye, EyeOff, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signIn } from "next-auth/react";
 
@@ -46,6 +46,157 @@ function LinkedInIcon() {
   );
 }
 
+// Password strength calculation
+function calculatePasswordStrength(password: string): { score: number; label: string; color: string } {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  const levels = [
+    { score: 0, label: "Very Weak", color: "bg-red-500" },
+    { score: 1, label: "Weak", color: "bg-red-400" },
+    { score: 2, label: "Fair", color: "bg-yellow-500" },
+    { score: 3, label: "Good", color: "bg-yellow-400" },
+    { score: 4, label: "Strong", color: "bg-green-400" },
+    { score: 5, label: "Very Strong", color: "bg-green-500" },
+  ];
+
+  return levels[Math.min(score, 5)];
+}
+
+// Password Strength Indicator Component
+function PasswordStrengthIndicator({ password }: { password: string }) {
+  if (!password) return null;
+
+  const strength = calculatePasswordStrength(password);
+  const percentage = (strength.score / 5) * 100;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${percentage}%` }}
+            transition={{ duration: 0.3 }}
+            className={`h-full rounded-full ${strength.color}`}
+          />
+        </div>
+        <span className={`text-xs font-medium ${
+          strength.score <= 1 ? "text-red-500" :
+          strength.score <= 3 ? "text-yellow-600" :
+          "text-green-600"
+        }`}>
+          {strength.label}
+        </span>
+      </div>
+      <p className="text-[10px] text-gray-400">
+        Use 8+ chars with uppercase, numbers & symbols
+      </p>
+    </div>
+  );
+}
+
+// Password Field Component with visibility toggle and matching indicator
+interface PasswordFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  showPassword: boolean;
+  setShowPassword: (show: boolean) => void;
+  focusedField: string | null;
+  setFocusedField: (field: string | null) => void;
+  fieldName: string;
+  matchTarget?: string;
+}
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  showPassword,
+  setShowPassword,
+  focusedField,
+  setFocusedField,
+  fieldName,
+  matchTarget,
+}: PasswordFieldProps) {
+  const isConfirmField = fieldName === "passwordConfirm";
+  const passwordsMatch = isConfirmField && matchTarget && value
+    ? value === matchTarget
+    : null;
+
+  return (
+    <div>
+      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          type={showPassword ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocusedField(fieldName)}
+          onBlur={() => setFocusedField(null)}
+          placeholder="••••••••"
+          className={`w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border pr-20 ${
+            focusedField === fieldName
+              ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
+              : "border-transparent hover:bg-gray-200"
+          } ${
+            isConfirmField && value && passwordsMatch === false
+              ? "border-red-300 bg-red-50"
+              : ""
+          } ${
+            isConfirmField && value && passwordsMatch === true
+              ? "border-green-300 bg-green-50"
+              : ""
+          }`}
+          required
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {/* Password Match Indicator (only for confirm field) */}
+          {isConfirmField && value && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className={`p-1 rounded-full ${
+                passwordsMatch ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+              }`}
+            >
+              {passwordsMatch ? <Check size={12} /> : <X size={12} />}
+            </motion.div>
+          )}
+          {/* Toggle Visibility Button */}
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+            tabIndex={-1}
+          >
+            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      </div>
+      {/* Match Status Text */}
+      {isConfirmField && value && (
+        <motion.p
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`text-[10px] mt-1 ${
+            passwordsMatch ? "text-green-600" : "text-red-500"
+          }`}
+        >
+          {passwordsMatch ? "Passwords match" : "Passwords do not match"}
+        </motion.p>
+      )}
+    </div>
+  );
+}
+
 export default function SignUp() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -57,6 +208,8 @@ export default function SignUp() {
   const [success, setSuccess] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [step, setStep] = useState<"email" | "details">("email");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
   const handleEmailSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -384,45 +537,31 @@ export default function SignUp() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onFocus={() => setFocusedField("password")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="••••••••"
-                    className={`w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
-                      focusedField === "password"
-                        ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
-                        : "border-transparent hover:bg-gray-200"
-                    }`}
-                    required
-                  />
-                </div>
+                <PasswordField
+                  label="Password"
+                  value={password}
+                  onChange={setPassword}
+                  showPassword={showPassword}
+                  setShowPassword={setShowPassword}
+                  focusedField={focusedField}
+                  setFocusedField={setFocusedField}
+                  fieldName="password"
+                />
 
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                    Confirm Password
-                  </label>
-                  <input
-                    type="password"
-                    value={passwordConfirm}
-                    onChange={(e) => setPasswordConfirm(e.target.value)}
-                    onFocus={() => setFocusedField("passwordConfirm")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="••••••••"
-                    className={`w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
-                      focusedField === "passwordConfirm"
-                        ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
-                        : "border-transparent hover:bg-gray-200"
-                    }`}
-                    required
-                  />
-                </div>
+                {/* Password Strength Indicator */}
+                <PasswordStrengthIndicator password={password} />
+
+                <PasswordField
+                  label="Confirm Password"
+                  value={passwordConfirm}
+                  onChange={setPasswordConfirm}
+                  showPassword={showPasswordConfirm}
+                  setShowPassword={setShowPasswordConfirm}
+                  focusedField={focusedField}
+                  setFocusedField={setFocusedField}
+                  fieldName="passwordConfirm"
+                  matchTarget={password}
+                />
 
                 <AnimatePresence>
                   {errors.passwordConfirm && (

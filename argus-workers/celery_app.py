@@ -69,6 +69,7 @@ app = Celery(
         "tasks.analyze",
         "tasks.report",
         "tasks.repo_scan",
+        "tasks.llm_review",
         "tasks.maintenance",
         "tasks.self_scan",
     ],

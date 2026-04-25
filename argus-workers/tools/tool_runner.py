@@ -53,7 +53,8 @@ class ToolRunner:
     ]
     
     def __init__(self, sandbox_dir: Optional[str] = None, connection_string: str = None,
-                 failure_threshold: int = 3, cooldown_seconds: int = 300):
+                 failure_threshold: int = 3, cooldown_seconds: int = 300,
+                 engagement_id: str = None):
         """
         Initialize Tool Runner
 
@@ -62,7 +63,9 @@ class ToolRunner:
             connection_string: Database connection string for logging
             failure_threshold: Failures before circuit breaker opens (default: 3)
             cooldown_seconds: Circuit breaker cooldown (default: 300 = 5 min)
+            engagement_id: Optional engagement ID for org-scoped metrics
         """
+        self.engagement_id = engagement_id
         if sandbox_dir:
             self.sandbox_dir = Path(sandbox_dir)
             self.sandbox_dir.mkdir(parents=True, exist_ok=True)
@@ -180,7 +183,8 @@ class ToolRunner:
                         self.metrics_repo.record_metric(
                             tool_name=tool,
                             duration_ms=duration_ms,
-                            success=success
+                            success=success,
+                            engagement_id=self.engagement_id
                         )
                     except Exception as metric_error:
                         # Don't fail execution if metrics recording fails
@@ -214,7 +218,8 @@ class ToolRunner:
                         self.metrics_repo.record_metric(
                             tool_name=tool,
                             duration_ms=duration_ms,
-                            success=False
+                            success=False,
+                            engagement_id=self.engagement_id
                         )
                     except Exception as metric_error:
                         print(f"Warning: Failed to record tool metric: {metric_error}")
@@ -247,7 +252,8 @@ class ToolRunner:
                         self.metrics_repo.record_metric(
                             tool_name=tool,
                             duration_ms=duration_ms,
-                            success=False
+                            success=False,
+                            engagement_id=self.engagement_id
                         )
                     except Exception as metric_error:
                         print(f"Warning: Failed to record tool metric: {metric_error}")

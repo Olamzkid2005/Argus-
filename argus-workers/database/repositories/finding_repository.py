@@ -304,6 +304,35 @@ class FindingRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
+    def get_findings_by_engagement(self, engagement_id: str) -> List[Dict]:
+        """
+        Get all findings for an engagement.
+
+        Args:
+            engagement_id: Engagement ID
+
+        Returns:
+            List of finding dictionaries
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        try:
+            cursor.execute(
+                """
+                SELECT * FROM findings
+                WHERE engagement_id = %s
+                ORDER BY created_at DESC
+                """,
+                (engagement_id,)
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)
+
     def find_unreviewed_low_confidence(
         self,
         engagement_id: str,
