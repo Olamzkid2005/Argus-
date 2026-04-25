@@ -26,8 +26,8 @@ describe("ScanTemplates", () => {
   ];
 
   it("should export ScanTemplates component", () => {
-    const module = require("@/components/ui-custom/ScanTemplates");
-    expect(module).toHaveProperty("ScanTemplates");
+    const templatesModule = require("@/components/ui-custom/ScanTemplates");
+    expect(templatesModule).toHaveProperty("ScanTemplates");
   });
 
   it("should render template cards", () => {

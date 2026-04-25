@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const result = await client.query(
-        "SELECT two_factor_enabled, two_factor_secret FROM users WHERE id = $1",
+        "SELECT two_factor_enabled, totp_secret FROM users WHERE id = $1",
         [userId],
       );
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
       const user = result.rows[0];
 
-      if (!user.two_factor_enabled || !user.two_factor_secret) {
+      if (!user.two_factor_enabled || !user.totp_secret) {
         return NextResponse.json(
           { error: "2FA not enabled for this user" },
           { status: 400 },
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Verify the TOTP code using proper algorithm
-      const isValid = await verifyTOTP(user.two_factor_secret, code, 30, 1);
+      const isValid = await verifyTOTP(user.totp_secret, code, 30, 1);
 
       if (!isValid) {
         return NextResponse.json(

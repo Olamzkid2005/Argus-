@@ -1292,6 +1292,7 @@ export default function DashboardPage() {
                     </button>
                     <button
                       onClick={() => router.push("/findings")}
+                      data-tour="findings"
                       className="flex items-center gap-2 px-4 py-2 border border-outline-variant dark:border-[#ffffff10] text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-primary/30 transition-all duration-300 text-xs uppercase font-bold tracking-widest rounded-lg"
                     >
                       <ShieldAlert size={14} />

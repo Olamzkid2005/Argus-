@@ -2,7 +2,6 @@
  * Contract tests for API ↔ Workers job messages
  * Validates that API routes send job messages matching the expected schema
  */
-import { describe, it, expect, beforeAll } from 'vitest';
 import { JobMessage } from '@/lib/redis';
 
 // JSON Schema for JobMessage

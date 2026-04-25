@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
@@ -191,6 +192,7 @@ export default function OnboardingTour() {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [showAllSteps, setShowAllSteps] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   const step = STEPS[currentStep];
   const totalSteps = STEPS.length;
@@ -209,6 +211,20 @@ export default function OnboardingTour() {
     return () =>
       window.removeEventListener("argus:restart-onboarding", handleRestart);
   }, [setIsOpen]);
+
+  // Listen for dashboard redirect with restart flag (from Settings page)
+  useEffect(() => {
+    if (pathname === "/dashboard") {
+      const pending = window.localStorage.getItem("argus:restart-onboarding-pending");
+      if (pending === "true") {
+        window.localStorage.removeItem("argus:restart-onboarding-pending");
+        window.localStorage.removeItem(STORAGE_KEY);
+        setCurrentStep(0);
+        setShowAllSteps(true);
+        setIsOpen(true);
+      }
+    }
+  }, [pathname, setIsOpen]);
 
   // Position tooltip and spotlight
   useEffect(() => {

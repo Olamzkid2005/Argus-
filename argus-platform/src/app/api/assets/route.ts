@@ -49,8 +49,7 @@ export async function GET(req: NextRequest) {
       const result = await client.query(query, params);
 
       // Get summary stats
-      const statsResult = await client.query(
-        `
+      let statsQuery = `
         SELECT 
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE risk_level = 'CRITICAL') as critical,
@@ -58,9 +57,15 @@ export async function GET(req: NextRequest) {
           COUNT(*) FILTER (WHERE lifecycle_status = 'active') as active
         FROM assets
         WHERE org_id = $1
-        `,
-        [session.user.orgId],
-      );
+      `;
+      const statsParams: unknown[] = [session.user.orgId];
+
+      if (assetType && assetType !== "all") {
+        statsQuery += ` AND asset_type = $2`;
+        statsParams.push(assetType);
+      }
+
+      const statsResult = await client.query(statsQuery, statsParams);
 
       return NextResponse.json({
         assets: result.rows,

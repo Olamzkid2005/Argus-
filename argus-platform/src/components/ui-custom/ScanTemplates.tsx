@@ -48,7 +48,7 @@ export const SCAN_TEMPLATES: ScanTemplate[] = [
 
 interface ScanTemplatesProps {
   selectedTemplate: string | null;
-  onSelect: (templateId: string) => void;
+  onSelect: (templateId: string | null) => void;
 }
 
 export function ScanTemplates({

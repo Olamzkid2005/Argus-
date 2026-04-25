@@ -16,6 +16,7 @@ import {
   Globe,
   StopCircle,
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface Engagement {
   id: string;

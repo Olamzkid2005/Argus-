@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         await client.query(
           `
           UPDATE users 
-          SET two_factor_secret = $1,
+          SET totp_secret = $1,
               two_factor_enabled = false,
               updated_at = NOW()
           WHERE id = $2
@@ -59,11 +59,11 @@ export async function POST(req: NextRequest) {
 
         // Get stored secret
         const result = await client.query(
-          "SELECT two_factor_secret FROM users WHERE id = $1",
+          "SELECT totp_secret FROM users WHERE id = $1",
           [(session.user as AuthUser).id],
         );
 
-        const secret = result.rows[0]?.two_factor_secret;
+        const secret = result.rows[0]?.totp_secret;
 
         if (!secret) {
           return NextResponse.json(
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
         await client.query(
           `
           UPDATE users 
-          SET two_factor_secret = NULL,
+          SET totp_secret = NULL,
               two_factor_enabled = false,
               updated_at = NOW()
           WHERE id = $1

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef, Set } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
@@ -234,6 +234,7 @@ export default function FindingsPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
+  const isMobile = useMobileDetect();
 
   const [findings, setFindings] = useState<Finding[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -485,6 +486,23 @@ export default function FindingsPage() {
     });
   }, []);
 
+  const filtered = useMemo(() => {
+    return findings.filter((f) => {
+      const matchesSearch =
+        f.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        f.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        f.endpoint.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSeverity = severityFilter === "All" || f.severity === severityFilter;
+      const matchesStatus =
+        statusFilter === "All"
+          ? true
+          : statusFilter === "Verified"
+          ? f.verified
+          : !f.verified;
+      return matchesSearch && matchesSeverity && matchesStatus;
+    });
+  }, [findings, searchQuery, severityFilter, statusFilter]);
+
   const handleSelectAll = useCallback(() => {
     if (selectedFindings.size === filtered.length) {
       // Deselect all
@@ -608,23 +626,6 @@ export default function FindingsPage() {
       showToast("error", "Failed to fetch similar findings");
     }
   };
-
-  const filtered = useMemo(() => {
-    return findings.filter((f) => {
-      const matchesSearch =
-        f.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.endpoint.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesSeverity = severityFilter === "All" || f.severity === severityFilter;
-      const matchesStatus =
-        statusFilter === "All"
-          ? true
-          : statusFilter === "Verified"
-          ? f.verified
-          : !f.verified;
-      return matchesSearch && matchesSeverity && matchesStatus;
-    });
-  }, [findings, searchQuery, severityFilter, statusFilter]);
 
   const severityCounts = useMemo(() => {
     return findings.reduce((acc, f) => {

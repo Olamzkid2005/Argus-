@@ -66,7 +66,7 @@ describe("Bulk Findings Operations - Logic Tests", () => {
 
 describe("BulkActionBar Component - Export Tests", () => {
   it("should export BulkActionBar component", () => {
-    const module = require("@/components/ui-custom/BulkActionBar");
-    expect(module).toHaveProperty("BulkActionBar");
+    const bulkModule = require("@/components/ui-custom/BulkActionBar");
+    expect(bulkModule).toHaveProperty("BulkActionBar");
   });
 });

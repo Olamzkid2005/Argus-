@@ -8,6 +8,7 @@ import Sidebar from "@/components/ui-custom/Sidebar";
 import { CommandPalette } from "@/components/ui-custom/CommandPalette";
 import { KeyboardShortcutsHelp } from "@/components/ui-custom/KeyboardShortcutsHelp";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import OnboardingTour from "@/components/ui-custom/OnboardingTour";
 import { applyThreePatch } from "@/lib/three-patch";
 
 applyThreePatch();
@@ -103,6 +104,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       )}
 
       <KeyboardShortcutsHelp open={showHelp} onOpenChange={setShowHelp} />
+      <OnboardingTour />
     </div>
   );
 }

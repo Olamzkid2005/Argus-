@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
@@ -73,8 +73,11 @@ export default function RulesPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedRule, setSelectedRule] = useState<CustomRule | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -94,19 +97,22 @@ export default function RulesPage() {
       }
       if (res.ok) {
         setRules(data.rules || []);
+        setFetchError(null);
       } else {
         console.error("Fetch rules failed:", res.status, JSON.stringify(data, null, 2));
         const msg = data?.error || data?.message || `Failed to fetch rules (HTTP ${res.status})`;
         const detail = data?.details ? ` — ${data.details}` : "";
-        showToast("error", msg + detail);
+        showToastRef.current("error", msg + detail);
+        setFetchError(msg + detail);
       }
     } catch (e) {
       console.error("Failed to fetch rules:", e);
-      showToast("error", "Network error — failed to load rules");
+      showToastRef.current("error", "Network error — failed to load rules");
+      setFetchError("Network error — failed to load rules");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, showToast]);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -114,6 +120,7 @@ export default function RulesPage() {
   }, [status, statusFilter, fetchRules]);
 
   const createRule = async () => {
+    if (submitting) return;
     if (!newRule.name.trim()) {
       showToast("error", "Rule name is required");
       return;
@@ -123,6 +130,7 @@ export default function RulesPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const res = await fetch("/api/rules", {
         method: "POST",
@@ -158,6 +166,8 @@ export default function RulesPage() {
     } catch (e) {
       console.error("Create rule network/error:", e);
       showToast("error", "Network error — check your connection and try again");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -169,6 +179,7 @@ export default function RulesPage() {
       if (res.ok) {
         showToast("success", "Rule deleted");
         setSelectedRule(null);
+        setDeleteConfirm(false);
         fetchRules();
       } else {
         const msg = data?.error || `Failed to delete rule (HTTP ${res.status})`;
@@ -358,13 +369,27 @@ export default function RulesPage() {
           </div>
         ) : rules.length === 0 ? (
           <div className="bg-white dark:bg-[#12121A] border border-outline-variant dark:border-white/[0.08] rounded-xl p-12 text-center">
-            <FileCode2 size={32} className="text-outline dark:text-[#8A8A9E] mx-auto mb-4" />
-            <h3 className="text-sm text-on-surface dark:text-[#F0F0F5] font-medium mb-2 font-headline">
-              No rules found
-            </h3>
-            <p className="text-xs text-outline dark:text-[#8A8A9E] font-body">
-              Create your first custom vulnerability detection rule
-            </p>
+            {fetchError ? (
+              <>
+                <AlertCircle size={32} className="text-red-400 mx-auto mb-4" />
+                <h3 className="text-sm text-red-400 font-medium mb-2 font-headline">
+                  Failed to load rules
+                </h3>
+                <p className="text-xs text-outline dark:text-[#8A8A9E] font-body">
+                  {fetchError}
+                </p>
+              </>
+            ) : (
+              <>
+                <FileCode2 size={32} className="text-outline dark:text-[#8A8A9E] mx-auto mb-4" />
+                <h3 className="text-sm text-on-surface dark:text-[#F0F0F5] font-medium mb-2 font-headline">
+                  No rules found
+                </h3>
+                <p className="text-xs text-outline dark:text-[#8A8A9E] font-body">
+                  Create your first custom vulnerability detection rule
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <motion.div
@@ -377,7 +402,7 @@ export default function RulesPage() {
               <motion.div
                 key={rule.id}
                 variants={itemVariants}
-                onClick={() => setSelectedRule(rule)}
+                onClick={() => { setSelectedRule(rule); setDeleteConfirm(false); }}
                 className="bg-white dark:bg-[#12121A] border border-outline-variant dark:border-white/[0.08] rounded-xl p-5 hover:shadow-md hover:border-primary/30 transition-all duration-300 group cursor-pointer"
               >
                 <div className="flex items-start justify-between">
@@ -617,9 +642,17 @@ export default function RulesPage() {
                       </button>
                       <button
                         onClick={createRule}
-                        className="px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300"
+                        disabled={submitting}
+                        className="flex items-center gap-2 px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        Create Rule
+                        {submitting ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          "Create Rule"
+                        )}
                       </button>
                     </div>
                   </>

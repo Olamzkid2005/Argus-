@@ -22,4 +22,4 @@ export {
   type SignupInput,
   type RateLimitConfigInput,
   type FindingFiltersInput,
-} from "./consolidated";
+} from "./validation/consolidated";

@@ -148,7 +148,7 @@ export function validate<T>(
     return { valid: true, errors: [], data: result.data };
   }
 
-  const errors = result.error.errors.map(
+  const errors = result.error.issues.map(
     (e) => `${e.path.join(".")}: ${e.message}`
   );
   return { valid: false, errors };

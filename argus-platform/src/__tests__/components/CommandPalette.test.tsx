@@ -48,12 +48,12 @@ describe("CommandPalette - Logic Tests", () => {
 // Test that the component file exports correctly
 describe("CommandPalette - Export Tests", () => {
   it("should export CommandPalette component", () => {
-    const module = require("@/components/ui-custom/CommandPalette");
-    expect(module).toHaveProperty("CommandPalette");
+    const paletteModule = require("@/components/ui-custom/CommandPalette");
+    expect(paletteModule).toHaveProperty("CommandPalette");
   });
 
   it("should export useCommandPalette hook", () => {
-    const module = require("@/components/ui-custom/CommandPalette");
-    expect(module).toHaveProperty("useCommandPalette");
+    const paletteModule2 = require("@/components/ui-custom/CommandPalette");
+    expect(paletteModule2).toHaveProperty("useCommandPalette");
   });
 });

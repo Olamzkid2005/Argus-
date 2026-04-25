@@ -26,7 +26,7 @@ describe("SignIn Page", () => {
 
   it("renders signin form with email and password inputs", () => {
     render(<SignInPage />);
-    expect(screen.getByPlaceholderText(/you@company.com/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/architect@argus.ai/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/••••••••/i)).toBeInTheDocument();
   });
 
@@ -40,7 +40,7 @@ describe("SignIn Page", () => {
     mockSignIn.mockResolvedValue({ error: null });
     render(<SignInPage />);
 
-    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
+    const emailInput = screen.getByPlaceholderText(/architect@argus.ai/i);
     const passwordInput = screen.getByPlaceholderText(/••••••••/i);
     const submitButton = screen.getByRole("button", { name: /sign in/i });
 
@@ -61,7 +61,7 @@ describe("SignIn Page", () => {
     mockSignIn.mockResolvedValue({ error: "Invalid credentials" });
     render(<SignInPage />);
 
-    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
+    const emailInput = screen.getByPlaceholderText(/architect@argus.ai/i);
     const passwordInput = screen.getByPlaceholderText(/••••••••/i);
     const submitButton = screen.getByRole("button", { name: /sign in/i });
 

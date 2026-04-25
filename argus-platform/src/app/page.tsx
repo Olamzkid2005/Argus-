@@ -566,7 +566,7 @@ function LandingContent({ session }: { session: any }) {
               viewport={{ once: true }}
               className="text-3xl md:text-4xl font-headline font-bold text-on-surface tracking-tight"
             >
-              State-of-the-art models, ready to deploy
+              State-of-the-art security, at the touch of a button
             </motion.p>
           </div>
 

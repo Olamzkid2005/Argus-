@@ -77,6 +77,7 @@ export default function AssetsPage() {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [newAsset, setNewAsset] = useState({
     asset_type: "domain",
     identifier: "",
@@ -99,6 +100,9 @@ export default function AssetsPage() {
         const data = await res.json();
         setAssets(data.assets || []);
         setStats(data.stats || { total: 0, critical: 0, high: 0, active: 0 });
+      } else {
+        const data = await res.json();
+        showToast("error", data.error || "Failed to fetch assets");
       }
     } catch (e) {
       console.error("Failed to fetch assets:", e);
@@ -113,6 +117,11 @@ export default function AssetsPage() {
   }, [status, typeFilter, fetchAssets]);
 
   const createAsset = async () => {
+    if (!newAsset.identifier.trim()) {
+      showToast("error", "Identifier is required");
+      return;
+    }
+    setIsCreating(true);
     try {
       const res = await fetch("/api/assets", {
         method: "POST",
@@ -136,6 +145,8 @@ export default function AssetsPage() {
       }
     } catch (e) {
       showToast("error", "Failed to add asset");
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -236,7 +247,7 @@ export default function AssetsPage() {
           transition={{ duration: 0.4, delay: 0.2 }}
           className="flex flex-wrap items-center gap-2 mb-6"
         >
-          {["all", "domain", "endpoint", "repository", "container", "api"].map((t) => (
+          {["all", "domain", "ip", "endpoint", "repository", "container", "api", "network", "cloud_resource"].map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
@@ -463,9 +474,17 @@ export default function AssetsPage() {
                   </button>
                   <button
                     onClick={createAsset}
-                    className="px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300"
+                    disabled={isCreating}
+                    className="px-4 py-2 primary-gradient text-white text-xs font-bold uppercase tracking-widest hover:shadow-glow rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Asset
+                    {isCreating ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin" />
+                        Adding...
+                      </span>
+                    ) : (
+                      "Add Asset"
+                    )}
                   </button>
                 </div>
               </div>

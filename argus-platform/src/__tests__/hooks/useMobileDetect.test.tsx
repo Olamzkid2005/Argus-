@@ -18,8 +18,8 @@ Object.defineProperty(window, "matchMedia", {
 
 describe("useMobileDetect", () => {
   it("should export the hook", () => {
-    const module = require("@/hooks/useMobileDetect");
-    expect(module).toHaveProperty("useMobileDetect");
+    const hookModule = require("@/hooks/useMobileDetect");
+    expect(hookModule).toHaveProperty("useMobileDetect");
   });
 
   it("should detect mobile when width < 768px", () => {

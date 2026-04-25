@@ -44,7 +44,7 @@ describe("Navigation Integration", () => {
     render(<Sidebar onOpenCommandPalette={jest.fn()} />);
 
     const findingsLink = screen.getByText("Findings").closest("a");
-    expect(findingsLink).toHaveClass("bg-white");
+    expect(findingsLink).toHaveClass("bg-[#6720FF]/10");
   });
 
   it("does not highlight inactive pages", () => {
@@ -52,6 +52,6 @@ describe("Navigation Integration", () => {
     render(<Sidebar onOpenCommandPalette={jest.fn()} />);
 
     const findingsLink = screen.getByText("Findings").closest("a");
-    expect(findingsLink).not.toHaveClass("bg-white");
+    expect(findingsLink).not.toHaveClass("bg-[#6720FF]/10");
   });
 });

@@ -674,8 +674,9 @@ export default function SettingsPage() {
                 </div>
                 <button
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent("argus:restart-onboarding"));
-                    showToast("info", "Onboarding tour restarted");
+                    window.localStorage.setItem("argus:restart-onboarding-pending", "true");
+                    router.push("/dashboard");
+                    showToast("success", "Starting onboarding tour...");
                   }}
                   className="text-[10px] font-bold text-primary uppercase tracking-wider hover:underline transition-all"
                 >

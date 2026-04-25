@@ -5,90 +5,78 @@
 jest.mock("../redis", () => ({
   __esModule: true,
   default: {
+    ping: jest.fn(() => Promise.resolve("PONG")),
     setex: jest.fn(() => Promise.resolve("OK")),
     get: jest.fn(() => Promise.resolve(null)),
-    del: jest.fn(() => Promise.resolve(1)),
-    sadd: jest.fn(() => Promise.resolve(1)),
-    expire: jest.fn(() => Promise.resolve(1)),
-    smembers: jest.fn(() => Promise.resolve([])),
-    info: jest.fn(() => Promise.resolve("db0:keys=0,expires=0")),
   },
 }));
 
 import redis from "../redis";
-import {
-  setCache,
-  getCache,
-  deleteCache,
-  invalidateByTag,
-  invalidateByTags,
-  getCacheStats,
-} from "../cache";
+import { withCache, cacheResponse, cachedRouteHandler } from "../cache";
 
 describe("Cache", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe("setCache / getCache", () => {
-    it("should store and retrieve a value", async () => {
-      const entry = JSON.stringify({ data: { data: "value" }, tags: [], createdAt: Date.now() });
-      (redis.get as jest.Mock).mockResolvedValue(entry);
+  describe("cacheResponse", () => {
+    it("should execute fetcher on cache miss and store result", async () => {
+      (redis.ping as jest.Mock).mockResolvedValue("PONG");
+      const fetcher = jest.fn().mockResolvedValue({ data: "value" });
 
-      await setCache("test-key", { data: "value" });
-      const result = await getCache("test-key");
+      const result = await cacheResponse("test-key", fetcher, 60);
+
       expect(result).toEqual({ data: "value" });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(redis.setex).toHaveBeenCalledWith(
+        "test-key",
+        60,
+        JSON.stringify({ data: "value" })
+      );
     });
 
-    it("should return null for missing key", async () => {
+    it("should return cached value without calling fetcher on cache hit", async () => {
+      (redis.ping as jest.Mock).mockResolvedValue("PONG");
+      (redis.get as jest.Mock).mockResolvedValue(
+        JSON.stringify({ data: "cached" })
+      );
+
+      const fetcher = jest.fn();
+
+      const result = await cacheResponse("cache-hit-key", fetcher, 60);
+
+      expect(result).toEqual({ data: "cached" });
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it("should return null when fetcher returns null for missing key", async () => {
+      (redis.ping as jest.Mock).mockResolvedValue("PONG");
       (redis.get as jest.Mock).mockResolvedValue(null);
-      const result = await getCache("missing-key");
+
+      const result = await cacheResponse("missing-key", () =>
+        Promise.resolve(null),
+        60,
+      );
+
       expect(result).toBeNull();
     });
+  });
 
-    it("should respect TTL", async () => {
-      (redis.get as jest.Mock).mockResolvedValue(null);
-      await setCache("ttl-key", "value", { ttl: 1 });
-      const result = await getCache("ttl-key");
-      expect(result).toBeNull();
+  describe("withCache", () => {
+    it("should be a function (decorator factory)", () => {
+      expect(typeof withCache).toBe("function");
     });
   });
 
-  describe("invalidateByTag", () => {
-    it("should invalidate entries by tag", async () => {
-      (redis.smembers as jest.Mock).mockImplementation((key: string) => {
-        if (key === "tag:engagement") return Promise.resolve(["eng-1"]);
-        return Promise.resolve([]);
-      });
-
-      await invalidateByTag("engagement");
-
-      expect(redis.del).toHaveBeenCalledWith("eng-1");
-      expect(redis.del).toHaveBeenCalledWith("tag:engagement");
+  describe("cachedRouteHandler", () => {
+    it("should be a function", () => {
+      expect(typeof cachedRouteHandler).toBe("function");
     });
-  });
 
-  describe("invalidateByTags", () => {
-    it("should invalidate multiple tags", async () => {
-      (redis.smembers as jest.Mock).mockImplementation((key: string) => {
-        if (key === "tag:engagement") return Promise.resolve(["eng-1"]);
-        if (key === "tag:finding") return Promise.resolve(["find-1"]);
-        return Promise.resolve([]);
-      });
-
-      await invalidateByTags(["engagement", "finding"]);
-
-      expect(redis.del).toHaveBeenCalledWith("eng-1");
-      expect(redis.del).toHaveBeenCalledWith("find-1");
-    });
-  });
-
-  describe("getCacheStats", () => {
-    it("should return cache statistics", async () => {
-      (redis.info as jest.Mock).mockResolvedValue("db0:keys=2,expires=0");
-      const stats = await getCacheStats();
-      expect(stats.status).toBe("available");
-      expect(stats.keys).toBe(2);
+    it("should return a wrapped handler function", () => {
+      const handler = jest.fn();
+      const wrapped = cachedRouteHandler(handler, { ttlSeconds: 60 });
+      expect(typeof wrapped).toBe("function");
     });
   });
 });

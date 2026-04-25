@@ -33,7 +33,7 @@ const navItems = [
   { to: "/assets", icon: Server, label: "Assets" },
   { to: "/rules", icon: FileCode2, label: "Rules" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/settings", icon: Settings, label: "Settings", tour: "settings" },
 ];
 
 export default function Sidebar({ onOpenCommandPalette, onClose }: SidebarProps) {
@@ -74,6 +74,7 @@ export default function Sidebar({ onOpenCommandPalette, onClose }: SidebarProps)
             <Link
               key={item.to}
               href={item.to}
+              {...(item.tour ? { "data-tour": item.tour } : {})}
               className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 group ${
                 isActive
                   ? "bg-[#6720FF]/10 text-[#6720FF] font-bold"

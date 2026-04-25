@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import FindingCard from "@/app/findings/[id]/page";
+import { FindingCard } from "@/components/ui-custom/FindingCard";
 
 describe("CVe/CWE Clickable Links", () => {
   it("should render CWE ID as clickable link to MITRE", () => {

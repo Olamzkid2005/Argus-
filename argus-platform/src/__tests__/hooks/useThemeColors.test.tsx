@@ -9,8 +9,8 @@ Object.defineProperty(window, "getComputedStyle", {
 
 describe("useThemeColors", () => {
   it("should export the hook", () => {
-    const module = require("@/hooks/useThemeColors");
-    expect(module).toHaveProperty("useThemeColors");
+    const hookModule = require("@/hooks/useThemeColors");
+    expect(hookModule).toHaveProperty("useThemeColors");
   });
 
   it("should return theme colors", () => {

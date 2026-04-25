@@ -54,7 +54,7 @@ describe("Sidebar", () => {
     render(<Sidebar onOpenCommandPalette={mockOpenCommandPalette} onClose={mockOnClose} />);
 
     const findingsLink = screen.getByText("Findings").closest("a");
-    expect(findingsLink).toHaveClass("bg-white");
+    expect(findingsLink).toHaveClass("bg-[#6720FF]/10");
   });
 
   it("triggers command palette on button click", () => {

@@ -23,10 +23,10 @@ describe("SignUp Page", () => {
     (global.fetch as jest.Mock).mockClear();
   });
 
-  it("renders signup form with all fields", () => {
+  it("renders signup form with email field", () => {
     render(<SignUpPage />);
-    expect(screen.getByPlaceholderText(/you@company.com/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/name@company.com/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next/i })).toBeInTheDocument();
   });
 
   it("renders social signup buttons", () => {
@@ -43,12 +43,20 @@ describe("SignUp Page", () => {
 
     render(<SignUpPage />);
 
-    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
+    // Step 1: Enter email and click Next
+    const emailInput = screen.getByPlaceholderText(/name@company.com/i);
+    fireEvent.change(emailInput, { target: { value: "newuser@argus.io" } });
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    // Step 2: Fill in details and submit
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    });
+
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     const submitButton = screen.getByRole("button", { name: /create account/i });
     const form = submitButton.closest("form") as HTMLFormElement;
 
-    fireEvent.change(emailInput, { target: { value: "newuser@argus.io" } });
     fireEvent.change(passwordInputs[0], { target: { value: "SecurePass123!" } });
     fireEvent.change(passwordInputs[1], { target: { value: "SecurePass123!" } });
     fireEvent.submit(form);
@@ -67,12 +75,20 @@ describe("SignUp Page", () => {
   it("shows error when passwords do not match", async () => {
     render(<SignUpPage />);
 
-    const emailInput = screen.getByPlaceholderText(/you@company.com/i);
+    // Step 1: Enter email and click Next
+    const emailInput = screen.getByPlaceholderText(/name@company.com/i);
+    fireEvent.change(emailInput, { target: { value: "newuser@argus.io" } });
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    // Step 2: Fill in mismatched passwords and submit
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    });
+
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     const submitButton = screen.getByRole("button", { name: /create account/i });
     const form = submitButton.closest("form") as HTMLFormElement;
 
-    fireEvent.change(emailInput, { target: { value: "newuser@argus.io" } });
     fireEvent.change(passwordInputs[0], { target: { value: "Password1" } });
     fireEvent.change(passwordInputs[1], { target: { value: "Password2" } });
     fireEvent.submit(form);

@@ -16,13 +16,13 @@ if (typeof globalThis.Buffer === 'undefined') {
 async function hmacSha1(secret: Uint8Array, message: Uint8Array): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     'raw',
-    secret,
+    secret.buffer as ArrayBuffer,
     { name: 'HMAC', hash: 'SHA-1' },
     false,
     ['sign']
   );
   
-  const signature = await crypto.subtle.sign('HMAC', key, message);
+  const signature = await crypto.subtle.sign('HMAC', key, message.buffer as ArrayBuffer);
   return new Uint8Array(signature);
 }
 

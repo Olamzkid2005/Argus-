@@ -37,11 +37,13 @@ describe("OnboardingTour - First-time detection", () => {
 });
 
 describe("OnboardingTour - Step progression", () => {
+  const TOTAL_STEPS = 13;
+
   it("shows step 1 initially", async () => {
     mockGetItem.mockReturnValue(null);
     render(<OnboardingTour />);
     await waitFor(() => screen.getByTestId("onboarding-tour"));
-    expect(screen.getByTestId("step-counter")).toHaveTextContent("1 of 5");
+    expect(screen.getByTestId("step-counter")).toHaveTextContent(`1 of ${TOTAL_STEPS}`);
   });
 
   it("advances to next step when Next is clicked", async () => {
@@ -50,7 +52,7 @@ describe("OnboardingTour - Step progression", () => {
     await waitFor(() => screen.getByTestId("onboarding-tour"));
 
     fireEvent.click(screen.getByTestId("next-step-btn"));
-    expect(screen.getByTestId("step-counter")).toHaveTextContent("2 of 5");
+    expect(screen.getByTestId("step-counter")).toHaveTextContent(`2 of ${TOTAL_STEPS}`);
   });
 
   it("goes back to previous step when Back is clicked", async () => {
@@ -59,10 +61,10 @@ describe("OnboardingTour - Step progression", () => {
     await waitFor(() => screen.getByTestId("onboarding-tour"));
 
     fireEvent.click(screen.getByTestId("next-step-btn"));
-    expect(screen.getByTestId("step-counter")).toHaveTextContent("2 of 5");
+    expect(screen.getByTestId("step-counter")).toHaveTextContent(`2 of ${TOTAL_STEPS}`);
 
     fireEvent.click(screen.getByTestId("prev-step-btn"));
-    expect(screen.getByTestId("step-counter")).toHaveTextContent("1 of 5");
+    expect(screen.getByTestId("step-counter")).toHaveTextContent(`1 of ${TOTAL_STEPS}`);
   });
 
   it("shows the Done button on the last step", async () => {
@@ -70,12 +72,12 @@ describe("OnboardingTour - Step progression", () => {
     render(<OnboardingTour />);
     await waitFor(() => screen.getByTestId("onboarding-tour"));
 
-    // Advance to last step (4 clicks to get from step 1 to step 5)
-    for (let i = 0; i < 4; i++) {
+    // Advance to last step (12 clicks to get from step 1 to step 13)
+    for (let i = 0; i < TOTAL_STEPS - 1; i++) {
       fireEvent.click(screen.getByTestId("next-step-btn"));
     }
 
-    expect(screen.getByTestId("step-counter")).toHaveTextContent("5 of 5");
+    expect(screen.getByTestId("step-counter")).toHaveTextContent(`${TOTAL_STEPS} of ${TOTAL_STEPS}`);
     expect(screen.getByTestId("done-btn")).toBeInTheDocument();
     expect(screen.queryByTestId("next-step-btn")).not.toBeInTheDocument();
   });
@@ -90,13 +92,15 @@ describe("OnboardingTour - Step progression", () => {
 });
 
 describe("OnboardingTour - Completion", () => {
+  const TOTAL_STEPS = 13;
+
   it("sets localStorage flag when Done is clicked", async () => {
     mockGetItem.mockReturnValue(null);
     render(<OnboardingTour />);
     await waitFor(() => screen.getByTestId("onboarding-tour"));
 
     // Advance to last step
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < TOTAL_STEPS - 1; i++) {
       fireEvent.click(screen.getByTestId("next-step-btn"));
     }
 
@@ -151,7 +155,7 @@ describe("OnboardingTour - Skip functionality", () => {
     expect(mockRemoveItem).toHaveBeenCalledWith(STORAGE_KEY);
   });
 
-  it("responds to the custom restart event", async () => {
+  it("responds to the custom restart event by showing the overview grid", async () => {
     mockGetItem.mockReturnValue("true");
     render(<OnboardingTour />);
     await waitFor(() => {
@@ -165,6 +169,8 @@ describe("OnboardingTour - Skip functionality", () => {
     await waitFor(() => {
       expect(screen.getByTestId("onboarding-tour")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("step-counter")).toHaveTextContent("1 of 5");
+    // Restart shows the "All Steps Overview" grid with "Complete Tour" heading
+    expect(screen.getByText("Complete Tour")).toBeInTheDocument();
+    expect(screen.getByText("Start Interactive Tour")).toBeInTheDocument();
   });
 });
