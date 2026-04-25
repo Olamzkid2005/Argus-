@@ -1,7 +1,7 @@
 import re
 import os
 import json
-from typing import List, Dict, Set
+from typing import List, Dict
 
 # Common open source licenses
 LICENSE_PATTERNS = {

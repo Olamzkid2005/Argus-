@@ -39,6 +39,8 @@ from config.constants import (
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,
 )
+from tools.llm_payload_generator import LLMPayloadGenerator
+from config.constants import LLM_MAX_GENERATED_PAYLOADS
 
 class WebScanner:
     """
@@ -183,16 +185,19 @@ class WebScanner:
         "X-Original-Forwarded-For": "127.0.0.1",
     }
     
-    def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0):
+    def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
+                 llm_payload_generator=None):
         """
         Initialize web scanner.
         
         Args:
             timeout: Request timeout in seconds
             rate_limit: Seconds between requests
+            llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
+        self.llm_payload_generator = llm_payload_generator
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -340,6 +345,73 @@ class WebScanner:
             "evidence": sanitized_evidence,
             "confidence": confidence,
         })
+    
+    def _detect_framework(self, response) -> str:
+        """
+        Detect web framework from HTTP response headers and content.
+        
+        Args:
+            response: HTTP response object
+            
+        Returns:
+            Framework name string or "unknown"
+        """
+        if not response:
+            return "unknown"
+        
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        body = response.text[:2000].lower() if response.text else ""
+        
+        # Check headers
+        powered_by = headers.get("x-powered-by", "").lower()
+        if "django" in body or "csrfmiddlewaretoken" in body:
+            return "Django"
+        if powered_by:
+            if "express" in powered_by:
+                return "Express"
+            if "asp.net" in powered_by:
+                return "ASP.NET"
+            if "php" in powered_by:
+                return "PHP"
+            if "rails" in powered_by or "ruby" in powered_by:
+                return "Rails"
+        
+        # Check server header
+        server = headers.get("server", "").lower()
+        if "nginx" in server:
+            return "nginx"
+        if "apache" in server:
+            return "Apache"
+        if "iis" in server or "microsoft-iis" in server:
+            return "IIS"
+        
+        # Check body for framework indicators
+        if "laravel" in body or "livewire" in body:
+            return "Laravel"
+        if "spring" in body or "javax.faces" in body:
+            return "Spring"
+        if "react" in body or "reactroot" in body:
+            return "React"
+        if "vue" in body or "vuejs" in body or "vueroot" in body:
+            return "Vue"
+        if "angular" in body or "ng-" in body:
+            return "Angular"
+        if "next" in body or "__next" in body or "nextjs" in body:
+            return "Next.js"
+        if "nuxt" in body:
+            return "Nuxt"
+        if "wordpress" in body or "wp-" in body or "wp-content" in body:
+            return "WordPress"
+        if "drupal" in body:
+            return "Drupal"
+        if "joomla" in body:
+            return "Joomla"
+        if "shopify" in body:
+            return "Shopify"
+        if "magento" in body:
+            return "Magento"
+        
+        return "unknown"
     
     def check_security_headers(self):
         """Check for missing security headers."""
@@ -998,7 +1070,16 @@ class WebScanner:
         for path in api_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
             
-            for payload in self.MASS_ASSIGN_PAYLOADS[:2]:  # Limit to 2
+            llm_payloads = []
+            if self.llm_payload_generator and self.llm_payload_generator.is_available():
+                llm_payloads = self.llm_payload_generator.generate_sync(
+                    vuln_class="MASS_ASSIGNMENT",
+                    param_name="json_body",
+                    response_snippet="",
+                )
+            
+            all_payloads = self.MASS_ASSIGN_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            for payload in all_payloads:
                 resp = self._safe_request(
                     "POST", url,
                     json=json.loads(payload),
@@ -1043,7 +1124,20 @@ class WebScanner:
             if param.lower() in ignore_params:
                 continue
             
-            for payload in self.XSS_PAYLOADS[:3]:
+            # Generate LLM payloads for this parameter context
+            llm_payloads = []
+            if self.llm_payload_generator and self.llm_payload_generator.is_available():
+                llm_payloads = self.llm_payload_generator.generate_sync(
+                    vuln_class="XSS",
+                    param_name=param,
+                    response_snippet=resp.text[:500] if resp else "",
+                    framework_hints=self._detect_framework(resp),
+                )
+            
+            # Use static payloads + LLM-generated payloads
+            all_payloads = self.XSS_PAYLOADS[:3] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            
+            for payload in all_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
                 test_resp = self._safe_request("GET", test_url)
                 if not test_resp:
@@ -1093,8 +1187,18 @@ class WebScanner:
             return
         
         for param in set(params[:3]):
-            # Test with SSTI payloads
-            test_payloads = ['{{7*7}}', '${7*7}', '<%= 7*7 %>']
+            # Generate LLM payloads for this parameter context
+            llm_payloads = []
+            if self.llm_payload_generator and self.llm_payload_generator.is_available():
+                llm_payloads = self.llm_payload_generator.generate_sync(
+                    vuln_class="SSTI",
+                    param_name=param,
+                    response_snippet=resp.text[:500] if resp else "",
+                    framework_hints=self._detect_framework(resp),
+                )
+            
+            # Static + LLM payloads
+            test_payloads = ['{{7*7}}', '${7*7}', '<%= 7*7 %>'] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
             for payload in test_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
                 test_resp = self._safe_request("GET", test_url)
@@ -1134,7 +1238,17 @@ class WebScanner:
             return
         
         for param in set(params[:3]):
-            for payload in self.LFI_PAYLOADS[:2]:
+            llm_payloads = []
+            if self.llm_payload_generator and self.llm_payload_generator.is_available():
+                llm_payloads = self.llm_payload_generator.generate_sync(
+                    vuln_class="LFI",
+                    param_name=param,
+                    response_snippet=resp.text[:500] if resp else "",
+                    framework_hints=self._detect_framework(resp),
+                )
+            
+            all_payloads = self.LFI_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            for payload in all_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
                 test_resp = self._safe_request("GET", test_url)
                 if test_resp and "root:x:" in test_resp.text:
@@ -1361,7 +1475,16 @@ class WebScanner:
             return
         
         # Test payloads
-        dom_payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>"]
+        llm_payloads = []
+        if self.llm_payload_generator and self.llm_payload_generator.is_available():
+            llm_payloads = self.llm_payload_generator.generate_sync(
+                vuln_class="DOM_XSS",
+                param_name="q",
+                response_snippet=resp.text[:500] if resp else "",
+                framework_hints=self._detect_framework(resp),
+            )
+        
+        dom_payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>"] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
         for payload in dom_payloads:
             test_url = f"{self.target_url}?q={payload}"
             test_resp = self._safe_request("GET", test_url)

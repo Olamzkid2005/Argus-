@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 import time
 import os
 
-from tracing import get_trace_id, StructuredLogger, ExecutionSpan
+from tracing import StructuredLogger, ExecutionSpan
 
 
 class ParserError(Exception):

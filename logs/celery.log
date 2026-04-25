@@ -1,10 +1,10 @@
  
  -------------- celery@MacBook-Air.local v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-23 14:15:41
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-24 13:18:30
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x1110a4ad0
+- ** ---------- .> app:         argus_workers:0x10a70d550
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -35,13 +35,157 @@
   . tasks.scan.deep_scan
   . tasks.scan.run_scan
 
-[2026-04-23 14:15:42,251: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-04-23 14:15:42,263: INFO/MainProcess] mingle: searching for neighbors
-[2026-04-23 14:15:43,336: INFO/MainProcess] mingle: all alone
-[2026-04-23 14:15:43,582: INFO/MainProcess] celery@MacBook-Air.local ready.
-[2026-04-23 14:15:43,660: INFO/MainProcess] Task tasks.health.ping[7981f332-563c-402e-ae15-87f291b8a10c] received
-[2026-04-23 14:15:43,864: INFO/ForkPoolWorker-2] Task 7981f332-563c-402e-ae15-87f291b8a10c succeeded
-[2026-04-23 14:15:43,866: INFO/ForkPoolWorker-2] Task tasks.health.ping[7981f332-563c-402e-ae15-87f291b8a10c] succeeded in 0.11420125799486414s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 42274, 'timestamp': '2026-04-23T13:15:43.779775'}
+[2026-04-24 13:18:32,201: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-24 13:18:32,207: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-24 13:18:33,718: INFO/MainProcess] mingle: all alone
+[2026-04-24 13:18:34,069: INFO/MainProcess] celery@MacBook-Air.local ready.
+[2026-04-24 13:18:34,109: INFO/MainProcess] Task tasks.health.ping[c77736fc-5051-43b8-834b-012281c64142] received
+[2026-04-24 13:18:34,196: INFO/MainProcess] Task tasks.health.ping[4a9209ba-071c-4e8e-8475-996323aec80d] received
+[2026-04-24 13:18:34,269: INFO/ForkPoolWorker-2] Task c77736fc-5051-43b8-834b-012281c64142 succeeded
+[2026-04-24 13:18:34,270: INFO/ForkPoolWorker-2] Task tasks.health.ping[c77736fc-5051-43b8-834b-012281c64142] succeeded in 0.06891255499795079s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 43155, 'timestamp': '2026-04-24T12:18:34.244534'}
+[2026-04-24 13:18:34,355: INFO/ForkPoolWorker-2] Task 4a9209ba-071c-4e8e-8475-996323aec80d succeeded
+[2026-04-24 13:18:34,356: INFO/ForkPoolWorker-2] Task tasks.health.ping[4a9209ba-071c-4e8e-8475-996323aec80d] succeeded in 0.002796465007122606s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 43155, 'timestamp': '2026-04-24T12:18:34.354481'}
+[2026-04-24 13:29:20,913: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
+[2026-04-24 13:29:21,294: WARNING/ForkPoolWorker-2] Failed to store log: invalid input syntax for type uuid: "test-123"
+LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
+                                    ^
+[2026-04-24 13:29:21,296: WARNING/ForkPoolWorker-2] [test-tra] job_started: Job started: recon
+[2026-04-24 13:29:21,613: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '94cad237-9f59-4ca0-9ae1-fba4df6f17cc', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:21,766: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '600e33b7-e5d0-43f2-8b0a-80eaea5174d4', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:21,820: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
+[2026-04-24 13:29:21,824: WARNING/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 retrying (attempt 0): invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '600e33b7-e5d0-43f2-8b0a-80eaea5174d4', 'test-123'...
+                                                             ^
+
+[2026-04-24 13:29:21,824: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] retry: Retry in 1s: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'600e33b7-e5d0-43f2-8b0a-80eaea5174d4\', \'test-123\'...\n                                                             ^\n')
+[2026-04-24 13:29:22,792: WARNING/ForkPoolWorker-2] Failed to store log: invalid input syntax for type uuid: "test-123"
+LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
+                                    ^
+[2026-04-24 13:29:22,793: WARNING/ForkPoolWorker-2] [test-tra] job_started: Job started: recon
+[2026-04-24 13:29:22,808: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '9b734d3c-41aa-4fe8-88d8-c42cdfc121a2', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:22,836: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '801d35b8-abe0-4396-803e-843fbdea2034', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:22,840: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
+[2026-04-24 13:29:22,843: WARNING/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 retrying (attempt 1): invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '801d35b8-abe0-4396-803e-843fbdea2034', 'test-123'...
+                                                             ^
+
+[2026-04-24 13:29:22,844: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] retry: Retry in 0s: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'801d35b8-abe0-4396-803e-843fbdea2034\', \'test-123\'...\n                                                             ^\n')
+[2026-04-24 13:29:22,985: WARNING/ForkPoolWorker-4] Failed to store log: invalid input syntax for type uuid: "test-123"
+LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
+                                    ^
+[2026-04-24 13:29:22,987: WARNING/ForkPoolWorker-4] [test-tra] job_started: Job started: recon
+[2026-04-24 13:29:23,006: WARNING/ForkPoolWorker-4] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          'c3a807f7-2643-4792-bf08-4da31a976ce0', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:23,042: WARNING/ForkPoolWorker-4] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '713b6d56-4f8f-437b-956c-189ea326ecc2', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:23,261: INFO/MainProcess] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] received
+[2026-04-24 13:29:23,283: WARNING/ForkPoolWorker-4] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 retrying (attempt 2): invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '713b6d56-4f8f-437b-956c-189ea326ecc2', 'test-123'...
+                                                             ^
+
+[2026-04-24 13:29:23,283: INFO/ForkPoolWorker-4] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] retry: Retry in 1s: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'713b6d56-4f8f-437b-956c-189ea326ecc2\', \'test-123\'...\n                                                             ^\n')
+[2026-04-24 13:29:24,258: WARNING/ForkPoolWorker-2] Failed to store log: invalid input syntax for type uuid: "test-123"
+LINE 4:                     VALUES ('test-123', 'test-trace-123', 'j...
+                                    ^
+[2026-04-24 13:29:24,258: WARNING/ForkPoolWorker-2] [test-tra] job_started: Job started: recon
+[2026-04-24 13:29:24,275: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          'cbed0041-71f7-4f81-b40a-120e7ce19244', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:24,301: WARNING/ForkPoolWorker-2] Failed to persist state transition: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '98c1ac16-786a-41b1-bdc1-a3375d5109c2', 'test-123'...
+                                                             ^
+[2026-04-24 13:29:24,320: INFO/ForkPoolWorker-2] LOW ERROR: {'task_id': 'bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25', 'task_name': 'tasks.recon.run_recon', 'error_type': 'InvalidTextRepresentation', 'error_message': 'invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'98c1ac16-786a-41b1-bdc1-a3375d5109c2\', \'test-123\'...\n                                                             ^\n', 'category': 'validation', 'severity': 'low', 'should_retry': False, 'retry_delay': 0, 'context': {'args': "['test-123', 'example.com', {'max_depth': 2}, 'test-trace-123']", 'kwargs': '{}'}}
+[2026-04-24 13:29:24,366: WARNING/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 (tasks.recon.run_recon) added to DLQ after 3 retries
+[2026-04-24 13:29:24,367: ERROR/ForkPoolWorker-2] Task bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25 failed: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '98c1ac16-786a-41b1-bdc1-a3375d5109c2', 'test-123'...
+                                                             ^
+
+[2026-04-24 13:29:24,367: ERROR/ForkPoolWorker-2] Task tasks.recon.run_recon[bdb111ab-75b4-4ad6-bc6d-05cfab7f8d25] raised unexpected: InvalidTextRepresentation('invalid input syntax for type uuid: "test-123"\nLINE 5: ...          \'98c1ac16-786a-41b1-bdc1-a3375d5109c2\', \'test-123\'...\n                                                             ^\n')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/recon.py", line 65, in run_recon
+    state_machine.transition("recon", "Starting reconnaissance")
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 115, in transition
+    self._persist_state_and_budget(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        from_state=old_state,
+        ^^^^^^^^^^^^^^^^^^^^^
+        to_state=new_state,
+        ^^^^^^^^^^^^^^^^^^^
+        reason=reason or f"Transition to {new_state}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 142, in _persist_state_and_budget
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        (transition_id, self.engagement_id, from_state, to_state, reason)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          'cbed0041-71f7-4f81-b40a-120e7ce19244', 'test-123'...
+                                                             ^
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 259, in __call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
+    ret = task.retry(exc=exc, **retry_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
+    raise_with_context(exc)
+    ~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
+    return task._orig_run(*args, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/recon.py", line 79, in run_recon
+    state_machine.transition("failed", f"Recon failed: {str(e)}")
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 115, in transition
+    self._persist_state_and_budget(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        from_state=old_state,
+        ^^^^^^^^^^^^^^^^^^^^^
+        to_state=new_state,
+        ^^^^^^^^^^^^^^^^^^^
+        reason=reason or f"Transition to {new_state}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 142, in _persist_state_and_budget
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        (transition_id, self.engagement_id, from_state, to_state, reason)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type uuid: "test-123"
+LINE 5: ...          '98c1ac16-786a-41b1-bdc1-a3375d5109c2', 'test-123'...
+                                                             ^
+
 
 worker: Warm shutdown (MainProcess)
 

@@ -24,6 +24,9 @@ class LoopBudgetManager:
         "commix": 0.20,
     }
     
+    # Cost per LLM analysis call (USD)
+    LLM_COST_PER_ANALYSIS = 0.02
+    
     def __init__(self, engagement_id: str, config: Optional[Dict] = None):
         """
         Initialize Loop Budget Manager
@@ -44,6 +47,8 @@ class LoopBudgetManager:
         self.current_cycles = 0
         self.current_depth = 0
         self.current_cost = 0.0
+        self.max_llm_cost = config.get("max_llm_cost", 0.50)
+        self.current_llm_cost = 0.0
     
     def can_continue(self, action: Dict) -> Tuple[bool, str]:
         """
@@ -93,6 +98,14 @@ class LoopBudgetManager:
         # Add to current cost
         self.current_cost += actual_cost
     
+    def can_afford_llm(self, estimated_cost: float = LLM_COST_PER_ANALYSIS) -> bool:
+        """Check if LLM budget is sufficient."""
+        return self.current_llm_cost + estimated_cost <= self.max_llm_cost
+    
+    def consume_llm(self, cost: float = LLM_COST_PER_ANALYSIS):
+        """Consume LLM budget."""
+        self.current_llm_cost += cost
+    
     def get_status(self) -> Dict:
         """
         Get current budget status
@@ -117,6 +130,11 @@ class LoopBudgetManager:
                 "limit": self.cost_limit,
                 "remaining": self.cost_limit - self.current_cost,
             },
+            "llm_cost": {
+                "current": self.current_llm_cost,
+                "limit": self.max_llm_cost,
+                "remaining": self.max_llm_cost - self.current_llm_cost,
+            },
         }
     
     def reset(self):
@@ -124,6 +142,7 @@ class LoopBudgetManager:
         self.current_cycles = 0
         self.current_depth = 0
         self.current_cost = 0.0
+        self.current_llm_cost = 0.0
     
     def load_from_db(self, db_data: Dict):
         """
@@ -135,6 +154,7 @@ class LoopBudgetManager:
         self.current_cycles = db_data.get("current_cycles", 0)
         self.current_depth = db_data.get("current_depth", 0)
         self.current_cost = db_data.get("current_cost", 0.0)
+        self.current_llm_cost = db_data.get("current_llm_cost", 0.0)
     
     def to_dict(self) -> Dict:
         """
@@ -148,7 +168,9 @@ class LoopBudgetManager:
             "max_cycles": self.max_cycles,
             "max_depth": self.max_depth,
             "max_cost": self.cost_limit,
+            "max_llm_cost": self.max_llm_cost,
             "current_cycles": self.current_cycles,
             "current_depth": self.current_depth,
             "current_cost": self.current_cost,
+            "current_llm_cost": self.current_llm_cost,
         }

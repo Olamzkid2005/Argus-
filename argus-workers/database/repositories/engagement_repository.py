@@ -60,7 +60,8 @@ class EngagementRepository(BaseRepository):
             return dict(row)
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)
 
     def find_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> List[Dict]:
         """
@@ -102,7 +103,8 @@ class EngagementRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)
 
     def find_active_by_org(self, org_id: str) -> List[Dict]:
         """
@@ -141,7 +143,8 @@ class EngagementRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)
 
     def update_status(self, engagement_id: str, status: str) -> Optional[Dict]:
         """
@@ -182,4 +185,5 @@ class EngagementRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)

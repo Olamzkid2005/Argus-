@@ -3,7 +3,6 @@ Repository for rate limit events.
 """
 
 from typing import Optional
-from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)

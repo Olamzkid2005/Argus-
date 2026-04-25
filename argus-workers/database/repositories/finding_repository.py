@@ -98,112 +98,6 @@ class FindingRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def find_by_engagement(self, engagement_id: str) -> List[Dict]:
-        """
-        Find all findings for an engagement
-
-        Args:
-            engagement_id: Engagement ID
-
-        Returns:
-            List of finding dictionaries
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
-            cursor.execute(
-                """
-                SELECT * FROM findings
-                WHERE engagement_id = %s
-                ORDER BY created_at DESC
-                """,
-                (engagement_id,)
-            )
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            conn.close()
-    
-    def get_findings_by_engagement(self, engagement_id: str) -> List[Dict]:
-        """
-        Get all findings for an engagement (alias for find_by_engagement).
-        
-        Args:
-            engagement_id: Engagement ID
-            
-        Returns:
-            List of finding dictionaries
-        """
-        return self.find_by_engagement(engagement_id)
-
-    def find_by_severity(
-        self,
-        engagement_id: str,
-        severity: str
-    ) -> List[Dict]:
-        """
-        Find findings by severity level
-
-        Args:
-            engagement_id: Engagement ID
-            severity: Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO)
-
-        Returns:
-            List of finding dictionaries
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
-            cursor.execute(
-                """
-                SELECT * FROM findings
-                WHERE engagement_id = %s AND severity = %s
-                ORDER BY confidence DESC
-                """,
-                (engagement_id, severity)
-            )
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            conn.close()
-
-    def find_by_type(
-        self,
-        engagement_id: str,
-        finding_type: str
-    ) -> List[Dict]:
-        """
-        Find findings by type
-
-        Args:
-            engagement_id: Engagement ID
-            finding_type: Finding type (SQL_INJECTION, XSS, etc.)
-
-        Returns:
-            List of finding dictionaries
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
-            cursor.execute(
-                """
-                SELECT * FROM findings
-                WHERE engagement_id = %s AND type = %s
-                ORDER BY confidence DESC
-                """,
-                (engagement_id, finding_type)
-            )
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            conn.close()
-
     def find_high_confidence(
         self,
         engagement_id: str,
@@ -235,8 +129,9 @@ class FindingRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
-            conn.close()
-
+            if not self._external_conn:
+                self._release_connection(conn)
+    
     def get_summary_by_engagement(self, engagement_id: str) -> Dict:
         """
         Get summary statistics for findings.
@@ -307,7 +202,8 @@ class FindingRepository(BaseRepository):
             return summary
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)
     
     def find_by_engagement_with_details(self, engagement_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
         """
@@ -344,4 +240,113 @@ class FindingRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)
+    
+    def update_confidence(self, finding_id: str, confidence: float) -> None:
+        """
+        Update confidence score for a finding.
+
+        Args:
+            finding_id: Finding ID
+            confidence: New confidence score (0.0-1.0)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                """
+                UPDATE findings
+                SET confidence = %s, updated_at = NOW()
+                WHERE id = %s
+                """,
+                (confidence, finding_id)
+            )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)
+
+    def add_llm_evidence(self, finding_id: str, llm_result: dict) -> None:
+        """
+        Store LLM analysis result and mark finding as LLM-reviewed.
+
+        Args:
+            finding_id: Finding ID
+            llm_result: Dictionary with LLM analysis (vulnerable, confidence, evidence_quote, model, timestamp)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            from psycopg2.extras import Json
+            cursor.execute(
+                """
+                UPDATE findings
+                SET llm_reviewed = TRUE,
+                    llm_analysis = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (Json(llm_result), finding_id)
+            )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)
+
+    def find_unreviewed_low_confidence(
+        self,
+        engagement_id: str,
+        threshold: float = 0.7,
+        min_confidence: float = 0.3,
+        limit: int = 50
+    ) -> List[Dict]:
+        """
+        Find findings for an engagement that:
+        - Have confidence below threshold
+        - Have confidence above min_confidence (skip very noisy findings)
+        - Haven't been LLM-reviewed yet
+        - Have evidence with payload or response data
+
+        Args:
+            engagement_id: Engagement ID
+            threshold: Upper confidence bound (findings below this)
+            min_confidence: Lower confidence bound (findings below this are too noisy)
+            limit: Maximum results
+
+        Returns:
+            List of finding dictionaries
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        try:
+            cursor.execute(
+                """
+                SELECT * FROM findings
+                WHERE engagement_id = %s
+                  AND confidence >= %s
+                  AND confidence < %s
+                  AND (llm_reviewed IS NULL OR llm_reviewed = FALSE)
+                  AND (evidence->>'payload' IS NOT NULL OR evidence->>'response' IS NOT NULL)
+                ORDER BY confidence DESC
+                LIMIT %s
+                """,
+                (engagement_id, min_confidence, threshold, limit)
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)

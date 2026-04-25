@@ -6,7 +6,6 @@ Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 
 """
 from typing import Dict, List, Optional
 from collections import defaultdict
-import time
 import os
 import json
 import re
@@ -56,7 +55,6 @@ class IntelligenceEngine:
                 - reasoning: Explanation of decisions
         """
         findings = snapshot.get("findings", [])
-        loop_budget = snapshot.get("loop_budget", {})
         
         # Execute with span tracing
         with self.span_recorder.span(

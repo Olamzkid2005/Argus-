@@ -2,7 +2,6 @@
 Settings Repository - Retrieve user API keys and settings
 """
 import os
-import psycopg2
 from database.connection import connect
 from typing import Optional, Dict
 

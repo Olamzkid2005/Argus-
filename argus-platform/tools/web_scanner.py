@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional, Any
 import requests
-from urllib.parse import urlparse, urljoin, parse_qs, quote
+from urllib.parse import urlparse, parse_qs, quote
 
 SQL_TIME_PAYLOADS = [
     "1' AND SLEEP(5)--",

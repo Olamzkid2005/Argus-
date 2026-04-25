@@ -7,10 +7,8 @@ enabling semantic similarity search across engagements.
 Requires: pgvector extension installed on PostgreSQL
 """
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import os
-import json
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

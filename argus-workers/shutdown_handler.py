@@ -6,6 +6,7 @@ Integrates with dead letter queue and error classification.
 """
 
 import signal
+import time
 import logging
 import sys
 import os
@@ -43,8 +44,6 @@ class GracefulShutdownHandler:
             f"Received signal {signum}, initiating graceful shutdown..."
         )
         self.shutdown_requested = True
-        
-        import time
         self.shutdown_deadline = time.time() + self.force_exit_after
         
         # Log current state - in Celery this will prevent new tasks
@@ -61,9 +60,7 @@ class GracefulShutdownHandler:
             return False
         
         # Check if shutdown deadline exceeded
-        if self.shutdown_deadline:
-            import time
-            if time.time() > self.shutdown_deadline:
+        if self.shutdown_deadline and time.time() > self.shutdown_deadline:
                 logger.warning("Shutdown deadline exceeded, forcing exit")
                 return True
         
@@ -75,10 +72,7 @@ class GracefulShutdownHandler:
     
     def should_force_exit(self) -> bool:
         """Check if we should force exit immediately"""
-        if not self.shutdown_deadline:
-            return False
-        import time
-        return time.time() > self.shutdown_deadline
+        return bool(self.shutdown_deadline and time.time() > self.shutdown_deadline)
     
     def register_task(self, task_id: str):
         """Register an active task"""

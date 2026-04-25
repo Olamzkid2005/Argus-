@@ -8,6 +8,7 @@ from celery_app import app
 from database.connection import connect
 
 from tasks.loader import load_module
+from utils.validation import validate_uuid
 
 _orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
@@ -24,6 +25,9 @@ EngagementStateMachine = _state_machine.EngagementStateMachine
 
 _intelligence_engine = load_module("intelligence_engine")
 IntelligenceEngine = _intelligence_engine.IntelligenceEngine
+
+_snapshot_manager = load_module("snapshot_manager")
+SnapshotManager = _snapshot_manager.SnapshotManager
 
 
 @app.task(bind=True, name="tasks.analyze.run_analysis")
@@ -124,9 +128,11 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
         Current engagement status string
     """
     try:
+        # Validate UUID before DB query to prevent InvalidTextRepresentation errors
+        valid_id = validate_uuid(engagement_id, "engagement_id")
         conn = connect(db_conn_string)
         cursor = conn.cursor()
-        cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+        cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
         row = cursor.fetchone()
         cursor.close()
         conn.close()

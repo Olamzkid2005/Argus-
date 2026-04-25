@@ -3,12 +3,16 @@ Celery tasks for reporting phase
 
 Requirements: 20.1, 20.2, 20.3, 23.4, 23.5, 17.1, 17.2, 17.3, 17.4
 """
+import json
 import os
+from datetime import datetime, timedelta, UTC
+from typing import Any, Dict, List, Optional
 from celery_app import app
 from database.connection import connect
 from psycopg2.extras import RealDictCursor
 
 from tasks.loader import load_module
+from utils.validation import validate_uuid
 
 _orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
@@ -26,7 +30,6 @@ EngagementStateMachine = _state_machine.EngagementStateMachine
 # Load compliance reporting
 _compliance = load_module("compliance_reporting")
 ComplianceReportGenerator = _compliance.ComplianceReportGenerator
-ComplianceStandard = _compliance.ComplianceStandard
 
 
 @app.task(bind=True, name="tasks.report.generate_report")
@@ -143,9 +146,11 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
         Current engagement status string
     """
     try:
+        # Validate UUID before DB query to prevent InvalidTextRepresentation errors
+        valid_id = validate_uuid(engagement_id, "engagement_id")
         conn = connect(db_conn_string)
         cursor = conn.cursor()
-        cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+        cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
         row = cursor.fetchone()
         cursor.close()
         conn.close()

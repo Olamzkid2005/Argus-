@@ -31,3 +31,23 @@ CIRCUIT_BREAKER_COOLDOWN = 300       # 5 minutes cooldown
 # SSL/TLS
 SSL_TIMEOUT = 10                     # SSL verification timeout
 TLS_MINIMUM_VERSION = "TLSv1.2"      # Minimum acceptable TLS version
+
+# ── LLM General ──
+LLM_MAX_RETRIES = 2
+
+# ── LLM Response Analysis ──
+LLM_REVIEW_ENABLED = True
+LLM_REVIEW_CONFIDENCE_THRESHOLD = 0.7    # only review findings below this
+LLM_REVIEW_MIN_CONFIDENCE = 0.3           # skip findings below this (too noisy)
+LLM_REVIEW_MAX_RESPONSE_CHARS = 3000      # truncate response body
+LLM_REVIEW_MAX_PER_ENGAGEMENT = 20        # cap total analyses per engagement
+LLM_RESPONSE_ANALYSIS_MODEL = "gpt-4o-mini"
+
+# ── LLM Payload Generation ──
+LLM_PAYLOAD_GENERATION_ENABLED = True
+LLM_PAYLOAD_CACHE_TTL = 3600              # 1 hour cache TTL
+LLM_MAX_GENERATED_PAYLOADS = 2            # max LLM payloads per probe context
+LLM_PAYLOAD_GENERATION_MODEL = "gpt-4o-mini"
+
+# ── Budget ──
+LLM_MAX_COST_PER_ENGAGEMENT = 0.50        # $0.50 max LLM spend per engagement

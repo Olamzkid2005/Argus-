@@ -47,6 +47,9 @@ from config.constants import (
     TOOL_TIMEOUT_SHORT,
 )
 
+from llm_client import LLMClient
+from tools.llm_payload_generator import LLMPayloadGenerator
+
 
 def get_wordlist_path(filename: str) -> Path:
     """Return the full path to a wordlist file.
@@ -110,6 +113,25 @@ class Orchestrator:
         self.normalizer = FindingNormalizer()
         self.finding_repo = FindingRepository(db_conn) if db_conn else None
         self.engagement_repo = EngagementRepository(db_conn) if db_conn else None
+        
+        # Initialize LLM components (with graceful degradation)
+        self.llm_client = None
+        self.llm_payload_generator = None
+        try:
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            self.llm_client = LLMClient(redis_url=redis_url)
+            if self.llm_client.is_available():
+                from config.constants import LLM_PAYLOAD_GENERATION_MODEL
+                from llm_client import load_llm_setting
+                llm_payload_enabled = load_llm_setting("llm_payload_generation_enabled", "true") == "true"
+                if llm_payload_enabled:
+                    self.llm_payload_generator = LLMPayloadGenerator(
+                        llm_client=self.llm_client,
+                        model=LLM_PAYLOAD_GENERATION_MODEL,
+                    )
+                    logger.info("LLM payload generator initialized")
+        except Exception as e:
+            logger.warning(f"LLM components not available (graceful degradation): {e}")
     
     def _load_custom_rules(self, engagement_id: str) -> List[Dict]:
         """
@@ -608,6 +630,21 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Failed to save findings: {e}")
         
+        # Enqueue post-scan LLM review task (non-blocking, graceful degradation)
+        from llm_client import load_llm_setting
+        llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
+        if llm_review_enabled and self.llm_client and self.llm_client.is_available():
+            try:
+                from tasks.llm_review import run_llm_review
+                run_llm_review.delay(
+                    engagement_id=self.engagement_id,
+                    budget=job.get("budget", {}),
+                    trace_id=get_trace_id(),
+                )
+                logger.info(f"Enqueued LLM review for engagement {self.engagement_id}")
+            except Exception as e:
+                logger.warning(f"Failed to enqueue LLM review (non-fatal): {e}")
+        
         # Publish state transition event
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
@@ -807,7 +844,11 @@ class Orchestrator:
             
             # Execute comprehensive web scanner
             try:
-                web_scanner = WebScanner(timeout=SSL_TIMEOUT, rate_limit=RATE_LIMIT_DELAY_MS / 1000.0)
+                web_scanner = WebScanner(
+                    timeout=SSL_TIMEOUT,
+                    rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                    llm_payload_generator=self.llm_payload_generator,
+                )
                 web_findings = web_scanner.scan(target)
                 
                 for wf in web_findings:

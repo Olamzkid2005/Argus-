@@ -7,7 +7,6 @@ Kubernetes configuration security checks, and SBOM generation.
 Requirements: 16.1, 16.2, 16.3, 16.4
 """
 import json
-import os
 import re
 from typing import Dict, List, Optional
 from pathlib import Path

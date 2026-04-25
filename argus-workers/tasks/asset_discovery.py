@@ -3,17 +3,14 @@ Celery task for automatic asset discovery and classification
 
 Requirements: 28.1, 28.2, 28.3, 28.4
 """
+import os
 from celery_app import app
-import psycopg2
 from database.connection import connect
 
 from loader import load_module
 
 _tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
-
-import psycopg2
-from database.connection import connect
 
 
 @app.task(bind=True, name="tasks.asset_discovery.run_asset_discovery")

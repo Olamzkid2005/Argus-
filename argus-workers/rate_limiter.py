@@ -82,15 +82,15 @@ class DomainRateLimiter:
         # Backoff state
         self.backoff_until = 0
 
+        # Robots.txt crawl delay
+        self.robots_crawl_delay: Optional[float] = None
+
     @property
     def semaphore(self) -> asyncio.Semaphore:
         """Lazy initialization of semaphore to avoid creating outside event loop"""
         if self._semaphore is None:
             self._semaphore = asyncio.Semaphore(self.config.concurrent_requests)
         return self._semaphore
-        
-        # Robots.txt crawl delay
-        self.robots_crawl_delay: Optional[float] = None
     
     async def throttle(self) -> None:
         """

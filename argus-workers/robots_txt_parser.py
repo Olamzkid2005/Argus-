@@ -6,7 +6,7 @@ Fetches and parses robots.txt files to respect Crawl-delay directives.
 
 import logging
 from typing import Optional, Dict
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 import aiohttp
 from datetime import datetime, timedelta
 

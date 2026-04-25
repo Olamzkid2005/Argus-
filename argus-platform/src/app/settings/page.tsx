@@ -29,6 +29,11 @@ import {
   Thermometer,
   X,
   Monitor,
+  Search,
+  Wand2,
+  ToggleLeft,
+  DollarSign,
+  Brain,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 
@@ -36,6 +41,9 @@ interface Settings {
   openrouter_api_key?: string;
   preferred_ai_model?: string;
   scan_aggressiveness?: string;
+  llm_review_enabled?: string;
+  llm_payload_generation_enabled?: string;
+  llm_max_cost?: string;
 }
 
 interface AITestResult {
@@ -213,7 +221,12 @@ export default function SettingsPage() {
       const response = await fetch("/api/settings");
       const data = await response.json();
       if (response.ok && data.settings) {
-        setSettings(data.settings);
+        setSettings({
+          llm_review_enabled: "true",
+          llm_payload_generation_enabled: "true",
+          llm_max_cost: "0.50",
+          ...data.settings,
+        });
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -598,6 +611,130 @@ export default function SettingsPage() {
                   </button>
                 );
               })}
+            </div>
+          </motion.div>
+
+          {/* AI Intelligence Features */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-purple-500/10 border border-purple-500/20">
+                <Brain size={20} className="text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  AI Intelligence Features
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">Advanced LLM scanning capabilities</p>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              {/* LLM Response Analysis Toggle */}
+              <div className="p-4 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Search size={14} className="text-primary" />
+                      <span className="text-xs font-bold text-on-surface font-headline">Post-Scan LLM Response Analysis</span>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                      After scanning, AI analyzes low-confidence HTTP responses to detect subtle vulnerabilities
+                      that regex patterns might miss (e.g., reflected payloads in JSON, partial SSTI evaluation,
+                      WAF-bypass vectors). Costs ~$0.02 per finding analyzed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.llm_review_enabled !== "false"}
+                    onClick={() =>
+                      setSettings((p) => ({
+                        ...p,
+                        llm_review_enabled: p.llm_review_enabled === "false" ? "true" : "false",
+                      }))
+                    }
+                    className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${
+                      settings.llm_review_enabled !== "false" ? "bg-primary" : "bg-surface-container-high dark:bg-surface-container"
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300 ${
+                        settings.llm_review_enabled !== "false" ? "left-6" : "left-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* LLM Payload Generation Toggle */}
+              <div className="p-4 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wand2 size={14} className="text-purple-400" />
+                      <span className="text-xs font-bold text-on-surface font-headline">Context-Aware LLM Payload Generation</span>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                      During scanning, AI generates targeted probe payloads based on parameter context
+                      (reflection point, framework, input type). Improves detection of XSS, SSTI, LFI,
+                      and mass assignment in WAF-protected and non-standard contexts.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.llm_payload_generation_enabled !== "false"}
+                    onClick={() =>
+                      setSettings((p) => ({
+                        ...p,
+                        llm_payload_generation_enabled: p.llm_payload_generation_enabled === "false" ? "true" : "false",
+                      }))
+                    }
+                    className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${
+                      settings.llm_payload_generation_enabled !== "false" ? "bg-primary" : "bg-surface-container-high dark:bg-surface-container"
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-300 ${
+                        settings.llm_payload_generation_enabled !== "false" ? "left-6" : "left-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Max LLM Cost */}
+              <div className="p-4 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <DollarSign size={14} className="text-green-400" />
+                      <span className="text-xs font-bold text-on-surface font-headline">Max LLM Cost Per Engagement</span>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant leading-relaxed mb-2">
+                      Maximum budget for AI-powered analysis per engagement. Prevents runaway costs
+                      from LLM API usage during scanning and post-scan review.
+                    </p>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.10"
+                      value={settings.llm_max_cost || "0.50"}
+                      onChange={(e) =>
+                        setSettings((p) => ({ ...p, llm_max_cost: e.target.value }))
+                      }
+                      className="w-24 px-3 py-1.5 bg-surface dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-sm font-mono text-on-surface outline-none focus:border-primary transition-all duration-300"
+                    />
+                    <span className="text-[10px] text-on-surface-variant ml-2">USD</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         </div>

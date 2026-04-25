@@ -5,7 +5,6 @@ Performs basic security self-assessment of the Argus platform.
 Checks for common misconfigurations and vulnerabilities.
 """
 
-import json
 import logging
 import os
 import sys

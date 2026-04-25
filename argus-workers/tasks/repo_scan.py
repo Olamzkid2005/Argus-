@@ -6,15 +6,18 @@ with custom rules based on vibe-security-ultra framework.
 
 Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
+import os
+import re
 import subprocess
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from celery_app import app
 from database.connection import connect
 
 from tasks.loader import load_module
+from utils.validation import validate_uuid
 
 _orchestrator = load_module("orchestrator")
 Orchestrator = _orchestrator.Orchestrator
@@ -23,6 +26,56 @@ _tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
 
 logger = logging.getLogger(__name__)
+
+# Common open source licenses
+LICENSE_PATTERNS = {
+    'GPL-2.0': [r'GNU General Public License.*version 2', r'GPLv2', r'GPL-2\.0'],
+    'GPL-3.0': [r'GNU General Public License.*version 3', r'GPLv3', r'GPL-3\.0'],
+    'MIT': [r'MIT License', r'The MIT License'],
+    'Apache-2.0': [r'Apache License[\s\S]*?version 2', r'Apache-2\.0'],
+    'BSD-3-Clause': [r'BSD 3-Clause', r'New BSD License'],
+    'BSD-2-Clause': [r'BSD 2-Clause', r'Simplified BSD License'],
+    'LGPL': [r'GNU Lesser General Public License', r'LGPL'],
+    'ISC': [r'ISC License'],
+    'MPL-2.0': [r'Mozilla Public License.*2\.0'],
+}
+
+# Common secret patterns for git history scanning
+SECRET_PATTERNS = {
+    'aws_access_key': r'AKIA[0-9A-Z]{16}',
+    'aws_secret_key': r'(?<![A-Za-z0-9/+])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=])',
+    'github_token': r'ghp_[a-zA-Z0-9]{36}',
+    'github_oauth': r'gho_[a-zA-Z0-9]{36}',
+    'slack_token': r'xox[bap]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}',
+    'api_key': r'api[_-]?key[_-]?[=:]+\s*["\']?[a-zA-Z0-9]{32,45}["\']?',
+    'private_key': r'-----BEGIN [A-Z]+ PRIVATE KEY-----',
+    'password': r'password[_-]?[=:]+\s*["\']?[^\s"\']{8,}["\']?',
+}
+
+# Default license policy configuration
+_DEFAULT_LICENSE_POLICY = {
+    'allowed': ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC'],
+    'warn': ['LGPL', 'MPL-2.0'],
+    'blocked': ['GPL-2.0', 'GPL-3.0'],
+}
+
+
+def _load_license_policy():
+    """Load license policy from environment variables with defaults."""
+    policy = _DEFAULT_LICENSE_POLICY.copy()
+    blocked_env = os.environ.get('ARGUS_LICENSE_POLICY_BLOCKED')
+    warn_env = os.environ.get('ARGUS_LICENSE_POLICY_WARN')
+    allowed_env = os.environ.get('ARGUS_LICENSE_POLICY_ALLOWED')
+    if blocked_env:
+        policy['blocked'] = [x.strip() for x in blocked_env.split(',')]
+    if warn_env:
+        policy['warn'] = [x.strip() for x in warn_env.split(',')]
+    if allowed_env:
+        policy['allowed'] = [x.strip() for x in allowed_env.split(',')]
+    return policy
+
+
+LICENSE_POLICY = _load_license_policy()
 
 _distributed_lock = load_module("distributed_lock")
 LockContext = _distributed_lock.LockContext
@@ -224,9 +277,11 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
         Current engagement status string
     """
     try:
+        # Validate UUID before DB query to prevent InvalidTextRepresentation errors
+        valid_id = validate_uuid(engagement_id, "engagement_id")
         conn = connect(db_conn_string)
         cursor = conn.cursor()
-        cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+        cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -245,7 +300,7 @@ def generate_cyclonedx_sbom(repo_path, dependencies):
         'version': 1,
         'serialNumber': f'urn:uuid:{uuid.uuid4()}',
         'creationInfo': {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'timestamp': datetime.now(timezone.utc).isoformat() + 'Z',
             'tools': [{'vendor': 'Argus', 'name': 'Security Platform', 'version': '1.0'}],
         },
         'components': [],
@@ -418,22 +473,6 @@ def run_govulncheck(repo_path):
     except Exception as e:
         logger.error(f"govulncheck failed: {e}")
     return []
-
-def check_maven_repositories(repo_path):
-    """Check Maven dependencies for known vulnerabilities."""
-    pom_files = []
-    for root, dirs, files in os.walk(repo_path):
-        for file in files:
-            if file == 'pom.xml':
-                pom_files.append(os.path.join(root, file))
-    
-    findings = []
-    for pom in pom_files:
-        # Parse pom.xml for dependencies
-        # Use requests to check Maven Central / NVD for known CVEs
-        pass
-    
-    return findings
 
 # ========== Section 3.2: Git History Secret Scan ==========
 

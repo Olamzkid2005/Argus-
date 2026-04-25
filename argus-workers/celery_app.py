@@ -8,6 +8,7 @@ using Redis as the message broker and result backend.
 import logging
 import os
 import sys
+import datetime
 from celery import Celery
 from dotenv import load_dotenv
 
@@ -68,6 +69,8 @@ app = Celery(
         "tasks.analyze",
         "tasks.report",
         "tasks.repo_scan",
+        "tasks.maintenance",
+        "tasks.self_scan",
     ],
 )
 
@@ -272,7 +275,7 @@ def ping_task(self):
         "status": "ok",
         "worker": self.request.hostname,
         "pid": os.getpid(),
-        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
 
 

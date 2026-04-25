@@ -4,8 +4,6 @@ Wires together: Tool Runner → Parser → Normalizer → PostgreSQL
 """
 import time
 from typing import List, Dict, Optional
-from datetime import datetime
-import psycopg2
 from database.connection import connect
 from psycopg2.extras import Json
 import uuid

@@ -8,13 +8,11 @@ import os
 import sys
 import subprocess
 import signal
-import time
-import shutil
 
 # Get this script's directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Use shutil to find the venv python
+# Find the venv python
 VENV_PYTHON = os.path.join(SCRIPT_DIR, "venv", "bin", "python")
 if not os.path.exists(VENV_PYTHON):
     # Fallback to system python

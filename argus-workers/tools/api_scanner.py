@@ -10,9 +10,12 @@ import json
 import time
 import re
 from typing import Dict, List, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
+
+from tools.llm_payload_generator import LLMPayloadGenerator
+from config.constants import LLM_MAX_GENERATED_PAYLOADS
 
 
 class APISecurityScanner:
@@ -58,16 +61,19 @@ class APISecurityScanner:
         {"requests": 1000, "concurrency": 100, "description": "DDoS simulation"},
     ]
     
-    def __init__(self, timeout: int = 15, rate_limit: float = 0.05):
+    def __init__(self, timeout: int = 15, rate_limit: float = 0.05,
+                 llm_payload_generator=None):
         """
         Initialize API security scanner.
         
         Args:
             timeout: Request timeout in seconds
             rate_limit: Seconds between requests
+            llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
+        self.llm_payload_generator = llm_payload_generator
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Argus-API-Scanner/1.0",
@@ -303,6 +309,19 @@ class APISecurityScanner:
             if len(parts) == 3:
                 header = json.loads(base64.b64decode(parts[0] + "=="))
                 alg = header.get("alg", "").lower()
+                # Generate LLM JWT payloads for algorithm confusion testing
+                llm_jwt_payloads = []
+                if self.llm_payload_generator and self.llm_payload_generator.is_available():
+                    llm_payloads = self.llm_payload_generator.generate_sync(
+                        vuln_class="JWT_WEAKNESS",
+                        param_name="jwt",
+                        response_snippet=json.dumps({"alg": alg}) if alg else "",
+                    )
+                    # LLM might return JWT-related manipulation payloads
+                    # Try to use them as alternative Authorization headers
+                    for lp in llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]:
+                        if len(lp) > 20:  # Looks like a token
+                            llm_jwt_payloads.append(lp)
                 if alg == "none":
                     self._add_finding(
                         finding_type="JWT_ALG_NONE",
@@ -330,7 +349,28 @@ class APISecurityScanner:
                             endpoint=self.target_url,
                             evidence={"payload": payload, "message": "JWT contains privilege claims"},
                             confidence=0.70,
+                            )
+                
+                # Test LLM-generated JWT payloads
+                for llm_payload in llm_jwt_payloads:
+                    for auth_header in ["Authorization", "X-Access-Token", "Token"]:
+                        test_resp = self._safe_request(
+                            "GET", self.target_url,
+                            headers={auth_header: f"Bearer {llm_payload}"}
                         )
+                        if test_resp and test_resp.status_code == 200:
+                            self._add_finding(
+                                finding_type="JWT_LLM_DETECTED_WEAKNESS",
+                                severity="HIGH",
+                                endpoint=self.target_url,
+                                evidence={
+                                    "llm_generated_payload": llm_payload[:30] + "...",
+                                    "auth_header": auth_header,
+                                    "message": "LLM-generated JWT bypass accepted by server",
+                                },
+                                confidence=0.6,
+                            )
+                            break
         except Exception:
             pass
     

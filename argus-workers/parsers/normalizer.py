@@ -130,7 +130,7 @@ class FindingNormalizer:
         
         # CWE-200: Information Disclosure
         "CWE-200": "INFORMATION_DISCLOSURE",
-        "CWE-319": "CLEARtext_TRANSMISSION",
+        "CWE-319": "CLEARTEXT_TRANSMISSION",
         
         # CWE-462: Race Condition
         "CWE-462": "RACE_CONDITION",
@@ -168,7 +168,6 @@ class FindingNormalizer:
     
     # OWASP to vulnerability type mappings
     OWASP_TYPE_MAPPINGS = {
-        "A03:2021-Injection": "REMOTE_CODE_EXECUTION",
         "A01:2021-Broken Access Control": "IDOR",
         "A02:2021-Cryptographic Failures": "WEAK_CRYPTOGRAPHY",
         "A03:2021-Injection": "SQL_INJECTION",

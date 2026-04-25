@@ -8,7 +8,7 @@ Requirements: 34.1, 34.2, 34.3, 34.4, 34.5
 """
 
 import logging
-from typing import Dict, Optional, Callable, List
+from typing import Dict, Optional, List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import json

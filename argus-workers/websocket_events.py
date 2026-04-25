@@ -229,45 +229,6 @@ class WebSocketEventPublisher:
         else:
             self._publish_event(event)
     
-    def publish_finding(
-        self,
-        engagement_id: str,
-        finding_id: str,
-        finding_type: str,
-        severity: str,
-        confidence: float,
-        endpoint: str,
-        source_tool: str
-    ) -> None:
-        """
-        Publish a finding discovered event.
-        
-        Requirements: 31.2
-        
-        Args:
-            engagement_id: Engagement ID
-            finding_id: Finding ID
-            finding_type: Type of vulnerability
-            severity: Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO)
-            confidence: Confidence score (0.0 - 1.0)
-            endpoint: Affected endpoint URL
-            source_tool: Tool that discovered the finding
-        """
-        event = {
-            "type": self.EVENT_FINDING_DISCOVERED,
-            "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data": {
-                "finding_id": finding_id,
-                "finding_type": finding_type,
-                "severity": severity,
-                "confidence": confidence,
-                "endpoint": endpoint,
-                "source_tool": source_tool,
-            }
-        }
-        self._publish_event(event)
-    
     def publish_state_transition(
         self,
         engagement_id: str,

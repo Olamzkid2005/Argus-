@@ -7,7 +7,6 @@ using Jinja2 templates.
 Requirements: 17.1, 17.2, 17.3, 17.4
 """
 import os
-import json
 import logging
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field

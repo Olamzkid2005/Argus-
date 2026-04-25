@@ -15,9 +15,8 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 import os
-import psycopg2
 from database.connection import connect
-from psycopg2.extras import RealDictCursor
+from utils.validation import validate_uuid
 
 
 class TracingError(Exception):
@@ -147,6 +146,16 @@ class StructuredLogger:
         """Store log entry in execution_logs table"""
         if not self.connection_string:
             return
+
+        engagement_id = log_entry.get("engagement_id")
+        # Validate UUID before DB insert to prevent InvalidTextRepresentation errors
+        if engagement_id:
+            try:
+                engagement_id = validate_uuid(engagement_id, "engagement_id")
+            except ValueError:
+                # Non-fatal: skip DB logging for invalid UUIDs
+                print(f"Failed to store log: invalid engagement_id UUID: '{engagement_id}'")
+                return
         
         try:
             conn = connect(self.connection_string)
@@ -158,7 +167,7 @@ class StructuredLogger:
                     (engagement_id, trace_id, event_type, message, metadata, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """, (
-                    log_entry.get("engagement_id"),
+                    engagement_id,
                     log_entry["trace_id"],
                     log_entry["event_type"],
                     log_entry["message"],

@@ -4,12 +4,11 @@ Base repository class with common CRUD operations
 Uses the shared connection pool from database/connection.py.
 Supports passing an external connection for transaction support.
 """
+import time
+import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional, Any, Union
-from datetime import datetime
-import uuid
-import re
 
 from database.connection import get_db
 
@@ -159,8 +158,6 @@ class BaseRepository:
 
     def _log_query_time(self, query: str, start_time: float, rows: int = 0):
         """Log slow queries for performance monitoring"""
-        import time
-        import logging
         elapsed_ms = (time.time() - start_time) * 1000
         if elapsed_ms > 500:
             logging.getLogger(__name__).warning(
@@ -177,7 +174,6 @@ class BaseRepository:
         Returns:
             Dictionary of the record or None
         """
-        import time
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         start = time.time()
@@ -204,7 +200,6 @@ class BaseRepository:
         Returns:
             List of record dictionaries
         """
-        import time
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         start = time.time()
@@ -307,7 +302,6 @@ class BaseRepository:
         Returns:
             Total number of records
         """
-        import time
         conn = self._get_connection()
         cursor = conn.cursor()
         start = time.time()

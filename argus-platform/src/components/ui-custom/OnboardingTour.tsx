@@ -22,6 +22,8 @@ import {
   AlertTriangle,
   Terminal,
   Cpu,
+  Search,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -49,6 +51,20 @@ const STEPS: TourStep[] = [
     description:
       "Argus integrates with OpenRouter to provide intelligent vulnerability explanations, attack path analysis, and contextual security insights. Configure your preferred AI model in settings for customized analysis depth.",
     icon: <Brain size={20} />,
+  },
+  {
+    id: "ai-response-analysis",
+    title: "AI Response Analysis",
+    description:
+      "After scanning, Argus automatically reviews low-confidence HTTP responses using AI to detect subtle vulnerabilities that regex patterns miss — including reflected payloads in JSON, partial SSTI evaluation, and WAF-bypass vectors.",
+    icon: <Search size={20} />,
+  },
+  {
+    id: "ai-payload-generation",
+    title: "AI Payload Generation",
+    description:
+      "During scanning, Argus generates context-aware probe payloads using AI. Payloads are tailored to each parameter's reflection context (HTML, script, JSON, attribute), framework, and input type — catching what static lists miss.",
+    icon: <Wand2 size={20} />,
   },
   {
     id: "scan-types",

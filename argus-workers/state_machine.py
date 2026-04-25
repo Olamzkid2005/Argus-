@@ -10,6 +10,7 @@ from database.connection import connect
 import uuid
 
 from database.connection import get_db
+from utils.validation import validate_uuid
 
 
 class InvalidStateTransition(Exception):
@@ -59,7 +60,8 @@ class EngagementStateMachine:
             current_state: Current engagement state
             connection: External connection for transaction support
         """
-        self.engagement_id = engagement_id
+        # Validate UUID format to prevent PostgreSQL errors
+        self.engagement_id = validate_uuid(engagement_id, "engagement_id")
         self._db_conn_string = db_connection_string
         self._external_conn = connection
         self.current_state = current_state
@@ -104,19 +106,12 @@ class EngagementStateMachine:
 
         old_state = self.current_state
 
-        # Handle loop-back transitions - use atomic state+budget update
-        if old_state == "analyzing" and new_state == "recon":
-            self._persist_state_and_budget(
-                from_state=old_state,
-                to_state=new_state,
-                reason=reason or f"Transition to {new_state}"
-            )
-        else:
-            self._persist_state_and_budget(
-                from_state=old_state,
-                to_state=new_state,
-                reason=reason or f"Transition to {new_state}"
-            )
+        # Persist state transition atomically (loop-back budget update handled internally)
+        self._persist_state_and_budget(
+            from_state=old_state,
+            to_state=new_state,
+            reason=reason or f"Transition to {new_state}"
+        )
 
         # Update current state
         self.current_state = new_state
@@ -132,7 +127,6 @@ class EngagementStateMachine:
             reason: Reason for transition
         """
         conn = self._get_connection()
-        should_release = False
 
         try:
             cursor = conn.cursor()
@@ -178,80 +172,6 @@ class EngagementStateMachine:
             conn.rollback()
             print(f"Failed to persist state transition: {e}")
             raise
-        finally:
-            if not self._external_conn:
-                self._release_connection(conn)
-
-    def _record_transition(self, from_state: str, to_state: str, reason: str):
-        """
-        Record state transition in database (legacy, use _persist_state_and_budget instead)
-
-        Args:
-            from_state: Source state
-            to_state: Target state
-            reason: Reason for transition
-        """
-        conn = self._get_connection()
-        should_release = False
-
-        try:
-            cursor = conn.cursor()
-
-            transition_id = str(uuid.uuid4())
-            cursor.execute(
-                """
-                INSERT INTO engagement_states (
-                    id, engagement_id, from_state, to_state, reason, created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, NOW()
-                )
-                """,
-                (transition_id, self.engagement_id, from_state, to_state, reason)
-            )
-
-            # Update engagement status
-            cursor.execute(
-                """
-                UPDATE engagements
-                SET status = %s, updated_at = NOW()
-                WHERE id = %s
-                """,
-                (to_state, self.engagement_id)
-            )
-
-            conn.commit()
-            cursor.close()
-
-        except Exception as e:
-            conn.rollback()
-            print(f"Failed to record transition: {e}")
-            raise
-        finally:
-            if not self._external_conn:
-                self._release_connection(conn)
-
-    def _increment_loop_budget_cycle(self):
-        """
-        Increment loop budget cycle counter on loop-back transition
-        """
-        conn = self._get_connection()
-
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE loop_budgets
-                SET current_cycles = current_cycles + 1
-                WHERE engagement_id = %s
-                """,
-                (self.engagement_id,)
-            )
-            conn.commit()
-            cursor.close()
-
-        except Exception as e:
-            conn.rollback()
-            print(f"Failed to increment loop budget cycle: {e}")
         finally:
             if not self._external_conn:
                 self._release_connection(conn)

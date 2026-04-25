@@ -29,12 +29,12 @@ class TestExecutionContext:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
         assert context.trace_id == trace_id
-        assert context.engagement_id == "eng-123"
+        assert context.engagement_id == "550e8400-e29b-41d4-a716-446655440000"
         assert context.job_type == "recon"
         assert context.start_time is not None
     
@@ -43,14 +43,14 @@ class TestExecutionContext:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="scan"
         )
         
         result = context.to_dict()
         
         assert result["trace_id"] == trace_id
-        assert result["engagement_id"] == "eng-123"
+        assert result["engagement_id"] == "550e8400-e29b-41d4-a716-446655440000"
         assert result["job_type"] == "scan"
         assert "start_time" in result
     
@@ -59,7 +59,7 @@ class TestExecutionContext:
         trace_id = str(uuid.uuid4())
         data = {
             "trace_id": trace_id,
-            "engagement_id": "eng-456",
+            "engagement_id": "550e8400-e29b-41d4-a716-446655440001",
             "job_type": "analyze",
             "start_time": time.time()
         }
@@ -67,7 +67,7 @@ class TestExecutionContext:
         context = ExecutionContext.from_dict(data)
         
         assert context.trace_id == trace_id
-        assert context.engagement_id == "eng-456"
+        assert context.engagement_id == "550e8400-e29b-41d4-a716-446655440001"
         assert context.job_type == "analyze"
 
 
@@ -79,7 +79,7 @@ class TestTraceContext:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
@@ -97,7 +97,7 @@ class TestTraceContext:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
@@ -120,7 +120,7 @@ class TestTraceContext:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
@@ -155,11 +155,11 @@ class TestTracingManager:
         manager = TracingManager()
         
         context = manager.create_context(
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
-        assert context.engagement_id == "eng-123"
+        assert context.engagement_id == "550e8400-e29b-41d4-a716-446655440000"
         assert context.job_type == "recon"
         assert context.trace_id is not None
         
@@ -172,7 +172,7 @@ class TestTracingManager:
         existing_trace_id = str(uuid.uuid4())
         
         context = manager.create_context(
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="scan",
             trace_id=existing_trace_id
         )
@@ -183,10 +183,10 @@ class TestTracingManager:
         """Test trace_execution context manager"""
         manager = TracingManager()
         
-        with manager.trace_execution("eng-123", "recon") as context:
+        with manager.trace_execution("550e8400-e29b-41d4-a716-446655440000", "recon") as context:
             # Context should be set
             assert get_trace_id() == context.trace_id
-            assert context.engagement_id == "eng-123"
+            assert context.engagement_id == "550e8400-e29b-41d4-a716-446655440000"
             assert context.job_type == "recon"
         
         # Context should be cleared after
@@ -203,7 +203,7 @@ class TestStructuredLogger:
         assert StructuredLogger.EVENT_PARSER_COMPLETED == "parser_completed"
         assert StructuredLogger.EVENT_INTELLIGENCE_DECISION == "intelligence_decision"
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_log_without_trace_context(self, mock_connect):
         """Test logging without trace context (should not fail)"""
         TraceContext.clear_context()
@@ -215,7 +215,7 @@ class TestStructuredLogger:
         # Should not have attempted database connection
         mock_connect.assert_not_called()
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_log_with_trace_context(self, mock_connect):
         """Test logging with trace context"""
         mock_conn = MagicMock()
@@ -226,7 +226,7 @@ class TestStructuredLogger:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
@@ -237,7 +237,7 @@ class TestStructuredLogger:
         # Should have executed INSERT
         mock_cursor.execute.assert_called_once()
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_log_job_started(self, mock_connect):
         """Test log_job_started convenience method"""
         mock_conn = MagicMock()
@@ -248,17 +248,17 @@ class TestStructuredLogger:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
         with TraceContext.with_context(context):
             logger = StructuredLogger("test_connection_string")
-            logger.log_job_started("recon", "eng-123", "https://example.com")
+            logger.log_job_started("recon", "550e8400-e29b-41d4-a716-446655440000", "https://example.com")
         
         mock_cursor.execute.assert_called_once()
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_log_tool_executed(self, mock_connect):
         """Test log_tool_executed convenience method"""
         mock_conn = MagicMock()
@@ -269,7 +269,7 @@ class TestStructuredLogger:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="scan"
         )
         
@@ -285,7 +285,7 @@ class TestStructuredLogger:
         
         mock_cursor.execute.assert_called_once()
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_log_parser_completed(self, mock_connect):
         """Test log_parser_completed convenience method"""
         mock_conn = MagicMock()
@@ -296,7 +296,7 @@ class TestStructuredLogger:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
@@ -310,7 +310,7 @@ class TestStructuredLogger:
         
         mock_cursor.execute.assert_called_once()
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_log_intelligence_decision(self, mock_connect):
         """Test log_intelligence_decision convenience method"""
         mock_conn = MagicMock()
@@ -321,7 +321,7 @@ class TestStructuredLogger:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="analyze"
         )
         
@@ -346,7 +346,7 @@ class TestExecutionSpan:
         assert ExecutionSpan.SPAN_INTELLIGENCE_EVALUATION == "intelligence_evaluation"
         assert ExecutionSpan.SPAN_ORCHESTRATOR_STEP == "orchestrator_step"
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_span_context_manager(self, mock_connect):
         """Test span context manager records duration"""
         mock_conn = MagicMock()
@@ -357,7 +357,7 @@ class TestExecutionSpan:
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
-            engagement_id="eng-123",
+            engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="recon"
         )
         
@@ -376,7 +376,7 @@ class TestExecutionSpan:
             call_args = mock_cursor.execute.call_args
             assert "test_span" in str(call_args)
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_span_without_trace_context(self, mock_connect):
         """Test span without trace context (should not store)"""
         TraceContext.clear_context()
@@ -412,7 +412,7 @@ class TestConvenienceFunctions:
 class TestIntegration:
     """Integration tests for tracing"""
     
-    @patch('tracing.psycopg2.connect')
+    @patch('tracing.connect')
     def test_full_tracing_flow(self, mock_connect):
         """Test complete tracing flow from job start to completion"""
         mock_conn = MagicMock()
@@ -423,11 +423,11 @@ class TestIntegration:
         manager = TracingManager("test_connection_string")
         
         # Simulate a full job execution
-        with manager.trace_execution("eng-123", "recon") as context:
+        with manager.trace_execution("550e8400-e29b-41d4-a716-446655440000", "recon") as context:
             trace_id = context.trace_id
             
             # Log job started
-            manager.logger.log_job_started("recon", "eng-123", "https://example.com")
+            manager.logger.log_job_started("recon", "550e8400-e29b-41d4-a716-446655440000", "https://example.com")
             
             # Record tool execution span
             with manager.span(ExecutionSpan.SPAN_TOOL_EXECUTION):
