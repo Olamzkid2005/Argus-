@@ -1,7 +1,6 @@
 """
 Checkpoint Manager - Saves and recovers from checkpoints during long scans
 """
-import psycopg2
 from database.connection import connect
 from psycopg2.extras import Json, RealDictCursor
 import uuid
@@ -264,8 +263,6 @@ class CheckpointManager:
         Returns:
             Number of checkpoints deleted
         """
-        from datetime import datetime, timedelta
-        
         conn = connect(self.db_conn_string)
         cursor = conn.cursor()
         

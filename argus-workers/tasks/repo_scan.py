@@ -85,7 +85,7 @@ _state_machine = load_module("state_machine")
 EngagementStateMachine = _state_machine.EngagementStateMachine
 
 
-@app.task(bind=True, name="tasks.repo_scan.run_repo_scan")
+@app.task(bind=True, name="tasks.repo_scan.run_repo_scan", soft_time_limit=600, time_limit=1200)
 def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_id: str = None, custom_rules_path: str = None):
     """
     Execute repository scanning phase for an engagement
@@ -153,7 +153,12 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
                         except Exception as e:
                             logger.error(f"Failed to generate SBOMs: {str(e)}")
 
-                state_machine.transition("awaiting_approval", "Repository scan complete")
+                state_machine.transition("scanning", "Repository scan complete — auto-advancing to web scan")
+                # Auto-push web scan job (skip awaiting_approval phase)
+                app.send_task(
+                    'tasks.scan.run_scan',
+                    args=[engagement_id, [repo_url], budget, trace_id],
+                )
 
                 return result
         except Exception as e:
@@ -578,7 +583,7 @@ def detect_license(file_path):
                 data = json.load(f)
                 if 'license' in data:
                     return data['license']
-        except:
+        except Exception:
             pass
     
     return 'UNKNOWN'

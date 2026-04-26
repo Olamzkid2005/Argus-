@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
         engagement_id: engagement_id,
         target: "",
         standard: standard,
-        budget: { max_cycles: 1, max_depth: 1, max_cost: 0.1 },
+        budget: { max_cycles: 1, max_depth: 1 },
         trace_id: "",
         created_at: new Date().toISOString(),
       });

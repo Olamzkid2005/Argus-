@@ -6,11 +6,11 @@ import { pool } from "@/lib/db";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAuth();
-    const engagementId = params.id;
+    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);

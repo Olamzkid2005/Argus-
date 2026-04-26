@@ -22,9 +22,6 @@ import {
   CheckCircle2,
   XCircle,
   UserPlus,
-  ChevronDown,
-  ChevronUp,
-  Filter,
 } from "lucide-react";
 
 // ── Types ──

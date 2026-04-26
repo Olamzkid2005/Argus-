@@ -38,8 +38,8 @@ export async function POST(req: Request) {
     // Validate authorized_scope - for repo scans, this can be empty
     if (
       effectiveScanType === "url" &&
-      (!authorizedScope.domains || authorizedScope.domains.length === 0) &&
-      (!authorizedScope.ipRanges || authorizedScope.ipRanges.length === 0)
+      (!authorizedScope || !authorizedScope.domains || authorizedScope.domains.length === 0) &&
+      (!authorizedScope || !authorizedScope.ipRanges || authorizedScope.ipRanges.length === 0)
     ) {
       return createErrorResponse(
         "authorized_scope must contain at least one domain or IP range",
@@ -47,6 +47,10 @@ export async function POST(req: Request) {
         undefined,
         400,
       );
+    }
+
+    if (!targetUrl) {
+      return createErrorResponse("targetUrl is required", ErrorCodes.VALIDATION_ERROR, undefined, 400);
     }
 
     // Validate rate limit configuration if provided
@@ -114,9 +118,9 @@ export async function POST(req: Request) {
       // Initialize loop budget with defaults
       await client.query(
         `INSERT INTO loop_budgets 
-         (id, engagement_id, max_cycles, max_depth, max_cost, current_cycles, current_depth, current_cost, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-        [uuidv4(), engagementId, 5, 3, 0.5, 0, 0, 0.0],
+         (id, engagement_id, max_cycles, max_depth, current_cycles, current_depth, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [uuidv4(), engagementId, 5, 3, 0, 0],
       );
 
       // Record initial state transition
@@ -127,14 +131,9 @@ export async function POST(req: Request) {
         [uuidv4(), engagementId, null, "created", "Engagement created"],
       );
 
-      // Auto-clear: Delete findings from previous engagements for this org
-      // This ensures each new scan starts fresh
-      await client.query(
-        `DELETE FROM findings f
-         USING engagements e
-         WHERE f.engagement_id = e.id AND e.org_id = $1`,
-        [session.user.orgId]
-      );
+      // NOTE: Auto-clear removed — this was destroying ALL historical findings
+      // for the entire org on every engagement creation, causing data loss.
+      // Each engagement starts with no findings naturally — no cleanup needed.
 
       await client.query("COMMIT");
 
@@ -153,7 +152,6 @@ export async function POST(req: Request) {
             budget: {
               max_cycles: 5,
               max_depth: 3,
-              max_cost: 0.5,
             },
             aggressiveness: effectiveAggressiveness,
             trace_id: traceId,
@@ -168,7 +166,6 @@ export async function POST(req: Request) {
             budget: {
               max_cycles: 5,
               max_depth: 3,
-              max_cost: 0.5,
             },
             aggressiveness: effectiveAggressiveness,
             trace_id: traceId,

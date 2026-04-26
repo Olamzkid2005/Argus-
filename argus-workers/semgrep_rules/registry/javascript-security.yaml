@@ -1,0 +1,27 @@
+rules:
+  - id: js-innerhtml-xss
+    pattern: innerHTML = $VAR
+    message: XSS risk - unsanitized innerHTML assignment
+    severity: WARNING
+    languages: [javascript]
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A3"
+
+  - id: js-dom-xss
+    pattern: document.write($VAR)
+    message: XSS risk - unsanitized document.write usage
+    severity: WARNING
+    languages: [javascript]
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A3"
+
+  - id: js-eval-xss
+    pattern: eval($CODE)
+    message: Code injection risk - eval with unsanitized input
+    severity: ERROR
+    languages: [javascript]
+    metadata:
+      cwe: "CWE-95"
+      owasp: "A3"

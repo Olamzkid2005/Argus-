@@ -9,7 +9,7 @@ Respects budget limits and gracefully degrades when LLM is unavailable.
 """
 import os
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from celery_app import app
 
@@ -73,7 +73,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     
     Args:
         engagement_id: Engagement ID
-        budget: Budget configuration dict (may include max_llm_cost)
+        budget: Budget configuration dict (max_cycles, max_depth)
         trace_id: Optional trace ID for distributed tracing
     """
     db_conn_string = os.getenv("DATABASE_URL")
@@ -118,17 +118,6 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     # Initialize budget manager
     try:
         from loop_budget_manager import LoopBudgetManager
-
-        # Load max LLM cost from Redis (UI setting) as fallback
-        try:
-            from llm_client import load_llm_setting
-            llm_max_cost_str = load_llm_setting("llm_max_cost", "0.50")
-            redis_llm_cost = float(llm_max_cost_str)
-            if budget:
-                budget.setdefault("max_llm_cost", redis_llm_cost)
-        except Exception:
-            pass
-
         budget_mgr = LoopBudgetManager(engagement_id, budget or {})
     except Exception as e:
         logger.warning(f"Budget manager not available: {e}")
@@ -159,13 +148,8 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     analyzed_count = 0
     confirmed_count = 0
     budget_exhausted = False
-    
+
     for finding in candidate_findings:
-        # Check budget
-        if budget_mgr and not budget_mgr.can_afford_llm():
-            logger.info("LLM budget exhausted, stopping review")
-            budget_exhausted = True
-            break
         
         try:
             # Skip if finding has no payload/response evidence
@@ -237,10 +221,6 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 except Exception as e:
                     logger.warning(f"Failed to update confidence: {e}")
             
-            # Consume budget
-            if budget_mgr:
-                budget_mgr.consume_llm()
-        
         except Exception as e:
             logger.warning(f"LLM review failed for finding {finding.get('id')}: {e}")
             continue

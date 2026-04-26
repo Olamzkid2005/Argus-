@@ -88,8 +88,6 @@ test.describe('Investigate Parser Issues', () => {
           lb.current_cycles,
           lb.max_depth,
           lb.current_depth,
-          lb.max_cost,
-          lb.current_cost
         FROM loop_budgets lb
         JOIN engagements e ON lb.engagement_id = e.id
         ORDER BY e.created_at DESC
@@ -101,7 +99,6 @@ test.describe('Investigate Parser Issues', () => {
         console.log(`  Status: ${b.status}`);
         console.log(`  Cycles: ${b.current_cycles}/${b.max_cycles}`);
         console.log(`  Depth: ${b.current_depth}/${b.max_depth}`);
-        console.log(`  Cost: $${b.current_cost}/$${b.max_cost}`);
         console.log('');
       }
 

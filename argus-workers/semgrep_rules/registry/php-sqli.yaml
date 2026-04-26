@@ -1,0 +1,27 @@
+rules:
+  - id: php-sqli-mysql
+    pattern: mysql_query($INPUT)
+    message: SQL injection risk - direct mysql_query with unsanitized variable
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A1"
+
+  - id: php-sqli-mysqli
+    pattern: mysqli_query($DB, $QUERY)
+    message: SQL injection risk - direct mysqli_query with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A1"
+
+  - id: php-sqli-pdo
+    pattern: $PDO->query($QUERY)
+    message: SQL injection risk - PDO query with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A1"

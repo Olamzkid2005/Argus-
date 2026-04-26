@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 def load_sbom_functions():
     """Load SBOM functions directly from repo_scan.py without external dependencies"""
-    file_path = '/Users/mac/Documents/Argus-/argus-workers/tasks/repo_scan.py'
+    file_path = os.path.join(os.path.dirname(__file__), '..', 'tasks', 'repo_scan.py')
     
     # Create mocked modules for all external dependencies
     mock_celery = MagicMock()

@@ -68,7 +68,12 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
                 result = orchestrator.run_recon(job)
 
-                state_machine.transition("awaiting_approval", "Recon complete")
+                state_machine.transition("scanning", "Recon complete — auto-advancing to scan")
+                # Auto-push scan job (skip awaiting_approval phase)
+                app.send_task(
+                    'tasks.scan.run_scan',
+                    args=[engagement_id, [target], budget, trace_id],
+                )
 
                 return result
         except Exception as e:
@@ -107,6 +112,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         job = {
             "type": "recon_expand",
             "engagement_id": engagement_id,
+            "target": targets[0] if targets else None,
             "targets": targets,
             "budget": budget,
             "trace_id": trace_id,
@@ -114,9 +120,33 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
 
         lock = DistributedLock(redis_url)
 
-        with LockContext(lock, engagement_id):
-            orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-            return orchestrator.run_recon(job)
+        try:
+            with LockContext(lock, engagement_id):
+                state_machine = EngagementStateMachine(
+                    engagement_id, db_connection_string=db_conn_string, current_state="recon"
+                )
+
+                orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
+                result = orchestrator.run_recon(job)
+
+                state_machine.transition("scanning", "Expanded recon complete — auto-advancing to scan")
+                # Auto-push scan job (skip awaiting_approval phase)
+                app.send_task(
+                    'tasks.scan.run_scan',
+                    args=[engagement_id, job.get("targets", [job.get("target")]), budget, trace_id],
+                )
+
+                return result
+        except Exception as e:
+            # Query actual current state from DB before transitioning to failed
+            current_state = _get_engagement_state(engagement_id, db_conn_string)
+            # Skip if already in failed state
+            if current_state != "failed":
+                state_machine = EngagementStateMachine(
+                    engagement_id, db_connection_string=db_conn_string, current_state=current_state
+                )
+                state_machine.transition("failed", f"Expand recon failed: {str(e)}")
+            raise
 
 
 def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:

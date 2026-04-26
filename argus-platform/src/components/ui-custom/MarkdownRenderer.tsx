@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Shield, Crosshair, AlertTriangle, Wrench, Radio, Lock } from "lucide-react";
+import { Shield, Crosshair, AlertTriangle, Wrench, Radio } from "lucide-react";
 
 interface ParsedBlock {
   type: "heading" | "paragraph" | "list" | "code" | "blockquote" | "divider";

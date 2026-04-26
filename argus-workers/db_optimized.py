@@ -8,7 +8,6 @@ import os
 import logging
 from contextlib import contextmanager
 from typing import Generator, Optional
-import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 

@@ -34,7 +34,6 @@
   budget: {
     max_cycles: engagement.max_cycles || 5,
     max_depth: engagement.max_depth || 3,
-    max_cost: engagement.max_cost || 0.5,
   },
   trace_id: traceId,
   created_at: new Date().toISOString(),

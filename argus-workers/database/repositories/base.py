@@ -18,8 +18,8 @@ ALLOWED_COLUMNS = {
                     "authorized_scope", "rate_limit_config"],
     "users": ["name", "role", "updated_at", "last_login_at"],
     "findings": ["verified", "fp_likelihood", "updated_at", "severity"],
-    "loop_budgets": ["current_cycles", "current_depth", "current_cost", "updated_at",
-                     "max_cycles", "max_depth", "max_cost"],
+    "loop_budgets": ["current_cycles", "current_depth", "updated_at",
+                     "max_cycles", "max_depth"],
     "engagement_states": ["from_state", "to_state", "reason"],
     "job_states": ["status", "worker_id", "error_message", "started_at", "completed_at"],
 }

@@ -4,7 +4,6 @@ Snapshot Manager - Creates immutable state snapshots for decision-making
 import psycopg2
 from database.connection import connect
 from psycopg2.extras import Json, RealDictCursor
-from psycopg2 import sql
 import uuid
 from typing import Dict, List, Optional
 from datetime import datetime, UTC
@@ -78,8 +77,8 @@ class SnapshotManager:
             cursor.execute(
                 """
                 SELECT 
-                    max_cycles, max_depth, max_cost,
-                    current_cycles, current_depth, current_cost
+                    max_cycles, max_depth,
+                    current_cycles, current_depth
                 FROM loop_budgets
                 WHERE engagement_id = %s
                 """,

@@ -15,14 +15,15 @@ import { pool } from "@/lib/db";
  * Requirements: 22.3, 22.4
  */
 export async function GET(req: Request) {
+  // Parse query parameters early so it's available in catch block
+  const { searchParams } = new URL(req.url);
+  const days = parseInt(searchParams.get("days") || "7", 10);
+
   try {
     // Verify authentication and get session with org context
     const session = await requireAuth();
     const orgId = session.user.orgId;
 
-    // Parse query parameters
-    const { searchParams } = new URL(req.url);
-    const days = parseInt(searchParams.get("days") || "7", 10);
     const toolName = searchParams.get("tool");
 
     // Validate days parameter
@@ -136,6 +137,25 @@ export async function GET(req: Request) {
 
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Handle case where tool_metrics table is missing the engagement_id column
+    // (schema migration not yet applied). Return empty stats gracefully instead of crashing.
+    if (err.message?.includes("column") && err.message?.includes("does not exist")) {
+      console.warn("Tool performance: missing column in tool_metrics table. Returning empty stats.");
+      return NextResponse.json({
+        tools: [],
+        summary: {
+          total_tools: 0,
+          total_executions: 0,
+          total_successes: 0,
+          overall_success_rate: 0,
+          avg_duration_across_tools: 0,
+        },
+        days,
+        generated_at: new Date().toISOString(),
+        warning: "tool_metrics table schema may need migration",
+      });
     }
 
     return NextResponse.json(

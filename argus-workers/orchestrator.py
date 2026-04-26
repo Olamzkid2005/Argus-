@@ -15,18 +15,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-import psycopg2
 from database.connection import connect
 
 from tracing import (
     TracingManager,
-    TraceContext,
     get_trace_id,
     StructuredLogger,
     ExecutionSpan,
 )
 from websocket_events import (
-    WebSocketEventPublisher,
     get_websocket_publisher,
 )
 from tools.tool_runner import ToolRunner
@@ -35,7 +32,7 @@ from parsers.parser import Parser
 from parsers.normalizer import FindingNormalizer
 from database.repositories.finding_repository import FindingRepository
 from database.repositories.engagement_repository import EngagementRepository
-from database.repositories.engagement_events_repository import EngagementEventsRepository
+
 
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
@@ -67,11 +64,31 @@ def get_wordlist_path(filename: str) -> Path:
     if not base.exists():
         raise FileNotFoundError(f"Wordlists directory not found: {base}")
 
-    wordlist_path = base / filename
-    if not wordlist_path.exists():
-        raise FileNotFoundError(f"Wordlist not found: {wordlist_path}")
+    word_path = base / filename
+    if not word_path.exists():
+        raise FileNotFoundError(f"Wordlist not found: {word_path}")
 
-    return wordlist_path
+    return word_path
+
+
+def get_nuclei_templates_path() -> Path:
+    """Return the path to pre-downloaded nuclei templates."""
+    # Check environment variable first, then default location
+    custom_path = os.environ.get("ARGUS_NUCLEI_TEMPLATES")
+    if custom_path:
+        base = Path(custom_path)
+    else:
+        base = Path(__file__).parent / "tool_assets" / "nuclei-templates"
+    
+    if base.exists() and any(base.rglob("*.yaml")):
+        return base
+    
+    # Fall back to ~/.nuclei-templates
+    home_path = Path.home() / ".nuclei-templates"
+    if home_path.exists() and any(home_path.rglob("*.yaml")):
+        return home_path
+    
+    return base  # May not exist - caller should check
 
 
 class EngagementTimeoutError(Exception):
@@ -244,7 +261,11 @@ class Orchestrator:
         """
         self._check_timeout()
         
+        # Handle both "target" (singular) and "targets" (plural/list from expand_recon)
         target = job.get("target")
+        if not target:
+            targets_list = job.get("targets", [])
+            target = targets_list[0] if targets_list else None
         
         # Publish job started event
         self.ws_publisher.publish_job_started(
@@ -677,9 +698,31 @@ class Orchestrator:
         agg = aggressiveness or DEFAULT_AGGRESSIVENESS
         
         for target in targets:
+            # Pre-resolve target to fail fast if DNS is broken
+            hostname = target.replace("https://", "").replace("http://", "").split("/")[0]
+            try:
+                import socket
+                socket.setdefaulttimeout(5)
+                socket.getaddrinfo(hostname, None)
+            except socket.gaierror as e:
+                logger.warning(f"DNS resolution failed for {hostname}: {e}. Skipping target.")
+                continue
+            
+            # Get local nuclei templates path
+            nuclei_templates = get_nuclei_templates_path()
+            templates_exist = nuclei_templates.exists() and any(nuclei_templates.rglob("*.yaml"))
+            
             # Execute Nuclei for vulnerability scanning
             try:
-                nuclei_cmd = ["-u", target, "-json", "-silent"]
+                nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
+                
+                # Use local templates if available
+                if templates_exist:
+                    nuclei_cmd.extend(["-t", str(nuclei_templates)])
+                    logger.info(f"Using local nuclei templates from {nuclei_templates}")
+                else:
+                    logger.warning("Nuclei templates not found. Scan will use default template download.")
+                
                 nuclei_timeout = TOOL_TIMEOUT_LONG
                 if agg == "high":
                     nuclei_cmd.extend(["-severity", "low,medium,high,critical"])
@@ -692,8 +735,13 @@ class Orchestrator:
                     nuclei_cmd,
                     timeout=nuclei_timeout
                 )
+                # Debug: log nuclei result
+                logger.warning(f"NUCLEI RESULT for {target}: success={nuclei_result.get('success')}, returncode={nuclei_result.get('returncode')}, stdout_len={len(nuclei_result.get('stdout', ''))}, stderr={nuclei_result.get('stderr', '')[:200]}")
+                
                 if nuclei_result.get("success"):
-                    parsed = self.parser.parse("nuclei", nuclei_result.get("stdout", ""))
+                    stdout = nuclei_result.get("stdout", "")
+                    parsed = self.parser.parse("nuclei", stdout)
+                    logger.warning(f"NUCLEI PARSED: {len(parsed)} findings from {len(stdout)} bytes of output")
                     for p in parsed:
                         normalized = self._normalize_finding(p, "nuclei")
                         if normalized:
@@ -703,7 +751,7 @@ class Orchestrator:
             
             # Execute dalfox for XSS
             try:
-                dalfox_cmd = ["url", target, "-json"]
+                dalfox_cmd = ["url", target, "--json"]
                 dalfox_timeout = TOOL_TIMEOUT_LONG
                 if agg == "high":
                     dalfox_cmd.append("-b")
@@ -727,7 +775,8 @@ class Orchestrator:
             
             # Execute sqlmap for SQL injection
             try:
-                sqlmap_cmd = ["-u", target, "--batch", "--json-output", "/tmp/sqlmap.json"]
+                sqlmap_out = str(self.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
+                sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
                 sqlmap_timeout = TOOL_TIMEOUT_LONG
                 if agg == "high":
                     sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
@@ -744,10 +793,10 @@ class Orchestrator:
                     # Read JSON output if available
                     import json
                     try:
-                        with open("/tmp/sqlmap.json", "r") as f:
+                        with open(sqlmap_out, "r") as f:
                             sqlmap_output = f.read()
                         parsed = self.parser.parse("sqlmap", sqlmap_output)
-                    except:
+                    except Exception:
                         parsed = []
                     
                     for p in parsed:
@@ -759,19 +808,20 @@ class Orchestrator:
             
             # Execute arjun for parameter discovery
             try:
+                arjun_out = str(self.tool_runner.sandbox_dir / "tmp" / "arjun.json")
                 arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
                 arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
                 arjun_result = self.tool_runner.run(
                     "arjun",
-                    ["-u", target, "-m", "GET", "-o", "/tmp/arjun.json", "-t", arjun_threads],
+                    ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
                     timeout=arjun_timeout
                 )
                 if arjun_result.get("success"):
                     try:
-                        with open("/tmp/arjun.json", "r") as f:
+                        with open(arjun_out, "r") as f:
                             arjun_output = f.read()
                         parsed = self.parser.parse("arjun", arjun_output)
-                    except:
+                    except Exception:
                         parsed = []
                     
                     for p in parsed:
@@ -800,17 +850,18 @@ class Orchestrator:
             
             # Execute commix for command injection testing
             try:
+                commix_out = str(self.tool_runner.sandbox_dir / "tmp" / "commix.json")
                 commix_result = self.tool_runner.run(
                     "commix",
-                    ["--url", target, "--batch", "--json-output", "/tmp/commix.json"],
-                    timeout=TOOL_TIMEOUT_LONG
+                    ["--url", target, "--batch", "--json-output", commix_out],
+                    timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
                 )
                 if commix_result.get("success"):
                     try:
-                        with open("/tmp/commix.json", "r") as f:
+                        with open(commix_out, "r") as f:
                             commix_output = f.read()
                         parsed = self.parser.parse("commix", commix_output)
-                    except:
+                    except Exception:
                         parsed = []
                     
                     for p in parsed:
@@ -822,17 +873,18 @@ class Orchestrator:
             
             # Execute testssl for TLS vulnerability scanning
             try:
+                testssl_out = str(self.tool_runner.sandbox_dir / "tmp" / "testssl.json")
                 testssl_result = self.tool_runner.run(
                     "testssl",
-                    ["--jsonfile", "/tmp/testssl.json", target],
-                    timeout=TOOL_TIMEOUT_LONG
+                    ["--jsonfile", testssl_out, target],
+                    timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
                 )
                 if testssl_result.get("success"):
                     try:
-                        with open("/tmp/testssl.json", "r") as f:
+                        with open(testssl_out, "r") as f:
                             testssl_output = f.read()
                         parsed = self.parser.parse("testssl", testssl_output)
-                    except:
+                    except Exception:
                         parsed = []
                     
                     for p in parsed:
@@ -1416,15 +1468,18 @@ class Orchestrator:
                os.path.exists(os.path.join(temp_dir, "build.gradle")) or \
                glob.glob(os.path.join(temp_dir, "**/*.java"), recursive=True):
                 detected_langs.add("java")
+            if glob.glob(os.path.join(temp_dir, "**/*.php"), recursive=True):
+                detected_langs.add("php")
             
             # Map to semgrep registry configs
             lang_registry_map = {
-                "javascript": "p/javascript",
-                "python": "p/python",
-                "go": "p/go",
-                "rust": "p/rust",
-                "ruby": "p/ruby",
-                "java": "p/java",
+                "javascript": ["p/javascript"],
+                "python":     ["p/python"],
+                "go":         ["p/golang"],
+                "rust":       ["p/rust"],
+                "ruby":       ["p/ruby"],
+                "java":       ["p/java"],
+                "php":        ["p/php"],
             }
             
             # ── 1. Gitleaks: secret detection in git history ──
@@ -1656,29 +1711,43 @@ class Orchestrator:
                     logger.warning(f"Maven check failed: {e}")
             
             # ── 7. Semgrep: static code analysis ──
-            # Build registry configs based on aggressiveness
-            registry_configs = ["p/secrets", "p/ci"]
-            if agg in ("high", "extreme"):
-                registry_configs.extend(["p/owasp-top-ten", "p/cwe-top-25"])
-            if agg == "extreme":
-                registry_configs.append("p/command-injection")
+            # Resolve registry shorthand (p/php) to local file paths.
+            # The sandbox has no network, so p/php → /abs/path/php-rules.yaml
+            # Hardcoded to avoid __file__ resolution issues in Celery workers.
+            _rules_registry = "/Users/mac/Documents/Argus-/argus-workers/semgrep_rules/registry"
+            def _resolve_semgrep_config(cfg: str) -> list:
+                """Resolve a semgrep config name to local file paths."""
+                INDEX = {
+                    "p/php":        ["php-ssl.yaml", "php-xss.yaml", "php-sqli.yaml"],
+                    "p/javascript": ["javascript-security.yaml"],
+                    "p/secrets":    ["secrets.yaml"],
+                }
+                files = INDEX.get(cfg, [])
+                if files:
+                    return [os.path.join(_rules_registry, f) for f in files if os.path.isfile(os.path.join(_rules_registry, f))]
+                return [cfg] if os.path.isfile(cfg) or os.path.isdir(cfg) else []
             
-            # Add language-specific configs
+            registry_configs = []
             for lang in detected_langs:
-                registry_config = lang_registry_map.get(lang)
-                if registry_config and registry_config not in registry_configs:
-                    registry_configs.append(registry_config)
+                configs = lang_registry_map.get(lang, [])
+                for cfg in configs:
+                    resolved = _resolve_semgrep_config(cfg)
+                    for rc in resolved:
+                        if rc not in registry_configs:
+                            registry_configs.append(rc)
             
             # Build custom rules list from available directories
-            rule_subdirs = [
-                "secrets", "auth", "injection", "xss", "ssrf",
-                "csrf", "auto", "business-logic", "deserialization",
-            ]
+            # NOTE: Custom rule dirs have invalid YAML - skip for now
+            # TODO: Fix custom rules to have valid semgrep patterns
             custom_configs = []
-            for subdir in rule_subdirs:
-                config_dir = os.path.join(rules_dir, subdir)
-                if os.path.isdir(config_dir):
-                    custom_configs.append(config_dir)
+            # rule_subdirs = [
+            #     "secrets", "auth", "injection", "xss", "ssrf",
+            #     "csrf", "auto", "business-logic", "deserialization",
+            # ]
+            # for subdir in rule_subdirs:
+            #     config_dir = os.path.join(rules_dir, subdir)
+            #     if os.path.isdir(config_dir):
+            #         custom_configs.append(config_dir)
             
             # Add user-provided custom rules path if specified
             if custom_rules_path and os.path.isdir(custom_rules_path):
@@ -1728,7 +1797,7 @@ class Orchestrator:
             # Cleanup temp directory
             try:
                 shutil.rmtree(temp_dir)
-            except:
+            except Exception:
                 pass
         
         _emit("repo_scan", f"Repository scan complete — {len(all_findings)} total issues found", "completed", items=len(all_findings))

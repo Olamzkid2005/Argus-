@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
           e.id, e.target_url, e.status, e.scan_type, e.created_at, 
           e.updated_at, e.completed_at,
           u.email as created_by_email,
-          lb.max_cycles, lb.max_cost, lb.current_cycles, lb.current_cost,
+          lb.max_cycles, lb.current_cycles,
           COALESCE(fc.findings_count, 0) as findings_count,
           COALESCE(fc.critical_count, 0) as critical_count
         FROM engagements e

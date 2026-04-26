@@ -1,7 +1,7 @@
 """
 Scope Validator - Ensures scan targets are within authorized scope
 """
-from typing import List, Dict
+from typing import Dict
 from urllib.parse import urlparse
 import ipaddress
 import fnmatch

@@ -1,0 +1,27 @@
+rules:
+  - id: php-ssl-verifypeer-disabled
+    pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYPEER, false)
+    message: SSL certificate verification is disabled - insecure
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-295"
+      owasp: "A2"
+
+  - id: php-ssl-verifyhost-disabled  
+    pattern: curl_setopt($CH, CURLOPT_SSL_VERIFYHOST, 0)
+    message: SSL host verification is disabled - insecure
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-295"
+      owasp: "A2"
+
+  - id: php-https-missing
+    pattern: file_get_contents($URL)
+    message: Security issue - consider using HTTPS for external URLs
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-295"
+      owasp: "A2"

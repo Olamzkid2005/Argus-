@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import { CheckCircle2, Trash2, Download, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useToast } from "@/components/ui/Toast";
 
 interface BulkActionBarProps {
   selectedCount: number;

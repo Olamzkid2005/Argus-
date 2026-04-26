@@ -16,8 +16,8 @@ export async function GET(
 
     // Fetch engagement details
     const result = await pool.query(
-      `SELECT e.*, lb.max_cycles, lb.max_depth, lb.max_cost, 
-              lb.current_cycles, lb.current_depth, lb.current_cost
+      `SELECT e.*, lb.max_cycles, lb.max_depth,
+              lb.current_cycles, lb.current_depth
        FROM engagements e
        LEFT JOIN loop_budgets lb ON e.id = lb.engagement_id
        WHERE e.id = $1`,

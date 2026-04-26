@@ -11,7 +11,7 @@ The system works exactly as today when LLM is unavailable.
 import logging
 import json
 import re
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime, timezone
 

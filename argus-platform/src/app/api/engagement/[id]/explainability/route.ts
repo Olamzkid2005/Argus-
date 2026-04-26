@@ -14,13 +14,13 @@ import { pool } from "@/lib/db";
  */
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
     const clusterId = searchParams.get("cluster_id");
-    const engagementId = params.id;
+    const { id: engagementId } = await params;
 
     const client = await pool.connect();
 

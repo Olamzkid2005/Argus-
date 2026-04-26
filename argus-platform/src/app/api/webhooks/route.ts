@@ -54,6 +54,10 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error("Webhook create error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to create webhook" },
       { status: 500 },
@@ -83,6 +87,10 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch webhooks" },
       { status: 500 },

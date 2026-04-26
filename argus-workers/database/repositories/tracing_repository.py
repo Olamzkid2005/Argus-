@@ -5,7 +5,7 @@ Provides database operations for the execution_logs and execution_spans tables.
 """
 from database.connection import connect
 from psycopg2.extras import RealDictCursor
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class TracingRepository:

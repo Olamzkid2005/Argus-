@@ -19,11 +19,10 @@ const jobMessageSchema = {
     standard: { type: 'string' },
     budget: {
       type: 'object',
-      required: ['max_cycles', 'max_depth', 'max_cost'],
+      required: ['max_cycles', 'max_depth'],
       properties: {
         max_cycles: { type: 'number', minimum: 1 },
         max_depth: { type: 'number', minimum: 1 },
-        max_cost: { type: 'number', minimum: 0 },
       },
     },
     aggressiveness: { type: 'string' },
@@ -65,9 +64,7 @@ function validateJobMessage(message: unknown): { valid: boolean; errors?: string
     if (typeof budget.max_depth !== 'number' || budget.max_depth < 1) {
       errors.push('budget.max_depth must be a positive number');
     }
-    if (typeof budget.max_cost !== 'number' || budget.max_cost < 0) {
-      errors.push('budget.max_cost must be a non-negative number');
-    }
+
   }
 
   // Validate UUIDs (basic check)
@@ -98,7 +95,6 @@ describe('Job Message Contract Tests', () => {
         budget: {
           max_cycles: 5,
           max_depth: 3,
-          max_cost: 0.5,
         },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
@@ -116,7 +112,6 @@ describe('Job Message Contract Tests', () => {
         budget: {
           max_cycles: 10,
           max_depth: 5,
-          max_cost: 1.0,
         },
         aggressiveness: 'normal',
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
@@ -136,7 +131,6 @@ describe('Job Message Contract Tests', () => {
         budget: {
           max_cycles: 3,
           max_depth: 2,
-          max_cost: 0.25,
         },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
@@ -155,7 +149,6 @@ describe('Job Message Contract Tests', () => {
         budget: {
           max_cycles: 1,
           max_depth: 1,
-          max_cost: 0.1,
         },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
@@ -171,7 +164,7 @@ describe('Job Message Contract Tests', () => {
       const message = {
         engagement_id: '123e4567-e89b-12d3-a456-426614174000',
         target: 'https://example.com',
-        budget: { max_cycles: 5, max_depth: 3, max_cost: 0.5 },
+        budget: { max_cycles: 5, max_depth: 3 },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
       };
@@ -186,7 +179,7 @@ describe('Job Message Contract Tests', () => {
         type: 'invalid_type',
         engagement_id: '123e4567-e89b-12d3-a456-426614174000',
         target: 'https://example.com',
-        budget: { max_cycles: 5, max_depth: 3, max_cost: 0.5 },
+        budget: { max_cycles: 5, max_depth: 3 },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
       };
@@ -201,7 +194,7 @@ describe('Job Message Contract Tests', () => {
         type: 'recon',
         engagement_id: 'not-a-uuid',
         target: 'https://example.com',
-        budget: { max_cycles: 5, max_depth: 3, max_cost: 0.5 },
+        budget: { max_cycles: 5, max_depth: 3 },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
       };
@@ -216,7 +209,7 @@ describe('Job Message Contract Tests', () => {
         type: 'recon',
         engagement_id: '123e4567-e89b-12d3-a456-426614174000',
         target: 'https://example.com',
-        budget: { max_cycles: 0, max_depth: -1, max_cost: -5 },
+        budget: { max_cycles: 0, max_depth: -1 },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: new Date().toISOString(),
       };
@@ -225,7 +218,6 @@ describe('Job Message Contract Tests', () => {
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('budget.max_cycles must be a positive number');
       expect(result.errors).toContain('budget.max_depth must be a positive number');
-      expect(result.errors).toContain('budget.max_cost must be a non-negative number');
     });
 
     it('should reject invalid timestamp format', () => {
@@ -233,7 +225,7 @@ describe('Job Message Contract Tests', () => {
         type: 'recon',
         engagement_id: '123e4567-e89b-12d3-a456-426614174000',
         target: 'https://example.com',
-        budget: { max_cycles: 5, max_depth: 3, max_cost: 0.5 },
+        budget: { max_cycles: 5, max_depth: 3 },
         trace_id: '123e4567-e89b-12d3-a456-426614174001',
         created_at: 'not-a-date',
       };

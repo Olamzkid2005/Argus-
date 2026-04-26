@@ -11,7 +11,6 @@ SELECT
     o.name as org_name,
     u.email as created_by_email,
     lb.max_cycles,
-    lb.max_cost,
     (SELECT COUNT(*)::int FROM findings f WHERE f.engagement_id = e.id) as findings_count,
     (SELECT COUNT(*)::int FROM findings f WHERE f.engagement_id = e.id AND f.severity = 'CRITICAL') as critical_count
 FROM engagements e
@@ -52,7 +51,7 @@ ON tool_metrics(tool_name, created_at DESC);
 
 -- Partial index for active jobs
 CREATE INDEX IF NOT EXISTS idx_job_states_active
-ON job_states(engagement_id, created_at DESC) WHERE status = 'active';
+ON job_states(engagement_id, created_at DESC) WHERE status = 'processing';
 
 -- Analyze tables for query optimization
 ANALYZE engagements;

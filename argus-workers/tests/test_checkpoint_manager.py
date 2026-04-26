@@ -14,7 +14,7 @@ class TestCheckpointManager:
     @pytest.fixture
     def mock_db_conn(self):
         """Create a mock psycopg2 connection"""
-        with patch("checkpoint_manager.psycopg2.connect") as mock_connect:
+        with patch("database.connection.psycopg2.connect") as mock_connect:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_conn.cursor.return_value = mock_cursor

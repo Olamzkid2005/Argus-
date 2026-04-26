@@ -31,7 +31,7 @@ export async function POST(
 
       // Get current engagement state with row lock
       const engagementResult = await client.query(
-        `SELECT e.*, lb.max_cycles, lb.max_depth, lb.max_cost
+        `SELECT e.*, lb.max_cycles, lb.max_depth
          FROM engagements e
          LEFT JOIN loop_budgets lb ON e.id = lb.engagement_id
          WHERE e.id = $1
@@ -91,7 +91,6 @@ export async function POST(
         budget: {
           max_cycles: engagement.max_cycles || 5,
           max_depth: engagement.max_depth || 3,
-          max_cost: engagement.max_cost || 0.5,
         },
         trace_id: traceId,
         created_at: new Date().toISOString(),

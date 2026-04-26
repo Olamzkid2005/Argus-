@@ -23,8 +23,6 @@ import time
 import re
 import json
 import base64
-import ssl
-import socket
 import logging
 from typing import Dict, List, Optional
 from urllib.parse import urlparse, urljoin
@@ -39,7 +37,6 @@ from config.constants import (
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,
 )
-from tools.llm_payload_generator import LLMPayloadGenerator
 from config.constants import LLM_MAX_GENERATED_PAYLOADS
 
 class WebScanner:
@@ -536,7 +533,8 @@ class WebScanner:
                 confidence=0.9,
             )
         elif acao == "http://evil.com":
-            severity = "CRITICAL" if acac.lower() == "true" else "HIGH"
+            acac_str = str(acac) if acac is not None else ""
+            severity = "CRITICAL" if acac_str.lower() == "true" else "HIGH"
             self._add_finding(
                 finding_type="REFLECTED_ORIGIN_CORS",
                 severity=severity,
@@ -1346,7 +1344,7 @@ class WebScanner:
                 continue
             try:
                 header = json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
-            except:
+            except Exception:
                 continue
             
             # Test alg:none

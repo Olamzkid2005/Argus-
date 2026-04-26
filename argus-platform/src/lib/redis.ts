@@ -35,7 +35,6 @@ export interface JobMessage {
   budget: {
     max_cycles: number;
     max_depth: number;
-    max_cost: number;
   };
   aggressiveness?: string;
   trace_id: string;

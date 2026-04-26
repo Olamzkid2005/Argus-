@@ -5,7 +5,6 @@ Provides UUID validation to prevent PostgreSQL errors when
 non-UUID values are passed to UUID-typed columns.
 """
 import uuid
-from typing import Optional
 
 
 def validate_uuid(value: str, field_name: str = "engagement_id") -> str:

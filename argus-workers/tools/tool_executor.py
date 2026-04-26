@@ -11,7 +11,7 @@ import uuid
 from tools.tool_runner import ToolRunner, SecurityException
 from tools.scope_validator import ScopeValidator, ScopeViolationError
 from parsers.parser import Parser, ParserError
-from parsers.normalizer import FindingNormalizer, FindingValidationError
+from parsers.normalizer import FindingNormalizer
 from models.finding import VulnerabilityFinding
 
 

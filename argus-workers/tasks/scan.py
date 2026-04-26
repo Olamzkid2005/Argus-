@@ -24,7 +24,7 @@ _state_machine = load_module("state_machine")
 EngagementStateMachine = _state_machine.EngagementStateMachine
 
 
-@app.task(bind=True, name="tasks.scan.run_scan")
+@app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=600, time_limit=1200)
 def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None):
     """
     Execute scanning phase for an engagement

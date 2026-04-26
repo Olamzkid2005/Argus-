@@ -64,7 +64,6 @@ describe("POST /api/engagement/[id]/approve", () => {
             target_url: "https://example.com",
             max_cycles: 5,
             max_depth: 3,
-            max_cost: 0.5,
           },
         ],
       })
@@ -116,7 +115,6 @@ describe("POST /api/engagement/[id]/approve", () => {
         budget: {
           max_cycles: 5,
           max_depth: 3,
-          max_cost: 0.5,
         },
       }),
     );
@@ -240,7 +238,6 @@ describe("POST /api/engagement/[id]/approve", () => {
             target_url: "https://example.com",
             max_cycles: 5,
             max_depth: 3,
-            max_cost: 0.5,
           },
         ],
       })

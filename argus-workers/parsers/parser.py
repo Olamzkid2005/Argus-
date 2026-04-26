@@ -4,7 +4,7 @@ Parser Layer - Converts CLI tool output to JSON
 Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 20.5, 21.1, 21.2
 """
 import json
-from typing import List, Dict, Optional, Generator
+from typing import List, Dict, Generator
 from abc import ABC, abstractmethod
 import time
 import os

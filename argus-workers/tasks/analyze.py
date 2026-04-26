@@ -71,10 +71,26 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                 result = orchestrator.run_analysis(job)
 
                 actions = result.get("actions", [])
+                next_state = result.get("next_state", "reporting")
                 if actions:
                     state_machine.transition("recon", "Additional targets discovered")
+                    # Push expand recon job for next scan cycle
+                    app.send_task(
+                        'tasks.recon.expand_recon',
+                        args=[
+                            engagement_id,
+                            [],  # targets will be populated from analysis scope
+                            budget,
+                            trace_id,
+                        ],
+                    )
                 else:
                     state_machine.transition("reporting", "Analysis complete")
+                    # Push report generation job
+                    app.send_task(
+                        'tasks.report.generate_report',
+                        args=[engagement_id, trace_id],
+                    )
 
                 return result
         except Exception as e:

@@ -13,7 +13,6 @@ import {
   Loader2,
   AlertCircle,
   Settings as SettingsIcon,
-  ChevronRight,
   LogOut,
   Sparkles,
   Check,
@@ -31,8 +30,6 @@ import {
   Monitor,
   Search,
   Wand2,
-  ToggleLeft,
-  DollarSign,
   Brain,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
@@ -43,7 +40,6 @@ interface Settings {
   scan_aggressiveness?: string;
   llm_review_enabled?: string;
   llm_payload_generation_enabled?: string;
-  llm_max_cost?: string;
 }
 
 interface AITestResult {
@@ -224,7 +220,6 @@ export default function SettingsPage() {
         setSettings({
           llm_review_enabled: "true",
           llm_payload_generation_enabled: "true",
-          llm_max_cost: "0.50",
           ...data.settings,
         });
       }
@@ -708,33 +703,7 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Max LLM Cost */}
-              <div className="p-4 rounded-lg bg-surface-container-low dark:bg-surface-container border border-outline-variant dark:border-outline/30">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <DollarSign size={14} className="text-green-400" />
-                      <span className="text-xs font-bold text-on-surface font-headline">Max LLM Cost Per Engagement</span>
-                    </div>
-                    <p className="text-[10px] text-on-surface-variant leading-relaxed mb-2">
-                      Maximum budget for AI-powered analysis per engagement. Prevents runaway costs
-                      from LLM API usage during scanning and post-scan review.
-                    </p>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.10"
-                      value={settings.llm_max_cost || "0.50"}
-                      onChange={(e) =>
-                        setSettings((p) => ({ ...p, llm_max_cost: e.target.value }))
-                      }
-                      className="w-24 px-3 py-1.5 bg-surface dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-sm font-mono text-on-surface outline-none focus:border-primary transition-all duration-300"
-                    />
-                    <span className="text-[10px] text-on-surface-variant ml-2">USD</span>
-                  </div>
-                </div>
-              </div>
+              {/* Removed: Max LLM Cost (budget tracking removed) */}
             </div>
           </motion.div>
         </div>

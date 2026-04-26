@@ -4,14 +4,11 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Zap,
   ShieldCheck,
   ArrowRight,
   Loader2,
   Globe,
   Lock,
-  Cpu,
-  ShieldAlert,
   ChevronDown,
   Activity,
   Menu,
@@ -25,15 +22,8 @@ import {
   Clock,
   Star,
   BookOpen,
-  ChevronRight,
-  Fingerprint,
-  Radio,
-  Terminal,
-  Database,
-  LayoutDashboard,
-  UserPlus,
 } from "lucide-react";
-import { signIn, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import SurveillanceEye from "@/components/effects/SurveillanceEye";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";

@@ -1,0 +1,27 @@
+rules:
+  - id: php-xss-echo
+    pattern: echo $USER_INPUT
+    message: XSS risk - unsanitized user input reflected in output
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A3"
+
+  - id: php-xss-print
+    pattern: print($USER_INPUT)
+    message: XSS risk - unsanitized user input in print
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A3"
+
+  - id: php-xss-printf
+    pattern: printf($USER_INPUT, ...)
+    message: XSS risk - unsanitized user input in printf
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A3"

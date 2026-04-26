@@ -5,34 +5,12 @@
  * Use ?secret=dev to bypass auth in development
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
-    const url = new URL(request.url);
-    const secret = url.searchParams.get("secret");
-    
-    // Dev bypass - remove in production
-    const DEV_SECRET = "argus_dev_secret_2024";
-    
-    let isAuthorized = false;
-    
-    if (secret === DEV_SECRET) {
-      isAuthorized = true;
-    } else {
-      const session = await getServerSession(authOptions);
-      if (session?.user?.email) {
-        // Only allow specific admin emails
-        const adminEmails = ["onepaymerchantportal@gmail.com"];
-        isAuthorized = adminEmails.includes(session.user.email);
-      }
-    }
-
-    if (!isAuthorized) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireAuth();
 
     const body = await request.json();
     const migration = body.migration;

@@ -8,13 +8,11 @@ Requirements: 15.1, 15.2, 15.3, 15.4
 """
 import json
 import time
-import re
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
-from tools.llm_payload_generator import LLMPayloadGenerator
 from config.constants import LLM_MAX_GENERATED_PAYLOADS
 
 

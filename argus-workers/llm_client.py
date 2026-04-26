@@ -10,7 +10,7 @@ API key resolution order (first found wins):
 """
 import os
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

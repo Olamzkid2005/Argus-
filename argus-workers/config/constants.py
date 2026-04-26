@@ -13,7 +13,7 @@ MAX_CONCURRENT_REQUESTS = 5          # Max parallel requests
 # Content limits
 MAX_CONTENT_LENGTH = 1000            # Max chars to store in evidence
 MAX_FINDINGS_PER_BATCH = 50          # Batch insert size
-MAX_ENDOINTS_PER_SCAN = 1000         # Max endpoints to process
+MAX_ENDPOINTS_PER_SCAN = 1000         # Max endpoints to process
 
 # Retries
 MAX_TOOL_RETRIES = 2                 # Number of retry attempts

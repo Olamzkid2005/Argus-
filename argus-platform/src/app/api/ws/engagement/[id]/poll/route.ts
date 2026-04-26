@@ -15,6 +15,9 @@ import { WEBSOCKET_CHANNELS, WebSocketEvent } from "@/lib/websocket-events";
 
 // Redis subscriber for pub/sub
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+redis.on("error", (err) => {
+  console.error("WebSocket poll Redis error:", err);
+});
 
 // Store recent events in Redis with TTL for polling
 const EVENTS_TTL = 300; // 5 minutes

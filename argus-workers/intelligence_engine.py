@@ -4,7 +4,7 @@ Analyzes findings and generates recommended actions
 
 Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2, 18.1, 18.2, 18.3, 18.4
 """
-from typing import Dict, List, Optional
+from typing import Dict, List
 from collections import defaultdict
 import os
 import json
@@ -224,7 +224,6 @@ class IntelligenceEngine:
             budget = {
                 "max_cycles": loop_budget.get("max_cycles", 5),
                 "max_depth": loop_budget.get("max_depth", 3),
-                "max_cost": loop_budget.get("max_cost", 0.5),
             }
             actions.append({
                 "type": "auth_focused_scan",

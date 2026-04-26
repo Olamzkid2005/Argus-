@@ -456,7 +456,6 @@ class WebSocketEventPublisher:
         if not db_url:
             return
         try:
-            import psycopg2
             from database.connection import connect
             conn = connect(db_url)
             cursor = conn.cursor()

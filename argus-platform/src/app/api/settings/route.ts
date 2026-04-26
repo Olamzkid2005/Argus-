@@ -38,8 +38,6 @@ export async function GET() {
     const scanAggressiveness = await redis.get(`settings:${email}:scan_aggressiveness`);
     const llmReviewEnabled = await redis.get(`settings:${email}:llm_review_enabled`);
     const llmPayloadGenEnabled = await redis.get(`settings:${email}:llm_payload_generation_enabled`);
-    const llmMaxCost = await redis.get(`settings:${email}:llm_max_cost`);
-
     const settings: Record<string, string> = {};
 
     // Mask the key
@@ -57,9 +55,6 @@ export async function GET() {
     }
     if (llmPayloadGenEnabled) {
       settings.llm_payload_generation_enabled = llmPayloadGenEnabled;
-    }
-    if (llmMaxCost) {
-      settings.llm_max_cost = llmMaxCost;
     }
 
     return NextResponse.json({ settings });

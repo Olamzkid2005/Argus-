@@ -36,7 +36,7 @@ import { MarkdownRenderer } from "@/components/ui-custom/MarkdownRenderer";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 import SecurityRating from "@/components/security/SecurityRating";
-import { BulkActionBar } from "@/components/ui-custom/BulkActionBar";
+
 
 // ── Types ──
 interface Finding {
@@ -589,43 +589,6 @@ export default function FindingsPage() {
       setIsBulkExporting(false);
     }
   }, [selectedFindings, filtered, showToast]);
-
-  const handleGenerateRemediation = async (findingId: string) => {
-    if (remediationContent[findingId]) return;
-    const finding = findings.find(f => f.id === findingId);
-    if (!finding) return;
-    try {
-      const response = await fetch("/api/ai/remediate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ finding, model: selectedModel }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setRemediationContent(prev => ({ ...prev, [findingId]: data.remediation }));
-        showToast("success", "Remediation steps generated");
-      } else {
-        showToast("error", data.error || "Failed to generate remediation");
-      }
-    } catch (err) {
-      showToast("error", "Failed to generate remediation");
-    }
-  };
-
-  const handleFetchSimilar = async (findingId: string) => {
-    setSimilarFindings([]);
-    try {
-      const response = await fetch(`/api/findings/similar?findingId=${findingId}`);
-      const data = await response.json();
-      if (response.ok) {
-        setSimilarFindings(data.findings || []);
-      } else {
-        showToast("error", data.error || "Failed to fetch similar findings");
-      }
-    } catch (err) {
-      showToast("error", "Failed to fetch similar findings");
-    }
-  };
 
   const severityCounts = useMemo(() => {
     return findings.reduce((acc, f) => {

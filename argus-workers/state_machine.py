@@ -6,10 +6,8 @@ Supports passing an external connection for transaction support.
 """
 from typing import Dict, List, Optional
 import psycopg2
-from database.connection import connect
+from database.connection import connect, get_db
 import uuid
-
-from database.connection import get_db
 from utils.validation import validate_uuid
 
 
@@ -39,7 +37,7 @@ class EngagementStateMachine:
     # Valid state transitions
     TRANSITIONS = {
         "created": ["recon", "failed"],
-        "recon": ["awaiting_approval", "failed", "paused"],
+        "recon": ["scanning", "awaiting_approval", "failed", "paused"],
         "awaiting_approval": ["scanning", "paused", "failed"],
         "scanning": ["analyzing", "failed", "paused"],
         "analyzing": ["reporting", "recon", "failed"],  # Can loop back to recon

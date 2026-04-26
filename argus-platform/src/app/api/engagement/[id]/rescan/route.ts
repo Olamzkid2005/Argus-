@@ -69,9 +69,9 @@ export async function POST(
       // Initialize loop budget with defaults
       await client.query(
         `INSERT INTO loop_budgets
-         (id, engagement_id, max_cycles, max_depth, max_cost, current_cycles, current_depth, current_cost, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-        [uuidv4(), newEngagementId, 5, 3, 0.5, 0, 0, 0.0],
+         (id, engagement_id, max_cycles, max_depth, current_cycles, current_depth, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [uuidv4(), newEngagementId, 5, 3, 0, 0],
       );
 
       // Record initial state transition
@@ -95,7 +95,7 @@ export async function POST(
             engagement_id: newEngagementId,
             target: source.target_url,
             repo_url: source.target_url,
-            budget: { max_cycles: 5, max_depth: 3, max_cost: 0.5 },
+            budget: { max_cycles: 5, max_depth: 3 },
             aggressiveness: source.scan_aggressiveness || "default",
             trace_id: traceId,
             created_at: new Date().toISOString(),
@@ -105,7 +105,7 @@ export async function POST(
             type: "recon",
             engagement_id: newEngagementId,
             target: source.target_url,
-            budget: { max_cycles: 5, max_depth: 3, max_cost: 0.5 },
+            budget: { max_cycles: 5, max_depth: 3 },
             aggressiveness: source.scan_aggressiveness || "default",
             trace_id: traceId,
             created_at: new Date().toISOString(),

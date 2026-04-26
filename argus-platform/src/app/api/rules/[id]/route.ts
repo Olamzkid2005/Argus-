@@ -9,7 +9,7 @@ import { pool } from "@/lib/db";
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAuth();
@@ -22,7 +22,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const client = await pool.connect();
     try {
       // Verify ownership before deleting
@@ -61,7 +61,7 @@ export async function DELETE(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAuth();
@@ -74,7 +74,7 @@ export async function PUT(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await req.json();
     const { name, description, severity, category, status, rule_yaml, tags } = body;
 

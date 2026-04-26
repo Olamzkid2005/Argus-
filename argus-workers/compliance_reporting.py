@@ -8,7 +8,7 @@ Requirements: 17.1, 17.2, 17.3, 17.4
 """
 import os
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

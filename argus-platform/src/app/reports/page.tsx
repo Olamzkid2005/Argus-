@@ -7,18 +7,12 @@ import { useToast } from "@/components/ui/Toast";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileBarChart,
-  FileText,
   Download,
-  Calendar,
   Filter,
   Search,
-  ChevronRight,
   Loader2,
-  RefreshCcw,
-  Eye,
   Trash2,
   Share2,
-  Printer,
   ShieldCheck,
   Plus,
 } from "lucide-react";

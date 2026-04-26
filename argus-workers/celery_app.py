@@ -123,6 +123,7 @@ app.conf.update(
     },
     
     # Task Routes (for future queue separation)
+    # Time limits are set per-task via @app.task decorator or globally above
     task_routes={
         "tasks.recon.*": {"queue": "recon"},
         "tasks.scan.*": {"queue": "scan"},
@@ -271,7 +272,6 @@ app.Task = BaseTask
 @app.task(bind=True, name="tasks.health.ping")
 def ping_task(self):
     """Simple ping task to verify worker is alive and can execute tasks."""
-    import socket
     return {
         "status": "ok",
         "worker": self.request.hostname,

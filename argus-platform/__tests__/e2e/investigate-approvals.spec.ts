@@ -99,8 +99,6 @@ test.describe('Investigate Awaiting Approval Engagements', () => {
         console.log(`  Current Cycles: ${b.current_cycles}`);
         console.log(`  Max Depth: ${b.max_depth}`);
         console.log(`  Current Depth: ${b.current_depth}`);
-        console.log(`  Max Cost: $${b.max_cost}`);
-        console.log(`  Current Cost: $${b.current_cost}`);
         console.log('');
       }
 

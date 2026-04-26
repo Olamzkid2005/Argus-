@@ -5,8 +5,10 @@ Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 20.4, 21.1, 21.2, 22.1
 """
 import subprocess
 import os
+import sys
+import site
 import tempfile
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 from pathlib import Path
 import time
 
@@ -98,31 +100,85 @@ class ToolRunner:
         Returns:
             True if dangerous pattern detected, False otherwise
         """
-        # Combine tool and args into single string for pattern matching
-        command_str = f"{tool} {' '.join(args)}"
+        # Check tool name against blocked tools (exact match only)
+        BLOCKED_TOOLS = {"curl", "wget", "nc", "netcat"}
+        if tool in BLOCKED_TOOLS:
+            return True
         
-        # Check for dangerous patterns
+        # Check args for shell injection patterns only (not tool name)
+        args_str = " ".join(args)
         for pattern in self.DANGEROUS_PATTERNS:
-            if pattern.lower() in command_str.lower():
+            # Skip patterns that match tool names — handled above
+            if pattern in ("curl", "wget", "nc ", "netcat"):
+                continue
+            if pattern.lower() in args_str.lower():
                 return True
         
         return False
     
-    def _locked_env(self) -> Dict[str, str]:
+    def _locked_env(self, tool: str = "") -> Dict[str, str]:
         """
-        Return minimal locked environment variables
+        Build the subprocess environment portably.
+
+        PYTHONPATH is assembled from the live interpreter — never hardcoded paths.
+        This survives Python upgrades and other machines.
         
-        Returns:
-            Dictionary of environment variables
+        Args:
+            tool: Tool name to determine if proxy should be stripped
         """
-        # Include venv bin path for installed tools (semgrep, etc.)
-        venv_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "venv", "bin")
-        return {
+        venv_bin = str(Path(sys.executable).parent)
+
+        # --- PYTHONPATH assembly ---
+        python_paths: List[str] = []
+
+        # 1. System / venv site-packages
+        try:
+            python_paths.extend(p for p in site.getsitepackages() if os.path.isdir(p))
+        except AttributeError:
+            pass  # getsitepackages() absent in some venv builds
+
+        # 2. User site-packages (~/.local/lib/... or ~/Library/Python/...)
+        user_site = site.getusersitepackages()
+        if user_site and os.path.isdir(user_site):
+            python_paths.append(user_site)
+
+        # 3. Running interpreter's sys.path (catches editable installs, .pth files)
+        python_paths.extend(p for p in sys.path if p and os.path.isdir(p))
+
+        # Deduplicate while preserving order
+        seen: Set[str] = set()
+        unique_paths: List[str] = []
+        for p in python_paths:
+            if p not in seen:
+                seen.add(p)
+                unique_paths.append(p)
+
+        # Tools that must NOT inherit proxy settings (they need full network access)
+        no_proxy_tools = {"nuclei", "dalfox", "sqlmap", "httpx", "nikto", "nmap", "curl", "testssl", "arjun", "jwt_tool", "commix"}
+
+        env = {
             "PATH": f"{venv_bin}:/usr/local/bin:/usr/bin:/bin",
-            "HOME": str(self.sandbox_dir),
+            # NOTE: Don't override HOME - it breaks Python module lookups in venv
+            # Use real home for Python packages but set TMPDIR for file isolation
             "TMPDIR": str(self.sandbox_dir / "tmp"),
-            "LANG": "en_US.UTF-8",
+            "PYTHONPATH": os.pathsep.join(unique_paths),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            # Suppress semgrep telemetry / version-check latency
+            "SEMGREP_SEND_METRICS": "off",
+            "SEMGREP_ENABLE_VERSION_CHECK": "0",
         }
+        
+        # For web scanning tools, strip proxy so they can reach the internet
+        # Semgrep will get proxy settings from parent environment (for validation fallback)
+        if tool in no_proxy_tools:
+            # Explicitly unset proxy vars - subprocess inherits parent env unless overridden
+            env["HTTP_PROXY"] = ""
+            env["HTTPS_PROXY"] = ""
+            env["http_proxy"] = ""
+            env["https_proxy"] = ""
+            env["no_proxy"] = "*"  # belt-and-suspenders
+        
+        return env
     
     def run(
         self,
@@ -160,6 +216,9 @@ class ToolRunner:
         
         # Execute with span tracing
         with self.span_recorder.span(ExecutionSpan.SPAN_TOOL_EXECUTION, {"tool": tool}):
+            # Get env with tool-specific proxy settings
+            env = self._locked_env(tool)
+            
             try:
                 # Execute with locked environment
                 result = subprocess.run(
@@ -168,14 +227,22 @@ class ToolRunner:
                     text=True,
                     timeout=timeout,
                     cwd=str(self.sandbox_dir),
-                    env=self._locked_env()
+                    env=env
                 )
                 
                 # Calculate duration
                 duration_ms = int((time.time() - start_time) * 1000)
                 
                 # Determine success
-                success = result.returncode == 0
+                # Tool-specific exit codes that mean "findings present, not an error"
+                FINDINGS_EXIT_CODES = {
+                    "semgrep":  {1},
+                    "bandit":   {1},
+                    "gitleaks": {1},
+                    "dalfox":   {1},
+                }
+                success = (result.returncode == 0 or 
+                          result.returncode in FINDINGS_EXIT_CODES.get(tool, set()))
                 
                 # Record tool metrics (Requirement 22.1)
                 if self.metrics_repo:

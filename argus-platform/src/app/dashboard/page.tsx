@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback, Suspense, lazy } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession, signIn } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { useMobileDetect } from "@/hooks/useMobileDetect";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,10 +15,8 @@ import {
   ChevronRight,
   Radio,
   Target,
-  Lock,
   Database,
   Trash2,
-  Cpu,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -29,7 +27,6 @@ import {
   Eye,
   History,
 } from "lucide-react";
-import ScannerReveal from "@/components/effects/ScannerReveal";
 import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import ScannerActivityPanel from "@/components/ui-custom/ScannerActivityPanel";
@@ -37,8 +34,7 @@ import { useScannerActivities } from "@/lib/use-scanner-activities";
 import { useScanEstimates } from "@/hooks/useScanEstimates";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import { WebSocketEvent } from "@/lib/websocket-events";
-import { ScrollReveal } from "@/components/animations/ScrollReveal";
-import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
+
 import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
 
 // Lazy load heavy visualization components
@@ -156,7 +152,7 @@ function TimelineRow({ event }: { event: WebSocketEvent }) {
       <div className="flex-1 min-w-0">
         <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] capitalize">{event.type.replace(/_/g, " ")}</div>
         <div className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono mt-0.5 truncate uppercase">
-          {event.data.message as string || event.data.from_state as string + " → " + event.data.to_state as string || ""}
+          {event.data.message as string || ((event.data.from_state as string) + " → " + (event.data.to_state as string)) || ""}
         </div>
       </div>
     </div>

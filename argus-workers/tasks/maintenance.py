@@ -19,7 +19,6 @@ def cleanup_old_results(self):
     - Clean up old checkpoints
     """
     import psycopg2
-    from datetime import datetime, timedelta
     import os
 
     db_conn = os.getenv("DATABASE_URL")
@@ -92,7 +91,6 @@ def cleanup_failed_engagements(self):
     Clean up engagements that have been in failed state for more than 7 days
     """
     import psycopg2
-    from datetime import datetime, timedelta
     import os
 
     db_conn = os.getenv("DATABASE_URL")
