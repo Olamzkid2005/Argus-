@@ -267,6 +267,16 @@ class Orchestrator:
             targets_list = job.get("targets", [])
             target = targets_list[0] if targets_list else None
         
+        if not target:
+            logger.warning(f"run_recon called with no target for engagement {self.engagement_id}, skipping")
+            return {
+                "phase": "recon",
+                "status": "skipped",
+                "findings_count": 0,
+                "next_state": "scanning",
+                "trace_id": get_trace_id(),
+            }
+        
         # Publish job started event
         self.ws_publisher.publish_job_started(
             engagement_id=self.engagement_id,
@@ -306,15 +316,15 @@ class Orchestrator:
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
             from_state="created",
-            to_state="awaiting_approval",
-            reason="Reconnaissance completed"
+            to_state="scanning",
+            reason="Reconnaissance completed — auto-advancing to scan"
         )
         
         return {
             "phase": "recon",
             "status": "completed",
             "findings_count": findings_count,
-            "next_state": "awaiting_approval",
+            "next_state": "scanning",
             "trace_id": get_trace_id(),
         }
     
@@ -331,6 +341,12 @@ class Orchestrator:
             List of findings
         """
         all_findings = []
+
+        # Guard against None/empty target
+        if not target:
+            logger.warning(f"[_execute_recon_tools] No valid target for engagement {self.engagement_id}, skipping recon")
+            return []
+
         target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
 
         # Aggressiveness config
@@ -669,7 +685,7 @@ class Orchestrator:
         # Publish state transition event
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
-            from_state="awaiting_approval",
+            from_state="scanning",
             to_state="analyzing",
             reason="Scanning completed"
         )
@@ -698,6 +714,10 @@ class Orchestrator:
         agg = aggressiveness or DEFAULT_AGGRESSIVENESS
         
         for target in targets:
+            # Skip None/empty targets
+            if not target:
+                continue
+
             # Pre-resolve target to fail fast if DNS is broken
             hostname = target.replace("https://", "").replace("http://", "").split("/")[0]
             try:
@@ -1109,7 +1129,7 @@ class Orchestrator:
                 text=True,
                 timeout=TOOL_TIMEOUT_LONG
             )
-            if result.returncode == 0:
+            if result.returncode in [0, 1] and result.stdout.strip():
                 audit_data = json.loads(result.stdout)
                 for vuln in audit_data:
                     severity = vuln.get('severity', 'MEDIUM').upper()
@@ -1345,15 +1365,15 @@ class Orchestrator:
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
             from_state="created",
-            to_state="awaiting_approval",
-            reason="Repository scan completed"
+            to_state="scanning",
+            reason="Repository scan completed — auto-advancing to web scan"
         )
         
         return {
             "phase": "repo_scan",
             "status": "completed",
             "findings_count": findings_count,
-            "next_state": "awaiting_approval",
+            "next_state": "scanning",
             "trace_id": get_trace_id(),
         }
     

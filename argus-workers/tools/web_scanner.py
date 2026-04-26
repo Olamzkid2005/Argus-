@@ -202,6 +202,7 @@ class WebScanner:
             "Accept-Language": "en-US,en;q=0.5",
         })
         self.findings = []
+        self.discovered_parameters = None  # Initialized before parameter_discovery()
     
     def scan(self, target_url: str) -> List[Dict]:
         """
@@ -218,95 +219,44 @@ class WebScanner:
         
         logger.info(f"Starting comprehensive web scan: {self.target_url}")
         
-        # 1. Security headers audit
-        self.check_security_headers()
+        checks = [
+            ("check_security_headers", self.check_security_headers),
+            ("check_csp", self.check_csp),
+            ("check_cookies", self.check_cookies),
+            ("check_cors", self.check_cors),
+            ("parameter_discovery", self.parameter_discovery),
+            ("parameter_fuzzing", self.parameter_fuzzing),
+            ("check_sensitive_files", self.check_sensitive_files),
+            ("check_js_secrets", self.check_js_secrets),
+            ("check_open_redirects", self.check_open_redirects),
+            ("check_host_header_injection", self.check_host_header_injection),
+            ("check_verb_tampering", self.check_verb_tampering),
+            ("check_debug_endpoints", self.check_debug_endpoints),
+            ("check_auth_endpoints", self.check_auth_endpoints),
+            ("check_mass_assignment", self.check_mass_assignment),
+            ("check_xss", self.check_xss),
+            ("check_ssti", self.check_ssti),
+            ("check_lfi", self.check_lfi),
+            ("check_xxe", self.check_xxe),
+            ("check_graphql_introspection", self.check_graphql_introspection),
+            ("check_jwt_algorithm_confusion", self.check_jwt_algorithm_confusion),
+            ("check_prototype_pollution", self.check_prototype_pollution),
+            ("check_cache_poisoning", self.check_cache_poisoning),
+            ("check_http_request_smuggling", self.check_http_request_smuggling),
+            ("check_dom_xss", self.check_dom_xss),
+            ("check_openapi_discovery", self.check_openapi_discovery),
+            ("differential_analysis", self.differential_analysis),
+            ("detect_waf", self.detect_waf),
+            ("time_based_detection", self.time_based_detection),
+            ("ssl_verify", self.ssl_verify),
+            ("response_analysis", self.response_analysis),
+        ]
         
-        # 2. CSP analysis
-        self.check_csp()
-        
-        # 3. Cookie security
-        self.check_cookies()
-        
-        # 4. CORS analysis
-        self.check_cors()
-        
-        # 4.5 Parameter discovery
-        self.parameter_discovery()
-        
-        # 4.6 Parameter fuzzing
-        self.parameter_fuzzing()
-        
-        # 5. Sensitive file detection
-        self.check_sensitive_files()
-        
-        # 6. JS secret scanning
-        self.check_js_secrets()
-        
-        # 7. Open redirect detection
-        self.check_open_redirects()
-        
-        # 8. Host header injection
-        self.check_host_header_injection()
-        
-        # 9. HTTP verb tampering
-        self.check_verb_tampering()
-        
-        # 10. Debug endpoint detection
-        self.check_debug_endpoints()
-        
-        # 11. Authentication testing
-        self.check_auth_endpoints()
-        
-        # 12. Mass assignment testing
-        self.check_mass_assignment()
-        
-        # 13. XSS testing (on discovered parameters)
-        self.check_xss()
-        
-        # 14. SSTI testing
-        self.check_ssti()
-        
-        # 15. LFI testing
-        self.check_lfi()
-        
-        # 16. XXE testing
-        self.check_xxe()
-        
-        # 17. GraphQL introspection
-        self.check_graphql_introspection()
-        
-        # 18. JWT algorithm confusion
-        self.check_jwt_algorithm_confusion()
-        
-        # 19. Prototype pollution
-        self.check_prototype_pollution()
-        
-        # 20. Cache poisoning
-        self.check_cache_poisoning()
-        
-        # 21. HTTP request smuggling
-        self.check_http_request_smuggling()
-        
-        # 22. DOM XSS
-        self.check_dom_xss()
-        
-        # 23. OpenAPI discovery
-        self.check_openapi_discovery()
-        
-        # 24. Differential analysis
-        self.differential_analysis()
-        
-        # 25. WAF detection
-        self.detect_waf()
-        
-        # 26. Time-based vulnerability detection
-        self.time_based_detection()
-        
-        # 27. SSL/TLS verification
-        self.ssl_verify()
-        
-        # 28. Response analysis for information leakage
-        self.response_analysis()
+        for name, method in checks:
+            try:
+                method()
+            except Exception as e:
+                logger.error(f"{name} failed (non-fatal): {e}", exc_info=True)
         
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
@@ -358,9 +308,9 @@ class WebScanner:
         
         headers = {k.lower(): v for k, v in response.headers.items()}
         body = response.text[:2000].lower() if response.text else ""
-        
-        # Check headers
-        powered_by = headers.get("x-powered-by", "").lower()
+
+        # Check headers — wrap with str() to handle int header values
+        powered_by = str(headers.get("x-powered-by", "")).lower()
         if "django" in body or "csrfmiddlewaretoken" in body:
             return "Django"
         if powered_by:
@@ -373,8 +323,8 @@ class WebScanner:
             if "rails" in powered_by or "ruby" in powered_by:
                 return "Rails"
         
-        # Check server header
-        server = headers.get("server", "").lower()
+        # Check server header — wrap with str() to handle int values
+        server = str(headers.get("server", "")).lower()
         if "nginx" in server:
             return "nginx"
         if "apache" in server:
@@ -868,8 +818,8 @@ class WebScanner:
                         allow_redirects=False,
                     )
                     if login_resp and login_resp.status_code in (200, 302):
-                        # Check if login was successful (redirect to dashboard, etc.)
-                        location = login_resp.headers.get("Location", "").lower()
+                        # Check if login was successful (redirect to dashboard, etc.) — wrap with str() for int values
+                        location = str(login_resp.headers.get("Location", "")).lower()
                         if any(x in location for x in ["dashboard", "admin", "home", "welcome"]):
                             self._add_finding(
                                 finding_type="DEFAULT_CREDENTIALS",
@@ -897,6 +847,10 @@ class WebScanner:
             None. Findings are appended to self.findings.
         """
         logger.info("Running parameter discovery")
+
+        # Initialize early so parameter_fuzzing() doesn't fail if we raise below
+        self.discovered_parameters = {"url_parameters": [], "form_parameters": [],
+                                       "json_parameters": [], "javascript_parameters": []}
 
         discovered = {
             "url_parameters": set(),
@@ -1001,7 +955,7 @@ class WebScanner:
         """
         logger.info("Running parameter fuzzing")
 
-        if not hasattr(self, "discovered_parameters"):
+        if not self.discovered_parameters:
             return
 
         # Simple fuzz payloads to test parameter handling
@@ -1146,7 +1100,7 @@ class WebScanner:
                 if payload in test_resp.text:
                     # Only flag HIGH if it's in script context or event handler
                     # Not just reflected in HTML (which browsers escape)
-                    is_script_context = "<script" in test_resp.text and "<script" in test_resp.text
+                    is_script_context = "<script" in test_resp.text and "</script>" in test_resp.text
                     
                     # Calculate confidence based on context
                     if is_script_context:
@@ -1712,7 +1666,7 @@ class WebScanner:
 
         for waf_name, signatures in waf_signatures.items():
             for sig_type, sig_value in signatures:
-                sig_value_lower = sig_value.lower()
+                sig_value_lower = str(sig_value).lower()
                 if sig_type == "header" and sig_value_lower in headers_str:
                     detected_wafs.add(waf_name)
                 elif sig_type == "body" and sig_value_lower in body_str:

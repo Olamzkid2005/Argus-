@@ -68,7 +68,8 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
                 result = orchestrator.run_recon(job)
 
-                state_machine.transition("scanning", "Recon complete — auto-advancing to scan")
+                # Don't transition to "scanning" here — scan.py handles that transition
+                # and verifies the state is valid before proceeding
                 # Auto-push scan job (skip awaiting_approval phase)
                 app.send_task(
                     'tasks.scan.run_scan',
@@ -109,11 +110,17 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
 
     # Execute with trace context
     with tracing_manager.trace_execution(engagement_id, "recon_expand", trace_id):
+        # Filter valid targets
+        valid_targets = [t for t in targets if t and isinstance(t, str)]
+        if not valid_targets:
+            logger.warning(f"expand_recon called with empty/invalid targets for engagement {engagement_id}, skipping")
+            return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets"}
+
         job = {
             "type": "recon_expand",
             "engagement_id": engagement_id,
-            "target": targets[0] if targets else None,
-            "targets": targets,
+            "target": valid_targets[0],
+            "targets": valid_targets,
             "budget": budget,
             "trace_id": trace_id,
         }
@@ -133,7 +140,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                 # Auto-push scan job (skip awaiting_approval phase)
                 app.send_task(
                     'tasks.scan.run_scan',
-                    args=[engagement_id, job.get("targets", [job.get("target")]), budget, trace_id],
+                    args=[engagement_id, valid_targets, budget, trace_id],
                 )
 
                 return result

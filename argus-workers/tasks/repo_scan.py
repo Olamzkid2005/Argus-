@@ -153,7 +153,8 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
                         except Exception as e:
                             logger.error(f"Failed to generate SBOMs: {str(e)}")
 
-                state_machine.transition("scanning", "Repository scan complete — auto-advancing to web scan")
+                # Don't transition to "scanning" here — scan.py handles that transition
+                # and reads the actual DB state before transitioning
                 # Auto-push web scan job (skip awaiting_approval phase)
                 app.send_task(
                     'tasks.scan.run_scan',
@@ -405,19 +406,18 @@ def run_npm_audit(repo_path):
             audit_data = json.loads(result.stdout)
             findings = []
             vulns = audit_data.get('vulnerabilities', {})
-            for vuln_type, vuln_list in vulns.items():
-                for vuln in vuln_list:
-                    findings.append({
-                        'type': 'DEPENDENCY_VULNERABILITY',
-                        'severity': vuln.get('severity', 'MEDIUM').upper(),
-                        'title': vuln.get('title', vuln_type),
-                        'package': vuln_type,
-                        'version': vuln.get('version', 'unknown'),
-                        'fix_available': vuln.get('fixAvailable', False),
-                        'vulnerable_versions': vuln.get('vulnerable_versions', ''),
-                        'cve': vuln.get('cves', []),
-                        'cvss_score': vuln.get('cvss', {}).get('score', 0),
-                    })
+            for pkg_name, vuln_info in vulns.items():
+                findings.append({
+                    'type': 'DEPENDENCY_VULNERABILITY',
+                    'severity': vuln_info.get('severity', 'MEDIUM').upper(),
+                    'title': f"Vulnerability in {pkg_name}",
+                    'package': pkg_name,
+                    'version': vuln_info.get('version', 'unknown'),
+                    'fix_available': vuln_info.get('fixAvailable', False),
+                    'vulnerable_versions': vuln_info.get('vulnerable_versions', ''),
+                    'cve': vuln_info.get('cves', []),
+                    'cvss_score': vuln_info.get('cvss', {}).get('score', 0),
+                })
             return findings
     except Exception as e:
         logger.error(f"npm audit failed: {e}")
@@ -433,7 +433,7 @@ def run_pip_audit(repo_path):
             text=True,
             timeout=300
         )
-        if result.returncode == 0:
+        if result.returncode in [0, 1]:
             audit_data = json.loads(result.stdout)
             findings = []
             for vuln in audit_data:
@@ -486,24 +486,32 @@ def scan_git_history_for_secrets(repo_path):
     findings = []
     
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             ['git', 'log', '--all', '--patch', '--pretty=format:COMMIT:%H|AUTHOR:%an|DATE:%ai'],
             cwd=repo_path,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=600
         )
-        
-        if result.returncode != 0:
-            logger.warning(f"Git log failed: {result.stderr}")
-            return findings
         
         current_commit = None
         current_author = None
         current_date = None
         patch_lines = []
+        line_count = 0
+        max_lines = 500000
         
-        for line in result.stdout.split('\n'):
+        for line in process.stdout:
+            line_count += 1
+            if line_count > max_lines:
+                logger.warning(
+                    f"Git history scan: exceeded {max_lines} lines, truncating"
+                )
+                process.kill()
+                break
+            
+            line = line.rstrip('\n\r')
+            
             if line.startswith('COMMIT:'):
                 if current_commit and patch_lines:
                     _check_patch_for_secrets(
@@ -521,12 +529,22 @@ def scan_git_history_for_secrets(repo_path):
             else:
                 patch_lines.append(line)
         
+        process.wait(timeout=600)
+        
+        if process.returncode not in [0, 1]:
+            stderr_output = process.stderr.read()
+            logger.warning(f"Git log failed (exit {process.returncode}): {stderr_output}")
+        
         if current_commit and patch_lines:
             _check_patch_for_secrets(
                 patch_lines, current_commit, current_author,
                 current_date, repo_path, findings
             )
     
+    except subprocess.TimeoutExpired:
+        logger.error("Git history scan timed out")
+        process.kill()
+        process.wait()
     except Exception as e:
         logger.error(f"Git history scan failed: {e}")
     

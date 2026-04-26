@@ -59,8 +59,10 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
 
         try:
             with LockContext(lock, engagement_id):
+                # Read actual state from DB instead of hardcoding
+                current_state = _get_engagement_state(engagement_id, db_conn_string)
                 state_machine = EngagementStateMachine(
-                    engagement_id, db_connection_string=db_conn_string, current_state="awaiting_approval"
+                    engagement_id, db_connection_string=db_conn_string, current_state=current_state
                 )
                 state_machine.transition("scanning", "Starting scan")
 
