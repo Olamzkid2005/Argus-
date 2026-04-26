@@ -1,0 +1,83 @@
+rules:
+  - id: php-lfi-include
+    pattern: include($INPUT)
+    message: Local File Inclusion risk - include with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-98"
+      owasp: "A1"
+
+  - id: php-lfi-require
+    pattern: require($INPUT)
+    message: Local File Inclusion risk - require with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-98"
+      owasp: "A1"
+
+  - id: php-lfi-include-once
+    pattern: include_once($INPUT)
+    message: Local File Inclusion risk - include_once with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-98"
+      owasp: "A1"
+
+  - id: php-unserialize
+    pattern: unserialize($INPUT)
+    message: Insecure Deserialization risk - unserialize with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-502"
+      owasp: "A8"
+
+  - id: php-file-upload-dangerous
+    pattern: move_uploaded_file($TMP, $DEST)
+    message: Unrestricted File Upload risk - uploaded file moved without validation
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-434"
+      owasp: "A1"
+
+  - id: php-open-redirect
+    pattern: 'header("Location: " . $INPUT)'
+    message: Open Redirect risk - unvalidated redirect via Location header
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-601"
+      owasp: "A1"
+
+  - id: php-ssrf-file-get-contents
+    pattern: file_get_contents($INPUT)
+    message: SSRF risk - file_get_contents with unsanitized input
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-918"
+      owasp: "A1"
+
+  - id: php-ssrf-curl
+    pattern: curl_exec($CH)
+    message: SSRF risk - curl_exec may be used with unsanitized URL
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-918"
+      owasp: "A1"
+
+  - id: php-type-juggling-loose-comparison
+    patterns:
+      - pattern: $VAR == $OTHER
+      - pattern-not: $VAR === $OTHER
+    message: Type Juggling risk - loose comparison (==) may cause unexpected auth bypass
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-843"
+      owasp: "A1"

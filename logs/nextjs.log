@@ -264,3 +264,678 @@ Import trace for requested module:
 ./src/lib/audit.ts
 Database client connected
 Database client connected
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET / 200 in 3981ms
+ GET /auth/signin 200 in 195ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/auth/providers 200 in 11345ms
+ GET /auth/signin 200 in 12030ms
+ GET /api/auth/csrf 200 in 24ms
+Database client connected
+ POST /api/auth/callback/credentials 302 in 2498ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ POST / 200 in 2347ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+Database client connected
+ POST /api/engagement/create 200 in 3312ms
+ POST /api/engagement/create 200 in 1309ms
+ GET /api/auth/csrf 200 in 350ms
+ POST /api/auth/callback/credentials 302 in 1101ms
+ POST /api/engagement/create 200 in 34ms
+ POST /api/engagement/create 200 in 20ms
+ POST /api/engagement/create 200 in 1202ms
+ POST /api/engagement/create 200 in 1331ms
+ POST /api/engagement/create 200 in 1137ms
+ POST /api/engagement/create 200 in 1002ms
+ GET /api/auth/csrf 200 in 28ms
+ POST /api/auth/callback/credentials 302 in 17ms
+ POST /api/engagement/create 200 in 1231ms
+ POST /api/engagement/create 200 in 1110ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/engagement 404 in 8368ms
+(node:86244) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Database client connected
+ GET /api/engagement/b8b31e19-9693-4d12-815d-cc6c0d4f8ac7/findings 200 in 4908ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ GET /api/engagements?limit=5 200 in 1808ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /dashboard 200 in 3316ms
+Database client connected
+ GET /api/engagement/b8b31e19-9693-4d12-815d-cc6c0d4f8ac7/findings?limit=50 200 in 818ms
+ GET /api/engagement/15d8500f-6d35-4c8d-8e91-8dbc30e0adaf/findings?limit=50 200 in 38ms
+(node:86884) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Get findings error: Error: Unauthorized
+    at requireAuth (webpack-internal:///(rsc)/./src/lib/session.ts:29:15)
+    at async GET (webpack-internal:///(rsc)/./src/app/api/engagement/[id]/findings/route.ts:18:25)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+ GET /api/engagement/b8b31e19-9693-4d12-815d-cc6c0d4f8ac7/findings 401 in 31ms
+(node:86975) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ GET /api/reports 404 in 102ms
+ GET /api/reports?limit=5 404 in 33ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+Assets API error: relation "assets" does not exist
+ GET /api/assets 500 in 1188ms
+ GET /api/compliance 404 in 244ms
+ GET /api/vulnerabilities 404 in 20ms
+Assets API error: permission denied for table assets
+ GET /api/assets 500 in 136ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /reports 200 in 4596ms
+Database client connected
+ GET /api/assets 200 in 216ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ GET /api/reports/compliance 200 in 1349ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ GET /api/reports 200 in 1261ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /reports 200 in 1151ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /assets 200 in 7616ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ GET /api/engagement/15d8500f-6d35-4c8d-8e91-8dbc30e0adaf/findings 200 in 1863ms
+(node:88241) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ GET /api/engagements 200 in 1912ms
+ GET /api/engagements 200 in 83ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/openapi 200 in 632ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ GET /api/reports 200 in 478ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ POST /api/reports/generate 400 in 503ms
+ GET /api/engagements 200 in 83ms
+ POST /api/reports/generate 400 in 39ms
+ POST /api/reports/generate 400 in 21ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+ POST /api/reports/generate 200 in 224ms
+ GET /api/reports 200 in 26ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+(node:88947) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Database client connected
+ GET /api/reports/9a74a38b-22d9-4afc-b17e-b1037f3dbe5e/download 200 in 1422ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+(node:88955) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Database client connected
+ DELETE /api/reports/9a74a38b-22d9-4afc-b17e-b1037f3dbe5e 200 in 1110ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts

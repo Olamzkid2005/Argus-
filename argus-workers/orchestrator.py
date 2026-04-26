@@ -1493,13 +1493,13 @@ class Orchestrator:
             
             # Map to semgrep registry configs
             lang_registry_map = {
-                "javascript": ["p/javascript"],
-                "python":     ["p/python"],
-                "go":         ["p/golang"],
-                "rust":       ["p/rust"],
-                "ruby":       ["p/ruby"],
-                "java":       ["p/java"],
-                "php":        ["p/php"],
+                "javascript": ["p/javascript", "p/secrets"],
+                "python":     ["p/python", "p/secrets"],
+                "go":         ["p/golang", "p/secrets"],
+                "rust":       ["p/rust", "p/secrets"],
+                "ruby":       ["p/ruby", "p/secrets"],
+                "java":       ["p/java", "p/secrets"],
+                "php":        ["p/php", "p/secrets"],
             }
             
             # ── 1. Gitleaks: secret detection in git history ──
@@ -1738,7 +1738,7 @@ class Orchestrator:
             def _resolve_semgrep_config(cfg: str) -> list:
                 """Resolve a semgrep config name to local file paths."""
                 INDEX = {
-                    "p/php":        ["php-ssl.yaml", "php-xss.yaml", "php-sqli.yaml"],
+                    "p/php":        ["php-ssl.yaml", "php-xss.yaml", "php-sqli.yaml", "php-csrf.yaml", "php-xxe.yaml", "php-rce.yaml", "php-session.yaml", "php-security.yaml"],
                     "p/javascript": ["javascript-security.yaml"],
                     "p/secrets":    ["secrets.yaml"],
                 }

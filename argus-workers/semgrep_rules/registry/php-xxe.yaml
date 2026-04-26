@@ -1,0 +1,45 @@
+rules:
+  - id: php-xxe-simplexml
+    pattern: simplexml_load_file($INPUT)
+    message: XXE risk - simplexmlload_file with external XML may enable XXE attacks
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-611"
+      owasp: "A4"
+
+  - id: php-xxe-domdocument-no-protect
+    patterns:
+      - pattern: |
+          $doc = new DOMDocument();
+          ...
+          $doc->load($INPUT);
+      - pattern-not: |
+          $doc = new DOMDocument();
+          $doc->loadXML(...);
+    message: XXE risk - DOMDocument loading XML without disabling external entities
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-611"
+      owasp: "A4"
+
+  - id: php-xxe-domdocument-loadxml
+    patterns:
+      - pattern: $DOC->loadXML($INPUT)
+      - pattern-not: libxml_disable_entity_loader(true)
+    message: XXE risk - loadXML without libxml entity loader disabled
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-611"
+      owasp: "A4"
+
+  - id: php-xxe-simplexml-import
+    pattern: simplexml_import_dom($DOC)
+    message: XXE risk - importing DOM without entity protection
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-611"
+      owasp: "A4"

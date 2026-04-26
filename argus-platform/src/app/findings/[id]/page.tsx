@@ -10,19 +10,19 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Filter,
   ShieldAlert,
-  Target,
   Zap,
   Activity,
   History,
-  LayoutGrid,
   FileSearch,
   ArrowLeft,
+  Layers,
+  List,
 } from "lucide-react";
 import { FindingCard } from "@/components/ui-custom/FindingCard";
+import { FindingGroupCard } from "@/components/ui-custom/FindingGroupCard";
 
 // Types
 interface Finding {
@@ -39,6 +39,16 @@ interface Finding {
   cvss_score?: number;
   owasp_category?: string;
   cwe_id?: string;
+}
+
+interface FindingGroup {
+  check_id: string;
+  rule_name: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  source_tool: string;
+  count: number;
+  endpoints: string[];
+  findings: Finding[];
 }
 
 interface ExecutionSpan {
@@ -62,6 +72,7 @@ export default function FindingsDashboardPage() {
   const [selectedSeverities, setSelectedSeverities] = useState<string[]>([]);
   const [minConfidence, setMinConfidence] = useState<number>(0);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const [groupByCheckId, setGroupByCheckId] = useState(true);
 
   // Fetch findings
   useEffect(() => {
@@ -136,6 +147,41 @@ export default function FindingsDashboardPage() {
       return acc;
     },
     {} as Record<string, Finding[]>,
+  );
+
+  // Group findings by check_id (extracted from evidence)
+  const groupedByCheckId = findings.reduce(
+    (acc, finding) => {
+      const checkId = (finding.evidence?.check_id as string) || finding.id;
+      if (!acc[checkId]) {
+        acc[checkId] = {
+          check_id: checkId,
+          rule_name: checkId.split(".").pop() || checkId,
+          severity: finding.severity,
+          source_tool: finding.source_tool,
+          count: 0,
+          findings: [],
+          endpoints: [],
+        };
+      }
+      const group = acc[checkId];
+      group.count++;
+      group.findings.push(finding);
+      if (!group.endpoints.includes(finding.endpoint)) {
+        group.endpoints.push(finding.endpoint);
+      }
+      // Keep highest severity
+      const sevOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+      if (sevOrder[finding.severity] < sevOrder[group.severity]) {
+        group.severity = finding.severity;
+      }
+      return acc;
+    },
+    {} as Record<string, FindingGroup>,
+  );
+
+  const groupedByCheckIdList = Object.values(groupedByCheckId).sort(
+    (a, b) => a.count - b.count,
   );
 
   // Get unique tools for filter
@@ -225,8 +271,20 @@ export default function FindingsDashboardPage() {
           </div>
 
           <div className="prism-glass p-2 rounded-2xl flex gap-1">
-            <button className="px-4 py-2 bg-primary/10 text-primary rounded-xl font-bold text-xs flex items-center gap-2">
-              <LayoutGrid className="h-3.5 w-3.5" /> Sector View
+            <button
+              onClick={() => setGroupByCheckId(!groupByCheckId)}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+                groupByCheckId
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-white/5"
+              }`}
+            >
+              {groupByCheckId ? (
+                <Layers className="h-3.5 w-3.5" />
+              ) : (
+                <List className="h-3.5 w-3.5" />
+              )}
+              {groupByCheckId ? "Grouped" : "Individual"}
             </button>
             <button className="px-4 py-2 text-muted-foreground hover:bg-white/5 rounded-xl font-bold text-xs flex items-center gap-2">
               <History className="h-3.5 w-3.5" /> Timeline
@@ -355,34 +413,50 @@ export default function FindingsDashboardPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-10">
-                {severityOrder.map((severity) => {
-                  const severityFindings = groupedFindings[severity] || [];
-                  if (severityFindings.length === 0) return null;
-                  const meta = getSeverityMeta(severity);
+                {groupByCheckId ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-3">
+                      {groupedByCheckIdList.map((group) => (
+                        <FindingGroupCard
+                          key={group.check_id}
+                          group={group}
+                          getSeverityMeta={getSeverityMeta}
+                        />
+                      ))}
+                    </div>
+                    {groupedByCheckIdList.length === 0 && (
+                      <div className="prism-glass p-12 rounded-3xl text-center opacity-60">
+                        <FileSearch className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground font-medium">
+                          No intelligence matches the filtered parameters.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  severityOrder.map((severity) => {
+                    const severityFindings = groupedFindings[severity] || [];
+                    if (severityFindings.length === 0) return null;
+                    const meta = getSeverityMeta(severity);
 
-                  return (
-                    <section key={severity}>
-                      <div className="flex items-center gap-4 mb-4">
-                        <div
-                          className={`h-px flex-1 bg-gradient-to-r from-transparent to-border`}
-                        />
-                        <h2
-                          className={`text-xs font-black uppercase tracking-[0.3em] ${meta.color}`}
-                        >
-                          {severity} DISCOVERY ({severityFindings.length})
-                        </h2>
-                        <div
-                          className={`h-px flex-1 bg-gradient-to-l from-transparent to-border`}
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 gap-4">
-                        {severityFindings.map((finding) => (
-                          <FindingCard key={finding.id} finding={finding} />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })}
+                    return (
+                      <section key={severity}>
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="h-px flex-1 bg-gradient-to-r from-transparent to-border" />
+                          <h2 className={`text-xs font-black uppercase tracking-[0.3em] ${meta.color}`}>
+                            {severity} DISCOVERY ({severityFindings.length})
+                          </h2>
+                          <div className="h-px flex-1 bg-gradient-to-l from-transparent to-border" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                          {severityFindings.map((finding) => (
+                            <FindingCard key={finding.id} finding={finding} />
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })
+                )}
 
                 {findings.length === 0 && (
                   <div className="prism-glass p-12 rounded-3xl text-center opacity-60">

@@ -390,16 +390,25 @@ def generate_compliance_report(
             html = generator.render_report(report)
             json_data = generator.render_to_json(report)
 
+            # Get org_id for the engagement
+            cursor.execute(
+                "SELECT org_id FROM engagements WHERE id = %s",
+                (engagement_id,)
+            )
+            org_row = cursor.fetchone()
+            org_id = org_row["org_id"] if org_row else None
+
             # Store report in database
             cursor.execute(
                 """
                 INSERT INTO compliance_reports (
-                    engagement_id, standard, title, report_data, html_content, status
+                    org_id, engagement_id, standard, title, results, html_content, status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
+                    org_id,
                     engagement_id,
                     standard,
                     report.title,
@@ -416,6 +425,172 @@ def generate_compliance_report(
             return {
                 "report_id": str(report_id) if report_id else None,
                 "standard": standard,
+                "engagement_id": engagement_id,
+                "findings_count": len(findings),
+                "status": "ready",
+            }
+
+        except Exception as e:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+
+@app.task(bind=True, name="tasks.report.generate_full_report")
+def generate_full_report(
+    self,
+    engagement_id: str,
+    report_id: str,
+    trace_id: str = None,
+):
+    """
+    Generate a full security audit report for an engagement
+
+    Args:
+        engagement_id: Engagement ID
+        report_id: Report ID to update (or None to create new)
+        trace_id: Optional trace_id for distributed tracing
+    """
+    db_conn_string = os.getenv("DATABASE_URL")
+
+    tracing_manager = TracingManager(db_conn_string)
+
+    if not trace_id:
+        trace_id = tracing_manager.generate_trace_id()
+
+    with tracing_manager.trace_execution(engagement_id, "full_report", trace_id):
+        conn = connect(db_conn_string)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        try:
+            # 1. Query the engagement
+            cursor.execute(
+                """
+                SELECT id, target_url, scan_type, org_id, created_at, completed_at
+                FROM engagements WHERE id = %s
+                """,
+                (engagement_id,)
+            )
+            engagement = cursor.fetchone()
+            if not engagement:
+                raise ValueError(f"Engagement {engagement_id} not found")
+
+            org_id = engagement["org_id"]
+
+            # 2. Query all findings (using columns that exist in the table)
+            cursor.execute(
+                """
+                SELECT id, type, severity, endpoint, evidence, source_tool,
+                       confidence, created_at
+                FROM findings
+                WHERE engagement_id = %s
+                ORDER BY
+                    CASE severity
+                        WHEN 'CRITICAL' THEN 1
+                        WHEN 'HIGH' THEN 2
+                        WHEN 'MEDIUM' THEN 3
+                        WHEN 'LOW' THEN 4
+                        WHEN 'INFO' THEN 5
+                    END
+                """,
+                (engagement_id,)
+            )
+            findings = [dict(row) for row in cursor.fetchall()]
+
+            # 3. Count by severity
+            critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
+            high_count = sum(1 for f in findings if f["severity"] == "HIGH")
+            medium_count = sum(1 for f in findings if f["severity"] == "MEDIUM")
+            low_count = sum(1 for f in findings if f["severity"] == "LOW")
+
+            # 4. Get top categories (group by type)
+            type_counts = {}
+            for f in findings:
+                ftype = f["type"]
+                type_counts[ftype] = type_counts.get(ftype, 0) + 1
+
+            top_categories = [
+                {"name": t, "count": c}
+                for t, c in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            ]
+
+            # 5. Calculate scan duration
+            scan_duration = ""
+            if engagement.get("created_at") and engagement.get("completed_at"):
+                duration = engagement["completed_at"] - engagement["created_at"]
+                total_seconds = int(duration.total_seconds())
+                hours, remainder = divmod(total_seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                scan_duration = f"{hours}h {minutes}m {seconds}s"
+
+            # 6. Render full report template via ComplianceReportGenerator
+            generator = ComplianceReportGenerator()
+            template = generator.env.get_template("full_report.html")
+
+            report_context = {
+                "title": f"Full Security Audit Report - {engagement_id}",
+                "engagement_id": str(engagement_id),
+                "target_url": engagement.get("target_url", ""),
+                "scan_type": engagement.get("scan_type", ""),
+                "summary": {
+                    "total_findings": len(findings),
+                    "critical_count": critical_count,
+                    "high_count": high_count,
+                    "medium_count": medium_count,
+                    "low_count": low_count,
+                    "top_categories": top_categories,
+                    "scan_duration": scan_duration,
+                },
+                "findings": findings,
+            }
+
+            generated_at = datetime.now(UTC)
+            html = template.render(
+                report=report_context,
+                generated_at=generated_at.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+
+            json_data = {"summary": report_context["summary"]}
+
+            # 7. Store HTML into compliance_reports.html_content
+            # 8. Store JSON summary into compliance_reports.results
+            if report_id:
+                cursor.execute(
+                    """
+                    UPDATE compliance_reports
+                    SET html_content = %s, results = %s, status = %s, updated_at = NOW()
+                    WHERE id = %s AND engagement_id = %s
+                    """,
+                    (html, json.dumps(json_data), "ready", report_id, engagement_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO compliance_reports (
+                        org_id, engagement_id, standard, title, results, html_content, status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        org_id,
+                        engagement_id,
+                        "full_report",
+                        report_context["title"],
+                        json.dumps(json_data),
+                        html,
+                        "ready",
+                    ),
+                )
+                row = cursor.fetchone()
+                report_id = row["id"] if row else None
+
+            conn.commit()
+
+            return {
+                "report_id": str(report_id) if report_id else None,
                 "engagement_id": engagement_id,
                 "findings_count": len(findings),
                 "status": "ready",

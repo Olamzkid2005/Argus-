@@ -1,26 +1,33 @@
 rules:
-  - id: php-xss-echo
-    pattern: echo $USER_INPUT
-    message: XSS risk - unsanitized user input reflected in output
+  - id: php-xss-print-superglobal
+    pattern-either:
+      - pattern: print($_GET)
+      - pattern: print($_POST)
+      - pattern: print($_REQUEST)
+    message: XSS risk - unsanitized superglobal printed directly
     severity: ERROR
     languages: [php]
     metadata:
       cwe: "CWE-79"
       owasp: "A3"
 
-  - id: php-xss-print
-    pattern: print($USER_INPUT)
-    message: XSS risk - unsanitized user input in print
+  - id: php-xss-printf-user-input
+    pattern: printf($VAR, ...)
+    message: XSS risk - printf with user input as format string
     severity: ERROR
     languages: [php]
     metadata:
       cwe: "CWE-79"
       owasp: "A3"
 
-  - id: php-xss-printf
-    pattern: printf($USER_INPUT, ...)
-    message: XSS risk - unsanitized user input in printf
-    severity: ERROR
+  - id: php-xss-print-without-encode
+    patterns:
+      - pattern: print($EXPR)
+      - pattern-not: print(htmlspecialchars(...))
+      - pattern-not: print(htmlentities(...))
+      - pattern-not: print(strip_tags(...))
+    message: XSS risk - print without htmlspecialchars/entities sanitization
+    severity: WARNING
     languages: [php]
     metadata:
       cwe: "CWE-79"

@@ -770,7 +770,7 @@ export default function EngagementsPage() {
 
           {analyticsData.length > 0 ? (
             <div className="h-[220px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={analyticsData} barCategoryGap="20%">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(122, 116, 137, 0.15)" />
                   <XAxis

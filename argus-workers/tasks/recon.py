@@ -3,9 +3,12 @@ Celery tasks for reconnaissance phase
 
 Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
+import logging
 import os
 from celery_app import app
 from database.connection import connect
+
+logger = logging.getLogger(__name__)
 
 from tasks.loader import load_module
 from utils.validation import validate_uuid
@@ -67,6 +70,31 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
                 result = orchestrator.run_recon(job)
+
+                # Discover assets from the recon target
+                try:
+                    conn = connect(db_conn_string)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+                    row = cursor.fetchone()
+                    org_id = str(row[0]) if row else None
+                    cursor.close()
+                    conn.close()
+
+                    if org_id:
+                        # Run asset discovery (creates domain/endpoint asset records)
+                        app.send_task(
+                            'tasks.asset_discovery.run_asset_discovery',
+                            args=[engagement_id, target, org_id, trace_id],
+                        )
+                        # Then update risk scores based on any existing findings
+                        app.send_task(
+                            'tasks.asset_discovery.update_asset_risk_scores',
+                            args=[org_id],
+                        )
+                except Exception as e:
+                    # Asset discovery is non-critical — log and continue
+                    print(f"Asset discovery skipped for {engagement_id}: {e}")
 
                 # Don't transition to "scanning" here — scan.py handles that transition
                 # and verifies the state is valid before proceeding

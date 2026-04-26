@@ -53,6 +53,9 @@ TASK_NAME_MAP = {
     "report": "tasks.report.generate_report",
     "repo_scan": "tasks.repo_scan.run_repo_scan",
     "compliance_report": "tasks.report.generate_compliance_report",
+    "full_report": "tasks.report.generate_full_report",
+    "asset_discovery": "tasks.asset_discovery.run_asset_discovery",
+    "asset_risk_scoring": "tasks.asset_discovery.update_asset_risk_scores",
 }
 
 
@@ -151,6 +154,23 @@ def main():
                 job["engagement_id"],
                 job.get("standard", "owasp_top10"),
                 job.get("trace_id"),
+            ]
+        elif job_type == "full_report":
+            args = [
+                job["engagement_id"],
+                job.get("report_id"),
+                job.get("trace_id"),
+            ]
+        elif job_type == "asset_discovery":
+            args = [
+                job["engagement_id"],
+                job.get("target"),
+                job.get("org_id"),
+                job.get("trace_id"),
+            ]
+        elif job_type == "asset_risk_scoring":
+            args = [
+                job.get("org_id"),
             ]
         else:
             raise ValueError(f"Unknown job type: {job_type}")

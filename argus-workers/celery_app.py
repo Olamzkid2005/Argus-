@@ -72,6 +72,7 @@ app = Celery(
         "tasks.llm_review",
         "tasks.maintenance",
         "tasks.self_scan",
+        "tasks.asset_discovery",
     ],
 )
 

@@ -16,6 +16,9 @@ const TASK_NAME_MAP: Record<string, string> = {
   report: "tasks.report.generate_report",
   repo_scan: "tasks.repo_scan.run_repo_scan",
   compliance_report: "tasks.report.generate_compliance_report",
+  full_report: "tasks.report.generate_full_report",
+  asset_discovery: "tasks.asset_discovery.run_asset_discovery",
+  asset_risk_scoring: "tasks.asset_discovery.update_asset_risk_scores",
 };
 
 // Map job types to positional arg order (matching Celery task signatures)
@@ -25,13 +28,18 @@ const TASK_NAME_MAP: Record<string, string> = {
 // report: (engagement_id, trace_id)
 // repo_scan: (engagement_id, repo_url, budget, trace_id)
 // compliance_report: (engagement_id, standard, trace_id)
+// full_report: (engagement_id, report_id, trace_id)
+// asset_discovery: (engagement_id, target, org_id, trace_id)
+// asset_risk_scoring: (org_id)
 
 export interface JobMessage {
-  type: "recon" | "scan" | "analyze" | "report" | "repo_scan" | "compliance_report";
+  type: "recon" | "scan" | "analyze" | "report" | "repo_scan" | "compliance_report" | "full_report" | "asset_discovery" | "asset_risk_scoring";
   engagement_id: string;
   target: string;
   repo_url?: string;
   standard?: string;
+  report_id?: string;
+  org_id?: string;
   budget: {
     max_cycles: number;
     max_depth: number;
@@ -152,6 +160,12 @@ function buildTaskArgs(job: JobMessage): unknown[] {
         job.standard || "owasp_top10",
         job.trace_id,
       ];
+    case "full_report":
+      return [job.engagement_id, job.report_id, job.trace_id];
+    case "asset_discovery":
+      return [job.engagement_id, job.target, job.org_id, job.trace_id];
+    case "asset_risk_scoring":
+      return [job.org_id];
     default:
       return [job.engagement_id, job.target, job.budget, job.trace_id];
   }

@@ -1,0 +1,90 @@
+rules:
+  - id: php-rce-system-exec
+    pattern: system($INPUT)
+    message: RCE risk - system() with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-exec
+    pattern: exec($INPUT)
+    message: RCE risk - exec() with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-shell-exec
+    pattern: shell_exec($INPUT)
+    message: RCE risk - shell_exec() with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-passthru
+    pattern: passthru($INPUT)
+    message: RCE risk - passthru() with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-popen
+    pattern: popen($INPUT, ...)
+    message: RCE risk - popen() with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-backtick
+    pattern: shell_exec($INPUT)
+    message: RCE risk - shell execution via backtick operator with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-preg-replace-eval
+    pattern: preg_replace($PATTERN, $REPLACEMENT, $SUBJECT)
+    message: RCE risk - preg_replace with /e modifier allows code execution
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"
+
+  - id: php-rce-create-function
+    pattern: create_function($ARGS, $CODE)
+    message: RCE risk - create_function() allows arbitrary code execution
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-94"
+      owasp: "A1"
+
+  - id: php-rce-assert
+    pattern: assert($INPUT)
+    message: RCE risk - assert() with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-94"
+      owasp: "A1"
+
+  - id: php-rce-imagick-image-tragick
+    pattern: new Imagick($INPUT)
+    message: RCE risk (ImageTragick CVE-2016-3714) - Imagick with unsanitized input
+    severity: ERROR
+    languages: [php]
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A1"

@@ -61,9 +61,14 @@ class LLMClient:
             or os.getenv("LLM_API_KEY")
             or self._load_key_from_redis(redis_url)
         )
-        self.api_url = api_url or os.getenv("LLM_API_URL", 
-            "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
-        )
+        # Auto-detect OpenRouter: if key was loaded from Redis openrouter key or starts with sk-or-
+        if self.api_key and self.api_key.startswith("sk-or-"):
+            self.provider = "generic"
+            self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        else:
+            self.api_url = api_url or os.getenv("LLM_API_URL", 
+                "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
+            )
         
         # OpenAI SDK client (lazy init)
         self._openai_client = None

@@ -1,0 +1,11 @@
+rules:
+  - id: php-csrf-api-no-header-check
+    patterns:
+      - pattern: |
+          header('Access-Control-Allow-Origin: *');
+    message: CSRF risk - CORS misconfiguration may allow cross-origin requests
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-352"
+      owasp: "A1"

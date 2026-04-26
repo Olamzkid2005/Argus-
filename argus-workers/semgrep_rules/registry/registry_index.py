@@ -8,6 +8,11 @@ REGISTRY_MAP = {
         os.path.join(_rules_dir, "php-ssl.yaml"),
         os.path.join(_rules_dir, "php-xss.yaml"),
         os.path.join(_rules_dir, "php-sqli.yaml"),
+        os.path.join(_rules_dir, "php-csrf.yaml"),
+        os.path.join(_rules_dir, "php-xxe.yaml"),
+        os.path.join(_rules_dir, "php-rce.yaml"),
+        os.path.join(_rules_dir, "php-session.yaml"),
+        os.path.join(_rules_dir, "php-security.yaml"),
     ],
     # JavaScript
     "p/javascript": [

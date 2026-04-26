@@ -7,7 +7,7 @@ import os
 from celery_app import app
 from database.connection import connect
 
-from loader import load_module
+from tasks.loader import load_module
 
 _tracing = load_module("tracing")
 TracingManager = _tracing.TracingManager
@@ -105,22 +105,53 @@ def update_asset_risk_scores(self, org_id: str):
     """
     Update risk scores for all assets based on associated findings.
     
+    Uses the same severity-weight methodology as the findings page's
+    security rating system:
+      CRITICAL → weight 10 (CVSS ~9.5)
+      HIGH     → weight 5  (CVSS ~7.5)
+      MEDIUM   → weight 2  (CVSS ~5.0)
+      LOW      → weight 1  (CVSS ~3.0)
+      INFO     → weight 0.25 (CVSS ~0.0)
+    
+    The asset risk_score is clamped to 0.00–10.00 scale.
+    
     Args:
         org_id: Organization ID
     """
     db_conn_string = os.getenv("DATABASE_URL")
     
+    # Severity penalty weights — mirrors security-rating.ts
+    SEVERITY_WEIGHTS = {
+        "CRITICAL": 10.0,
+        "HIGH": 5.0,
+        "MEDIUM": 2.0,
+        "LOW": 1.0,
+        "INFO": 0.25,
+    }
+    
+    # Estimate CVSS per severity — mirrors attack_graph._estimate_cvss
+    SEVERITY_CVSS = {
+        "CRITICAL": 9.5,
+        "HIGH": 7.5,
+        "MEDIUM": 5.0,
+        "LOW": 3.0,
+        "INFO": 0.0,
+    }
+    
     try:
         conn = connect(db_conn_string)
         cursor = conn.cursor()
         
-        # Get all assets with their engagement findings
+        # Get all assets with their engagement findings by severity
         cursor.execute(
             """
-            SELECT a.id, a.asset_type, a.identifier,
-                   COUNT(f.id) as finding_count,
+            SELECT a.id,
                    COUNT(f.id) FILTER (WHERE f.severity = 'CRITICAL') as critical_count,
-                   COUNT(f.id) FILTER (WHERE f.severity = 'HIGH') as high_count
+                   COUNT(f.id) FILTER (WHERE f.severity = 'HIGH') as high_count,
+                   COUNT(f.id) FILTER (WHERE f.severity = 'MEDIUM') as medium_count,
+                   COUNT(f.id) FILTER (WHERE f.severity = 'LOW') as low_count,
+                   COUNT(f.id) FILTER (WHERE f.severity = 'INFO') as info_count,
+                   COALESCE(MAX(f.cvss_score), 0) as max_cvss
             FROM assets a
             LEFT JOIN engagements e ON a.engagement_id = e.id
             LEFT JOIN findings f ON e.id = f.engagement_id
@@ -131,11 +162,40 @@ def update_asset_risk_scores(self, org_id: str):
         )
         
         rows = cursor.fetchall()
+        scored_count = 0
         for row in rows:
-            asset_id, asset_type, identifier, finding_count, critical_count, high_count = row
+            asset_id, critical_count, high_count, medium_count, low_count, info_count, max_cvss = row
             
-            # Simple risk scoring formula
-            risk_score = min(10.0, (critical_count * 3.0) + (high_count * 1.5) + (finding_count * 0.1))
+            # Use CVSS score if available, otherwise estimate from highest severity
+            if max_cvss and max_cvss > 0:
+                cvss_based = float(max_cvss)
+                # Convert to 0-10 scale if stored as 0-1
+                if cvss_based <= 1.0:
+                    cvss_based = cvss_based * 10.0
+            else:
+                # Pick the CVSS equivalent of the highest severity present
+                if critical_count > 0:
+                    cvss_based = SEVERITY_CVSS["CRITICAL"]
+                elif high_count > 0:
+                    cvss_based = SEVERITY_CVSS["HIGH"]
+                elif medium_count > 0:
+                    cvss_based = SEVERITY_CVSS["MEDIUM"]
+                elif low_count > 0:
+                    cvss_based = SEVERITY_CVSS["LOW"]
+                else:
+                    cvss_based = SEVERITY_CVSS["INFO"]
+            
+            # Apply severity-weight penalty (same method as security-rating.ts)
+            total_weight = (
+                critical_count * SEVERITY_WEIGHTS["CRITICAL"] +
+                high_count * SEVERITY_WEIGHTS["HIGH"] +
+                medium_count * SEVERITY_WEIGHTS["MEDIUM"] +
+                low_count * SEVERITY_WEIGHTS["LOW"] +
+                info_count * SEVERITY_WEIGHTS["INFO"]
+            )
+            
+            # Final score blends CVSS base with volume penalty, clamped to 0–10
+            risk_score = round(min(10.0, max(0.0, cvss_based + (total_weight * 0.05))), 2)
             
             risk_level = "LOW"
             if risk_score >= 7.0:
@@ -153,12 +213,13 @@ def update_asset_risk_scores(self, org_id: str):
                 """,
                 (risk_score, risk_level, asset_id)
             )
+            scored_count += 1
         
         conn.commit()
         cursor.close()
         conn.close()
         
-        return {"status": "completed", "assets_scored": len(rows)}
+        return {"status": "completed", "assets_scored": scored_count}
         
     except Exception as e:
         return {"status": "failed", "error": str(e)}

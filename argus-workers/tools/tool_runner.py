@@ -180,6 +180,23 @@ class ToolRunner:
         
         return env
     
+    def _resolve_tool_path(self, tool: str) -> str:
+        """
+        Resolve the full path to a tool binary by checking common locations
+        and the current environment PATH.
+        
+        Args:
+            tool: Tool name (e.g., 'nuclei', 'httpx')
+            
+        Returns:
+            Full path to the tool binary, or the tool name if not found
+        """
+        import shutil
+        resolved = shutil.which(tool)
+        if resolved:
+            return resolved
+        return tool
+
     def run(
         self,
         tool: str,
@@ -219,10 +236,13 @@ class ToolRunner:
             # Get env with tool-specific proxy settings
             env = self._locked_env(tool)
             
+            # Resolve tool binary path for tools not in locked PATH
+            tool_path = self._resolve_tool_path(tool)
+            
             try:
                 # Execute with locked environment
                 result = subprocess.run(
-                    [tool] + args,
+                    [tool_path] + args,
                     capture_output=True,
                     text=True,
                     timeout=timeout,
