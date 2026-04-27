@@ -1309,3 +1309,5 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 [2026-04-27 05:17:04,824: INFO/ForkPoolWorker-1] LLM review complete: 0 analyzed, 0 confirmed, all processed
 [2026-04-27 05:17:04,832: INFO/ForkPoolWorker-1] Task 761f72be-cbe6-400a-8032-606faa73bb8f succeeded
 [2026-04-27 05:17:04,832: INFO/ForkPoolWorker-1] Task tasks.llm_review.run_llm_review[761f72be-cbe6-400a-8032-606faa73bb8f] succeeded in 165.08897896300186s: {'status': 'completed', 'analyzed': 0, 'confirmed': 0, 'total_candidates': 20, 'budget_exhausted': False}
+
+worker: Warm shutdown (MainProcess)

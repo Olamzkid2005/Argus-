@@ -51,6 +51,20 @@ export async function GET(
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
 
+    if (err.message.startsWith("NotFound")) {
+      return NextResponse.json(
+        { error: "Engagement not found" },
+        { status: 404 },
+      );
+    }
+
+    if (err.message.startsWith("ServiceUnavailable")) {
+      return NextResponse.json(
+        { error: "Authorization service unavailable" },
+        { status: 503 },
+      );
+    }
+
     return NextResponse.json(
       { error: "Failed to fetch engagement" },
       { status: 500 },

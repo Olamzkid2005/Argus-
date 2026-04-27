@@ -13,11 +13,16 @@ import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
 import { WEBSOCKET_CHANNELS, WebSocketEvent } from "@/lib/websocket-events";
 
-// Redis subscriber for pub/sub
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
-redis.on("error", (err) => {
-  console.error("WebSocket poll Redis error:", err);
-});
+// Redis subscriber for pub/sub (singleton via globalThis to survive hot reloads)
+const globalForPollRedis = globalThis as unknown as { __pollRedis?: Redis };
+const redis = globalForPollRedis.__pollRedis ?? (() => {
+  const client = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+  client.on("error", (err) => {
+    console.error("WebSocket poll Redis error:", err);
+  });
+  globalForPollRedis.__pollRedis = client;
+  return client;
+})();
 
 // Store recent events in Redis with TTL for polling
 const EVENTS_TTL = 300; // 5 minutes
@@ -30,10 +35,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
   try {
     // Verify authentication
     const session = await requireAuth();
-    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
@@ -133,6 +138,13 @@ export async function GET(
 
     if (err.message.startsWith("Forbidden")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+
+    if (err.message.startsWith("NotFound")) {
+      return NextResponse.json(
+        { error: "Engagement not found", engagement_id: engagementId },
+        { status: 404 },
+      );
     }
 
     if (err.message.startsWith("ServiceUnavailable")) {

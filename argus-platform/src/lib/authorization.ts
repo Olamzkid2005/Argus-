@@ -46,7 +46,7 @@ export async function canAccessEngagement(
   }
 
   if (!result || result.rows.length === 0) {
-    return false;
+    throw new Error("NotFound: Engagement does not exist");
   }
 
   const engagement = result.rows[0];
@@ -64,6 +64,10 @@ export async function requireEngagementAccess(
   try {
     hasAccess = await canAccessEngagement(session, engagementId);
   } catch (error) {
+    // Let NotFound errors propagate through (they're not service failures)
+    if (error instanceof Error && error.message.startsWith("NotFound")) {
+      throw error;
+    }
     console.error("Authorization check error:", error);
     throw new Error("ServiceUnavailable: Authorization service unavailable");
   }

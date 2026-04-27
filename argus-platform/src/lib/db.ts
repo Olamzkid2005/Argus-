@@ -22,8 +22,13 @@ const poolConfig: PoolConfig = {
 /**
  * Shared PostgreSQL connection pool.
  * Single instance used across all API routes to avoid connection exhaustion.
+ *
+ * Uses globalThis to survive Next.js hot-reload cycles in development.
+ * Without this, every hot reload creates a new Pool, leaking connections
+ * (observed: 123 idle connections vs pool max of 20).
  */
-export const pool = new Pool(poolConfig);
+const globalForPool = globalThis as unknown as { __pgPool?: Pool };
+export const pool = globalForPool.__pgPool ?? (globalForPool.__pgPool = new Pool(poolConfig));
 
 /**
  * Track pool health and query metrics

@@ -67,12 +67,17 @@ export function useScannerActivities(
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
   const prevIdRef = useRef(engagementId);
+  const consecutiveErrorsRef = useRef(0);
+  const stoppedRef = useRef(false);
+  const MAX_ERRORS = 5;
 
   // Reset stored data when engagementId changes
   useEffect(() => {
     if (prevIdRef.current !== engagementId) {
       prevIdRef.current = engagementId;
       setActivities(engagementId ? loadStoredActivities(engagementId) : []);
+      consecutiveErrorsRef.current = 0;
+      stoppedRef.current = false;
     }
   }, [engagementId]);
 
@@ -84,7 +89,7 @@ export function useScannerActivities(
   }, [engagementId, activities]);
 
   const fetchActivities = useCallback(async () => {
-    if (!engagementId || !mountedRef.current) return;
+    if (!engagementId || !mountedRef.current || stoppedRef.current) return;
 
     try {
       const response = await fetch(
@@ -92,17 +97,31 @@ export function useScannerActivities(
       );
 
       if (!response.ok) {
+        // 4xx errors: stop polling immediately (access issue won't resolve)
+        if (response.status >= 400 && response.status < 500) {
+          stoppedRef.current = true;
+          log.wsEvent("activities-access-denied", { engagementId, status: response.status });
+          setError(new Error(`Access denied: ${response.status}`));
+          return;
+        }
         throw new Error(`Failed to fetch activities: ${response.status}`);
       }
 
       const data = await response.json();
 
       if (mountedRef.current) {
+        consecutiveErrorsRef.current = 0;
         setActivities(data.activities || []);
         setError(null);
       }
     } catch (err) {
       if (mountedRef.current) {
+        consecutiveErrorsRef.current += 1;
+        if (consecutiveErrorsRef.current >= MAX_ERRORS) {
+          stoppedRef.current = true;
+          log.wsEvent("activities-polling-stopped", { engagementId });
+          return;
+        }
         log.wsError("Scanner activities fetch failed", { error: String(err), engagementId });
         setError(err instanceof Error ? err : new Error(String(err)));
       }
@@ -110,6 +129,9 @@ export function useScannerActivities(
   }, [engagementId]);
 
   const refetch = useCallback(() => {
+    // Allow refetch even if stopped (user explicitly retrying)
+    stoppedRef.current = false;
+    consecutiveErrorsRef.current = 0;
     log.wsEvent("refetchActivities", { engagementId });
     setIsLoading(true);
     fetchActivities().finally(() => {

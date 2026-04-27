@@ -378,7 +378,6 @@ export default function DashboardPage() {
   const [dbFindings, setDbFindings] = useState<any[]>([]);
   const [toolMetrics, setToolMetrics] = useState<any[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
-  const [attackPaths, setAttackPaths] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
   const accessDeniedNotifiedRef = useRef(false);
   const [engagementStart, setEngagementStart] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -397,6 +396,12 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rescannings, setRescannings] = useState<Set<string>>(new Set());
   const intentionalDisconnectRef = useRef(false);
+  
+  // Stopped flags for secondary polling effects — prevents infinite retry loops
+  const findingsPollStoppedRef = useRef(false);
+  const timelinePollStoppedRef = useRef(false);
+  const statePollStoppedRef = useRef(false);
+  
   const isMobile = useMobileDetect();
 
   // Persist active engagement to localStorage + URL so it survives navigation
@@ -600,6 +605,8 @@ export default function DashboardPage() {
   // Fetch findings from DB so they persist beyond Redis TTL
   useEffect(() => {
     if (!engagementId || !isConnected) return;
+    if (findingsPollStoppedRef.current) return;
+
     const fetchFindings = async () => {
       try {
         let url = `/api/engagement/${engagementId}/findings?limit=50`;
@@ -608,10 +615,16 @@ export default function DashboardPage() {
           url += `&since=${encodeURIComponent(scanStartTime)}`;
         }
         const res = await fetch(url);
-        if (handleEngagementAccessDenied(res.status)) return;
+        if (handleEngagementAccessDenied(res.status)) {
+          findingsPollStoppedRef.current = true;
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           setDbFindings(data.findings || []);
+        } else if (res.status >= 400 && res.status < 500) {
+          findingsPollStoppedRef.current = true;
+          return;
         }
       } catch (e) {
         console.error("Failed to fetch findings:", e);
@@ -661,6 +674,13 @@ export default function DashboardPage() {
     }
   }, [status, router]);
 
+  // Reset polling stop flags when engagement changes
+  useEffect(() => {
+    findingsPollStoppedRef.current = false;
+    timelinePollStoppedRef.current = false;
+    statePollStoppedRef.current = false;
+  }, [engagementId]);
+
   // Fetch real dashboard stats from DB
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -707,6 +727,8 @@ export default function DashboardPage() {
       setTimelineEvents([]);
       return;
     }
+    if (timelinePollStoppedRef.current) return;
+
     const fetchTimeline = async () => {
       try {
         const [timelineRes, engagementRes] = await Promise.all([
@@ -717,7 +739,17 @@ export default function DashboardPage() {
           handleEngagementAccessDenied(timelineRes.status) ||
           handleEngagementAccessDenied(engagementRes.status)
         ) {
+          timelinePollStoppedRef.current = true;
           return;
+        }
+        if (!timelineRes.ok || !engagementRes.ok) {
+          if (
+            (timelineRes.status >= 400 && timelineRes.status < 500) ||
+            (engagementRes.status >= 400 && engagementRes.status < 500)
+          ) {
+            timelinePollStoppedRef.current = true;
+            return;
+          }
         }
         if (timelineRes.ok) {
           const data = await timelineRes.json();
@@ -746,80 +778,77 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [engagementId, isConnected]);
 
-  // Fetch attack paths for active engagement
-  useEffect(() => {
-    if (!engagementId || !isConnected) {
-      setAttackPaths({ nodes: [], edges: [] });
-      return;
+  // Derive attack paths from dbFindings (already polled every 5s)
+  // instead of making a redundant API call that only gets DB findings.
+  const attackPaths = useMemo(() => {
+    if (!engagementId || !isConnected || !dbFindings || dbFindings.length === 0) {
+      return { nodes: [], edges: [] };
     }
-    const fetchPaths = async () => {
-      try {
-        const response = await fetch(`/api/engagement/${engagementId}/findings?limit=20`);
-        if (handleEngagementAccessDenied(response.status)) return;
-        if (response.ok) {
-          const data = await response.json();
-          const findings = data.findings || [];
-          const sortedFindings = [...findings]
-            .sort((a: any, b: any) => (Number(b.cvss_score || 0) - Number(a.cvss_score || 0)))
-            .slice(0, 4);
 
-          const firstFinding = sortedFindings[0];
-          const entryLabel = firstFinding?.endpoint || firstFinding?.target || firstFinding?.host || "External Surface";
-          const targetLabel = sortedFindings[sortedFindings.length - 1]?.endpoint || "Critical Asset";
+    const sortedFindings = [...dbFindings]
+      .sort((a: any, b: any) => (Number(b.cvss_score || 0) - Number(a.cvss_score || 0)))
+      .slice(0, 4);
 
-          const nodes = [
-            {
-              id: "node-entry",
-              type: "entry",
-              label: "Entry Point",
-              description: entryLabel,
-              cvss: null,
-              confidence: null,
-            },
-            ...sortedFindings.map((f: any, i: number) => ({
-              id: `node-exploit-${i}`,
-              type: "exploit",
-              label: f.finding_type || f.type || f.title || "Exploit Step",
-              description: f.endpoint || f.target || f.source_tool || "Unknown target",
-              cvss: f.cvss_score,
-              confidence: f.confidence,
-            })),
-            {
-              id: "node-target",
-              type: "target",
-              label: "Target",
-              description: targetLabel,
-              cvss: null,
-              confidence: null,
-            },
-          ];
+    const firstFinding = sortedFindings[0];
+    const entryLabel = firstFinding?.endpoint || firstFinding?.target || firstFinding?.host || "External Surface";
+    const targetLabel = sortedFindings[sortedFindings.length - 1]?.endpoint || "Critical Asset";
 
-          const edges = nodes.slice(0, -1).map((node: any, i: number) => ({
-            source: node.id,
-            target: nodes[i + 1].id,
-            label: i === 0 ? "recon" : i === nodes.length - 2 ? "impact" : "exploit",
-          }));
-          setAttackPaths({ nodes, edges });
-        }
-      } catch (err) {
-        console.error("Failed to fetch attack paths:", err);
-      }
-    };
-    fetchPaths();
-  }, [engagementId, isConnected]);
+    const nodes: any[] = [
+      {
+        id: "node-entry",
+        type: "entry",
+        label: "Entry Point",
+        description: entryLabel,
+        cvss: null,
+        confidence: null,
+      },
+      ...sortedFindings.map((f: any, i: number) => ({
+        id: `node-exploit-${i}`,
+        type: "exploit",
+        label: f.finding_type || f.type || f.title || "Exploit Step",
+        description: f.endpoint || f.target || f.source_tool || "Unknown target",
+        cvss: f.cvss_score,
+        confidence: f.confidence,
+      })),
+      {
+        id: "node-target",
+        type: "target",
+        label: "Target",
+        description: targetLabel,
+        cvss: null,
+        confidence: null,
+      },
+    ];
+
+    const edges: any[] = nodes.slice(0, -1).map((node: any, i: number) => ({
+      source: node.id,
+      target: nodes[i + 1].id,
+      label: i === 0 ? "recon" : i === nodes.length - 2 ? "impact" : "exploit",
+    }));
+
+    return { nodes, edges };
+  }, [engagementId, isConnected, dbFindings]);
 
   // Poll engagement state from DB — Redis TTL can expire, DB is the source of truth
   useEffect(() => {
     if (!engagementId) return;
+    if (statePollStoppedRef.current) return;
+
     const fetchState = async () => {
       try {
         const res = await fetch(`/api/engagement/${engagementId}`);
-        if (handleEngagementAccessDenied(res.status)) return;
+        if (handleEngagementAccessDenied(res.status)) {
+          statePollStoppedRef.current = true;
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           if (data.engagement?.status) {
             setCurrentState(data.engagement.status);
           }
+        } else if (res.status >= 400 && res.status < 500) {
+          statePollStoppedRef.current = true;
+          return;
         }
       } catch (e) {
         console.error("Failed to fetch engagement state:", e);

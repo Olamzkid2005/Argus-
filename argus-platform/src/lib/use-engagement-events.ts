@@ -99,6 +99,13 @@ export function useEngagementEvents(
   const mountedRef = useRef(true);
   const prevIdRef = useRef(engagementId);
 
+  // Use refs for callbacks to avoid cascading re-creation of fetchEvents
+  // when the consumer passes inline functions that change on every render.
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   // Reset stored data when engagementId changes
   useEffect(() => {
     if (prevIdRef.current !== engagementId) {
@@ -121,9 +128,22 @@ export function useEngagementEvents(
     }
   }, [engagementId, currentState]);
 
+  // Track consecutive errors for backoff
+  const consecutiveErrorsRef = useRef(0);
+  const maxErrorsBeforeStop = 5; // Stop polling after this many consecutive errors
+
   // Fetch events via polling
   const fetchEvents = useCallback(async () => {
     if (!mountedRef.current || !enabled) return;
+
+    // Stop polling after too many consecutive errors (engagement likely deleted/forbidden)
+    if (consecutiveErrorsRef.current >= maxErrorsBeforeStop) {
+      if (consecutiveErrorsRef.current === maxErrorsBeforeStop) {
+        log.wsEvent("polling-stopped", { engagementId, reason: `${maxErrorsBeforeStop} consecutive failures` });
+        consecutiveErrorsRef.current = maxErrorsBeforeStop + 1; // Log only once
+      }
+      return;
+    }
 
     try {
       const params = new URLSearchParams({
@@ -136,15 +156,25 @@ export function useEngagementEvents(
       );
 
       if (!response.ok) {
+        // For 4xx errors (Forbidden/Unauthorized/Not Found), stop polling faster
+        if (response.status >= 400 && response.status < 500) {
+          consecutiveErrorsRef.current = maxErrorsBeforeStop; // Stop immediately
+          log.wsEvent("polling-access-denied", { engagementId, status: response.status });
+          setError(new Error(`Access denied: ${response.status}`));
+          setIsConnected(false);
+          onErrorRef.current?.(new Error(`Failed to fetch events: ${response.status}`));
+          return;
+        }
         throw new Error(`Failed to fetch events: ${response.status}`);
       }
 
       const data = await response.json();
 
       if (mountedRef.current) {
+        // Reset error count on success
+        consecutiveErrorsRef.current = 0;
         setIsConnected(true);
         setError(null);
-        log.wsConnect(engagementId);
 
         // Update current state
         if (data.current_state) {
@@ -172,33 +202,42 @@ export function useEngagementEvents(
           }
 
           // Call onEvent callback for each new event
-          if (onEvent) {
+          if (onEventRef.current) {
             data.events.forEach((event: WebSocketEvent) => {
-              onEvent(event);
+              onEventRef.current!(event);
             });
           }
         }
       }
     } catch (err) {
       if (mountedRef.current) {
+        consecutiveErrorsRef.current += 1;
         const error = err instanceof Error ? err : new Error(String(err));
-        log.wsError("Engagement events fetch failed", { error: error.message, engagementId });
+        
+        // Only log every few errors to avoid flooding
+        if (consecutiveErrorsRef.current <= 3 || consecutiveErrorsRef.current % 5 === 0) {
+          log.wsError("Engagement events fetch failed", { error: error.message, engagementId, attempt: consecutiveErrorsRef.current });
+        }
+        
         setError(error);
         setIsConnected(false);
-        onError?.(error);
+        
+        // Only call onError for the first error (avoids spam)
+        if (consecutiveErrorsRef.current === 1) {
+          onErrorRef.current?.(error);
+        }
       }
     }
-  }, [engagementId, enabled, onEvent, onError]);
+  }, [engagementId, enabled]);
 
   // Start polling
   const startPolling = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
     }
-
+    consecutiveErrorsRef.current = 0;
     // Initial fetch
     fetchEvents();
-
     // Set up polling interval
     pollingRef.current = setInterval(fetchEvents, pollingInterval);
   }, [fetchEvents, pollingInterval]);

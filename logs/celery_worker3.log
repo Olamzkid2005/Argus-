@@ -1,0 +1,730 @@
+ 
+ -------------- celery@MacBook-Air.local v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-27 08:40:09
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         argus_workers:0x106d91400
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 4 (prefork)
+-- ******* ---- .> task events: ON
+--- ***** ----- 
+ -------------- [queues]
+                .> analyze          exchange=analyze(direct) key=analyze
+                .> celery           exchange=celery(direct) key=celery
+                .> recon            exchange=recon(direct) key=recon
+                .> repo_scan        exchange=repo_scan(direct) key=repo_scan
+                .> report           exchange=report(direct) key=report
+                .> scan             exchange=scan(direct) key=scan
+
+[tasks]
+  . tasks.analyze.evaluate_findings
+  . tasks.analyze.run_analysis
+  . tasks.asset_discovery.run_asset_discovery
+  . tasks.asset_discovery.update_asset_risk_scores
+  . tasks.health.ping
+  . tasks.llm_review.run_llm_review
+  . tasks.maintenance.cleanup_checkpoints
+  . tasks.maintenance.cleanup_failed_engagements
+  . tasks.maintenance.cleanup_old_results
+  . tasks.maintenance.refresh_views
+  . tasks.maintenance.worker_health_check
+  . tasks.recon.expand_recon
+  . tasks.recon.run_recon
+  . tasks.repo_scan.expand_repo_scan
+  . tasks.repo_scan.run_repo_scan
+  . tasks.report.generate_compliance_report
+  . tasks.report.generate_full_report
+  . tasks.report.generate_report
+  . tasks.report.generate_scheduled_reports
+  . tasks.report.get_compliance_reports
+  . tasks.report.get_findings_summary
+  . tasks.scan.auth_focused_scan
+  . tasks.scan.deep_scan
+  . tasks.scan.run_scan
+  . tasks.security.run_self_scan
+
+[2026-04-27 08:40:11,488: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-27 08:40:11,507: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-27 08:40:12,602: INFO/MainProcess] mingle: all alone
+[2026-04-27 08:40:12,915: INFO/MainProcess] celery@MacBook-Air.local ready.
+[2026-04-27 08:40:13,771: INFO/MainProcess] Task tasks.recon.run_recon[402e21ba-101f-4b47-92dd-48f956a2d140] received
+[2026-04-27 08:40:13,794: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[76aa2395-1535-4814-b351-180e37160203] received
+[2026-04-27 08:40:14,829: WARNING/ForkPoolWorker-2] [55e0b5b3] job_started: Job started: recon
+[2026-04-27 08:40:14,990: WARNING/ForkPoolWorker-4] [5422b96a] job_started: Job started: repo_scan
+[2026-04-27 08:40:14,993: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-27 08:40:15,006: INFO/ForkPoolWorker-2] Loaded tool definition: arjun
+[2026-04-27 08:40:15,011: INFO/ForkPoolWorker-2] Loaded tool definition: katana
+[2026-04-27 08:40:15,015: INFO/ForkPoolWorker-2] Loaded tool definition: semgrep
+[2026-04-27 08:40:15,020: INFO/ForkPoolWorker-2] Loaded tool definition: trivy
+[2026-04-27 08:40:15,025: INFO/ForkPoolWorker-2] Loaded tool definition: sqlmap
+[2026-04-27 08:40:15,033: INFO/ForkPoolWorker-2] Loaded tool definition: amass
+[2026-04-27 08:40:15,043: INFO/ForkPoolWorker-2] Loaded tool definition: ffuf
+[2026-04-27 08:40:15,056: INFO/ForkPoolWorker-2] Loaded tool definition: gau
+[2026-04-27 08:40:15,171: INFO/ForkPoolWorker-2] Loaded tool definition: nuclei
+[2026-04-27 08:40:15,171: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-04-27 08:40:15,174: INFO/ForkPoolWorker-2] Loaded tool definition: waybackurls
+[2026-04-27 08:40:15,180: INFO/ForkPoolWorker-2] Loaded tool definition: testssl
+[2026-04-27 08:40:15,182: INFO/ForkPoolWorker-4] Loaded tool definition: arjun
+[2026-04-27 08:40:15,186: INFO/ForkPoolWorker-2] Loaded tool definition: gospider
+[2026-04-27 08:40:15,188: INFO/ForkPoolWorker-4] Loaded tool definition: katana
+[2026-04-27 08:40:15,192: INFO/ForkPoolWorker-2] Loaded tool definition: naabu
+[2026-04-27 08:40:15,192: INFO/ForkPoolWorker-4] Loaded tool definition: semgrep
+[2026-04-27 08:40:15,201: INFO/ForkPoolWorker-2] Loaded tool definition: bandit
+[2026-04-27 08:40:15,202: INFO/ForkPoolWorker-4] Loaded tool definition: trivy
+[2026-04-27 08:40:15,212: INFO/ForkPoolWorker-2] Loaded tool definition: gitleaks
+[2026-04-27 08:40:15,212: INFO/ForkPoolWorker-4] Loaded tool definition: sqlmap
+[2026-04-27 08:40:15,218: INFO/ForkPoolWorker-2] Loaded tool definition: jwt_tool
+[2026-04-27 08:40:15,221: INFO/ForkPoolWorker-4] Loaded tool definition: amass
+[2026-04-27 08:40:15,222: INFO/ForkPoolWorker-2] Loaded tool definition: nmap
+[2026-04-27 08:40:15,224: INFO/ForkPoolWorker-2] Loaded tool definition: pip-audit
+[2026-04-27 08:40:15,225: INFO/ForkPoolWorker-4] Loaded tool definition: ffuf
+[2026-04-27 08:40:15,229: INFO/ForkPoolWorker-2] Loaded tool definition: wpscan
+[2026-04-27 08:40:15,232: INFO/ForkPoolWorker-2] Loaded tool definition: commix
+[2026-04-27 08:40:15,235: INFO/ForkPoolWorker-2] Loaded tool definition: nikto
+[2026-04-27 08:40:15,239: INFO/ForkPoolWorker-2] Loaded tool definition: dalfox
+[2026-04-27 08:40:15,244: INFO/ForkPoolWorker-2] Loaded tool definition: whatweb
+[2026-04-27 08:40:15,256: INFO/ForkPoolWorker-2] Loaded tool definition: httpx
+[2026-04-27 08:40:15,247: INFO/ForkPoolWorker-4] Loaded tool definition: gau
+[2026-04-27 08:40:15,277: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: recon
+[2026-04-27 08:40:15,299: INFO/ForkPoolWorker-4] Loaded tool definition: nuclei
+[2026-04-27 08:40:15,308: INFO/ForkPoolWorker-4] Loaded tool definition: waybackurls
+[2026-04-27 08:40:15,325: INFO/ForkPoolWorker-4] Loaded tool definition: testssl
+[2026-04-27 08:40:15,347: INFO/ForkPoolWorker-4] Loaded tool definition: gospider
+[2026-04-27 08:40:15,364: INFO/ForkPoolWorker-4] Loaded tool definition: naabu
+[2026-04-27 08:40:15,371: INFO/ForkPoolWorker-4] Loaded tool definition: bandit
+[2026-04-27 08:40:15,382: INFO/ForkPoolWorker-4] Loaded tool definition: gitleaks
+[2026-04-27 08:40:15,393: INFO/ForkPoolWorker-4] Loaded tool definition: jwt_tool
+[2026-04-27 08:40:15,420: INFO/ForkPoolWorker-4] Loaded tool definition: nmap
+[2026-04-27 08:40:15,423: INFO/ForkPoolWorker-4] Loaded tool definition: pip-audit
+[2026-04-27 08:40:15,429: INFO/ForkPoolWorker-4] Loaded tool definition: wpscan
+[2026-04-27 08:40:15,436: INFO/ForkPoolWorker-4] Loaded tool definition: commix
+[2026-04-27 08:40:15,449: INFO/ForkPoolWorker-4] Loaded tool definition: nikto
+[2026-04-27 08:40:15,502: INFO/ForkPoolWorker-4] Loaded tool definition: dalfox
+[2026-04-27 08:40:15,509: INFO/ForkPoolWorker-4] Loaded tool definition: whatweb
+[2026-04-27 08:40:15,525: INFO/ForkPoolWorker-4] Loaded tool definition: httpx
+[2026-04-27 08:40:15,559: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: repo_scan
+[2026-04-27 08:40:16,740: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: httpx
+[2026-04-27 08:40:16,741: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 1356ms
+[2026-04-27 08:40:30,922: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: gitleaks
+[2026-04-27 08:40:30,924: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 376ms
+[2026-04-27 08:40:30,925: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: gitleaks
+[2026-04-27 08:40:30,927: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 1ms
+[2026-04-27 08:40:34,035: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: trivy
+[2026-04-27 08:40:34,039: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 2851ms
+[2026-04-27 08:40:34,045: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: trivy
+[2026-04-27 08:40:34,046: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 6ms
+[2026-04-27 08:40:34,163: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: katana
+[2026-04-27 08:40:34,164: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 17333ms
+[2026-04-27 08:40:34,242: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: katana
+[2026-04-27 08:40:34,243: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 77ms
+[2026-04-27 08:40:34,346: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: snyk
+[2026-04-27 08:40:34,347: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 70ms
+[2026-04-27 08:41:27,557: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: semgrep
+[2026-04-27 08:41:27,562: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 53105ms
+[2026-04-27 08:41:27,582: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: semgrep
+[2026-04-27 08:41:27,610: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 46ms
+[2026-04-27 08:41:47,676: INFO/ForkPoolWorker-4] SBOM generation skipped for engagement 2913efa2-cf79-4995-ae63-af3e33e974fb: no dependency data available (result keys: ['phase', 'status', 'findings_count', 'next_state', 'trace_id', 'sbom_paths'])
+[2026-04-27 08:41:47,714: INFO/MainProcess] Task tasks.scan.run_scan[fedc5fe7-a0ab-4ac6-8934-7968e3cbdd74] received
+[2026-04-27 08:41:47,767: INFO/ForkPoolWorker-4] Task 76aa2395-1535-4814-b351-180e37160203 succeeded
+[2026-04-27 08:41:47,770: INFO/ForkPoolWorker-4] Task tasks.repo_scan.run_repo_scan[76aa2395-1535-4814-b351-180e37160203] succeeded in 93.84075662400573s: {'phase': 'repo_scan', 'status': 'completed', 'findings_count': 264, 'next_state': 'scanning', 'trace_id': None, 'sbom_paths': {}}
+[2026-04-27 08:41:47,935: WARNING/ForkPoolWorker-1] [5422b96a] job_started: Job started: scan
+[2026-04-27 08:41:47,995: INFO/ForkPoolWorker-1] LLM payload generator initialized
+[2026-04-27 08:41:48,012: INFO/ForkPoolWorker-1] Loaded tool definition: arjun
+[2026-04-27 08:41:48,020: INFO/ForkPoolWorker-1] Loaded tool definition: katana
+[2026-04-27 08:41:48,024: INFO/ForkPoolWorker-1] Loaded tool definition: semgrep
+[2026-04-27 08:41:48,029: INFO/ForkPoolWorker-1] Loaded tool definition: trivy
+[2026-04-27 08:41:48,033: INFO/ForkPoolWorker-1] Loaded tool definition: sqlmap
+[2026-04-27 08:41:48,039: INFO/ForkPoolWorker-1] Loaded tool definition: amass
+[2026-04-27 08:41:48,052: INFO/ForkPoolWorker-1] Loaded tool definition: ffuf
+[2026-04-27 08:41:48,056: INFO/ForkPoolWorker-1] Loaded tool definition: gau
+[2026-04-27 08:41:48,064: INFO/ForkPoolWorker-1] Loaded tool definition: nuclei
+[2026-04-27 08:41:48,066: INFO/ForkPoolWorker-1] Loaded tool definition: waybackurls
+[2026-04-27 08:41:48,072: INFO/ForkPoolWorker-1] Loaded tool definition: testssl
+[2026-04-27 08:41:48,082: INFO/ForkPoolWorker-1] Loaded tool definition: gospider
+[2026-04-27 08:41:48,089: INFO/ForkPoolWorker-1] Loaded tool definition: naabu
+[2026-04-27 08:41:48,093: INFO/ForkPoolWorker-1] Loaded tool definition: bandit
+[2026-04-27 08:41:48,098: INFO/ForkPoolWorker-1] Loaded tool definition: gitleaks
+[2026-04-27 08:41:48,104: INFO/ForkPoolWorker-1] Loaded tool definition: jwt_tool
+[2026-04-27 08:41:48,108: INFO/ForkPoolWorker-1] Loaded tool definition: nmap
+[2026-04-27 08:41:48,112: INFO/ForkPoolWorker-1] Loaded tool definition: pip-audit
+[2026-04-27 08:41:48,117: INFO/ForkPoolWorker-1] Loaded tool definition: wpscan
+[2026-04-27 08:41:48,120: INFO/ForkPoolWorker-1] Loaded tool definition: commix
+[2026-04-27 08:41:48,124: INFO/ForkPoolWorker-1] Loaded tool definition: nikto
+[2026-04-27 08:41:48,136: INFO/ForkPoolWorker-1] Loaded tool definition: dalfox
+[2026-04-27 08:41:48,153: INFO/ForkPoolWorker-1] Loaded tool definition: whatweb
+[2026-04-27 08:41:48,161: INFO/ForkPoolWorker-1] Loaded tool definition: httpx
+[2026-04-27 08:41:48,247: WARNING/ForkPoolWorker-1] [NO_TRACE] job_started: Job started: scan
+[2026-04-27 08:41:48,954: INFO/ForkPoolWorker-1] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
+[2026-04-27 08:43:18,746: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: ffuf
+[2026-04-27 08:43:18,748: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 164374ms
+[2026-04-27 08:43:18,749: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: ffuf
+[2026-04-27 08:43:18,750: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 1ms
+[2026-04-27 08:43:19,177: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: amass
+[2026-04-27 08:43:19,178: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 337ms
+[2026-04-27 08:43:28,560: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: naabu
+[2026-04-27 08:43:28,562: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 9281ms
+[2026-04-27 08:43:28,563: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: naabu
+[2026-04-27 08:43:28,564: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 0ms
+[2026-04-27 08:43:32,221: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: whatweb
+[2026-04-27 08:43:32,222: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 3515ms
+[2026-04-27 08:45:13,796: WARNING/MainProcess] Soft time limit (300s) exceeded for tasks.recon.run_recon[402e21ba-101f-4b47-92dd-48f956a2d140]
+[2026-04-27 08:45:18,838: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: nikto
+[2026-04-27 08:45:18,842: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 106568ms
+[2026-04-27 08:46:49,969: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: nuclei
+[2026-04-27 08:46:49,976: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 301019ms
+[2026-04-27 08:46:49,977: WARNING/ForkPoolWorker-1] NUCLEI RESULT for https://github.com/vulnbank/vulnbank.git: success=False, returncode=-1, stdout_len=0, stderr=Tool execution timed out after 300 seconds
+[2026-04-27 08:46:50,455: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: dalfox
+[2026-04-27 08:46:50,456: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 475ms
+[2026-04-27 08:46:50,462: WARNING/ForkPoolWorker-1] [NO_TRACE] parser_completed: Parser completed: dalfox
+[2026-04-27 08:46:50,462: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN parsing: 5ms
+[2026-04-27 08:46:56,963: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: sqlmap
+[2026-04-27 08:46:56,964: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 6501ms
+[2026-04-27 08:47:44,618: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: gau
+[2026-04-27 08:47:44,621: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 143062ms
+[2026-04-27 08:47:44,624: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: gau
+[2026-04-27 08:47:44,625: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 3ms
+[2026-04-27 08:47:55,302: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: waybackurls
+[2026-04-27 08:47:55,303: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 10612ms
+[2026-04-27 08:47:55,306: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: waybackurls
+[2026-04-27 08:47:55,306: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 2ms
+[2026-04-27 08:48:14,575: INFO/MainProcess] Task tasks.asset_discovery.run_asset_discovery[dfb88ef4-ecf1-4ca6-a1e3-ed6c41795354] received
+[2026-04-27 08:48:14,581: INFO/MainProcess] Task tasks.scan.run_scan[7c963bb1-b7bc-4cdb-90b5-5075d1948a45] received
+[2026-04-27 08:48:14,587: INFO/ForkPoolWorker-2] Task 402e21ba-101f-4b47-92dd-48f956a2d140 succeeded
+[2026-04-27 08:48:14,588: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[402e21ba-101f-4b47-92dd-48f956a2d140] succeeded in 480.79386219200387s: {'phase': 'recon', 'status': 'completed', 'findings_count': 663, 'next_state': 'scanning', 'trace_id': None}
+[2026-04-27 08:48:14,598: INFO/MainProcess] Task tasks.asset_discovery.update_asset_risk_scores[2d0f7d75-3967-44d3-b75f-91d55032dfbe] received
+[2026-04-27 08:48:14,645: WARNING/ForkPoolWorker-4] [55e0b5b3] job_started: Job started: asset_discovery
+[2026-04-27 08:48:14,676: INFO/ForkPoolWorker-2] Task 2d0f7d75-3967-44d3-b75f-91d55032dfbe succeeded
+[2026-04-27 08:48:14,676: INFO/ForkPoolWorker-2] Task tasks.asset_discovery.update_asset_risk_scores[2d0f7d75-3967-44d3-b75f-91d55032dfbe] succeeded in 0.07400237399997422s: {'status': 'completed', 'assets_scored': 6}
+[2026-04-27 08:48:14,685: INFO/ForkPoolWorker-4] Task dfb88ef4-ecf1-4ca6-a1e3-ed6c41795354 succeeded
+[2026-04-27 08:48:14,686: INFO/ForkPoolWorker-4] Task tasks.asset_discovery.run_asset_discovery[dfb88ef4-ecf1-4ca6-a1e3-ed6c41795354] succeeded in 0.0935654130007606s: {'status': 'completed', 'assets_discovered': 2, 'assets': [{'id': '7f38f0b5-d166-4bf9-9354-fbd641c9e0d0', 'type': 'domain', 'identifier': 'preview.owasp-juice.shop'}, {'id': 'ee1775ec-4d3c-4a0a-9cfb-171c2f358a36', 'type': 'endpoint', 'identifier': 'https://preview.owasp-juice.shop'}], 'trace_id': '55e0b5b3-71bf-413e-b0bb-16a772040e18'}
+[2026-04-27 08:48:14,939: WARNING/ForkPoolWorker-3] [55e0b5b3] job_started: Job started: scan
+[2026-04-27 08:48:14,992: INFO/ForkPoolWorker-3] LLM payload generator initialized
+[2026-04-27 08:48:14,998: INFO/ForkPoolWorker-3] Loaded tool definition: arjun
+[2026-04-27 08:48:15,002: INFO/ForkPoolWorker-3] Loaded tool definition: katana
+[2026-04-27 08:48:15,004: INFO/ForkPoolWorker-3] Loaded tool definition: semgrep
+[2026-04-27 08:48:15,009: INFO/ForkPoolWorker-3] Loaded tool definition: trivy
+[2026-04-27 08:48:15,014: INFO/ForkPoolWorker-3] Loaded tool definition: sqlmap
+[2026-04-27 08:48:15,017: INFO/ForkPoolWorker-3] Loaded tool definition: amass
+[2026-04-27 08:48:15,023: INFO/ForkPoolWorker-3] Loaded tool definition: ffuf
+[2026-04-27 08:48:15,027: INFO/ForkPoolWorker-3] Loaded tool definition: gau
+[2026-04-27 08:48:15,034: INFO/ForkPoolWorker-3] Loaded tool definition: nuclei
+[2026-04-27 08:48:15,039: INFO/ForkPoolWorker-3] Loaded tool definition: waybackurls
+[2026-04-27 08:48:15,041: INFO/ForkPoolWorker-3] Loaded tool definition: testssl
+[2026-04-27 08:48:15,044: INFO/ForkPoolWorker-3] Loaded tool definition: gospider
+[2026-04-27 08:48:15,048: INFO/ForkPoolWorker-3] Loaded tool definition: naabu
+[2026-04-27 08:48:15,051: INFO/ForkPoolWorker-3] Loaded tool definition: bandit
+[2026-04-27 08:48:15,055: INFO/ForkPoolWorker-3] Loaded tool definition: gitleaks
+[2026-04-27 08:48:15,058: INFO/ForkPoolWorker-3] Loaded tool definition: jwt_tool
+[2026-04-27 08:48:15,061: INFO/ForkPoolWorker-3] Loaded tool definition: nmap
+[2026-04-27 08:48:15,063: INFO/ForkPoolWorker-3] Loaded tool definition: pip-audit
+[2026-04-27 08:48:15,067: INFO/ForkPoolWorker-3] Loaded tool definition: wpscan
+[2026-04-27 08:48:15,069: INFO/ForkPoolWorker-3] Loaded tool definition: commix
+[2026-04-27 08:48:15,074: INFO/ForkPoolWorker-3] Loaded tool definition: nikto
+[2026-04-27 08:48:15,079: INFO/ForkPoolWorker-3] Loaded tool definition: dalfox
+[2026-04-27 08:48:15,084: INFO/ForkPoolWorker-3] Loaded tool definition: whatweb
+[2026-04-27 08:48:15,088: INFO/ForkPoolWorker-3] Loaded tool definition: httpx
+[2026-04-27 08:48:15,094: WARNING/ForkPoolWorker-3] [NO_TRACE] job_started: Job started: scan
+[2026-04-27 08:48:15,418: INFO/ForkPoolWorker-3] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
+[2026-04-27 08:49:57,200: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: arjun
+[2026-04-27 08:49:57,201: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 180234ms
+[2026-04-27 08:49:57,566: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: jwt_tool
+[2026-04-27 08:49:57,567: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 365ms
+[2026-04-27 08:49:57,920: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: commix
+[2026-04-27 08:49:57,920: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 351ms
+[2026-04-27 08:51:47,792: WARNING/MainProcess] Soft time limit (600s) exceeded for tasks.scan.run_scan[fedc5fe7-a0ab-4ac6-8934-7968e3cbdd74]
+[2026-04-27 08:51:47,950: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: testssl
+[2026-04-27 08:51:47,952: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 110031ms
+[2026-04-27 08:51:47,957: INFO/ForkPoolWorker-1] Starting comprehensive web scan: https://github.com/vulnbank/vulnbank.git
+[2026-04-27 08:51:51,347: INFO/ForkPoolWorker-1] Running parameter discovery
+[2026-04-27 08:51:54,243: INFO/ForkPoolWorker-1] Running parameter fuzzing
+[2026-04-27 08:53:15,777: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: nuclei
+[2026-04-27 08:53:15,780: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 300360ms
+[2026-04-27 08:53:15,781: WARNING/ForkPoolWorker-3] NUCLEI RESULT for https://preview.owasp-juice.shop: success=False, returncode=-1, stdout_len=0, stderr=Tool execution timed out after 300 seconds
+[2026-04-27 08:53:15,984: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: dalfox
+[2026-04-27 08:53:15,984: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 201ms
+[2026-04-27 08:53:15,986: WARNING/ForkPoolWorker-3] [NO_TRACE] parser_completed: Parser completed: dalfox
+[2026-04-27 08:53:15,987: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN parsing: 1ms
+[2026-04-27 08:53:18,838: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: sqlmap
+[2026-04-27 08:53:18,839: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 2850ms
+[2026-04-27 08:53:22,537: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: arjun
+[2026-04-27 08:53:22,539: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 3698ms
+[2026-04-27 08:53:22,710: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: jwt_tool
+[2026-04-27 08:53:22,711: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 170ms
+[2026-04-27 08:53:22,914: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: commix
+[2026-04-27 08:53:22,914: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 203ms
+[2026-04-27 08:53:54,248: WARNING/ForkPoolWorker-1] parameter_fuzzing exceeded 120s soft time limit
+[2026-04-27 08:54:49,393: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:49,395: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:50,796: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:50,798: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:53,190: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:53,192: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:53,193: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:54,413: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:54,414: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:55,801: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:55,802: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:58,211: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:58,212: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:58,212: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:54:59,325: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:54:59,326: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:00,694: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:00,696: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:03,052: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:03,053: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:03,054: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:04,187: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:04,188: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:05,577: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:05,578: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:07,967: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:07,968: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:07,969: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:10,061: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:10,063: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:11,419: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:11,421: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:13,826: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:13,827: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:13,828: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:16,741: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:16,742: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:18,113: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:18,114: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:20,483: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:20,484: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:20,484: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:24,197: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:24,198: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:25,558: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:25,559: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:27,947: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:27,949: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:27,949: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:31,066: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:31,067: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:32,439: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:32,440: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:34,821: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:34,822: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:34,822: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:38,424: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:38,425: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:39,805: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:39,806: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:42,169: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:42,170: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:42,171: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:42,742: WARNING/ForkPoolWorker-3] [NO_TRACE] tool_executed: Tool executed: testssl
+[2026-04-27 08:55:42,743: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN tool_execution: 139827ms
+[2026-04-27 08:55:42,745: WARNING/ForkPoolWorker-3] [NO_TRACE] parser_failed: Parser failed for testssl: 'list' object has no attribute 'get'
+[2026-04-27 08:55:42,746: WARNING/ForkPoolWorker-3] [NO_TRACE] SPAN parsing: 1ms
+[2026-04-27 08:55:42,750: INFO/ForkPoolWorker-3] Starting comprehensive web scan: https://preview.owasp-juice.shop
+[2026-04-27 08:55:44,200: INFO/ForkPoolWorker-3] Running parameter discovery
+[2026-04-27 08:55:44,386: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:44,387: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:45,809: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:45,810: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:47,387: INFO/ForkPoolWorker-3] Running parameter fuzzing
+[2026-04-27 08:55:48,238: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:55:48,240: WARNING/ForkPoolWorker-1] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:55:48,240: WARNING/ForkPoolWorker-1] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:03,907: INFO/ForkPoolWorker-1] Running differential analysis
+[2026-04-27 08:56:08,979: INFO/ForkPoolWorker-1] Running WAF detection
+[2026-04-27 08:56:14,585: INFO/ForkPoolWorker-1] Running time-based vulnerability detection
+[2026-04-27 08:56:27,301: INFO/ForkPoolWorker-1] Running SSL/TLS verification
+[2026-04-27 08:56:27,539: INFO/ForkPoolWorker-1] Running response analysis
+[2026-04-27 08:56:28,093: INFO/ForkPoolWorker-1] Scan complete: 48 findings
+[2026-04-27 08:56:29,662: INFO/ForkPoolWorker-1] Enqueued LLM review for engagement 2913efa2-cf79-4995-ae63-af3e33e974fb
+[2026-04-27 08:56:29,664: INFO/MainProcess] Task tasks.llm_review.run_llm_review[a6e6c0c7-66f2-4709-bd9b-cb6120c5a98f] received
+[2026-04-27 08:56:29,685: INFO/MainProcess] Task tasks.analyze.run_analysis[24891579-2267-4e36-9e40-9c5bec2ccaf6] received
+[2026-04-27 08:56:29,686: INFO/ForkPoolWorker-1] Task fedc5fe7-a0ab-4ac6-8934-7968e3cbdd74 succeeded
+[2026-04-27 08:56:29,687: INFO/ForkPoolWorker-1] Task tasks.scan.run_scan[fedc5fe7-a0ab-4ac6-8934-7968e3cbdd74] succeeded in 881.8821595150002s: {'phase': 'scan', 'status': 'completed', 'findings_count': 48, 'next_state': 'analyzing', 'trace_id': None, 'analysis_task_id': '24891579-2267-4e36-9e40-9c5bec2ccaf6'}
+[2026-04-27 08:56:29,721: INFO/ForkPoolWorker-2] LLM review: 20 candidate findings for engagement 2913efa2-cf79-4995-ae63-af3e33e974fb
+[2026-04-27 08:56:29,753: WARNING/ForkPoolWorker-4] [5422b96a] job_started: Job started: analyze
+[2026-04-27 08:56:29,769: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-04-27 08:56:29,772: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: analyze
+[2026-04-27 08:56:29,894: WARNING/ForkPoolWorker-4] [NO_TRACE] intelligence_decision: Intelligence decision: 2 actions generated
+[2026-04-27 08:56:29,895: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN intelligence_evaluation: 3ms
+[2026-04-27 08:56:29,967: INFO/MainProcess] Task tasks.recon.expand_recon[f7080fa0-0ea3-450d-a2dd-2bc1cd7365b3] received
+[2026-04-27 08:56:29,978: INFO/ForkPoolWorker-4] Task 24891579-2267-4e36-9e40-9c5bec2ccaf6 succeeded
+[2026-04-27 08:56:29,979: INFO/ForkPoolWorker-4] Task tasks.analyze.run_analysis[24891579-2267-4e36-9e40-9c5bec2ccaf6] succeeded in 0.2862357440026244s: {'phase': 'analyze', 'status': 'completed', 'actions': [{'type': 'deep_scan', 'targets': [...], 'reason': 'high_value_targets_identified', 'description': 'High-value targets with potential vulnerabilities identified. Performing deep scan.'}, {'type': 'auth_focused_scan', 'endpoints': [...], 'budget': {...}, 'reason': 'weak_auth_signals', 'description': 'Weak authentication signals detected. Focusing on authentication mechanisms.'}], 'scored_findings': [{'id': '309eafc4-ab79-4f3f-b12b-b51a560fbee8', 'engagement_id': '2913efa2-cf79-4995-ae63-af3e33e974fb', 'type': 'INTERNAL_IP_DISCLOSURE', 'severity': 'LOW', 'confidence': 0.35, 'endpoint': 'https://github.com/vulnbank/vulnbank.git', 'evidence': {...}, 'source_tool': 'web_scanner', 'repro_steps': None, 'cvss_score': None, 'owasp_category': None, 'cwe_id': None, 'evidence_strength': None, 'tool_agreement_level': 'single_tool', 'fp_likelihood': None, 'verified': False, 'created_at': datetime.datetime(2026, 4, 27, 8, 56, 29, 584987,..., 'embedding': None, 'llm_revie...', ...}]}
+[2026-04-27 08:56:29,984: WARNING/ForkPoolWorker-1] [5422b96a] job_started: Job started: recon_expand
+[2026-04-27 08:56:29,984: WARNING/ForkPoolWorker-1] expand_recon called with empty/invalid targets for engagement 2913efa2-cf79-4995-ae63-af3e33e974fb, skipping
+[2026-04-27 08:56:29,986: INFO/ForkPoolWorker-1] Task f7080fa0-0ea3-450d-a2dd-2bc1cd7365b3 succeeded
+[2026-04-27 08:56:29,986: INFO/ForkPoolWorker-1] Task tasks.recon.expand_recon[f7080fa0-0ea3-450d-a2dd-2bc1cd7365b3] succeeded in 0.016837196999404114s: {'phase': 'recon_expand', 'status': 'skipped', 'reason': 'no_valid_targets'}
+[2026-04-27 08:56:31,651: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:31,656: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:33,102: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:33,104: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:35,499: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:35,501: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:35,502: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:37,573: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:37,576: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:39,074: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:39,076: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:41,385: INFO/ForkPoolWorker-3] Parameter fuzzing complete: 160 tests performed
+[2026-04-27 08:56:41,519: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:41,521: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:41,522: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:43,323: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:43,326: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:44,705: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:44,707: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:47,077: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:47,080: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:47,080: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:48,998: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:49,000: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:50,360: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:50,362: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:52,795: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:52,798: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:52,798: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:54,592: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:54,594: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:55,954: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:55,956: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:58,315: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:56:58,317: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:56:58,318: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:01,063: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:01,066: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:02,437: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:02,440: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:04,807: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:04,810: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:04,810: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:05,566: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:05,568: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:06,936: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:06,937: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:07,628: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:07,631: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:08,994: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:08,996: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:09,290: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:09,291: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:09,292: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:10,973: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:10,974: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:11,361: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:11,363: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:11,364: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:12,417: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:12,418: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:13,117: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:13,120: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:14,488: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:14,490: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:15,114: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:15,116: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:15,117: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:16,642: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:16,643: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:16,868: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:16,871: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:16,871: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:18,024: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:18,026: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:18,549: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:18,552: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:19,912: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:19,915: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:20,381: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:20,383: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:20,383: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:22,037: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:22,039: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:22,282: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:22,284: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:22,285: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:23,398: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:23,399: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:24,073: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:24,076: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:25,447: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:25,449: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:25,755: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:25,757: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:25,757: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:27,816: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:27,819: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:27,819: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:27,933: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:27,934: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:29,304: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:29,305: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:29,644: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:29,647: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:31,191: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:31,193: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:31,670: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:31,672: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:31,672: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:33,561: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:33,563: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:33,564: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:34,322: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:34,323: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:35,700: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:35,702: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:35,809: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:35,811: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:37,274: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:37,276: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:38,352: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:38,354: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:38,354: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:39,678: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:39,681: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:39,681: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:40,294: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:40,296: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:41,552: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:41,554: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:41,709: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:41,710: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:43,375: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:43,377: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:44,078: INFO/ForkPoolWorker-3] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:44,080: WARNING/ForkPoolWorker-3] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:44,080: WARNING/ForkPoolWorker-3] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:45,750: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:45,752: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:45,753: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:47,487: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:47,489: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:48,884: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:48,887: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:51,255: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:51,257: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:51,257: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:53,094: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:53,097: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:54,839: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:54,842: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:55,587: INFO/ForkPoolWorker-3] Running differential analysis
+[2026-04-27 08:57:57,241: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:57,243: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:57,243: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:57,791: INFO/ForkPoolWorker-3] Running WAF detection
+[2026-04-27 08:57:58,995: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:57:58,998: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:57:59,327: INFO/ForkPoolWorker-3] Running time-based vulnerability detection
+[2026-04-27 08:58:00,391: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:00,394: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:02,798: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:02,801: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:02,801: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:03,588: INFO/ForkPoolWorker-3] Running SSL/TLS verification
+[2026-04-27 08:58:03,950: INFO/ForkPoolWorker-3] Running response analysis
+[2026-04-27 08:58:04,258: INFO/ForkPoolWorker-3] Scan complete: 47 findings
+[2026-04-27 08:58:04,891: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:04,893: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:05,302: INFO/ForkPoolWorker-3] Enqueued LLM review for engagement ff761cc0-7079-4e08-a84c-2b837717b1e6
+[2026-04-27 08:58:05,303: INFO/MainProcess] Task tasks.llm_review.run_llm_review[18f07d13-fd97-4b8d-bab5-c3bcf679045b] received
+[2026-04-27 08:58:05,327: INFO/MainProcess] Task tasks.analyze.run_analysis[ca0aa8d3-5f47-4373-a2b7-61d9397aa79b] received
+[2026-04-27 08:58:05,329: INFO/ForkPoolWorker-3] Task 7c963bb1-b7bc-4cdb-90b5-5075d1948a45 succeeded
+[2026-04-27 08:58:05,330: INFO/ForkPoolWorker-3] Task tasks.scan.run_scan[7c963bb1-b7bc-4cdb-90b5-5075d1948a45] succeeded in 590.7115995160057s: {'phase': 'scan', 'status': 'completed', 'findings_count': 47, 'next_state': 'analyzing', 'trace_id': None, 'analysis_task_id': 'ca0aa8d3-5f47-4373-a2b7-61d9397aa79b'}
+[2026-04-27 08:58:05,331: INFO/ForkPoolWorker-4] LLM review: 20 candidate findings for engagement ff761cc0-7079-4e08-a84c-2b837717b1e6
+[2026-04-27 08:58:05,344: WARNING/ForkPoolWorker-1] [55e0b5b3] job_started: Job started: analyze
+[2026-04-27 08:58:05,349: INFO/ForkPoolWorker-1] LLM payload generator initialized
+[2026-04-27 08:58:05,351: WARNING/ForkPoolWorker-1] [NO_TRACE] job_started: Job started: analyze
+[2026-04-27 08:58:05,462: WARNING/ForkPoolWorker-1] [NO_TRACE] intelligence_decision: Intelligence decision: 1 actions generated
+[2026-04-27 08:58:05,462: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN intelligence_evaluation: 4ms
+[2026-04-27 08:58:05,525: INFO/MainProcess] Task tasks.recon.expand_recon[4afe7c29-0398-45a3-b238-e8043008e81e] received
+[2026-04-27 08:58:05,540: INFO/ForkPoolWorker-1] Task ca0aa8d3-5f47-4373-a2b7-61d9397aa79b succeeded
+[2026-04-27 08:58:05,540: INFO/ForkPoolWorker-1] Task tasks.analyze.run_analysis[ca0aa8d3-5f47-4373-a2b7-61d9397aa79b] succeeded in 0.21095494399924064s: {'phase': 'analyze', 'status': 'completed', 'actions': [{'type': 'deep_scan', 'targets': [...], 'reason': 'high_value_targets_identified', 'description': 'High-value targets with potential vulnerabilities identified. Performing deep scan.'}], 'scored_findings': [{'id': 'ab4b49cf-56a4-43b4-aca8-d1863662b254', 'engagement_id': 'ff761cc0-7079-4e08-a84c-2b837717b1e6', 'type': 'SERVER_INFO_DISCLOSURE', 'severity': 'LOW', 'confidence': 0.35, 'endpoint': 'https://preview.owasp-juice.shop', 'evidence': {...}, 'source_tool': 'web_scanner', 'repro_steps': None, 'cvss_score': None, 'owasp_category': None, 'cwe_id': None, 'evidence_strength': None, 'tool_agreement_level': 'single_tool', 'fp_likelihood': None, 'verified': False, 'created_at': datetime.datetime(2026, 4, 27, 8, 58, 5, 273476, tzinfo=datetime.timezone(datetime.timedelta(seconds=3600))), 'embedding': None, 'llm_reviewed': False, 'llm_analysis': None}, {'id': '27b0cc7c-430d-4917-ac8f-3463c63d1ce6', 'engagement_id': 'ff761cc0-7079-4e08-a84c-2b837717b1e6', 'type', ...}]}
+[2026-04-27 08:58:05,542: WARNING/ForkPoolWorker-3] [55e0b5b3] job_started: Job started: recon_expand
+[2026-04-27 08:58:05,542: WARNING/ForkPoolWorker-3] expand_recon called with empty/invalid targets for engagement ff761cc0-7079-4e08-a84c-2b837717b1e6, skipping
+[2026-04-27 08:58:05,544: INFO/ForkPoolWorker-3] Task 4afe7c29-0398-45a3-b238-e8043008e81e succeeded
+[2026-04-27 08:58:05,544: INFO/ForkPoolWorker-3] Task tasks.recon.expand_recon[4afe7c29-0398-45a3-b238-e8043008e81e] succeeded in 0.017105708000599407s: {'phase': 'recon_expand', 'status': 'skipped', 'reason': 'no_valid_targets'}
+[2026-04-27 08:58:06,258: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:06,261: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:08,637: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:08,640: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:08,640: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:10,347: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:10,349: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:11,784: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:11,785: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:14,156: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:14,159: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:14,159: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:15,895: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:15,897: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:16,740: INFO/ForkPoolWorker-4] LLM review complete: 0 analyzed, 0 confirmed, all processed
+[2026-04-27 08:58:16,745: INFO/ForkPoolWorker-4] Task 18f07d13-fd97-4b8d-bab5-c3bcf679045b succeeded
+[2026-04-27 08:58:16,745: INFO/ForkPoolWorker-4] Task tasks.llm_review.run_llm_review[18f07d13-fd97-4b8d-bab5-c3bcf679045b] succeeded in 11.438513089997286s: {'status': 'completed', 'analyzed': 0, 'confirmed': 0, 'total_candidates': 20, 'budget_exhausted': False}
+[2026-04-27 08:58:17,263: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:17,266: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:19,718: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:19,721: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:19,721: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:21,793: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:21,797: WARNING/ForkPoolWorker-2] LLM chat attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:23,777: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:23,779: WARNING/ForkPoolWorker-2] LLM chat attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:26,252: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+[2026-04-27 08:58:26,254: WARNING/ForkPoolWorker-2] LLM chat attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:26,255: WARNING/ForkPoolWorker-2] LLM response analysis failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+[2026-04-27 08:58:26,269: INFO/ForkPoolWorker-2] LLM review complete: 0 analyzed, 0 confirmed, all processed
+[2026-04-27 08:58:26,271: INFO/ForkPoolWorker-2] Task a6e6c0c7-66f2-4709-bd9b-cb6120c5a98f succeeded
+[2026-04-27 08:58:26,272: INFO/ForkPoolWorker-2] Task tasks.llm_review.run_llm_review[a6e6c0c7-66f2-4709-bd9b-cb6120c5a98f] succeeded in 116.59622979899723s: {'status': 'completed', 'analyzed': 0, 'confirmed': 0, 'total_candidates': 20, 'budget_exhausted': False}
+
+worker: Warm shutdown (MainProcess)
+
+worker: Warm shutdown (MainProcess)

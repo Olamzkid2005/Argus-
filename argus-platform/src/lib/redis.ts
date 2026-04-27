@@ -5,8 +5,9 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 
-// Redis client for job queue
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+// Redis client for job queue (singleton via globalThis to survive hot reloads)
+const globalForRedis = globalThis as unknown as { __redis?: Redis };
+const redis = globalForRedis.__redis ?? (globalForRedis.__redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379"));
 
 // Map job types to Celery task names
 const TASK_NAME_MAP: Record<string, string> = {
