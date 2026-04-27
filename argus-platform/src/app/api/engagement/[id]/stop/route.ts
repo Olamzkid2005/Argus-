@@ -3,14 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
+  log.api('POST', '/api/engagement/[id]/stop', { engagementId });
   try {
     const session = await requireAuth();
-    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
@@ -60,14 +62,17 @@ export async function POST(
         console.warn("Failed to update Redis state:", redisErr);
       }
 
+      log.apiEnd('POST', `/api/engagement/${engagementId}/stop`, 200);
       return NextResponse.json({ success: true, status: "failed" });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error("Stop engagement error:", error);
+    log.error("Stop engagement error:", error);
     const err = error as Error;
 
+    const statusCode = err.message === "Unauthorized" ? 401 : err.message.startsWith("Forbidden") ? 403 : 500;
+    log.apiEnd('POST', `/api/engagement/${engagementId || 'unknown'}/stop`, statusCode);
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

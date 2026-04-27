@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { motion } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   Key,
   Eye,
@@ -150,6 +151,11 @@ export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const { showToast } = useToast();
+
+  useEffect(() => {
+    log.pageMount("Settings");
+    return () => log.pageUnmount("Settings");
+  }, []);
 
   const [settings, setSettings] = useState<Settings>({});
   const [isLoading, setIsLoading] = useState(true);

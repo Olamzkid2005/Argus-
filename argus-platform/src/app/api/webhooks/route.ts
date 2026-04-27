@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/webhooks');
   try {
     const session = await requireAuth();
     const body = await req.json();
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
         ],
       );
 
+      log.apiEnd('POST', '/api/webhooks', 200, { webhook_id: result.rows[0].id });
       return NextResponse.json({
         success: true,
         webhook_id: result.rows[0].id,
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Webhook create error:", error);
+    log.error("Webhook create error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -66,6 +69,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/webhooks');
   try {
     const session = await requireAuth();
 
@@ -82,6 +86,7 @@ export async function GET(req: NextRequest) {
         [session.user.orgId],
       );
 
+      log.apiEnd('GET', '/api/webhooks', 200, { count: result.rows.length });
       return NextResponse.json({ webhooks: result.rows });
     } finally {
       client.release();

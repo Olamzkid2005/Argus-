@@ -4,6 +4,7 @@ import { requireEngagementAccess } from "@/lib/authorization";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob } from "@/lib/redis";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 /**
  * POST /api/engagement/[id]/approve
@@ -17,9 +18,10 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
+  log.api('POST', '/api/engagement/[id]/approve', { engagementId });
   try {
     const session = await requireAuth();
-    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
@@ -96,6 +98,7 @@ export async function POST(
         created_at: new Date().toISOString(),
       });
 
+      log.apiEnd('POST', `/api/engagement/${engagementId}/approve`, 200, { traceId });
       return NextResponse.json({
         message: "Engagement approved and scan job queued",
         engagement_id: engagementId,
@@ -109,9 +112,11 @@ export async function POST(
       client.release();
     }
   } catch (error: unknown) {
-    console.error("Approve engagement error:", error);
+    log.error("Approve engagement error:", error);
     const err = error as Error;
 
+    const statusCode = err.message === "Unauthorized" ? 401 : err.message.startsWith("Forbidden") ? 403 : 500;
+    log.apiEnd('POST', `/api/engagement/${engagementId || 'unknown'}/approve`, statusCode);
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

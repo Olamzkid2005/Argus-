@@ -4,6 +4,7 @@ import { requireEngagementAccess } from "@/lib/authorization";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob } from "@/lib/redis";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 /**
  * POST /api/engagement/[id]/rescan
@@ -16,9 +17,10 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
+  log.api('POST', '/api/engagement/[id]/rescan', { engagementId });
   try {
     const session = await requireAuth();
-    const { id: engagementId } = await params;
 
     // Verify user has access to the source engagement
     await requireEngagementAccess(session, engagementId);
@@ -119,6 +121,7 @@ export async function POST(
         );
       }
 
+      log.apiEnd('POST', `/api/engagement/${engagementId}/rescan`, 200, { newEngagementId, traceId });
       return NextResponse.json({
         engagement: engagementResult.rows[0],
         trace_id: traceId,
@@ -130,9 +133,11 @@ export async function POST(
       client.release();
     }
   } catch (error: unknown) {
-    console.error("Rescan error:", error);
+    log.error("Rescan error:", error);
     const err = error as Error;
 
+    const statusCode = err.message === "Unauthorized" ? 401 : err.message.startsWith("Forbidden") ? 403 : 500;
+    log.apiEnd('POST', `/api/engagement/${engagementId || 'unknown'}/rescan`, statusCode);
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

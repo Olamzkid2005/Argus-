@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { log } from "@/lib/logger";
 import {
   ArrowLeft,
   Loader2,
@@ -28,6 +29,11 @@ export default function ComplianceReportViewPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  useEffect(() => {
+    log.pageMount("ComplianceReportView");
+    return () => log.pageUnmount("ComplianceReportView");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

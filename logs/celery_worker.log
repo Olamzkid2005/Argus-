@@ -1,0 +1,458 @@
+ 
+ -------------- celery@MacBook-Air v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-27 04:18:02
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         argus_workers:0x10996d400
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 2 (prefork)
+-- ******* ---- .> task events: ON
+--- ***** ----- 
+ -------------- [queues]
+                .> analyze          exchange=analyze(direct) key=analyze
+                .> celery           exchange=celery(direct) key=celery
+                .> recon            exchange=recon(direct) key=recon
+                .> repo_scan        exchange=repo_scan(direct) key=repo_scan
+                .> report           exchange=report(direct) key=report
+                .> scan             exchange=scan(direct) key=scan
+
+[tasks]
+  . tasks.analyze.evaluate_findings
+  . tasks.analyze.run_analysis
+  . tasks.asset_discovery.run_asset_discovery
+  . tasks.asset_discovery.update_asset_risk_scores
+  . tasks.health.ping
+  . tasks.llm_review.run_llm_review
+  . tasks.maintenance.cleanup_checkpoints
+  . tasks.maintenance.cleanup_failed_engagements
+  . tasks.maintenance.cleanup_old_results
+  . tasks.maintenance.refresh_views
+  . tasks.maintenance.worker_health_check
+  . tasks.recon.expand_recon
+  . tasks.recon.run_recon
+  . tasks.repo_scan.expand_repo_scan
+  . tasks.repo_scan.run_repo_scan
+  . tasks.report.generate_compliance_report
+  . tasks.report.generate_full_report
+  . tasks.report.generate_report
+  . tasks.report.generate_scheduled_reports
+  . tasks.report.get_compliance_reports
+  . tasks.report.get_findings_summary
+  . tasks.scan.auth_focused_scan
+  . tasks.scan.deep_scan
+  . tasks.scan.run_scan
+  . tasks.security.run_self_scan
+
+[2026-04-27 04:18:02,391: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-04-27 04:18:02,400: INFO/MainProcess] mingle: searching for neighbors
+[2026-04-27 04:18:03,433: INFO/MainProcess] mingle: all alone
+[2026-04-27 04:18:03,581: INFO/MainProcess] celery@MacBook-Air ready.
+[2026-04-27 04:18:03,589: INFO/MainProcess] Task tasks.health.ping[ea8310c1-da7e-4841-90a8-0bc4c260ee34] received
+[2026-04-27 04:18:03,594: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] received
+[2026-04-27 04:18:03,872: INFO/ForkPoolWorker-2] Task ea8310c1-da7e-4841-90a8-0bc4c260ee34 succeeded
+[2026-04-27 04:18:03,873: INFO/ForkPoolWorker-2] Task tasks.health.ping[ea8310c1-da7e-4841-90a8-0bc4c260ee34] succeeded in 0.2775803780023125s: {'status': 'ok', 'worker': 'celery@MacBook-Air', 'pid': 79428, 'timestamp': '2026-04-27T03:18:03.869703+00:00'}
+[2026-04-27 04:18:03,883: INFO/MainProcess] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] received
+[2026-04-27 04:18:03,980: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:03,980: WARNING/ForkPoolWorker-2] [508c658f] job_started: Job started: scan
+[2026-04-27 04:18:03,998: WARNING/ForkPoolWorker-1] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:03,999: WARNING/ForkPoolWorker-1] [1afd7f92] job_started: Job started: repo_scan
+[2026-04-27 04:18:04,029: WARNING/ForkPoolWorker-1] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:04,059: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,079: WARNING/ForkPoolWorker-1] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:04,094: WARNING/ForkPoolWorker-2] Task b2f1cbd7-e627-4572-b56f-34dc400b77d2 retrying (attempt 0): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+
+[2026-04-27 04:18:04,095: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] retry: Retry in 0s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".\n')
+[2026-04-27 04:18:04,103: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] received
+[2026-04-27 04:18:04,105: INFO/MainProcess] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] received
+[2026-04-27 04:18:04,119: WARNING/ForkPoolWorker-1] Task 257dc01d-ceb0-43ff-ba89-e95a28cdc326 retrying (attempt 0): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+
+[2026-04-27 04:18:04,120: INFO/ForkPoolWorker-1] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] retry: Retry in 1s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".\n')
+[2026-04-27 04:18:04,136: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,136: WARNING/ForkPoolWorker-2] [b804d805] job_started: Job started: scan
+[2026-04-27 04:18:04,191: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,198: INFO/MainProcess] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] received
+[2026-04-27 04:18:04,204: WARNING/ForkPoolWorker-2] Task b2f1cbd7-e627-4572-b56f-34dc400b77d2 retrying (attempt 1): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+
+[2026-04-27 04:18:04,204: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] retry: Retry in 0s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".\n')
+[2026-04-27 04:18:04,216: WARNING/ForkPoolWorker-1] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,216: WARNING/ForkPoolWorker-1] [936b2359] job_started: Job started: scan
+[2026-04-27 04:18:04,270: WARNING/ForkPoolWorker-1] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,275: INFO/MainProcess] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] received
+[2026-04-27 04:18:04,280: WARNING/ForkPoolWorker-1] Task b2f1cbd7-e627-4572-b56f-34dc400b77d2 retrying (attempt 2): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+
+[2026-04-27 04:18:04,281: INFO/ForkPoolWorker-1] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] retry: Retry in 0s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".\n')
+[2026-04-27 04:18:04,293: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,294: WARNING/ForkPoolWorker-2] [149a1fef] job_started: Job started: scan
+[2026-04-27 04:18:04,369: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+[2026-04-27 04:18:04,381: WARNING/ForkPoolWorker-2] MEDIUM ERROR: {'task_id': 'b2f1cbd7-e627-4572-b56f-34dc400b77d2', 'task_name': 'tasks.scan.run_scan', 'error_type': 'ForeignKeyViolation', 'error_message': 'insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".\n', 'category': 'unknown', 'severity': 'medium', 'should_retry': True, 'retry_delay': 30, 'context': {'args': "['c289bfd1-fe70-4f72-9ca8-da2425a61d27', ['https://preview.owasp-juice.shop'], {'max_depth': 1}, None]", 'kwargs': '{}'}}
+[2026-04-27 04:18:04,381: ERROR/ForkPoolWorker-2] Task b2f1cbd7-e627-4572-b56f-34dc400b77d2 failed: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+
+[2026-04-27 04:18:04,382: ERROR/ForkPoolWorker-2] Task tasks.scan.run_scan[b2f1cbd7-e627-4572-b56f-34dc400b77d2] raised unexpected: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".\n')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/scan.py", line 67, in run_scan
+    state_machine.transition("scanning", "Starting scan")
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 106, in transition
+    raise InvalidStateTransition(
+    ...<2 lines>...
+    )
+state_machine.InvalidStateTransition: Invalid transition from created to scanning. Valid transitions: ['recon', 'failed']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 265, in __call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
+    ret = task.retry(exc=exc, **retry_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
+    raise_with_context(exc)
+    ~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
+    return task._orig_run(*args, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/scan.py", line 89, in run_scan
+    state_machine.safe_transition("failed", f"Scan failed: {str(e)}")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 244, in safe_transition
+    self.transition(new_state, reason)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 114, in transition
+    self._persist_state_and_budget(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        from_state=old_state,
+        ^^^^^^^^^^^^^^^^^^^^^
+        to_state=new_state,
+        ^^^^^^^^^^^^^^^^^^^
+        reason=reason or f"Transition to {new_state}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 140, in _persist_state_and_budget
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        (transition_id, self.engagement_id, from_state, to_state, reason)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+psycopg2.errors.ForeignKeyViolation: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(c289bfd1-fe70-4f72-9ca8-da2425a61d27) is not present in table "engagements".
+
+[2026-04-27 04:18:05,106: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,107: WARNING/ForkPoolWorker-2] [4e92a0e2] job_started: Job started: repo_scan
+[2026-04-27 04:18:05,124: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,152: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,157: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] received
+[2026-04-27 04:18:05,168: WARNING/ForkPoolWorker-2] Task 257dc01d-ceb0-43ff-ba89-e95a28cdc326 retrying (attempt 1): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+
+[2026-04-27 04:18:05,168: INFO/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] retry: Retry in 0s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".\n')
+[2026-04-27 04:18:05,179: WARNING/ForkPoolWorker-1] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,180: WARNING/ForkPoolWorker-1] [9b64eb3e] job_started: Job started: repo_scan
+[2026-04-27 04:18:05,209: WARNING/ForkPoolWorker-1] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,235: WARNING/ForkPoolWorker-1] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,239: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] received
+[2026-04-27 04:18:05,249: WARNING/ForkPoolWorker-1] Task 257dc01d-ceb0-43ff-ba89-e95a28cdc326 retrying (attempt 2): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+
+[2026-04-27 04:18:05,250: INFO/ForkPoolWorker-1] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] retry: Retry in 0s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".\n')
+[2026-04-27 04:18:05,260: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,260: WARNING/ForkPoolWorker-2] [f54f37f5] job_started: Job started: repo_scan
+[2026-04-27 04:18:05,278: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,305: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+[2026-04-27 04:18:05,313: WARNING/ForkPoolWorker-2] MEDIUM ERROR: {'task_id': '257dc01d-ceb0-43ff-ba89-e95a28cdc326', 'task_name': 'tasks.repo_scan.run_repo_scan', 'error_type': 'ForeignKeyViolation', 'error_message': 'insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".\n', 'category': 'unknown', 'severity': 'medium', 'should_retry': True, 'retry_delay': 30, 'context': {'args': "['0e0db0ea-73d2-4262-a4bf-780f9de5f58a', 'https://github.com/vulnbank/vulnbank.git', {'max_depth': 1}, None]", 'kwargs': '{}'}}
+[2026-04-27 04:18:05,314: ERROR/ForkPoolWorker-2] Task 257dc01d-ceb0-43ff-ba89-e95a28cdc326 failed: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+
+[2026-04-27 04:18:05,314: ERROR/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[257dc01d-ceb0-43ff-ba89-e95a28cdc326] raised unexpected: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".\n')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/repo_scan.py", line 128, in run_repo_scan
+    state_machine.transition("recon", "Starting repository scan")
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 114, in transition
+    self._persist_state_and_budget(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        from_state=old_state,
+        ^^^^^^^^^^^^^^^^^^^^^
+        to_state=new_state,
+        ^^^^^^^^^^^^^^^^^^^
+        reason=reason or f"Transition to {new_state}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 140, in _persist_state_and_budget
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        (transition_id, self.engagement_id, from_state, to_state, reason)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+psycopg2.errors.ForeignKeyViolation: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 265, in __call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
+    ret = task.retry(exc=exc, **retry_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
+    raise_with_context(exc)
+    ~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
+    return task._orig_run(*args, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/repo_scan.py", line 175, in run_repo_scan
+    state_machine.safe_transition("failed", f"Repository scan failed: {str(e)}")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 244, in safe_transition
+    self.transition(new_state, reason)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 114, in transition
+    self._persist_state_and_budget(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        from_state=old_state,
+        ^^^^^^^^^^^^^^^^^^^^^
+        to_state=new_state,
+        ^^^^^^^^^^^^^^^^^^^
+        reason=reason or f"Transition to {new_state}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 140, in _persist_state_and_budget
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        (transition_id, self.engagement_id, from_state, to_state, reason)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+psycopg2.errors.ForeignKeyViolation: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
+DETAIL:  Key (engagement_id)=(0e0db0ea-73d2-4262-a4bf-780f9de5f58a) is not present in table "engagements".
+
+[2026-04-27 04:30:49,232: INFO/MainProcess] Task tasks.recon.run_recon[0b53ab37-76e8-4273-86ac-b3fd9d30e19a] received
+[2026-04-27 04:30:49,234: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[e28f8088-d23c-4143-a4c3-789914cf5981] received
+[2026-04-27 04:30:49,471: WARNING/ForkPoolWorker-1] [e64b4e18] job_started: Job started: repo_scan
+[2026-04-27 04:30:49,471: WARNING/ForkPoolWorker-2] [1c63922c] job_started: Job started: recon
+[2026-04-27 04:30:49,512: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-27 04:30:49,512: INFO/ForkPoolWorker-1] LLM payload generator initialized
+[2026-04-27 04:30:49,518: INFO/ForkPoolWorker-1] Loaded tool definition: arjun
+[2026-04-27 04:30:49,518: INFO/ForkPoolWorker-2] Loaded tool definition: arjun
+[2026-04-27 04:30:49,520: INFO/ForkPoolWorker-2] Loaded tool definition: katana
+[2026-04-27 04:30:49,520: INFO/ForkPoolWorker-1] Loaded tool definition: katana
+[2026-04-27 04:30:49,523: INFO/ForkPoolWorker-2] Loaded tool definition: semgrep
+[2026-04-27 04:30:49,523: INFO/ForkPoolWorker-1] Loaded tool definition: semgrep
+[2026-04-27 04:30:49,526: INFO/ForkPoolWorker-1] Loaded tool definition: trivy
+[2026-04-27 04:30:49,526: INFO/ForkPoolWorker-2] Loaded tool definition: trivy
+[2026-04-27 04:30:49,529: INFO/ForkPoolWorker-2] Loaded tool definition: sqlmap
+[2026-04-27 04:30:49,529: INFO/ForkPoolWorker-1] Loaded tool definition: sqlmap
+[2026-04-27 04:30:49,539: INFO/ForkPoolWorker-1] Loaded tool definition: amass
+[2026-04-27 04:30:49,539: INFO/ForkPoolWorker-2] Loaded tool definition: amass
+[2026-04-27 04:30:49,546: INFO/ForkPoolWorker-2] Loaded tool definition: ffuf
+[2026-04-27 04:30:49,549: INFO/ForkPoolWorker-1] Loaded tool definition: ffuf
+[2026-04-27 04:30:49,550: INFO/ForkPoolWorker-2] Loaded tool definition: gau
+[2026-04-27 04:30:49,550: INFO/ForkPoolWorker-1] Loaded tool definition: gau
+[2026-04-27 04:30:49,552: INFO/ForkPoolWorker-2] Loaded tool definition: nuclei
+[2026-04-27 04:30:49,553: INFO/ForkPoolWorker-1] Loaded tool definition: nuclei
+[2026-04-27 04:30:49,555: INFO/ForkPoolWorker-2] Loaded tool definition: waybackurls
+[2026-04-27 04:30:49,555: INFO/ForkPoolWorker-1] Loaded tool definition: waybackurls
+[2026-04-27 04:30:49,556: INFO/ForkPoolWorker-1] Loaded tool definition: testssl
+[2026-04-27 04:30:49,556: INFO/ForkPoolWorker-2] Loaded tool definition: testssl
+[2026-04-27 04:30:49,559: INFO/ForkPoolWorker-1] Loaded tool definition: gospider
+[2026-04-27 04:30:49,560: INFO/ForkPoolWorker-2] Loaded tool definition: gospider
+[2026-04-27 04:30:49,563: INFO/ForkPoolWorker-1] Loaded tool definition: naabu
+[2026-04-27 04:30:49,565: INFO/ForkPoolWorker-2] Loaded tool definition: naabu
+[2026-04-27 04:30:49,571: INFO/ForkPoolWorker-1] Loaded tool definition: bandit
+[2026-04-27 04:30:49,572: INFO/ForkPoolWorker-2] Loaded tool definition: bandit
+[2026-04-27 04:30:49,575: INFO/ForkPoolWorker-2] Loaded tool definition: gitleaks
+[2026-04-27 04:30:49,575: INFO/ForkPoolWorker-1] Loaded tool definition: gitleaks
+[2026-04-27 04:30:49,577: INFO/ForkPoolWorker-2] Loaded tool definition: jwt_tool
+[2026-04-27 04:30:49,577: INFO/ForkPoolWorker-1] Loaded tool definition: jwt_tool
+[2026-04-27 04:30:49,581: INFO/ForkPoolWorker-2] Loaded tool definition: nmap
+[2026-04-27 04:30:49,581: INFO/ForkPoolWorker-1] Loaded tool definition: nmap
+[2026-04-27 04:30:49,586: INFO/ForkPoolWorker-1] Loaded tool definition: pip-audit
+[2026-04-27 04:30:49,586: INFO/ForkPoolWorker-2] Loaded tool definition: pip-audit
+[2026-04-27 04:30:49,591: INFO/ForkPoolWorker-2] Loaded tool definition: wpscan
+[2026-04-27 04:30:49,591: INFO/ForkPoolWorker-1] Loaded tool definition: wpscan
+[2026-04-27 04:30:49,595: INFO/ForkPoolWorker-2] Loaded tool definition: commix
+[2026-04-27 04:30:49,597: INFO/ForkPoolWorker-1] Loaded tool definition: commix
+[2026-04-27 04:30:49,598: INFO/ForkPoolWorker-2] Loaded tool definition: nikto
+[2026-04-27 04:30:49,598: INFO/ForkPoolWorker-1] Loaded tool definition: nikto
+[2026-04-27 04:30:49,600: INFO/ForkPoolWorker-2] Loaded tool definition: dalfox
+[2026-04-27 04:30:49,601: INFO/ForkPoolWorker-1] Loaded tool definition: dalfox
+[2026-04-27 04:30:49,602: INFO/ForkPoolWorker-2] Loaded tool definition: whatweb
+[2026-04-27 04:30:49,602: INFO/ForkPoolWorker-1] Loaded tool definition: whatweb
+[2026-04-27 04:30:49,604: INFO/ForkPoolWorker-1] Loaded tool definition: httpx
+[2026-04-27 04:30:49,604: INFO/ForkPoolWorker-2] Loaded tool definition: httpx
+[2026-04-27 04:30:49,609: WARNING/ForkPoolWorker-1] [NO_TRACE] job_started: Job started: repo_scan
+[2026-04-27 04:30:49,609: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: recon
+[2026-04-27 04:30:54,428: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: httpx
+[2026-04-27 04:30:54,428: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 4473ms
+[2026-04-27 04:30:54,429: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: httpx
+[2026-04-27 04:30:54,430: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 0ms
+[2026-04-27 04:31:10,732: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: katana
+[2026-04-27 04:31:10,736: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 16216ms
+[2026-04-27 04:31:10,764: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: katana
+[2026-04-27 04:31:10,765: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 28ms
+[2026-04-27 04:31:36,937: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: gitleaks
+[2026-04-27 04:31:36,940: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 420ms
+[2026-04-27 04:31:36,941: WARNING/ForkPoolWorker-1] [NO_TRACE] parser_completed: Parser completed: gitleaks
+[2026-04-27 04:31:36,941: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN parsing: 0ms
+[2026-04-27 04:33:16,331: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: ffuf
+[2026-04-27 04:33:16,332: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 125479ms
+[2026-04-27 04:33:16,333: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: ffuf
+[2026-04-27 04:33:16,334: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 0ms
+[2026-04-27 04:33:16,695: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: amass
+[2026-04-27 04:33:16,696: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 280ms
+[2026-04-27 04:33:29,475: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: naabu
+[2026-04-27 04:33:29,476: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 12739ms
+[2026-04-27 04:33:29,477: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: naabu
+[2026-04-27 04:33:29,477: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 0ms
+[2026-04-27 04:33:31,008: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: whatweb
+[2026-04-27 04:33:31,009: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 1477ms
+[2026-04-27 04:33:43,449: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: trivy
+[2026-04-27 04:33:43,451: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 125923ms
+[2026-04-27 04:33:43,451: WARNING/ForkPoolWorker-1] [NO_TRACE] parser_completed: Parser completed: trivy
+[2026-04-27 04:33:43,452: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN parsing: 0ms
+[2026-04-27 04:33:43,604: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: snyk
+[2026-04-27 04:33:43,605: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 70ms
+[2026-04-27 04:34:11,076: WARNING/ForkPoolWorker-1] [NO_TRACE] tool_executed: Tool executed: semgrep
+[2026-04-27 04:34:11,077: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN tool_execution: 27387ms
+[2026-04-27 04:34:11,088: WARNING/ForkPoolWorker-1] [NO_TRACE] parser_completed: Parser completed: semgrep
+[2026-04-27 04:34:11,088: WARNING/ForkPoolWorker-1] [NO_TRACE] SPAN parsing: 10ms
+
+worker: Warm shutdown (MainProcess)
+[2026-04-27 04:34:25,524: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 54474ms
+[2026-04-27 04:34:26,049: ERROR/MainProcess] Process 'ForkPoolWorker-2' pid:79428 exited with 'signal 15 (SIGTERM)'
+[2026-04-27 04:34:26,069: ERROR/MainProcess] Task handler raised error: WorkerLostError('Worker exited prematurely: signal 15 (SIGTERM) Job: 9.')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.einfo.ExceptionWithTraceback: 
+"""
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/worker.py", line 203, in start
+    self.blueprint.start(self)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 365, in start
+    return self.obj.start()
+           ~~~~~~~~~~~~~~^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 346, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 788, in start
+    c.loop(*c.loop_args())
+    ~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/loops.py", line 86, in asynloop
+    state.maybe_shutdown()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/state.py", line 93, in maybe_shutdown
+    raise WorkerShutdown(should_stop)
+celery.exceptions.WorkerShutdown: 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.exceptions.WorkerLostError: Worker exited prematurely: signal 15 (SIGTERM) Job: 9.
+"""
+[2026-04-27 04:34:26,572: ERROR/MainProcess] Process 'ForkPoolWorker-1' pid:79427 exited with 'signal 15 (SIGTERM)'
+[2026-04-27 04:34:26,586: ERROR/MainProcess] Task handler raised error: WorkerLostError('Worker exited prematurely: signal 15 (SIGTERM) Job: 10.')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.einfo.ExceptionWithTraceback: 
+"""
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/worker.py", line 203, in start
+    self.blueprint.start(self)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 365, in start
+    return self.obj.start()
+           ~~~~~~~~~~~~~~^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 346, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 788, in start
+    c.loop(*c.loop_args())
+    ~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/loops.py", line 86, in asynloop
+    state.maybe_shutdown()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/state.py", line 93, in maybe_shutdown
+    raise WorkerShutdown(should_stop)
+celery.exceptions.WorkerShutdown: 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.exceptions.WorkerLostError: Worker exited prematurely: signal 15 (SIGTERM) Job: 10.
+"""

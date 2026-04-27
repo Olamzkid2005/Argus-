@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { AuditAction } from "@/lib/audit";
+import { log } from "@/lib/logger";
 
 /**
  * Middleware for security headers, rate limiting, API versioning,
@@ -50,6 +51,7 @@ export async function middleware(request: NextRequest) {
   // API Version headers
   const path = request.nextUrl.pathname;
   if (path.startsWith("/api/")) {
+    log.api(request.method, path, { query: request.nextUrl.search });
     // Add default rate limit headers to all API responses
     response.headers.set("X-RateLimit-Limit", "100");
     response.headers.set("X-RateLimit-Window", "60s");

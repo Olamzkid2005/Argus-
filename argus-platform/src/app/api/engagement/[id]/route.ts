@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
+  log.api('GET', '/api/engagement/[id]', { engagementId });
   try {
     const session = await requireAuth();
-    const { id: engagementId } = await params;
-
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
 
@@ -25,19 +26,23 @@ export async function GET(
     );
 
     if (result.rows.length === 0) {
+      log.apiEnd('GET', `/api/engagement/${engagementId}`, 404);
       return NextResponse.json(
         { error: "Engagement not found" },
         { status: 404 },
       );
     }
 
+    log.apiEnd('GET', `/api/engagement/${engagementId}`, 200);
     return NextResponse.json({
       engagement: result.rows[0],
     });
   } catch (error: unknown) {
-    console.error("Get engagement error:", error);
+    log.error("Get engagement error:", error);
     const err = error as Error;
 
+    const statusCode = err.message === "Unauthorized" ? 401 : err.message.startsWith("Forbidden") ? 403 : 500;
+    log.apiEnd('GET', `/api/engagement/${engagementId || 'unknown'}`, statusCode);
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -2,14 +2,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  log.api('POST', '/api/findings/[id]/verify');
   try {
     const session = await requireAuth();
     const { id: findingId } = await params;
+    log.api('POST', '/api/findings/[id]/verify', { findingId });
 
     const client = await pool.connect();
 
@@ -36,12 +39,13 @@ export async function POST(
         findingId,
       ]);
 
+      log.apiEnd('POST', `/api/findings/${findingId}/verify`, 200);
       return NextResponse.json({ success: true });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error("Verify error:", error);
+    log.error("Verify error:", error);
     return NextResponse.json(
       { error: "Failed to verify finding" },
       { status: 500 },

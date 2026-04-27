@@ -156,7 +156,7 @@ class ToolRunner:
         no_proxy_tools = {"nuclei", "dalfox", "sqlmap", "httpx", "nikto", "nmap", "curl", "testssl", "arjun", "jwt_tool", "commix"}
 
         env = {
-            "PATH": f"{venv_bin}:/usr/local/bin:/usr/bin:/bin",
+            "PATH": f"{venv_bin}:/Users/mac/go/bin:/usr/local/bin:/usr/bin:/bin",
             # Pass through HOME so tools (gitleaks, nmap, git, nuclei) can find
             # ~/.config/ and other user-level configuration. Do NOT override it.
             "HOME": os.environ.get("HOME", "/root"),
@@ -201,9 +201,19 @@ class ToolRunner:
         """
         self._validate_tool_name(tool)
         import shutil
+        # Search PATH plus venv bin and Go bin (same dirs as _locked_env adds)
         resolved = shutil.which(tool)
         if resolved:
             return resolved
+        # Fallback: search venv and Go bin directories explicitly
+        extra_dirs = [
+            str(Path(sys.executable).parent),
+            os.path.expanduser("~/go/bin"),
+        ]
+        for d in extra_dirs:
+            candidate = os.path.join(d, tool)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
         return tool
 
     def run(

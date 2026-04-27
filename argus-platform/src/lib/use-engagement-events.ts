@@ -11,6 +11,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { log } from "@/lib/logger";
 import { WebSocketEvent } from "./websocket-events";
 
 export interface UseEngagementEventsOptions {
@@ -143,6 +144,7 @@ export function useEngagementEvents(
       if (mountedRef.current) {
         setIsConnected(true);
         setError(null);
+        log.wsConnect(engagementId);
 
         // Update current state
         if (data.current_state) {
@@ -180,6 +182,7 @@ export function useEngagementEvents(
     } catch (err) {
       if (mountedRef.current) {
         const error = err instanceof Error ? err : new Error(String(err));
+        log.wsError("Engagement events fetch failed", { error: error.message, engagementId });
         setError(error);
         setIsConnected(false);
         onError?.(error);
@@ -205,18 +208,21 @@ export function useEngagementEvents(
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
+      log.wsDisconnect(engagementId);
     }
-  }, []);
+  }, [engagementId]);
 
   // Reconnect
   const reconnect = useCallback(() => {
+    log.wsEvent("reconnect", { engagementId });
     setError(null);
     lastTimestampRef.current = null;
     startPolling();
-  }, [startPolling]);
+  }, [startPolling, engagementId]);
 
   // Clear events
   const clearEvents = useCallback(() => {
+    log.wsEvent("clearEvents", { engagementId });
     setEvents([]);
     lastTimestampRef.current = null;
     try {

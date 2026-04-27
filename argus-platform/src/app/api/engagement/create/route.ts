@@ -4,8 +4,10 @@ import { requireAuth } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob, checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function POST(req: Request) {
+  log.api('POST', '/api/engagement/create');
   try {
     const session = await requireAuth();
     const body = await req.json();
@@ -202,6 +204,7 @@ export async function POST(req: Request) {
         JSON.stringify(response)
       );
 
+      log.apiEnd('POST', '/api/engagement/create', 200, { engagementId, scanType: effectiveScanType });
       return NextResponse.json(response);
     } catch (error) {
       await client.query("ROLLBACK");
@@ -210,7 +213,7 @@ export async function POST(req: Request) {
       client.release();
     }
   } catch (error: unknown) {
-    console.error("Create engagement error:", error);
+    log.error("Create engagement error:", error);
     const err = error as Error;
 
     if (err.message === "Unauthorized") {

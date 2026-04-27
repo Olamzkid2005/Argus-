@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { log } from "@/lib/logger";
 import {
   ShieldCheck,
   FileText,
@@ -51,6 +52,11 @@ const statusConfig = {
 };
 
 export default function ComplianceReportsPage() {
+  useEffect(() => {
+    log.pageMount("ComplianceReports");
+    return () => log.pageUnmount("ComplianceReports");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

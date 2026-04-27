@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   Loader2,
   Server,
@@ -68,6 +69,11 @@ const tableRowVariants = {
 };
 
 export default function AssetsPage() {
+  useEffect(() => {
+    log.pageMount("Assets");
+    return () => log.pageUnmount("Assets");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/collaboration/team');
   try {
     const session = await requireAuth();
     const result = await pool.query(
@@ -18,9 +20,10 @@ export async function GET(req: NextRequest) {
       [session.user.orgId],
     );
 
+    log.apiEnd('GET', '/api/collaboration/team', 200, { count: result.rows.length });
     return NextResponse.json({ members: result.rows });
   } catch (error) {
-    console.error("Get team error:", error);
+    log.error("Get team error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,10 +33,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/collaboration/team');
   try {
     const session = await requireAuth();
     const body = await req.json();
     const { email, team_role } = body;
+    log.api('POST', '/api/collaboration/team', { email, team_role });
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -56,9 +61,10 @@ export async function POST(req: NextRequest) {
       [session.user.orgId, userId, team_role || "member", session.user.id],
     );
 
+    log.apiEnd('POST', '/api/collaboration/team', 200, { email });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Add team member error:", error);
+    log.error("Add team member error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,6 +74,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  log.api('DELETE', '/api/collaboration/team');
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -82,9 +89,10 @@ export async function DELETE(req: NextRequest) {
       [id, session.user.orgId],
     );
 
+    log.apiEnd('DELETE', '/api/collaboration/team', 200, { memberId: id });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Remove team member error:", error);
+    log.error("Remove team member error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

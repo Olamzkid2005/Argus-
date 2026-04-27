@@ -1,6 +1,7 @@
 // Database health check endpoint
 import { NextResponse } from "next/server";
 import { pool, getPoolStats } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 /**
  * GET /api/health/db
@@ -8,6 +9,7 @@ import { pool, getPoolStats } from "@/lib/db";
  * Returns database health status
  */
 export async function GET() {
+  log.api('GET', '/api/health/db');
   const startTime = Date.now();
   const checks: Record<string, unknown> = {};
 
@@ -41,6 +43,7 @@ export async function GET() {
     const responseTime = Date.now() - startTime;
     const isHealthy = checks.connection === "ok" && responseTime < 1000;
 
+    log.apiEnd('GET', '/api/health/db', isHealthy ? 200 : 503, { responseTime });
     return NextResponse.json({
       status: isHealthy ? "healthy" : "degraded",
       timestamp: new Date().toISOString(),
@@ -48,7 +51,7 @@ export async function GET() {
       checks,
     });
   } catch (error) {
-    console.error("Database health check error:", error);
+    log.error("Database health check error:", error);
     return NextResponse.json(
       {
         status: "unhealthy",

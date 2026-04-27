@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/dashboard/stats');
   try {
     const session = await requireAuth();
     const orgId = (session.user as { orgId?: string }).orgId;
@@ -60,6 +62,7 @@ export async function GET(req: NextRequest) {
         [orgId],
       );
 
+      log.apiEnd('GET', '/api/dashboard/stats', 200);
       return NextResponse.json({
         engagements: orgStats.rows[0],
         findings: findingsStats.rows[0],
@@ -69,7 +72,7 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Dashboard stats error:", error);
+    log.error("Dashboard stats error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -11,6 +11,7 @@
  * - Connection status tracking
  */
 
+import { log } from "@/lib/logger";
 import { WebSocketEvent, WebSocketEventType } from "./websocket-events";
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected" | "reconnecting";
@@ -71,12 +72,14 @@ export class ResilientWebSocket {
   connect(): void {
     if (this.status === "connected" || this.status === "connecting") return;
 
+    log.wsConnect(this.engagementId);
     this.setStatus("connecting");
     this.reconnectAttempts = 0;
     this.startPolling();
   }
 
   disconnect(): void {
+    log.wsDisconnect(this.engagementId);
     this.stopPolling();
     this.clearReconnectTimer();
     if (this.abortController) {
@@ -150,6 +153,9 @@ export class ResilientWebSocket {
       }
 
       if (data.events && Array.isArray(data.events)) {
+        if (data.events.length > 0) {
+          log.wsEvent("batch", { count: data.events.length, engagementId: this.engagementId });
+        }
         for (const event of data.events) {
           if (this.shouldProcessEvent(event)) {
             this.eventBuffer.push(event);
@@ -173,6 +179,7 @@ export class ResilientWebSocket {
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
 
+      log.wsError("Poll failed", { error: String(error), engagementId: this.engagementId });
       this.handleConnectionError();
     }
   }
@@ -218,7 +225,7 @@ export class ResilientWebSocket {
     this.setStatus("reconnecting");
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Max reconnection attempts reached");
+      log.wsError("Max reconnection attempts reached", { engagementId: this.engagementId });
       this.setStatus("disconnected");
       return;
     }
@@ -228,7 +235,7 @@ export class ResilientWebSocket {
       30000
     );
 
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+    log.wsEvent("reconnecting", { delay, attempt: this.reconnectAttempts + 1, engagementId: this.engagementId });
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;

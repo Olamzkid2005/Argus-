@@ -2,14 +2,16 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { requireEngagementAccess } from "@/lib/authorization";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
+  log.api('GET', '/api/engagement/[id]/findings', { engagementId });
   try {
     const session = await requireAuth();
-    const { id: engagementId } = await params;
 
     // Verify user has access to this engagement
     await requireEngagementAccess(session, engagementId);
@@ -77,6 +79,7 @@ export async function GET(
 
     const hasMore = offset + result.rows.length < total;
 
+    log.apiEnd('GET', `/api/engagement/${engagementId}/findings`, 200, { total, returned: result.rows.length });
     return NextResponse.json({
       findings: result.rows,
       total,
@@ -85,9 +88,11 @@ export async function GET(
       hasMore,
     });
   } catch (error: unknown) {
-    console.error("Get findings error:", error);
+    log.error("Get findings error:", error);
     const err = error as Error;
 
+    const statusCode = err.message === "Unauthorized" ? 401 : err.message.startsWith("Forbidden") ? 403 : err.message.startsWith("ServiceUnavailable") ? 503 : 500;
+    log.apiEnd('GET', `/api/engagement/${engagementId || 'unknown'}/findings`, statusCode);
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

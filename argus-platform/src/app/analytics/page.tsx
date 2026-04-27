@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { motion } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   BarChart,
   Bar,
@@ -91,6 +92,11 @@ const SEVERITY_COLORS = {
 const PIE_COLORS = ["#FF4444", "#FF8800", "#F59E0B", "#10B981", "#6720FF"];
 
 export default function AnalyticsPage() {
+  useEffect(() => {
+    log.pageMount("Analytics");
+    return () => log.pageUnmount("Analytics");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

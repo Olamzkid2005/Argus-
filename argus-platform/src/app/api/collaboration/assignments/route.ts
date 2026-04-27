@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/collaboration/assignments', { query: req.nextUrl.search });
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -36,9 +38,10 @@ export async function GET(req: NextRequest) {
     query += ` ORDER BY fa.created_at DESC`;
 
     const result = await pool.query(query, params);
+    log.apiEnd('GET', '/api/collaboration/assignments', 200, { count: result.rows.length });
     return NextResponse.json({ assignments: result.rows });
   } catch (error) {
-    console.error("Get assignments error:", error);
+    log.error("Get assignments error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -48,10 +51,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/collaboration/assignments');
   try {
     const session = await requireAuth();
     const body = await req.json();
     const { finding_id, assigned_to, priority, due_date } = body;
+    log.api('POST', '/api/collaboration/assignments', { finding_id, assigned_to });
 
     if (!finding_id || !assigned_to) {
       return NextResponse.json({ error: "finding_id and assigned_to are required" }, { status: 400 });
@@ -93,9 +98,10 @@ export async function POST(req: NextRequest) {
       ],
     );
 
+    log.apiEnd('POST', '/api/collaboration/assignments', 200, { finding_id });
     return NextResponse.json({ assignment: result.rows[0] });
   } catch (error) {
-    console.error("Create assignment error:", error);
+    log.error("Create assignment error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -105,10 +111,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  log.api('PATCH', '/api/collaboration/assignments');
   try {
     const session = await requireAuth();
     const body = await req.json();
     const { id, status } = body;
+    log.api('PATCH', '/api/collaboration/assignments', { id, status });
 
     if (!id || !status) {
       return NextResponse.json({ error: "id and status are required" }, { status: 400 });
@@ -128,9 +136,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     }
 
+    log.apiEnd('PATCH', '/api/collaboration/assignments', 200, { id, status });
     return NextResponse.json({ assignment: result.rows[0] });
   } catch (error) {
-    console.error("Update assignment error:", error);
+    log.error("Update assignment error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

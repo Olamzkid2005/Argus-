@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/collaboration/approvals', { query: req.nextUrl.search });
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -37,12 +39,13 @@ export async function GET(req: NextRequest) {
 
     const requestsResult = await pool.query(requestsQuery, requestsParams);
 
+    log.apiEnd('GET', '/api/collaboration/approvals', 200, { workflows: workflowsResult.rows.length, requests: requestsResult.rows.length });
     return NextResponse.json({
       workflows: workflowsResult.rows,
       requests: requestsResult.rows,
     });
   } catch (error) {
-    console.error("Get approvals error:", error);
+    log.error("Get approvals error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -52,10 +55,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/collaboration/approvals');
   try {
     const session = await requireAuth();
     const body = await req.json();
     const { action, workflow_id, engagement_id, finding_id, notes } = body;
+    log.api('POST', '/api/collaboration/approvals', { action, workflow_id });
 
     if (action === "create_request") {
       if (!workflow_id) {
@@ -96,12 +101,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Request not found" }, { status: 404 });
       }
 
+      log.apiEnd('POST', '/api/collaboration/approvals', 200, { action });
       return NextResponse.json({ request: result.rows[0] });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
-    console.error("Approval action error:", error);
+    log.error("Approval action error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

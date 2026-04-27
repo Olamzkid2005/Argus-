@@ -4,8 +4,10 @@ import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import crypto from "crypto";
 import { pushJob } from "@/lib/redis";
+import { log } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/reports/generate');
   try {
     const session = await requireAuth();
     const body = await req.json();
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      log.apiEnd('POST', '/api/reports/generate', 200, { reportId, engagement_id });
       return NextResponse.json({
         report_id: reportId,
         status: "generating",
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Generate report error:", error);
+    log.error("Generate report error:", error);
     return NextResponse.json(
       { error: "Failed to generate report" },
       { status: 500 }

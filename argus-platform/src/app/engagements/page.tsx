@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { motion } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   Shield,
   Globe,
@@ -132,6 +133,11 @@ const statusConfig: Record<string, { color: string; bg: string; label: string }>
 };
 
 export default function EngagementsPage() {
+  useEffect(() => {
+    log.pageMount("Engagements");
+    return () => log.pageUnmount("Engagements");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

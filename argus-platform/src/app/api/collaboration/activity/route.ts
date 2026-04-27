@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/collaboration/activity', { query: req.nextUrl.search });
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -48,13 +50,14 @@ export async function GET(req: NextRequest) {
       [session.user.id],
     );
 
+    log.apiEnd('GET', '/api/collaboration/activity', 200, { activityCount: activityResult.rows.length });
     return NextResponse.json({
       activities: activityResult.rows,
       notifications: notificationsResult.rows,
       unread_count: parseInt(unreadCount.rows[0].count),
     });
   } catch (error) {
-    console.error("Get activity feed error:", error);
+    log.error("Get activity feed error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -64,6 +67,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  log.api('PATCH', '/api/collaboration/activity');
   try {
     const session = await requireAuth();
     const body = await req.json();
@@ -81,9 +85,10 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    log.apiEnd('PATCH', '/api/collaboration/activity', 200);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Update notifications error:", error);
+    log.error("Update notifications error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

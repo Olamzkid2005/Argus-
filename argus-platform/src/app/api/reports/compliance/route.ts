@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/reports/compliance', { query: req.nextUrl.search });
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -28,12 +30,13 @@ export async function GET(req: NextRequest) {
       query += ` ORDER BY cr.created_at DESC`;
 
       const result = await client.query(query, params);
+      log.apiEnd('GET', '/api/reports/compliance', 200, { count: result.rows.length });
       return NextResponse.json({ reports: result.rows });
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error("Compliance reports API error:", error);
+    log.error("Compliance reports API error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,10 +49,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/reports/compliance');
   try {
     const session = await requireAuth();
     const body = await req.json();
     const { engagement_id, standard } = body;
+    log.api('POST', '/api/reports/compliance', { engagement_id, standard });
 
     if (!engagement_id || !standard) {
       return NextResponse.json(
@@ -110,6 +115,7 @@ export async function POST(req: NextRequest) {
         created_at: new Date().toISOString(),
       });
 
+      log.apiEnd('POST', '/api/reports/compliance', 200, { reportId, engagement_id, standard });
       return NextResponse.json({
         report_id: reportId,
         status: "generating",
@@ -119,7 +125,7 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Create compliance report error:", error);
+    log.error("Create compliance report error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

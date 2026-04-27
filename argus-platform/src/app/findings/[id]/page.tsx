@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { log } from "@/lib/logger";
 import {
   Filter,
   ShieldAlert,
@@ -60,6 +61,11 @@ interface ExecutionSpan {
 }
 
 export default function FindingsDashboardPage() {
+  useEffect(() => {
+    log.pageMount("FindingsDashboard");
+    return () => log.pageUnmount("FindingsDashboard");
+  }, []);
+
   const params = useParams();
   const engagementId = params.id as string;
 

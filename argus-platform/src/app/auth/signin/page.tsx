@@ -1,11 +1,12 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState, FormEvent, Suspense } from "react";
+import { useState, FormEvent, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck, Eye, EyeOff, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { log } from "@/lib/logger";
 
 function GoogleIcon() {
   return (
@@ -330,6 +331,11 @@ function SignInForm() {
 }
 
 export default function SignIn() {
+  useEffect(() => {
+    log.pageMount("SignIn");
+    return () => log.pageUnmount("SignIn");
+  }, []);
+
   return (
     <Suspense
       fallback={

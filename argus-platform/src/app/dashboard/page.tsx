@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { useMobileDetect } from "@/hooks/useMobileDetect";
 import { motion, AnimatePresence } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   Activity,
   ShieldAlert,
@@ -345,6 +346,11 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
+
+  useEffect(() => {
+    log.pageMount("Dashboard");
+    return () => log.pageUnmount("Dashboard");
+  }, []);
 
   const [engagementId, setEngagementId] = useState<string>(() => {
     if (typeof window === "undefined") return "";

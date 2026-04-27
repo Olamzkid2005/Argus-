@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   FileBarChart,
   Download,
@@ -46,6 +47,11 @@ const statusConfig = {
 
 // ── Main Page ──
 export default function ReportsPage() {
+  useEffect(() => {
+    log.pageMount("Reports");
+    return () => log.pageUnmount("Reports");
+  }, []);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();

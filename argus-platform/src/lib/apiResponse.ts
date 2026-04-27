@@ -3,6 +3,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { log } from "@/lib/logger";
 
 export interface ApiResponse<T = unknown> {
   data?: T;
@@ -28,6 +29,7 @@ export function successResponse<T>(
   data: T,
   status: number = 200
 ): NextResponse<ApiResponse<T>> {
+  log.apiEnd('success', '', status);
   return NextResponse.json(
     { data },
     { status }
@@ -41,6 +43,7 @@ export function errorResponse(
   error: string,
   status: number = 500
 ): NextResponse<ApiResponse> {
+  log.apiEnd('error', '', status);
   return NextResponse.json(
     { error },
     { status }
@@ -55,6 +58,7 @@ export function paginatedResponse<T>(
   meta: PaginatedResponse<T>["meta"],
   status: number = 200
 ): NextResponse<PaginatedResponse<T>> {
+  log.apiEnd('paginated', '', status);
   return NextResponse.json(
     { data, meta } as PaginatedResponse<T>,
     { status }
@@ -65,6 +69,7 @@ export function paginatedResponse<T>(
  * Create 204 No Content response
  */
 export function noContentResponse(): NextResponse {
+  log.apiEnd('no-content', '', 204);
   return new NextResponse(null, { status: 204 });
 }
 
@@ -74,6 +79,7 @@ export function noContentResponse(): NextResponse {
 export function createdResponse<T>(
   data: T
 ): NextResponse<ApiResponse<T>> {
+  log.apiEnd('created', '', 201);
   return NextResponse.json(
     { data, message: "Created successfully" },
     { status: 201 }

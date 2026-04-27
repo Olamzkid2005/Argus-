@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
+import { log } from "@/lib/logger";
 import {
   Users,
   MessageSquare,
@@ -97,6 +98,11 @@ const TABS = [
 ];
 
 export default function CollaborationPage() {
+  useEffect(() => {
+    log.pageMount("Collaboration");
+    return () => log.pageUnmount("Collaboration");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

@@ -119,6 +119,8 @@ export interface ErrorEvent {
   };
 }
 
+import { log } from "@/lib/logger";
+
 /**
  * Redis channel names for WebSocket events
  */
@@ -136,5 +138,6 @@ export async function publishWebSocketEvent(
 ): Promise<void> {
   const channel = WEBSOCKET_CHANNELS.engagement(event.engagement_id);
   const message = JSON.stringify(event);
+  log.wsEvent("publish", { type: event.type, channel, engagementId: event.engagement_id });
   await redis.publish(channel, message);
 }

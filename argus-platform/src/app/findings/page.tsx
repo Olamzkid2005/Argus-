@@ -6,6 +6,7 @@ import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { useMobileDetect } from "@/hooks/useMobileDetect";
 import { motion, AnimatePresence } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   Search,
   Filter,
@@ -231,6 +232,11 @@ function AttackChainPanel({
 
 // ── Main Page ──
 export default function FindingsPage() {
+  useEffect(() => {
+    log.pageMount("Findings");
+    return () => log.pageUnmount("Findings");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

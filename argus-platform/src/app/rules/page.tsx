@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { log } from "@/lib/logger";
 import {
   Loader2,
   ShieldCheck,
@@ -52,6 +53,11 @@ const itemVariants = {
 };
 
 export default function RulesPage() {
+  useEffect(() => {
+    log.pageMount("Rules");
+    return () => log.pageUnmount("Rules");
+  }, []);
+
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();

@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/findings', { query: req.nextUrl.search });
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -135,6 +137,7 @@ export async function GET(req: NextRequest) {
 
       const result = await client.query(query, params);
 
+      log.apiEnd('GET', '/api/findings', 200, { total, returned: result.rows.length });
       const response = NextResponse.json({
         findings: result.rows,
         meta: {
@@ -159,7 +162,7 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Findings API error:", error);
+    log.error("Findings API error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return createErrorResponse(
@@ -187,6 +190,7 @@ export async function GET(req: NextRequest) {
  * - update_severity: Change severity level
  */
 export async function POST(req: NextRequest) {
+  log.api('POST', '/api/findings');
   try {
     const session = await requireAuth();
     const body = await req.json();
@@ -281,6 +285,7 @@ export async function POST(req: NextRequest) {
           );
       }
 
+      log.apiEnd('POST', '/api/findings', 200, { action, affected: result?.rowCount || 0 });
       return NextResponse.json({
         success: true,
         action,
@@ -290,7 +295,7 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Findings bulk operation error:", error);
+    log.error("Findings bulk operation error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return createErrorResponse(

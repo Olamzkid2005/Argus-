@@ -5,6 +5,7 @@ import GitHubProvider from "next-auth/providers/github";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 // Security configuration
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -60,7 +61,7 @@ async function checkAccountLockout(
 
     return { locked: false };
   } catch (error) {
-    console.error("Lockout check error:", error);
+    log.authError("Lockout check error", { error: String(error) });
     // Fail open - don't block login if check fails
     return { locked: false };
   }
@@ -97,7 +98,7 @@ async function recordFailedLoginAttempt(email: string): Promise<void> {
       }
     }
   } catch (error) {
-    console.error("Failed to record login attempt:", error);
+    log.authError("Failed to record login attempt", { error: String(error) });
   }
 }
 
@@ -112,7 +113,7 @@ async function clearFailedLoginAttempts(email: string): Promise<void> {
       [email.toLowerCase()],
     );
   } catch (error) {
-    console.error("Failed to clear login attempts:", error);
+    log.authError("Failed to clear login attempts", { error: String(error) });
   }
 }
 
@@ -223,7 +224,7 @@ export const authOptions: NextAuthOptions = {
             role: user.role,
           } as User;
         } catch (error) {
-          console.error("Authentication error:", error);
+          log.authError("Authentication error", { error: String(error) });
           return null;
         }
       },
@@ -261,7 +262,7 @@ export const authOptions: NextAuthOptions = {
           },
         });
       } catch (auditError) {
-        console.error("Audit logging error:", auditError);
+        log.authError("Audit logging error", { error: String(auditError) });
       }
       // Handle OAuth sign-ins (Google, GitHub)
       if (account?.provider === "google" || account?.provider === "github") {
@@ -320,13 +321,13 @@ export const authOptions: NextAuthOptions = {
             return true;
           } catch (txError) {
             await client.query("ROLLBACK");
-            console.error("Error creating OAuth user:", txError);
+            log.authError("Error creating OAuth user", { error: String(txError) });
             return false;
           } finally {
             client.release();
           }
         } catch (error) {
-          console.error("OAuth signIn error:", error);
+          log.authError("OAuth signIn error", { error: String(error) });
           return false;
         }
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { log } from "@/lib/logger";
 
 export interface ScannerActivity {
   id: string;
@@ -102,17 +103,19 @@ export function useScannerActivities(
       }
     } catch (err) {
       if (mountedRef.current) {
+        log.wsError("Scanner activities fetch failed", { error: String(err), engagementId });
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     }
   }, [engagementId]);
 
   const refetch = useCallback(() => {
+    log.wsEvent("refetchActivities", { engagementId });
     setIsLoading(true);
     fetchActivities().finally(() => {
       if (mountedRef.current) setIsLoading(false);
     });
-  }, [fetchActivities]);
+  }, [fetchActivities, engagementId]);
 
   // Polling
   useEffect(() => {

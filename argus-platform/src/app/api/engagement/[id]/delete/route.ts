@@ -2,14 +2,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id: engagementId } = await params;
+  log.api('DELETE', '/api/engagement/[id]/delete', { engagementId });
   try {
     const session = await requireAuth();
-    const { id: engagementId } = await params;
 
     const client = await pool.connect();
 
@@ -66,6 +68,7 @@ export async function DELETE(
 
       console.log(`[DELETE ENGAGEMENT] Deleted engagement ${engagementId}, rows affected: ${deleteResult.rowCount}`);
 
+      log.apiEnd('DELETE', `/api/engagement/${engagementId}/delete`, 200, { deleted: deleteResult.rowCount });
       return NextResponse.json({ 
         success: true, 
         deleted: deleteResult.rowCount,
@@ -73,13 +76,13 @@ export async function DELETE(
       });
     } catch (error) {
       await client.query("ROLLBACK");
-      console.error("[DELETE ENGAGEMENT] Transaction error:", error);
+      log.error("Delete engagement transaction error:", error);
       throw error;
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error("[DELETE ENGAGEMENT] Outer error:", error);
+    log.error("Delete engagement outer error:", error);
     return NextResponse.json(
       { error: "Failed to delete engagement", details: error instanceof Error ? error.message : String(error) },
       { status: 500 },

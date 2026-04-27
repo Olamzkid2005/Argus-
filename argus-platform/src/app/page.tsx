@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { log } from "@/lib/logger";
 import {
   ShieldCheck,
   ArrowRight,
@@ -957,6 +958,11 @@ function LandingContent({ session }: { session: any }) {
 export default function Home() {
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    log.pageMount("Landing");
+    return () => log.pageUnmount("Landing");
+  }, []);
 
   useEffect(() => {
     if (status === "loading") return;

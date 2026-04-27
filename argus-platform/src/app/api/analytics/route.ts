@@ -2,8 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
+  log.api('GET', '/api/analytics', { query: req.nextUrl.search });
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -86,6 +88,7 @@ export async function GET(req: NextRequest) {
         [session.user.orgId],
       );
 
+      log.apiEnd('GET', '/api/analytics', 200, { range: `${days}d` });
       return NextResponse.json({
         trends: trendsResult.rows.map((r) => ({
           date: new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -104,7 +107,7 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Analytics error:", error);
+    log.error("Analytics error:", error);
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

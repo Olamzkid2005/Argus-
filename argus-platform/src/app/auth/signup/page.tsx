@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck, Loader2, ArrowRight, UserCheck, Eye, EyeOff, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signIn } from "next-auth/react";
+import { log } from "@/lib/logger";
 
 function GoogleIcon() {
   return (
@@ -198,6 +199,11 @@ function PasswordField({
 }
 
 export default function SignUp() {
+  useEffect(() => {
+    log.pageMount("SignUp");
+    return () => log.pageUnmount("SignUp");
+  }, []);
+
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

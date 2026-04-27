@@ -1,6 +1,7 @@
 // Worker health and monitoring endpoint
 import { NextResponse } from "next/server";
 import redis from "@/lib/redis";
+import { log } from "@/lib/logger";
 
 /**
  * GET /api/health/worker
@@ -8,9 +9,11 @@ import redis from "@/lib/redis";
  * Returns worker system health status including Redis-based queue info
  */
 export async function GET(req: Request) {
+  log.api('GET', '/api/health/worker');
   try {
     const { searchParams } = new URL(req.url);
     const detailed = searchParams.get("detailed") === "true";
+    log.api('GET', '/api/health/worker', { detailed });
 
     // Get process stats
     const stats = {
@@ -49,6 +52,7 @@ export async function GET(req: Request) {
 
     const isHealthy = redisStatus === "connected";
 
+    log.apiEnd('GET', '/api/health/worker', isHealthy ? 200 : 503, { redisStatus });
     return NextResponse.json({
       status: isHealthy ? "healthy" : "degraded",
       timestamp: new Date().toISOString(),
@@ -59,7 +63,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
-    console.error("Worker health error:", error);
+    log.error("Worker health error:", error);
     return NextResponse.json(
       { status: "unhealthy", error: "Failed to get worker stats" },
       { status: 500 }

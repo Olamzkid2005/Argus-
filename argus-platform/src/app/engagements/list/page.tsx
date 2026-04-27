@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { log } from "@/lib/logger";
 import {
   Loader2,
   Plus,
@@ -59,6 +60,11 @@ export default function EngagementsListPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    log.pageMount("EngagementsList");
+    return () => log.pageUnmount("EngagementsList");
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
