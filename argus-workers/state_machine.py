@@ -4,11 +4,14 @@ Engagement State Machine - Enforces valid state transitions
 Uses the shared connection pool from database/connection.py.
 Supports passing an external connection for transaction support.
 """
+import logging
 from typing import Dict, List, Optional
 import psycopg2
 from database.connection import connect, get_db
 import uuid
 from utils.validation import validate_uuid
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidStateTransition(Exception):
@@ -76,9 +79,12 @@ class EngagementStateMachine:
         return get_db().get_connection()
 
     def _release_connection(self, conn):
-        """Release connection back to pool (skip if external)"""
-        if conn and not self._external_conn and not self._db_conn_string:
-            get_db().release_connection(conn)
+        """Release connection back to pool or close raw connections"""
+        if conn and not self._external_conn:
+            if self._db_conn_string:
+                conn.close()
+            else:
+                get_db().release_connection(conn)
 
     def transition(self, new_state: str, reason: Optional[str] = None):
         """
@@ -221,6 +227,22 @@ class EngagementStateMachine:
             List of valid target states
         """
         return self.TRANSITIONS.get(self.current_state, [])
+
+    def safe_transition(self, new_state: str, reason: Optional[str] = None) -> bool:
+        """
+        Attempt a state transition, but silently skip if the current state
+        has no outgoing transitions (e.g. already 'failed' or 'complete').
+        Returns True if the transition was applied, False if skipped.
+        """
+        if not self.can_transition_to(new_state):
+            logger.warning(
+                "Skipping transition %s -> %s for engagement %s "
+                "(no valid outgoing transitions from current state)",
+                self.current_state, new_state, self.engagement_id,
+            )
+            return False
+        self.transition(new_state, reason)
+        return True
 
     def can_transition_to(self, new_state: str) -> bool:
         """

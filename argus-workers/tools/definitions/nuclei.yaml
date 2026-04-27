@@ -1,0 +1,21 @@
+name: "nuclei"
+command: "nuclei"
+description: "Vulnerability scanner based on YAML templates"
+args: ["-json", "-silent"]
+enabled: true
+timeout: 600
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL or host to scan"
+    flag: "-u"
+    required: true
+  - name: "severity"
+    type: "string"
+    description: "Severity filter"
+    flag: "-severity"
+    enum: ["info", "low", "medium", "high", "critical"]
+  - name: "templates"
+    type: "string"
+    description: "Custom template directory"
+    flag: "-t"

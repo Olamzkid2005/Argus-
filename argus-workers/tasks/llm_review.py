@@ -169,13 +169,27 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             
             # LLM analysis
             import asyncio
-            result = asyncio.run(detector.analyze_async(
-                test_url=finding.get("endpoint", ""),
-                vuln_class=finding.get("type", "UNKNOWN"),
-                payload=payload,
-                response=response,
-                max_response_chars=LLM_REVIEW_MAX_RESPONSE_CHARS,
-            ))
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                # Already in an event loop (e.g. gevent worker or async Celery)
+                result = loop.run_until_complete(detector.analyze_async(
+                    test_url=finding.get("endpoint", ""),
+                    vuln_class=finding.get("type", "UNKNOWN"),
+                    payload=payload,
+                    response=response,
+                    max_response_chars=LLM_REVIEW_MAX_RESPONSE_CHARS,
+                ))
+            else:
+                result = asyncio.run(detector.analyze_async(
+                    test_url=finding.get("endpoint", ""),
+                    vuln_class=finding.get("type", "UNKNOWN"),
+                    payload=payload,
+                    response=response,
+                    max_response_chars=LLM_REVIEW_MAX_RESPONSE_CHARS,
+                ))
             
             if result is None:
                 logger.debug(f"LLM analysis returned None for finding {finding.get('id')}")

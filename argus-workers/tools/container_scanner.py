@@ -7,9 +7,12 @@ Kubernetes configuration security checks, and SBOM generation.
 Requirements: 16.1, 16.2, 16.3, 16.4
 """
 import json
+import logging
 import re
 from typing import Dict, List, Optional
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class ContainerSecurityScanner:
@@ -307,8 +310,8 @@ class ContainerSecurityScanner:
                     "version": version,
                     "purl": f"pkg:npm/{name}@{version}",
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse npm packages from %s: %s", package_json_path, e)
         return components
     
     def _parse_pip_packages(self, requirements_path: Path) -> List[Dict]:
@@ -328,8 +331,8 @@ class ContainerSecurityScanner:
                         "version": version.strip(),
                         "purl": f"pkg:pypi/{name.strip()}@{version.strip()}",
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse pip packages from %s: %s", requirements_path, e)
         return components
     
     def _parse_pipfile_packages(self, pipfile_path: Path) -> List[Dict]:
@@ -347,8 +350,8 @@ class ContainerSecurityScanner:
                         "version": version,
                         "purl": f"pkg:pypi/{name}@{version}",
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse Pipfile packages from %s: %s", pipfile_path, e)
         return components
     
     def _parse_go_packages(self, go_mod_path: Path) -> List[Dict]:
@@ -367,8 +370,8 @@ class ContainerSecurityScanner:
                             "version": parts[1],
                             "purl": f"pkg:golang/{parts[0]}@{parts[1]}",
                         })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse Go modules from %s: %s", go_mod_path, e)
         return components
     
     def _parse_rust_packages(self, cargo_toml_path: Path) -> List[Dict]:
@@ -385,8 +388,8 @@ class ContainerSecurityScanner:
                     "version": version,
                     "purl": f"pkg:cargo/{name}@{version}",
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to parse Cargo packages from %s: %s", cargo_toml_path, e)
         return components
     
     def run_trivy_scan(self, image_or_path: str, tool_runner) -> List[Dict]:
@@ -417,7 +420,7 @@ class ContainerSecurityScanner:
                 from parsers.parser import TrivyParser
                 parser = TrivyParser()
                 findings = parser.parse(result.get("stdout", ""))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to parse Trivy scan results: %s", e)
         
         return findings

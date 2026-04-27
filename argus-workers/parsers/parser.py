@@ -251,7 +251,7 @@ class KatanaParser(BaseParser):
             
             try:
                 data = json.loads(line)
-                request = data.get("request", {})
+                request = _safe_get(data, "request", default={})
                 
                 finding = {
                     "type": "CRAWLED_ENDPOINT",
@@ -588,7 +588,7 @@ class SemgrepParser(BaseParser):
             
             for result in results:
                 extra = result.get("extra", {})
-                metadata = extra.get("metadata", {})
+                metadata = _safe_get(extra, "metadata", default={})
                 
                 # Map severity
                 severity = "MEDIUM"
@@ -600,7 +600,7 @@ class SemgrepParser(BaseParser):
                 
                 # Get file and line info
                 path = result.get("path", "")
-                start_line = result.get("start", {}).get("line", 0)
+                start_line = _safe_get(result, "start", "line", default=0)
                 
                 finding = {
                     "type": "CODE_VULNERABILITY",
@@ -830,7 +830,7 @@ class NaabuParser(BaseParser):
                     "evidence": {
                         "port": port,
                         "service": data.get("service", ""),
-                        "banner": data.get("banner", "")[:100],
+                        "banner": (data.get("banner") or "")[:100],
                     },
                     "confidence": 0.95,
                     "tool": "naabu",
@@ -947,8 +947,8 @@ class TrivyParser(BaseParser):
                             "installed_version": installed,
                             "fixed_version": fixed,
                             "title": vuln.get("Title", ""),
-                            "description": vuln.get("Description", "")[:500],
-                            "references": vuln.get("References", [])[:5],
+                            "description": (_safe_get(vuln, "Description") or "")[:500],
+                            "references": (vuln.get("References") or [])[:5],
                             "cvss": vuln.get("CVSS", {}),
                         },
                         "confidence": 0.90,
@@ -982,7 +982,7 @@ class TestSSLParser(BaseParser):
             
             # Process each finding
             for check in data.get("results", []):
-                id_info = check.get("id", {})
+                id_info = _safe_get(check, "id", default={})
                 vuln = check.get("vulnerability", "")
                 
                 if not vuln:
@@ -1174,6 +1174,23 @@ class WpscanParser(BaseParser):
             pass
         
         return findings
+
+
+def _safe_get(data, *keys, default=None):
+    """
+    Safely traverse a nested dict, returning *default* if any key is
+    missing OR if an intermediate value is None (JSON null).
+    Unlike nested dict.get() chains, this handles JSON null correctly.
+    """
+    current = data
+    for key in keys:
+        if current is None:
+            return default
+        if isinstance(current, dict):
+            current = current.get(key)
+        else:
+            return default
+    return current if current is not None else default
 
 
 class Parser:

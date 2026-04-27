@@ -31,11 +31,11 @@ class ConnectionManager:
     """
 
     _instance: Optional["ConnectionManager"] = None
-    _lock = threading.Lock()
+    _instance_lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            with cls._lock:
+            with cls._instance_lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
@@ -44,9 +44,12 @@ class ConnectionManager:
     def __init__(self):
         if self._initialized:
             return
-        self._initialized = True
-        self._pool: Optional[pool.ThreadedConnectionPool] = None
-        self._pool_lock = threading.Lock()
+        with self._instance_lock:
+            if self._initialized:
+                return
+            self._initialized = True
+            self._pool: Optional[pool.ThreadedConnectionPool] = None
+            self._pool_lock = threading.Lock()
         self._min_connections = int(os.getenv("DB_POOL_MIN", "2"))
         self._max_connections = int(os.getenv("DB_POOL_MAX", "20"))
         self._slow_query_threshold_ms = int(os.getenv("DB_SLOW_QUERY_MS", "500"))
@@ -141,9 +144,12 @@ class ConnectionManager:
             raise DatabaseConnectionError(f"Connection error: {e}")
 
     def release_connection(self, conn):
-        """Release a connection back to the pool"""
-        if self._pool:
-            self._pool.putconn(conn)
+        """Release a connection back to the pool (safe, never raises)"""
+        if self._pool and conn:
+            try:
+                self._pool.putconn(conn)
+            except Exception as e:
+                logger.error("Failed to release connection back to pool: %s", e)
             with self._metrics_lock:
                 self._metrics["active_connections"] = max(0, self._metrics["active_connections"] - 1)
 
@@ -223,13 +229,16 @@ class SlowQueryCursor(psycopg2_cursor):
 
 # Singleton instance
 _db: Optional[ConnectionManager] = None
+_db_lock = threading.Lock()
 
 
 def get_db() -> ConnectionManager:
-    """Get the singleton database connection manager"""
+    """Get the singleton database connection manager (thread-safe)"""
     global _db
     if _db is None:
-        _db = ConnectionManager()
+        with _db_lock:
+            if _db is None:
+                _db = ConnectionManager()
     return _db
 
 

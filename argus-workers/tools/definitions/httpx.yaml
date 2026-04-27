@@ -1,0 +1,17 @@
+name: "httpx"
+command: "httpx"
+description: "HTTP probing tool for web service discovery"
+args: ["-json", "-silent"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL or host"
+    flag: "-u"
+    required: true
+  - name: "threads"
+    type: "number"
+    description: "Number of threads"
+    flag: "-t"
+    default: 50

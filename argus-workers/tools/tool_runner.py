@@ -14,7 +14,7 @@ import time
 
 from tracing import get_trace_id, StructuredLogger, ExecutionSpan
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
-from tools.circuit_breaker import CircuitBreaker, CircuitOpenError
+from tools.circuit_breaker import CircuitBreaker, CircuitOpenError, ToolCircuitBreakerManager
 
 
 class SecurityException(Exception):
@@ -82,12 +82,10 @@ class ToolRunner:
         # Initialize metrics repository
         self.metrics_repo = ToolMetricsRepository(self.connection_string) if self.connection_string else None
 
-        # Initialize circuit breaker for resilience
-        self._circuit_breaker = CircuitBreaker(
-            failure_threshold=failure_threshold,
-            cooldown_seconds=cooldown_seconds,
-            name="tool_runner"
-        )
+        # Initialize per-tool circuit breakers for resilience
+        self._circuit_breaker_mgr = ToolCircuitBreakerManager()
+        self._failure_threshold = failure_threshold
+        self._cooldown_seconds = cooldown_seconds
     
     def is_dangerous(self, tool: str, args: List[str]) -> bool:
         """
@@ -105,12 +103,9 @@ class ToolRunner:
         if tool in BLOCKED_TOOLS:
             return True
         
-        # Check args for shell injection patterns only (not tool name)
+        # Check args for shell injection patterns
         args_str = " ".join(args)
         for pattern in self.DANGEROUS_PATTERNS:
-            # Skip patterns that match tool names — handled above
-            if pattern in ("curl", "wget", "nc ", "netcat"):
-                continue
             if pattern.lower() in args_str.lower():
                 return True
         
@@ -158,8 +153,9 @@ class ToolRunner:
 
         env = {
             "PATH": f"{venv_bin}:/usr/local/bin:/usr/bin:/bin",
-            # NOTE: Don't override HOME - it breaks Python module lookups in venv
-            # Use real home for Python packages but set TMPDIR for file isolation
+            # Pass through HOME so tools (gitleaks, nmap, git, nuclei) can find
+            # ~/.config/ and other user-level configuration. Do NOT override it.
+            "HOME": os.environ.get("HOME", "/root"),
             "TMPDIR": str(self.sandbox_dir / "tmp"),
             "PYTHONPATH": os.pathsep.join(unique_paths),
             "PYTHONDONTWRITEBYTECODE": "1",
@@ -180,6 +176,14 @@ class ToolRunner:
         
         return env
     
+    def _validate_tool_name(self, tool: str) -> str:
+        """Validate tool name does not contain path traversal or shell metacharacters."""
+        if not tool or "/" in tool or "\\" in tool or ".." in tool:
+            raise SecurityException(
+                f"Invalid tool name blocked (path traversal): {tool!r}"
+            )
+        return tool
+
     def _resolve_tool_path(self, tool: str) -> str:
         """
         Resolve the full path to a tool binary by checking common locations
@@ -191,6 +195,7 @@ class ToolRunner:
         Returns:
             Full path to the tool binary, or the tool name if not found
         """
+        self._validate_tool_name(tool)
         import shutil
         resolved = shutil.which(tool)
         if resolved:
@@ -278,13 +283,16 @@ class ToolRunner:
                         print(f"Warning: Failed to record tool metric: {metric_error}")
                 
                 # Log tool execution
-                self.logger.log_tool_executed(
-                    tool_name=tool,
-                    arguments=args,
-                    duration_ms=duration_ms,
-                    success=success,
-                    return_code=result.returncode
-                )
+                try:
+                    self.logger.log_tool_executed(
+                        tool_name=tool,
+                        arguments=args,
+                        duration_ms=duration_ms,
+                        success=success,
+                        return_code=result.returncode
+                    )
+                except Exception as log_err:
+                    logger.warning("Failed to log tool execution: %s", log_err)
                 
                 return {
                     "stdout": result.stdout,
@@ -293,6 +301,8 @@ class ToolRunner:
                     "tool": tool,
                     "success": success,
                     "duration_ms": duration_ms,
+                    "timeout": False,
+                    "error": None,
                     "trace_id": get_trace_id(),
                 }
                 
@@ -326,8 +336,9 @@ class ToolRunner:
                     "returncode": -1,
                     "tool": tool,
                     "success": False,
-                    "timeout": True,
                     "duration_ms": duration_ms,
+                    "timeout": True,
+                    "error": None,
                     "trace_id": get_trace_id(),
                 }
             except Exception as e:
@@ -360,8 +371,9 @@ class ToolRunner:
                     "returncode": -1,
                     "tool": tool,
                     "success": False,
-                    "error": str(e),
                     "duration_ms": duration_ms,
+                    "timeout": False,
+                    "error": str(e),
                     "trace_id": get_trace_id(),
                 }
     
@@ -493,19 +505,33 @@ class ToolRunner:
         Returns:
             True if tool can be called, False if circuit is open
         """
-        return self._circuit_breaker.is_available()
+        breaker = self._circuit_breaker_mgr.get_breaker(
+            tool, self._failure_threshold, self._cooldown_seconds
+        )
+        return breaker.is_available()
 
-    def get_circuit_state(self) -> str:
-        """Get the current circuit breaker state."""
-        return self._circuit_breaker.state.value
+    def get_circuit_state(self, tool: str = "") -> str:
+        """Get the current circuit breaker state for a tool."""
+        if tool:
+            breaker = self._circuit_breaker_mgr.get_breaker(
+                tool, self._failure_threshold, self._cooldown_seconds
+            )
+            return breaker.state.value
+        return "unknown"
 
     def record_tool_success(self, tool: str):
         """Record successful tool execution."""
-        self._circuit_breaker.record_success()
+        breaker = self._circuit_breaker_mgr.get_breaker(
+            tool, self._failure_threshold, self._cooldown_seconds
+        )
+        breaker.record_success()
 
     def record_tool_failure(self, tool: str):
         """Record failed tool execution."""
-        self._circuit_breaker.record_failure()
+        breaker = self._circuit_breaker_mgr.get_breaker(
+            tool, self._failure_threshold, self._cooldown_seconds
+        )
+        breaker.record_failure()
 
     def run_with_circuit_breaker(
         self,
@@ -530,16 +556,22 @@ class ToolRunner:
             CircuitOpenError: If circuit breaker is open
             SecurityException: If dangerous payload detected
         """
-        if not self._circuit_breaker.is_available():
+        breaker = self._circuit_breaker_mgr.get_breaker(
+            tool, self._failure_threshold, self._cooldown_seconds
+        )
+        if not breaker.is_available():
             raise CircuitOpenError(
                 f"Circuit breaker is OPEN for tool '{tool}'. "
-                f"Wait {self._circuit_breaker._time_until_retry():.0f}s before retry."
+                f"Wait {breaker._time_until_retry():.0f}s before retry."
             )
 
         try:
             result = self.run(tool, args, timeout)
-            self._circuit_breaker.record_success()
+            breaker.record_success()
             return result
+        except SecurityException:
+            # Safety successes should not count as failures
+            raise
         except Exception as e:
-            self._circuit_breaker.record_failure()
+            breaker.record_failure()
             raise

@@ -1,0 +1,15 @@
+name: "semgrep"
+command: "semgrep"
+description: "Static code analysis tool"
+args: ["--json"]
+enabled: true
+timeout: 600
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target directory to scan"
+    required: true
+  - name: "config"
+    type: "string"
+    description: "Rule configuration"
+    flag: "--config"

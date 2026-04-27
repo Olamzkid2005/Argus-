@@ -5,7 +5,7 @@ from database.connection import connect
 from psycopg2.extras import Json, RealDictCursor
 import uuid
 from typing import Dict, Optional, List
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 
 
 class CheckpointManager:

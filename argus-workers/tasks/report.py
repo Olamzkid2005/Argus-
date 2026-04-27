@@ -4,12 +4,15 @@ Celery tasks for reporting phase
 Requirements: 20.1, 20.2, 20.3, 23.4, 23.5, 17.1, 17.2, 17.3, 17.4
 """
 import json
+import logging
 import os
 from datetime import datetime, timedelta, UTC
 from typing import Any, Dict, List, Optional
 from celery_app import app
 from database.connection import connect
 from psycopg2.extras import RealDictCursor
+
+logger = logging.getLogger(__name__)
 
 from tasks.loader import load_module
 from utils.validation import validate_uuid
@@ -79,7 +82,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None):
             state_machine = EngagementStateMachine(
                 engagement_id, db_connection_string=db_conn_string, current_state=current_state
             )
-            state_machine.transition("failed", f"Reporting failed: {str(e)}")
+            state_machine.safe_transition("failed", f"Reporting failed: {str(e)}")
             raise
 
 
@@ -299,8 +302,11 @@ def _generate_report_data(org_id: str, engagement_ids: Optional[List[str]], repo
 def _send_report_email(recipients: List[str], report_name: str, report_data: Dict[str, Any]):
     """Send report via email. Placeholder for actual email service integration."""
     # In production, integrate with SendGrid, AWS SES, or Resend
-    print(f"[REPORT EMAIL] Sending '{report_name}' to {', '.join(recipients)}")
-    print(f"[REPORT DATA] {len(report_data.get('findings_summary', []))} severity groups, {len(report_data.get('engagements', []))} engagements")
+    logger.warning("Email sending not configured — _send_report_email is a placeholder")
+    logger.info("Would send '%s' to %s with %d severity groups, %d engagements",
+                report_name, ', '.join(recipients),
+                len(report_data.get('findings_summary', [])),
+                len(report_data.get('engagements', [])))
 
 
 def _calculate_next_run(frequency: str) -> datetime:
@@ -431,6 +437,7 @@ def generate_compliance_report(
             }
 
         except Exception as e:
+            logger.error("Compliance report generation failed: %s", e)
             conn.rollback()
             raise
         finally:
@@ -597,6 +604,7 @@ def generate_full_report(
             }
 
         except Exception as e:
+            logger.error("Full report generation failed: %s", e)
             conn.rollback()
             raise
         finally:

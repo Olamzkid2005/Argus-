@@ -86,7 +86,7 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
             state_machine = EngagementStateMachine(
                 engagement_id, db_connection_string=db_conn_string, current_state=current_state
             )
-            state_machine.transition("failed", f"Scan failed: {str(e)}")
+            state_machine.safe_transition("failed", f"Scan failed: {str(e)}")
             raise
 
 
@@ -123,9 +123,17 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
 
         lock = DistributedLock(redis_url)
 
-        with LockContext(lock, engagement_id):
-            orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-            return orchestrator.run_scan(job)
+        try:
+            with LockContext(lock, engagement_id):
+                orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
+                return orchestrator.run_scan(job)
+        except Exception as e:
+            current_state = _get_engagement_state(engagement_id, db_conn_string)
+            state_machine = EngagementStateMachine(
+                engagement_id, db_connection_string=db_conn_string, current_state=current_state
+            )
+            state_machine.safe_transition("failed", f"Deep scan failed: {str(e)}")
+            raise
 
 
 @app.task(bind=True, name="tasks.scan.auth_focused_scan")
@@ -161,9 +169,17 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
 
         lock = DistributedLock(redis_url)
 
-        with LockContext(lock, engagement_id):
-            orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-            return orchestrator.run_scan(job)
+        try:
+            with LockContext(lock, engagement_id):
+                orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
+                return orchestrator.run_scan(job)
+        except Exception as e:
+            current_state = _get_engagement_state(engagement_id, db_conn_string)
+            state_machine = EngagementStateMachine(
+                engagement_id, db_connection_string=db_conn_string, current_state=current_state
+            )
+            state_machine.safe_transition("failed", f"Auth scan failed: {str(e)}")
+            raise
 
 
 def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:

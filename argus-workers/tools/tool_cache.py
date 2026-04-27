@@ -55,8 +55,24 @@ class ToolCache:
             return None
         return self.tools_dir / tool_name / tool_name
     
+    def _validate_tool_name(self, tool_name: str) -> str:
+        """Validate tool name to prevent command injection."""
+        if not tool_name or not tool_name.strip():
+            raise ValueError(f"Invalid tool name: {tool_name!r}")
+        if "/" in tool_name or "\\" in tool_name or ".." in tool_name:
+            raise ValueError(f"Tool name blocked (path traversal): {tool_name!r}")
+        return tool_name.strip()
+
+    def _validate_download_url(self, url: str) -> str:
+        """Validate download URL to prevent injection."""
+        if not url or not url.startswith(("http://", "https://")):
+            raise ValueError(f"Invalid download URL (must start with http:// or https://): {url!r}")
+        return url
+
     def cache_tool(self, tool_name: str, download_url: Optional[str] = None) -> bool:
         """Download and cache a tool."""
+        self._validate_tool_name(tool_name)
+        
         if self.is_cached(tool_name):
             logger.info(f"Tool {tool_name} already cached")
             return True
@@ -78,6 +94,7 @@ class ToolCache:
         # Otherwise download
         if download_url:
             try:
+                self._validate_download_url(download_url)
                 temp_dir = tempfile.mkdtemp()
                 result = subprocess.run(
                     ["curl", "-L", "-o", f"{temp_dir}/{tool_name}", download_url],

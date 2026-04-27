@@ -7,6 +7,7 @@ Falls back to environment variables for local development.
 
 import logging
 import os
+import threading
 from typing import Optional, Dict, Any
 from functools import lru_cache
 
@@ -81,8 +82,8 @@ class SecretsManager:
                 value = response["data"]["data"]["value"]
                 self._cache[key] = value
                 return value
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Vault secret lookup failed for %s: %s", key, e)
         
         # Try AWS Secrets Manager
         aws = self._get_aws_client()
@@ -92,8 +93,8 @@ class SecretsManager:
                 value = response.get("SecretString", default)
                 self._cache[key] = value
                 return value
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("AWS Secrets Manager lookup failed for %s: %s", key, e)
         
         # Fall back to environment variable
         env_value = os.getenv(key)
@@ -132,11 +133,14 @@ class SecretsManager:
 
 # Singleton instance
 _secrets_manager: Optional[SecretsManager] = None
+_secrets_lock = threading.Lock()
 
 
 def get_secrets_manager() -> SecretsManager:
-    """Get singleton secrets manager"""
+    """Get singleton secrets manager (thread-safe)"""
     global _secrets_manager
     if _secrets_manager is None:
-        _secrets_manager = SecretsManager()
+        with _secrets_lock:
+            if _secrets_manager is None:
+                _secrets_manager = SecretsManager()
     return _secrets_manager

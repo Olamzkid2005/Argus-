@@ -131,17 +131,15 @@ class SecurityAudit:
     
     def check_file_permissions(self):
         """Check for overly permissive files"""
-        sensitive_files = [
-            ".env", ".env.local", ".env.production",
-            "id_rsa", ".pem", ".key"
-        ]
+        sensitive_exact_names = {".env", ".env.local", ".env.production", "id_rsa"}
+        sensitive_extensions = {".pem", ".key", ".env"}
         
         for root, dirs, files in os.walk("."):
             # Skip node_modules and venv
             dirs[:] = [d for d in dirs if d not in ("node_modules", "venv", ".git", "__pycache__")]
             
             for file in files:
-                if any(file.endswith(ext) or file == name for ext, name in [(".env", f) for f in sensitive_files]):
+                if file in sensitive_exact_names or any(file.endswith(ext) for ext in sensitive_extensions):
                     filepath = os.path.join(root, file)
                     try:
                         stat = os.stat(filepath)

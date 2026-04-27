@@ -67,11 +67,11 @@ def _load_license_policy():
     warn_env = os.environ.get('ARGUS_LICENSE_POLICY_WARN')
     allowed_env = os.environ.get('ARGUS_LICENSE_POLICY_ALLOWED')
     if blocked_env:
-        policy['blocked'] = [x.strip() for x in blocked_env.split(',')]
+        policy['blocked'] = [x.strip() for x in blocked_env.split(',') if x.strip()]
     if warn_env:
-        policy['warn'] = [x.strip() for x in warn_env.split(',')]
+        policy['warn'] = [x.strip() for x in warn_env.split(',') if x.strip()]
     if allowed_env:
-        policy['allowed'] = [x.strip() for x in allowed_env.split(',')]
+        policy['allowed'] = [x.strip() for x in allowed_env.split(',') if x.strip()]
     return policy
 
 
@@ -132,6 +132,8 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
 
                 # Generate SBOMs after dependency scanning
                 if result and isinstance(result, dict):
+                    # Ensure sbom_paths key exists even if generation fails downstream
+                    result.setdefault('sbom_paths', {})
                     dependencies = result.get('dependencies', [])
                     # Get repo path from result or use default engagement artifact path
                     repo_path = result.get('repo_path', os.path.join(os.getenv('ARTIFACTS_DIR', '/tmp/argus_artifacts'), engagement_id))
@@ -152,6 +154,8 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
                             logger.info(f"SBOMs generated for engagement {engagement_id}")
                         except Exception as e:
                             logger.error(f"Failed to generate SBOMs: {str(e)}")
+                    else:
+                        logger.info(f"SBOM generation skipped for engagement {engagement_id}: no dependency data available (result keys: {list(result.keys())})")
 
                 # Don't transition to "scanning" here — scan.py handles that transition
                 # and reads the actual DB state before transitioning
@@ -168,7 +172,7 @@ def run_repo_scan(self, engagement_id: str, repo_url: str, budget: dict, trace_i
             state_machine = EngagementStateMachine(
                 engagement_id, db_connection_string=db_conn_string, current_state=current_state
             )
-            state_machine.transition("failed", f"Repository scan failed: {str(e)}")
+            state_machine.safe_transition("failed", f"Repository scan failed: {str(e)}")
             raise
 
 
@@ -433,20 +437,21 @@ def run_pip_audit(repo_path):
             text=True,
             timeout=300
         )
-        if result.returncode in [0, 1]:
+        if result.stdout:
             audit_data = json.loads(result.stdout)
             findings = []
-            for vuln in audit_data:
-                findings.append({
-                    'type': 'DEPENDENCY_VULNERABILITY',
-                    'severity': vuln.get('severity', 'MEDIUM').upper(),
-                    'title': vuln.get('name', 'Unknown'),
-                    'package': vuln.get('package', ''),
-                    'version': vuln.get('version', ''),
-                    'fix_version': vuln.get('fix_version', ''),
-                    'vulnerable_versions': vuln.get('vulnerable_versions', ''),
-                    'cve': vuln.get('vulnerability_id', ''),
-                })
+            if isinstance(audit_data, list):
+                for vuln in audit_data:
+                    findings.append({
+                        'type': 'DEPENDENCY_VULNERABILITY',
+                        'severity': vuln.get('severity', 'MEDIUM').upper(),
+                        'title': vuln.get('name', 'Unknown'),
+                        'package': vuln.get('package', ''),
+                        'version': vuln.get('version', ''),
+                        'fix_version': vuln.get('fix_version', ''),
+                        'vulnerable_versions': vuln.get('vulnerable_versions', ''),
+                        'cve': vuln.get('vulnerability_id', ''),
+                    })
             return findings
     except Exception as e:
         logger.error(f"pip-audit failed: {e}")
@@ -483,6 +488,7 @@ def run_govulncheck(repo_path):
 
 def scan_git_history_for_secrets(repo_path):
     """Scan git history for committed secrets."""
+    MAX_GIT_OUTPUT_BYTES = 100 * 1024 * 1024  # 100MB
     findings = []
     
     try:
@@ -498,14 +504,14 @@ def scan_git_history_for_secrets(repo_path):
         current_author = None
         current_date = None
         patch_lines = []
-        line_count = 0
-        max_lines = 500000
+        total_bytes = 0
         
         for line in process.stdout:
-            line_count += 1
-            if line_count > max_lines:
+            line_bytes = len(line.encode('utf-8'))
+            total_bytes += line_bytes
+            if total_bytes > MAX_GIT_OUTPUT_BYTES:
                 logger.warning(
-                    f"Git history scan: exceeded {max_lines} lines, truncating"
+                    f"Git history scan: exceeded {MAX_GIT_OUTPUT_BYTES} bytes ({total_bytes}), truncating"
                 )
                 process.kill()
                 break
@@ -615,7 +621,7 @@ def _match_license(content):
     return 'UNKNOWN'
 
 def check_license_compliance(repo_path, policy=None):
-    """Check license compliance for all dependencies."""
+    """Check license compliance for the project and its dependencies."""
     if policy is None:
         policy = LICENSE_POLICY
     
@@ -639,6 +645,36 @@ def check_license_compliance(repo_path, policy=None):
             'file_path': 'LICENSE',
             'compliance_status': 'blocked' if project_license in policy['blocked'] else 'warn' if project_license in policy['warn'] else 'allowed',
         })
+    
+    # Check dependency licenses from package-lock.json (npm)
+    lock_path = os.path.join(repo_path, 'package-lock.json')
+    if os.path.exists(lock_path):
+        try:
+            with open(lock_path) as f:
+                lock = json.load(f)
+            for dep_name, dep_info in lock.get('packages', {}).items():
+                if dep_name:  # skip root package (key "")
+                    dep_license = dep_info.get('license', 'UNKNOWN')
+                    if dep_license in policy['blocked']:
+                        findings.append({
+                            'type': 'LICENSE_COMPLIANCE',
+                            'severity': 'HIGH',
+                            'title': f'Dependency "{dep_name}" has blocked license: {dep_license}',
+                            'license': dep_license,
+                            'file_path': f'package-lock.json:{dep_name}',
+                            'compliance_status': 'blocked',
+                        })
+                    elif dep_license in policy['warn']:
+                        findings.append({
+                            'type': 'LICENSE_COMPLIANCE',
+                            'severity': 'MEDIUM',
+                            'title': f'Dependency "{dep_name}" has restricted license: {dep_license}',
+                            'license': dep_license,
+                            'file_path': f'package-lock.json:{dep_name}',
+                            'compliance_status': 'warn',
+                        })
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to parse package-lock.json for license check: %s", e)
     
     return findings
 
@@ -683,9 +719,13 @@ def _map_bandit_severity(severity):
 def run_eslint_security(repo_path):
     """Run ESLint with security plugins."""
     try:
+        # Protect against argument injection via repo_path
+        if repo_path.startswith("-"):
+            logger.warning("Suspicious repo_path starting with '-', skipping eslint: %s", repo_path)
+            return []
         result = subprocess.run(
             ['npx', 'eslint', '--ext', '.js,.jsx,.ts,.tsx', 
-             '--format', 'json', repo_path],
+             '--format', 'json', '--', repo_path],
             capture_output=True,
             text=True,
             timeout=300

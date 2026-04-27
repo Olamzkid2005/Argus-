@@ -315,7 +315,7 @@ class Orchestrator:
         # Publish state transition event
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
-            from_state="created",
+            from_state=self._get_scan_state(),
             to_state="scanning",
             reason="Reconnaissance completed — auto-advancing to scan"
         )
@@ -642,7 +642,7 @@ class Orchestrator:
                     activity="custom rule loaded",
                     status="completed",
                     target=str(targets),
-                    details=f"{rule['name']} ({rule['severity']}) — {rule.get('description', '')[:120]}",
+                    details=f"{rule.get('name', 'unknown')} ({rule.get('severity', 'unknown')}) — {rule.get('description', '')[:120]}",
                 )
             logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
         
@@ -976,6 +976,10 @@ class Orchestrator:
         
         # Create snapshot
         db_conn = os.getenv("DATABASE_URL")
+        if not db_conn:
+            raise EnvironmentError(
+                "DATABASE_URL is not set — cannot create snapshot for analysis"
+            )
         snapshot_mgr = SnapshotManager(db_conn)
         snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
         
@@ -1174,7 +1178,9 @@ class Orchestrator:
                 text=True,
                 timeout=TOOL_TIMEOUT_LONG
             )
-            if result.returncode == 0 and result.stdout:
+            # govulncheck returns non-zero (typically 3) when it finds vulnerabilities,
+            # but still outputs JSON to stdout. Accept any output, not just returncode 0.
+            if result.stdout:
                 # govulncheck outputs one JSON object per line
                 for line in result.stdout.strip().split('\n'):
                     if not line:
@@ -1448,7 +1454,7 @@ class Orchestrator:
         
         try:
             # ── Clone repository ──
-            clone_cmd = ["git", "clone"] + clone_depth + [repo_url, temp_dir]
+            clone_cmd = ["git", "clone"] + clone_depth + ["--", repo_url, temp_dir]
             clone_timeout = 120 if agg in ("default", "high") else TOOL_TIMEOUT_LONG
             clone_result = subprocess.run(
                 clone_cmd,
@@ -1733,8 +1739,8 @@ class Orchestrator:
             # ── 7. Semgrep: static code analysis ──
             # Resolve registry shorthand (p/php) to local file paths.
             # The sandbox has no network, so p/php → /abs/path/php-rules.yaml
-            # Hardcoded to avoid __file__ resolution issues in Celery workers.
-            _rules_registry = "/Users/mac/Documents/Argus-/argus-workers/semgrep_rules/registry"
+            # Resolve relative to this file's location so it works on any deployment.
+            _rules_registry = os.path.join(os.path.dirname(__file__), "semgrep_rules", "registry")
             def _resolve_semgrep_config(cfg: str) -> list:
                 """Resolve a semgrep config name to local file paths."""
                 INDEX = {

@@ -35,7 +35,7 @@ if not os.getenv("DATABASE_URL"):
                     if "=" in line:
                         key, value = line.split("=", 1)
                         if key == "DATABASE_URL":
-                            os.environ[key] = value
+                            os.environ[key] = value.strip()
                             break
 
 logging.basicConfig(
@@ -82,7 +82,10 @@ def dispatch_task(job_type: str, args: list, task_id: str = None) -> dict:
     
     # Make sure DATABASE_URL is set
     if not os.getenv("DATABASE_URL"):
-        os.environ["DATABASE_URL"] = "postgresql://argus_user:argus_dev_password_change_in_production@localhost:5432/argus_pentest"
+        raise EnvironmentError(
+            "DATABASE_URL environment variable is not set. "
+            "Set it in .env.local or export it before running dispatch_task."
+        )
 
     # Send the task through Celery with the correct environment
     result = app.send_task(

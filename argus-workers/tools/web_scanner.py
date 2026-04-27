@@ -19,6 +19,7 @@ Integrates advanced web scanning capabilities:
 - Debug endpoint detection
 - Sensitive file detection
 """
+import signal
 import time
 import re
 import json
@@ -26,6 +27,8 @@ import base64
 import logging
 from typing import Dict, List, Optional
 from urllib.parse import urlparse, urljoin
+import socket
+import urllib3
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
@@ -252,11 +255,31 @@ class WebScanner:
             ("response_analysis", self.response_analysis),
         ]
         
+        SOFT_TIME_LIMIT = 120
+
+        class _SoftTimeLimitExceeded(Exception):
+            pass
+
+        def _timeout_handler(signum, frame):
+            raise _SoftTimeLimitExceeded()
+
+        signal.signal(signal.SIGALRM, _timeout_handler)
+
         for name, method in checks:
             try:
-                method()
+                signal.alarm(0)
+                signal.alarm(SOFT_TIME_LIMIT)
+                try:
+                    method()
+                except _SoftTimeLimitExceeded:
+                    logger.warning(f"{name} exceeded {SOFT_TIME_LIMIT}s soft time limit")
+                except Exception as e:
+                    logger.error(f"{name} failed (non-fatal): {e}", exc_info=True)
+                finally:
+                    signal.alarm(0)
             except Exception as e:
                 logger.error(f"{name} failed (non-fatal): {e}", exc_info=True)
+                signal.alarm(0)
         
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
@@ -266,11 +289,12 @@ class WebScanner:
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
-            kwargs.setdefault("verify", False)  # Don't fail on self-signed certs
+            kwargs.setdefault("verify", True)  # Verify SSL certs by default
             resp = self.session.request(method, url, **kwargs)
             time.sleep(self.rate_limit)
             return resp
-        except (RequestException, Timeout, ConnectionError) as e:
+        except (RequestException, Timeout, ConnectionError,
+                urllib3.exceptions.SSLError, socket.timeout) as e:
             logger.debug(f"Request failed: {e}")
             return None
     
@@ -1100,7 +1124,7 @@ class WebScanner:
                 if payload in test_resp.text:
                     # Only flag HIGH if it's in script context or event handler
                     # Not just reflected in HTML (which browsers escape)
-                    is_script_context = "<script" in test_resp.text and "</script>" in test_resp.text
+                    is_script_context = "<script>" in test_resp.text.lower() or "<script " in test_resp.text.lower()
                     
                     # Calculate confidence based on context
                     if is_script_context:
@@ -1826,100 +1850,106 @@ class WebScanner:
         import ssl
         import socket
 
+        parsed = urlparse(self.target_url)
+        hostname = parsed.hostname
+        port = parsed.port or 443
+
+        if not hostname:
+            return
+
+        if parsed.scheme != "https":
+            self._add_finding(
+                finding_type="NO_HTTPS",
+                severity="HIGH",
+                endpoint=self.target_url,
+                evidence={
+                    "scheme": parsed.scheme,
+                    "message": "Target does not use HTTPS",
+                },
+                confidence=0.95,
+            )
+            return
+
+        context = ssl.create_default_context()
+        sock = None
+        ssock = None
+
         try:
-            parsed = urlparse(self.target_url)
-            hostname = parsed.hostname
-            port = parsed.port or 443
+            sock = socket.create_connection((hostname, port), timeout=self.timeout)
+            ssock = context.wrap_socket(sock, server_hostname=hostname)
 
-            if not hostname:
-                return
+            try:
+                cert = ssock.getpeercert()
+            except (ValueError, ssl.SSLError):
+                cert = None
+            cipher = ssock.cipher()
+            version = ssock.version()
 
-            if parsed.scheme != "https":
-                self._add_finding(
-                    finding_type="NO_HTTPS",
-                    severity="HIGH",
-                    endpoint=self.target_url,
-                    evidence={
-                        "scheme": parsed.scheme,
-                        "message": "Target does not use HTTPS",
-                    },
-                    confidence=0.95,
-                )
-                return
-
-            context = ssl.create_default_context()
-
-            with socket.create_connection((hostname, port), timeout=self.timeout) as sock:
-                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                    cert = ssock.getpeercert()
-                    cipher = ssock.cipher()
-                    version = ssock.version()
-
-                    # Check certificate expiry
-                    if cert:
-                        from datetime import datetime
-                        not_after = cert.get("notAfter")
-                        if not_after:
-                            expiry = ssl.cert_time_to_seconds(not_after)
-                            if expiry < time.time():
-                                self._add_finding(
-                                    finding_type="EXPIRED_SSL_CERTIFICATE",
-                                    severity="HIGH",
-                                    endpoint=f"{hostname}:{port}",
-                                    evidence={
-                                        "expiry_date": not_after,
-                                        "subject": cert.get("subject"),
-                                    },
-                                    confidence=0.95,
-                                )
-
-                        # Check if self-signed
-                        issuer = cert.get("issuer")
-                        subject = cert.get("subject")
-                        if issuer == subject:
-                            self._add_finding(
-                                finding_type="SELF_SIGNED_CERTIFICATE",
-                                severity="MEDIUM",
-                                endpoint=f"{hostname}:{port}",
-                                evidence={
-                                    "issuer": issuer,
-                                    "subject": subject,
-                                },
-                                confidence=0.9,
-                            )
-
-                    # Check TLS version
-                    weak_versions = ["SSLv3", "TLSv1", "TLSv1.1"]
-                    if version in weak_versions:
+            # Check certificate expiry
+            if cert:
+                from datetime import datetime
+                not_after = cert.get("notAfter")
+                if not_after:
+                    expiry = ssl.cert_time_to_seconds(not_after)
+                    if expiry < time.time():
                         self._add_finding(
-                            finding_type="WEAK_TLS_VERSION",
+                            finding_type="EXPIRED_SSL_CERTIFICATE",
                             severity="HIGH",
                             endpoint=f"{hostname}:{port}",
                             evidence={
-                                "tls_version": version,
-                                "message": f"{version} is deprecated and insecure",
+                                "expiry_date": not_after,
+                                "subject": cert.get("subject"),
                             },
                             confidence=0.95,
                         )
 
-                    # Check cipher strength
-                    if cipher:
-                        cipher_name = cipher[0]
-                        weak_ciphers = [
-                            "RC4", "DES", "3DES", "MD5", "NULL",
-                            "EXPORT", "anon", "CBC"
-                        ]
-                        if any(wc in cipher_name for wc in weak_ciphers):
-                            self._add_finding(
-                                finding_type="WEAK_SSL_CIPHER",
-                                severity="HIGH",
-                                endpoint=f"{hostname}:{port}",
-                                evidence={
-                                    "cipher": cipher_name,
-                                    "message": f"Weak cipher detected: {cipher_name}",
-                                },
-                                confidence=0.85,
-                            )
+                # Check if self-signed
+                issuer = cert.get("issuer")
+                subject = cert.get("subject")
+                if issuer == subject:
+                    self._add_finding(
+                        finding_type="SELF_SIGNED_CERTIFICATE",
+                        severity="MEDIUM",
+                        endpoint=f"{hostname}:{port}",
+                        evidence={
+                            "issuer": issuer,
+                            "subject": subject,
+                        },
+                        confidence=0.9,
+                    )
+
+            # Check TLS version
+            weak_versions = ["SSLv3", "TLSv1", "TLSv1.1"]
+            if version in weak_versions:
+                self._add_finding(
+                    finding_type="WEAK_TLS_VERSION",
+                    severity="HIGH",
+                    endpoint=f"{hostname}:{port}",
+                    evidence={
+                        "tls_version": version,
+                        "message": f"{version} is deprecated and insecure",
+                    },
+                    confidence=0.95,
+                )
+
+            # Check cipher strength
+            if cipher:
+                cipher_name = cipher[0]
+                weak_ciphers = [
+                    "RC4", "DES", "3DES", "MD5", "NULL",
+                    "EXPORT", "anon", "CBC"
+                ]
+                if any(wc in cipher_name for wc in weak_ciphers):
+                    self._add_finding(
+                        finding_type="WEAK_SSL_CIPHER",
+                        severity="HIGH",
+                        endpoint=f"{hostname}:{port}",
+                        evidence={
+                            "cipher": cipher_name,
+                            "message": f"Weak cipher detected: {cipher_name}",
+                        },
+                        confidence=0.85,
+                    )
 
         except ssl.SSLError as e:
             self._add_finding(
@@ -1936,6 +1966,17 @@ class WebScanner:
             logger.debug(f"SSL verification socket error: {e}")
         except Exception as e:
             logger.debug(f"SSL verification error: {e}")
+        finally:
+            if ssock:
+                try:
+                    ssock.close()
+                except Exception:
+                    pass
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
 
     def response_analysis(self):
         """

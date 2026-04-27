@@ -95,7 +95,7 @@ app.conf.update(
     task_time_limit=600,  # 10 minutes hard limit
     
     # Task Retry Configuration
-    task_autoretry_for=(Exception,),
+    task_autoretry_for=(ConnectionError, TimeoutError, OSError),
     task_retry_kwargs={"max_retries": 3},
     task_retry_backoff=True,  # Exponential backoff
     task_retry_backoff_max=600,  # Max 10 minutes between retries
@@ -253,8 +253,8 @@ class BaseTask(app.Task):
         try:
             monitor = get_health_monitor()
             monitor.increment_tasks()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to update health metrics: %s", e)
         
         try:
             # Check if shutdown is requested before starting
