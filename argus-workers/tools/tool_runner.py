@@ -201,16 +201,27 @@ class ToolRunner:
         """
         self._validate_tool_name(tool)
         import shutil
-        # Search PATH plus venv bin and Go bin (same dirs as _locked_env adds)
-        resolved = shutil.which(tool)
+        
+        # Build a comprehensive PATH that includes venv/bin and ~/go/bin
+        # so tools installed via pip or go install are always findable
+        venv_bin = str(Path(sys.executable).parent)
+        go_bin = os.path.expanduser("~/go/bin")
+        # Also check the project's explicit venv bin (in case system python is used)
+        project_venv_bin = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "venv", "bin"))
+        extra_paths = [venv_bin, project_venv_bin, go_bin, "/usr/local/bin", "/opt/homebrew/bin"]
+        
+        current_path = os.environ.get("PATH", "")
+        for p in extra_paths:
+            if p not in current_path:
+                current_path = f"{p}:{current_path}"
+        
+        # Search the augmented PATH
+        resolved = shutil.which(tool, path=current_path)
         if resolved:
             return resolved
-        # Fallback: search venv and Go bin directories explicitly
-        extra_dirs = [
-            str(Path(sys.executable).parent),
-            os.path.expanduser("~/go/bin"),
-        ]
-        for d in extra_dirs:
+        
+        # Direct file check as final fallback
+        for d in extra_paths:
             candidate = os.path.join(d, tool)
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                 return candidate

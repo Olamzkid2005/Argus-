@@ -20,6 +20,18 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# Ensure tool binaries (venv/bin, ~/go/bin) are in PATH for worker subprocesses
+import os as _os
+_venv_bin = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "venv", "bin")
+_go_bin = _os.path.expanduser("~/go/bin")
+_current_path = _os.environ.get("PATH", "")
+for _bin_dir in [_venv_bin, _go_bin]:
+    if _bin_dir not in _current_path and _os.path.isdir(_bin_dir):
+        _current_path = f"{_bin_dir}:{_current_path}"
+if _current_path != _os.environ.get("PATH", ""):
+    _os.environ["PATH"] = _current_path
+
+
 # Configure logging
 def setup_logging():
     """Configure structured logging for the application with secrets redaction"""
