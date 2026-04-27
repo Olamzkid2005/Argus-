@@ -103,10 +103,14 @@ class ToolRunner:
         if tool in BLOCKED_TOOLS:
             return True
         
-        # Check args for shell injection patterns
+        # Check args and full command for dangerous patterns
+        # Patterns like "rm -rf" include the tool name, so we check both
+        # the args alone and the combined command
         args_str = " ".join(args)
+        full_command = f"{tool} {args_str}"
         for pattern in self.DANGEROUS_PATTERNS:
-            if pattern.lower() in args_str.lower():
+            pattern_lower = pattern.lower()
+            if pattern_lower in args_str.lower() or pattern_lower in full_command.lower():
                 return True
         
         return False

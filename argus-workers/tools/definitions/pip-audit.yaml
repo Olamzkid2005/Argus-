@@ -1,0 +1,10 @@
+name: "pip-audit"
+command: "pip-audit"
+description: "Python dependency vulnerability scanner"
+args: ["--format", "json", "--quiet"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Audit target path"

@@ -1,0 +1,12 @@
+name: "jwt_tool"
+command: "jwt_tool"
+description: "JWT security testing tool"
+args: ["-C", "-d"]
+enabled: true
+timeout: 120
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL with JWT"
+    flag: "-u"
+    required: true

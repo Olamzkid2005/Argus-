@@ -30,12 +30,12 @@ describe("Dark Mode Integration", () => {
   });
 
   it("renders in light mode by default", () => {
-    render(<Sidebar onOpenCommandPalette={jest.fn()} />);
+    render(<Sidebar onOpenCommandPalette={jest.fn()} onClose={() => {}} />);
     expect(screen.getByText("Dark Mode")).toBeInTheDocument();
   });
 
   it("toggles to dark mode when clicked", () => {
-    render(<Sidebar onOpenCommandPalette={jest.fn()} />);
+    render(<Sidebar onOpenCommandPalette={jest.fn()} onClose={() => {}} />);
 
     const themeButton = screen.getByText("Dark Mode").closest("button");
     fireEvent.click(themeButton!);

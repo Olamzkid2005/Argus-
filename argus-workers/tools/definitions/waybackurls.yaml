@@ -1,0 +1,11 @@
+name: "waybackurls"
+command: "waybackurls"
+description: "Fetch URLs from Wayback Machine"
+args: []
+enabled: true
+timeout: 120
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target domain"
+    required: true

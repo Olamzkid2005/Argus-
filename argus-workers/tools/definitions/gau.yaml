@@ -1,0 +1,11 @@
+name: "gau"
+command: "gau"
+description: "Get all URLs from web archives"
+args: ["--json"]
+enabled: true
+timeout: 180
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target domain or URL"
+    required: true

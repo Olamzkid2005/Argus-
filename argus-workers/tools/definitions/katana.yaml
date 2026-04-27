@@ -1,0 +1,17 @@
+name: "katana"
+command: "katana"
+description: "Web crawling and endpoint discovery"
+args: ["-jsonl", "-silent"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL"
+    flag: "-u"
+    required: true
+  - name: "depth"
+    type: "number"
+    description: "Crawl depth"
+    flag: "-d"
+    default: 3

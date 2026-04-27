@@ -1,0 +1,12 @@
+name: "nikto"
+command: "nikto"
+description: "Web server vulnerability scanner"
+args: ["-Format", "csv"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL or host"
+    flag: "-h"
+    required: true

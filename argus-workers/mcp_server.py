@@ -18,13 +18,14 @@ class ToolSchema:
     """JSON Schema definition for a tool parameter."""
     def __init__(self, name: str, type: str, description: str = "",
                  required: bool = False, enum: List[str] = None,
-                 default: Any = None):
+                 default: Any = None, flag: str = None):
         self.name = name
         self.type = type
         self.description = description
         self.required = required
         self.enum = enum or []
         self.default = default
+        self.flag = flag
 
 
 class ToolDefinition:

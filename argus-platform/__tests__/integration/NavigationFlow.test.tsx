@@ -22,7 +22,7 @@ jest.mock("@/components/ui-custom/AIStatus", () => ({
 describe("Navigation Integration", () => {
   it("renders all navigation links in sidebar", () => {
     mockUsePathname.mockReturnValue("/dashboard");
-    render(<Sidebar onOpenCommandPalette={jest.fn()} />);
+    render(<Sidebar onOpenCommandPalette={jest.fn()} onClose={() => {}} />);
 
     const navLinks = [
       "Dashboard",
@@ -41,7 +41,7 @@ describe("Navigation Integration", () => {
 
   it("highlights the active page", () => {
     mockUsePathname.mockReturnValue("/findings");
-    render(<Sidebar onOpenCommandPalette={jest.fn()} />);
+    render(<Sidebar onOpenCommandPalette={jest.fn()} onClose={() => {}} />);
 
     const findingsLink = screen.getByText("Findings").closest("a");
     expect(findingsLink).toHaveClass("bg-[#6720FF]/10");
@@ -49,7 +49,7 @@ describe("Navigation Integration", () => {
 
   it("does not highlight inactive pages", () => {
     mockUsePathname.mockReturnValue("/dashboard");
-    render(<Sidebar onOpenCommandPalette={jest.fn()} />);
+    render(<Sidebar onOpenCommandPalette={jest.fn()} onClose={() => {}} />);
 
     const findingsLink = screen.getByText("Findings").closest("a");
     expect(findingsLink).not.toHaveClass("bg-[#6720FF]/10");

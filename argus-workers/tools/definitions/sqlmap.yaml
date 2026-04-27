@@ -1,0 +1,22 @@
+name: "sqlmap"
+command: "sqlmap"
+description: "SQL injection detection and exploitation"
+args: ["--batch"]
+enabled: true
+timeout: 600
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL"
+    flag: "-u"
+    required: true
+  - name: "level"
+    type: "number"
+    description: "Test level (1-5)"
+    flag: "--level"
+    default: 1
+  - name: "risk"
+    type: "number"
+    description: "Risk level (1-3)"
+    flag: "--risk"
+    default: 1

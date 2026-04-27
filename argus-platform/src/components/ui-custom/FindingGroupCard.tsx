@@ -53,7 +53,7 @@ export function FindingGroupCard({
               {group.rule_name}
             </h3>
             <div className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-white/10 text-muted-foreground border border-border">
-              {group.source_tool}
+              {group.findings[0]?.source_tool}
             </div>
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">

@@ -1,0 +1,11 @@
+name: "testssl"
+command: "testssl"
+description: "TLS/SSL security testing"
+args: []
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target host:port"
+    required: true

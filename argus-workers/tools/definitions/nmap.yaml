@@ -1,0 +1,15 @@
+name: "nmap"
+command: "nmap"
+description: "Network port scanner"
+args: ["-oX", "-"]
+enabled: true
+timeout: 600
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target host or IP"
+    required: true
+  - name: "ports"
+    type: "string"
+    description: "Port range"
+    flag: "-p"

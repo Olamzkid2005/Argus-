@@ -1,0 +1,19 @@
+name: "dalfox"
+command: "dalfox"
+description: "XSS vulnerability scanner"
+args: ["--json"]
+enabled: true
+timeout: 600
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL"
+    required: true
+  - name: "blind"
+    type: "boolean"
+    description: "Enable blind XSS mode"
+    flag: "-b"
+  - name: "deep_dom"
+    type: "boolean"
+    description: "Enable deep DOM scanning"
+    flag: "--deep-dom"

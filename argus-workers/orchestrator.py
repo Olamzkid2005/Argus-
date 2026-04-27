@@ -44,6 +44,14 @@ from config.constants import (
     TOOL_TIMEOUT_SHORT,
 )
 
+from mcp_server import get_mcp_server, ToolDefinition, ToolSchema
+from agent_loop import ReActAgent, ToolRegistry, CoordinatorAgent
+from streaming import (
+    emit_thinking, emit_tool_start, emit_tool_complete,
+    emit_finding, emit_state_change, emit_progress, emit_error, emit_complete,
+    get_stream_manager, StreamEvent, StreamEventType
+)
+
 from llm_client import LLMClient
 from tools.llm_payload_generator import LLMPayloadGenerator
 
@@ -149,6 +157,218 @@ class Orchestrator:
                     logger.info("LLM payload generator initialized")
         except Exception as e:
             logger.warning(f"LLM components not available (graceful degradation): {e}")
+        
+        # Initialize MCP protocol server
+        self.mcp = get_mcp_server()
+        
+        # Initialize streaming
+        self.stream = get_stream_manager()
+        
+        # Register tools with MCP server
+        self._register_mcp_tools()
+    
+    def _register_mcp_tools(self):
+        """Register all available tools with the MCP protocol server."""
+        tools = [
+            # ── Reconnaissance tools ──
+            ToolDefinition("httpx", "httpx",
+                description="HTTP probing tool for web service discovery",
+                args=["-json", "-silent"],
+                parameters=[ToolSchema("target", "string", "Target URL", required=True)],
+                timeout=300),
+            ToolDefinition("katana", "katana",
+                description="Web crawling and endpoint discovery",
+                args=["-jsonl", "-silent"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", flag="-u", required=True),
+                    ToolSchema("depth", "number", "Crawl depth", flag="-d", default=3),
+                ],
+                timeout=300),
+            ToolDefinition("ffuf", "ffuf",
+                description="Web fuzzing tool for directory/parameter discovery",
+                args=["-json"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL with FUZZ keyword", flag="-u", required=True),
+                    ToolSchema("wordlist", "string", "Path to wordlist", flag="-w", required=True),
+                    ToolSchema("threads", "number", "Thread count", flag="-t", default=40),
+                ],
+                timeout=300),
+            ToolDefinition("amass", "amass",
+                description="Subdomain enumeration and reconnaissance",
+                args=["enum", "-json"],
+                parameters=[
+                    ToolSchema("target", "string", "Target domain", flag="-d", required=True),
+                    ToolSchema("brute", "boolean", "Enable brute forcing", flag="-brute"),
+                ],
+                timeout=600),
+            ToolDefinition("naabu", "naabu",
+                description="Port scanning tool",
+                args=["-json"],
+                parameters=[
+                    ToolSchema("target", "string", "Target host", flag="-host", required=True),
+                    ToolSchema("top_ports", "string", "Top ports to scan", flag="-top-ports"),
+                    ToolSchema("port_range", "string", "Port range", flag="-p"),
+                ],
+                timeout=300),
+            ToolDefinition("whatweb", "whatweb",
+                description="Web technology fingerprinting",
+                args=["--format=json"],
+                parameters=[ToolSchema("target", "string", "Target URL", required=True)],
+                timeout=120),
+            ToolDefinition("nikto", "nikto",
+                description="Web server vulnerability scanner",
+                args=["-Format", "csv"],
+                parameters=[ToolSchema("target", "string", "Target URL", flag="-h", required=True)],
+                timeout=300),
+            ToolDefinition("gau", "gau",
+                description="Get all URLs from web archives",
+                args=["--json"],
+                parameters=[ToolSchema("target", "string", "Target domain", required=True)],
+                timeout=180),
+            ToolDefinition("waybackurls", "waybackurls",
+                description="Fetch URLs from Wayback Machine",
+                args=[],
+                parameters=[ToolSchema("target", "string", "Target domain", required=True)],
+                timeout=120),
+            ToolDefinition("nmap", "nmap",
+                description="Network port scanner",
+                args=["-oX", "-"],
+                parameters=[
+                    ToolSchema("target", "string", "Target host", required=True),
+                    ToolSchema("ports", "string", "Port range", flag="-p"),
+                ],
+                timeout=600),
+            # ── Scanning tools ──
+            ToolDefinition("nuclei", "nuclei",
+                description="Vulnerability scanner based on YAML templates",
+                args=["-json", "-silent"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", flag="-u", required=True),
+                    ToolSchema("severity", "string", "Severity filter", flag="-severity",
+                             enum=["info", "low", "medium", "high", "critical"]),
+                    ToolSchema("templates", "string", "Custom template directory", flag="-t"),
+                    ToolSchema("tags", "string", "Template tags to run", flag="-tags"),
+                ],
+                timeout=600),
+            ToolDefinition("dalfox", "dalfox",
+                description="XSS vulnerability scanner",
+                args=["--json"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", required=True),
+                    ToolSchema("blind", "boolean", "Blind XSS mode", flag="-b"),
+                    ToolSchema("deep_dom", "boolean", "Deep DOM scanning", flag="--deep-dom"),
+                ],
+                timeout=600),
+            ToolDefinition("sqlmap", "sqlmap",
+                description="SQL injection detection and exploitation",
+                args=["--batch"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", flag="-u", required=True),
+                    ToolSchema("level", "number", "Test level (1-5)", flag="--level", default=1),
+                    ToolSchema("risk", "number", "Risk level (1-3)", flag="--risk", default=1),
+                ],
+                timeout=600),
+            ToolDefinition("arjun", "arjun",
+                description="HTTP parameter discovery",
+                args=["-m", "GET"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", flag="-u", required=True),
+                    ToolSchema("threads", "number", "Thread count", flag="-t", default=10),
+                ],
+                timeout=300),
+            ToolDefinition("jwt_tool", "jwt_tool",
+                description="JWT security testing tool",
+                args=["-C", "-d"],
+                parameters=[ToolSchema("target", "string", "Target URL", flag="-u", required=True)],
+                timeout=120),
+            ToolDefinition("commix", "commix",
+                description="Command injection detection",
+                args=["--batch"],
+                parameters=[ToolSchema("target", "string", "Target URL", flag="--url", required=True)],
+                timeout=300),
+            ToolDefinition("testssl", "testssl",
+                description="TLS/SSL security testing",
+                args=[],
+                parameters=[ToolSchema("target", "string", "Target host:port", required=True)],
+                timeout=300),
+            # ── Repository scanning tools ──
+            ToolDefinition("semgrep", "semgrep",
+                description="Static code analysis tool",
+                args=["--json"],
+                parameters=[
+                    ToolSchema("target", "string", "Target path", required=True),
+                    ToolSchema("config", "string", "Rule config path", flag="--config"),
+                ],
+                timeout=600),
+            ToolDefinition("gitleaks", "gitleaks",
+                description="Git repository secret scanning",
+                args=["detect", "--verbose", "--no-color"],
+                parameters=[
+                    ToolSchema("target", "string", "Target path", flag="--source", required=True),
+                    ToolSchema("report_format", "string", "Report format", default="json"),
+                    ToolSchema("max_target_mb", "number", "Max target size", flag="--max-target-megabytes"),
+                ],
+                timeout=300),
+            ToolDefinition("trivy", "trivy",
+                description="Container and filesystem vulnerability scanner",
+                args=["fs", "--format", "json", "--skip-dirs", "node_modules,vendor,dist,build,.git,coverage"],
+                parameters=[
+                    ToolSchema("target", "string", "Image name or path", required=True),
+                    ToolSchema("scanners", "string", "Comma-separated scanners", flag="--scanners",
+                             default="vuln,misconfig,secret"),
+                ],
+                timeout=600),
+            ToolDefinition("bandit", "bandit",
+                description="Python security linter",
+                args=["-f", "json"],
+                parameters=[
+                    ToolSchema("target", "string", "Target path", flag="-r", required=True),
+                    ToolSchema("severity", "string", "Severity filter", flag="-ll"),
+                ],
+                timeout=300),
+            # ── Specialized tools ──
+            ToolDefinition("gospider", "gospider",
+                description="Web spider for endpoint discovery",
+                args=["-q", "-j"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", flag="-s", required=True),
+                    ToolSchema("depth", "number", "Crawl depth", flag="-d", default=3),
+                ],
+                timeout=300),
+            ToolDefinition("wpscan", "wpscan",
+                description="WordPress vulnerability scanner",
+                args=["-f", "json", "--no-banner"],
+                parameters=[
+                    ToolSchema("target", "string", "WordPress URL", flag="--url", required=True),
+                    ToolSchema("api_token", "string", "WPScan API token", flag="--api-token"),
+                ],
+                timeout=600),
+            ToolDefinition("pip_audit", "pip-audit",
+                description="Python dependency vulnerability scanner",
+                args=["--format", "json", "--quiet"],
+                parameters=[ToolSchema("target", "string", "Audit target path")],
+                timeout=300),
+        ]
+        for tool in tools:
+            self.mcp.register_tool(tool)
+    
+    def mcp_run(self, tool: str, arguments: Dict = None) -> Dict:
+        """
+        Execute a tool through the MCP protocol server with streaming.
+        
+        Args:
+            tool: Tool name (must be registered with MCP server)
+            arguments: Tool arguments
+            
+        Returns:
+            MCP-formatted result dict
+        """
+        emit_tool_start(self.engagement_id, tool, list((arguments or {}).keys()))
+        result = self.mcp.call_tool(tool, arguments)
+        success = not result.get("isError", False)
+        emit_tool_complete(self.engagement_id, tool, success, 
+                          result.get("meta", {}).get("duration_ms", 0))
+        return result
     
     def _load_custom_rules(self, engagement_id: str) -> List[Dict]:
         """
@@ -291,6 +511,10 @@ class Orchestrator:
             target=target
         )
         
+        # Emit streaming events
+        emit_thinking(self.engagement_id, f"Starting reconnaissance against {target}")
+        emit_state_change(self.engagement_id, "created", "recon", "Starting reconnaissance")
+        
         # Execute reconnaissance tools
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         findings = self._execute_recon_tools(target, job.get("budget", {}), aggressiveness)
@@ -370,6 +594,7 @@ class Orchestrator:
         # Execute httpx for endpoint discovery
         _emit("httpx", "Discovering live endpoints and probing HTTP services", "started")
         try:
+            emit_tool_start(self.engagement_id, "httpx", ["-u", target, "-json", "-silent"])
             httpx_result = self.tool_runner.run(
                 "httpx",
                 ["-u", target, "-json", "-silent"],
@@ -391,6 +616,7 @@ class Orchestrator:
         # Execute katana for web crawling
         _emit("katana", f"Crawling application routes and links up to depth {katana_depth}", "started")
         try:
+            emit_tool_start(self.engagement_id, "katana", ["-u", target, "-jsonl", "-silent", "-d", katana_depth])
             katana_result = self.tool_runner.run(
                 "katana",
                 ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
@@ -423,6 +649,7 @@ class Orchestrator:
                 ffuf_cmd.extend(["-t", "50"])
             elif agg == "extreme":
                 ffuf_cmd.extend(["-t", "100", "-mc", "all"])
+            emit_tool_start(self.engagement_id, "ffuf", ffuf_cmd)
             ffuf_result = self.tool_runner.run(
                 "ffuf",
                 ffuf_cmd,
@@ -447,6 +674,7 @@ class Orchestrator:
         try:
             amass_cmd = amass_mode + [target_domain, "-json"]
             amass_timeout = TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
+            emit_tool_start(self.engagement_id, "amass", amass_cmd)
             amass_result = self.tool_runner.run(
                 "amass",
                 amass_cmd,
@@ -475,6 +703,7 @@ class Orchestrator:
             else:
                 naabu_cmd.extend(["-top-ports", naabu_port_val])
             naabu_timeout = 120 if agg == "default" else TOOL_TIMEOUT_LONG if agg == "high" else 900
+            emit_tool_start(self.engagement_id, "naabu", naabu_cmd)
             naabu_result = self.tool_runner.run(
                 "naabu",
                 naabu_cmd,
@@ -496,6 +725,7 @@ class Orchestrator:
         # Execute whatweb for technology fingerprinting
         _emit("whatweb", "Fingerprinting web technologies and server stack", "started")
         try:
+            emit_tool_start(self.engagement_id, "whatweb", ["--format=json", target])
             whatweb_result = self.tool_runner.run(
                 "whatweb",
                 ["--format=json", target],
@@ -517,6 +747,7 @@ class Orchestrator:
         # Execute nikto for web server scanning
         _emit("nikto", "Scanning web server for misconfigurations and known issues", "started")
         try:
+            emit_tool_start(self.engagement_id, "nikto", ["-h", target, "-Format", "csv"])
             nikto_result = self.tool_runner.run(
                 "nikto",
                 ["-h", target, "-Format", "csv"],
@@ -538,6 +769,7 @@ class Orchestrator:
         # Execute gau for known URLs
         _emit("gau", "Fetching known URLs from passive archives (gau)", "started")
         try:
+            emit_tool_start(self.engagement_id, "gau", [target, "--json"])
             gau_result = self.tool_runner.run(
                 "gau",
                 [target, "--json"],
@@ -559,6 +791,7 @@ class Orchestrator:
         # Execute waybackurls for historical URLs
         _emit("waybackurls", "Retrieving historical URLs from Wayback Machine", "started")
         try:
+            emit_tool_start(self.engagement_id, "waybackurls", [target])
             wayback_result = self.tool_runner.run(
                 "waybackurls",
                 [target],
@@ -750,6 +983,7 @@ class Orchestrator:
                 elif agg == "extreme":
                     nuclei_cmd.extend(["-severity", "info,low,medium,high,critical", "-tags", "fuzz"])
                     nuclei_timeout = 1200
+                emit_tool_start(self.engagement_id, "nuclei", nuclei_cmd)
                 nuclei_result = self.tool_runner.run(
                     "nuclei",
                     nuclei_cmd,
@@ -779,6 +1013,7 @@ class Orchestrator:
                 elif agg == "extreme":
                     dalfox_cmd.extend(["-b", "--deep-dom"])
                     dalfox_timeout = 1200
+                emit_tool_start(self.engagement_id, "dalfox", dalfox_cmd)
                 dalfox_result = self.tool_runner.run(
                     "dalfox",
                     dalfox_cmd,
@@ -804,6 +1039,7 @@ class Orchestrator:
                 elif agg == "extreme":
                     sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
                     sqlmap_timeout = 1800
+                emit_tool_start(self.engagement_id, "sqlmap", sqlmap_cmd)
                 sqlmap_result = self.tool_runner.run(
                     "sqlmap",
                     sqlmap_cmd,
@@ -831,6 +1067,7 @@ class Orchestrator:
                 arjun_out = str(self.tool_runner.sandbox_dir / "tmp" / "arjun.json")
                 arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
                 arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
+                emit_tool_start(self.engagement_id, "arjun", ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads])
                 arjun_result = self.tool_runner.run(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
@@ -854,6 +1091,7 @@ class Orchestrator:
             # Execute jwt_tool for JWT vulnerability testing
             try:
                 # First check if target has JWT tokens
+                emit_tool_start(self.engagement_id, "jwt_tool", ["-u", target, "-C", "-d"])
                 jwt_result = self.tool_runner.run(
                     "jwt_tool",
                     ["-u", target, "-C", "-d"],
@@ -871,6 +1109,7 @@ class Orchestrator:
             # Execute commix for command injection testing
             try:
                 commix_out = str(self.tool_runner.sandbox_dir / "tmp" / "commix.json")
+                emit_tool_start(self.engagement_id, "commix", ["--url", target, "--batch", "--json-output", commix_out])
                 commix_result = self.tool_runner.run(
                     "commix",
                     ["--url", target, "--batch", "--json-output", commix_out],
@@ -894,6 +1133,7 @@ class Orchestrator:
             # Execute testssl for TLS vulnerability scanning
             try:
                 testssl_out = str(self.tool_runner.sandbox_dir / "tmp" / "testssl.json")
+                emit_tool_start(self.engagement_id, "testssl", ["--jsonfile", testssl_out, target])
                 testssl_result = self.tool_runner.run(
                     "testssl",
                     ["--jsonfile", testssl_out, target],
@@ -921,6 +1161,7 @@ class Orchestrator:
                     rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
                     llm_payload_generator=self.llm_payload_generator,
                 )
+                emit_tool_start(self.engagement_id, "web_scanner", [target])
                 web_findings = web_scanner.scan(target)
                 
                 for wf in web_findings:
@@ -1282,6 +1523,10 @@ class Orchestrator:
                 f"of {HARD_TIMEOUT_SECONDS} seconds (elapsed: {elapsed:.2f}s)"
             )
     
+    def _get_scan_state(self) -> str:
+        """Return the current engagement state for state transitions."""
+        return "recon"
+
     def _log_timeout_event(self, elapsed_seconds: float):
         """
         Log timeout event to execution logs

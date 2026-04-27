@@ -1,0 +1,20 @@
+name: "amass"
+command: "amass"
+description: "Subdomain enumeration and reconnaissance"
+args: ["enum", "-json"]
+enabled: true
+timeout: 600
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target domain"
+    flag: "-d"
+    required: true
+  - name: "brute"
+    type: "boolean"
+    description: "Enable brute forcing"
+    flag: "-brute"
+  - name: "wordlist"
+    type: "string"
+    description: "Path to wordlist"
+    flag: "-w"

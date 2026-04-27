@@ -1,0 +1,20 @@
+name: "gitleaks"
+command: "gitleaks"
+description: "Git repository secret scanning"
+args: ["detect", "--verbose", "--no-color"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target path"
+    flag: "--source"
+    required: true
+  - name: "report_format"
+    type: "string"
+    description: "Report format"
+    default: "json"
+  - name: "max_target_mb"
+    type: "number"
+    description: "Max target size in MB"
+    flag: "--max-target-megabytes"

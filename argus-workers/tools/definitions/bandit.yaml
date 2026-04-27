@@ -1,0 +1,16 @@
+name: "bandit"
+command: "bandit"
+description: "Python security linter"
+args: ["-f", "json"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target path"
+    flag: "-r"
+    required: true
+  - name: "severity"
+    type: "string"
+    description: "Severity level"
+    flag: "-ll"
