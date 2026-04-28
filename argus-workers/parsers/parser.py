@@ -1193,6 +1193,295 @@ def _safe_get(data, *keys, default=None):
     return current if current is not None else default
 
 
+class PipAuditParser(BaseParser):
+    """Parser for pip-audit JSON output (dependency vulnerability scanning)"""
+
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse pip-audit JSON output
+
+        Args:
+            raw_output: pip-audit output (JSON array of vulnerability objects)
+
+        Returns:
+            List of dependency vulnerability findings
+        """
+        findings = []
+
+        try:
+            data = json.loads(raw_output)
+            if isinstance(data, dict):
+                data = data.get("vulnerabilities", [])
+
+            for vuln in data if isinstance(data, list) else []:
+                name = vuln.get("name", "")
+                version = vuln.get("version", "")
+                fix_version = vuln.get("fix_version", "")
+                vulnerable_versions = vuln.get("vulnerable_versions", "")
+                vulnerability_id = vuln.get("vulnerability_id", "")
+                severity = vuln.get("severity", "INFO")
+                description = vuln.get("description", "")
+
+                finding = {
+                    "type": "DEPENDENCY_VULNERABILITY",
+                    "severity": severity.upper(),
+                    "endpoint": f"pypi:{name}",
+                    "evidence": {
+                        "package": name,
+                        "version": version,
+                        "fix_version": fix_version,
+                        "vulnerability_id": vulnerability_id,
+                        "description": description[:500] if description else "",
+                    },
+                    "confidence": 0.90,
+                    "tool": "pip_audit",
+                }
+                findings.append(finding)
+
+        except json.JSONDecodeError:
+            pass
+
+        return findings
+
+
+class BanditParser(BaseParser):
+    """Parser for bandit JSON output (Python security linter)"""
+
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse bandit JSON output
+
+        Args:
+            raw_output: Bandit output (JSON with results array)
+
+        Returns:
+            List of code vulnerability findings
+        """
+        findings = []
+
+        try:
+            data = json.loads(raw_output)
+            results = data.get("results", [])
+
+            for result in results:
+                filename = result.get("filename", "")
+                line_number = result.get("line_number", 0)
+                issue_severity = result.get("issue_severity", "MEDIUM")
+                issue_confidence = result.get("issue_confidence", "MEDIUM")
+                code = result.get("code", "")
+                test_id = result.get("test_id", "")
+                test_name = result.get("test_name", "")
+                issue_text = result.get("issue_text", "")
+
+                severity = issue_severity.upper()
+                if severity not in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+                    severity = "MEDIUM"
+
+                confidence_map = {"HIGH": 0.95, "MEDIUM": 0.85, "LOW": 0.70}
+                confidence_value = confidence_map.get(issue_confidence.upper(), 0.70)
+
+                finding = {
+                    "type": f"BANDIT_{test_id}" if test_id else "CODE_VULNERABILITY",
+                    "severity": severity,
+                    "endpoint": f"file:{filename}:{line_number}",
+                    "evidence": {
+                        "file": filename,
+                        "line": line_number,
+                        "code": code,
+                        "issue_text": issue_text,
+                        "test_name": test_name,
+                    },
+                    "confidence": confidence_value,
+                    "tool": "bandit",
+                }
+                findings.append(finding)
+
+        except json.JSONDecodeError:
+            pass
+
+        return findings
+
+
+class NmapParser(BaseParser):
+    """Parser for nmap XML output (-oX - format)"""
+
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse nmap XML output
+
+        Args:
+            raw_output: Nmap XML output
+
+        Returns:
+            List of open port findings
+        """
+        findings = []
+
+        try:
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(raw_output)
+
+            for host in root.findall("host"):
+                address_el = host.find("address")
+                host_addr = address_el.get("addr", "") if address_el is not None else ""
+
+                ports_el = host.find("ports")
+                if ports_el is None:
+                    continue
+
+                for port_el in ports_el.findall("port"):
+                    protocol = port_el.get("protocol", "")
+                    port = port_el.get("portid", "")
+
+                    state_el = port_el.find("state")
+                    state = state_el.get("state", "") if state_el is not None else ""
+
+                    if state.lower() != "open":
+                        continue
+
+                    service_el = port_el.find("service")
+                    service_name = service_el.get("name", "") if service_el is not None else ""
+                    product = service_el.get("product", "") if service_el is not None else ""
+                    version = service_el.get("version", "") if service_el is not None else ""
+
+                    banner = ""
+                    for child in port_el:
+                        if child.tag == "script" and child.get("id") == "banner":
+                            banner = child.get("output", "")
+
+                    finding = {
+                        "type": "OPEN_PORT",
+                        "severity": "INFO",
+                        "endpoint": f"{host_addr}:{port}",
+                        "evidence": {
+                            "port": port,
+                            "protocol": protocol,
+                            "service": service_name,
+                            "product": product,
+                            "version": version,
+                            "banner": banner,
+                            "state": state,
+                        },
+                        "confidence": 0.95,
+                        "tool": "nmap",
+                    }
+                    findings.append(finding)
+
+        except Exception:
+            pass
+
+        return findings
+
+
+class SubfinderParser(BaseParser):
+    """Parser for subfinder output (subdomain enumeration)"""
+
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse subfinder output (JSON lines or plain text)
+
+        Args:
+            raw_output: Subfinder output
+
+        Returns:
+            List of subdomain discovery findings
+        """
+        findings = []
+
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+
+            try:
+                data = json.loads(line)
+                host = data.get("host", "")
+                source = data.get("source", "")
+                if host:
+                    finding = {
+                        "type": "SUBDOMAIN_DISCOVERY",
+                        "severity": "INFO",
+                        "endpoint": host,
+                        "evidence": {
+                            "source": source if source else "subfinder",
+                        },
+                        "confidence": 0.90,
+                        "tool": "subfinder",
+                    }
+                    findings.append(finding)
+            except json.JSONDecodeError:
+                endpoint = line.strip()
+                if endpoint:
+                    finding = {
+                        "type": "SUBDOMAIN_DISCOVERY",
+                        "severity": "INFO",
+                        "endpoint": endpoint,
+                        "evidence": {
+                            "source": "subfinder",
+                        },
+                        "confidence": 0.90,
+                        "tool": "subfinder",
+                    }
+                    findings.append(finding)
+
+        return findings
+
+
+class AlterxParser(BaseParser):
+    """Parser for alterx output (subdomain permutation enumeration)"""
+
+    def parse(self, raw_output: str) -> List[Dict]:
+        """
+        Parse alterx output (JSON or plain text)
+
+        Args:
+            raw_output: Alterx output
+
+        Returns:
+            List of subdomain permutation findings
+        """
+        findings = []
+
+        for line in raw_output.split("\n"):
+            if not line.strip():
+                continue
+
+            try:
+                data = json.loads(line)
+                host = data.get("host", "")
+                source = data.get("source", "")
+                input_domain = data.get("input", "")
+                if host:
+                    finding = {
+                        "type": "SUBDOMAIN_PERMUTATION",
+                        "severity": "INFO",
+                        "endpoint": host,
+                        "evidence": {
+                            "source": source if source else "alterx",
+                            "input": input_domain if input_domain else "",
+                        },
+                        "confidence": 0.70,
+                        "tool": "alterx",
+                    }
+                    findings.append(finding)
+            except json.JSONDecodeError:
+                endpoint = line.strip()
+                if endpoint:
+                    finding = {
+                        "type": "SUBDOMAIN_PERMUTATION",
+                        "severity": "INFO",
+                        "endpoint": endpoint,
+                        "evidence": {
+                            "source": "alterx",
+                            "input": "",
+                        },
+                        "confidence": 0.70,
+                        "tool": "alterx",
+                    }
+                    findings.append(finding)
+
+        return findings
+
+
 class Parser:
     """
     Main parser class that routes to appropriate tool parser
@@ -1227,6 +1516,11 @@ class Parser:
             "trivy": TrivyParser(),
             "gospider": GospiderParser(),
             "wpscan": WpscanParser(),
+            "pip_audit": PipAuditParser(),
+            "bandit": BanditParser(),
+            "nmap": NmapParser(),
+            "subfinder": SubfinderParser(),
+            "alterx": AlterxParser(),
         }
         
         # Initialize tracing

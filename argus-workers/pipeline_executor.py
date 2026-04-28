@@ -125,6 +125,8 @@ class PipelineExecutor:
         2. katana — web crawling
         3. ffuf — directory fuzzing
         4. amass — subdomain enumeration
+        4b. subfinder — passive subdomain enumeration
+        4c. alterx — subdomain permutation generation
         5. naabu — port scanning
         6. whatweb — technology fingerprinting
         7. nikto — web server scanning
@@ -155,6 +157,12 @@ class PipelineExecutor:
 
         # ── Step 4: amass — subdomain enumeration ──
         results.append(self._exec_amass(target_domain, engagement_id, agg))
+
+        # ── Step 4b: subfinder — passive subdomain enumeration ──
+        results.append(self._exec_subfinder(target_domain, engagement_id, agg))
+
+        # ── Step 4c: alterx — subdomain permutation generation ──
+        results.append(self._exec_alterx(target_domain, engagement_id, agg))
 
         # ── Step 5: naabu — port scanning ──
         results.append(self._exec_naabu(target_domain, engagement_id, agg))
@@ -309,6 +317,45 @@ class PipelineExecutor:
             findings = self._parse_and_normalize(result, tool)
             count = len(findings)
             self._emit(engagement_id, tool, f"Subdomain enumeration complete — found {count}", "completed", domain, count)
+            return StepResult(step, tool, True, findings, duration_ms=self._ms(start))
+        except Exception as e:
+            self._emit(engagement_id, tool, f"Failed: {e}", "failed", domain)
+            return StepResult(step, tool, False, error=str(e), error_code=ErrorCode.TOOL_EXECUTION_FAILED, duration_ms=self._ms(start))
+
+    def _exec_subfinder(self, domain: str, engagement_id: str, agg: str) -> StepResult:
+        """Step 4b: subfinder — passive subdomain enumeration."""
+        step = 4
+        tool = "subfinder"
+        start = time.time()
+
+        try:
+            desc = "passive" if agg == "default" else "all sources" if agg == "high" else "all sources + aggressive"
+            self._emit(engagement_id, tool, f"Enumerating subdomains ({desc})", "started", domain)
+            cmd = ["-d", domain, "-silent"]
+            if agg in ("high", "extreme"):
+                cmd.append("-all")
+            timeout = 300 if agg == "default" else 600
+            result = self._run_tool(tool, cmd, timeout=timeout)
+            findings = self._parse_and_normalize(result, tool)
+            count = len(findings)
+            self._emit(engagement_id, tool, f"Subdomain enumeration complete — found {count}", "completed", domain, count)
+            return StepResult(step, tool, True, findings, duration_ms=self._ms(start))
+        except Exception as e:
+            self._emit(engagement_id, tool, f"Failed: {e}", "failed", domain)
+            return StepResult(step, tool, False, error=str(e), error_code=ErrorCode.TOOL_EXECUTION_FAILED, duration_ms=self._ms(start))
+
+    def _exec_alterx(self, domain: str, engagement_id: str, agg: str) -> StepResult:
+        """Step 4c: alterx — subdomain permutation generation."""
+        step = 4
+        tool = "alterx"
+        start = time.time()
+
+        try:
+            self._emit(engagement_id, tool, "Generating subdomain permutations", "started", domain)
+            result = self._run_tool(tool, ["-d", domain, "-silent"], timeout=120)
+            findings = self._parse_and_normalize(result, tool)
+            count = len(findings)
+            self._emit(engagement_id, tool, f"Permutation generation complete — generated {count} variants", "completed", domain, count)
             return StepResult(step, tool, True, findings, duration_ms=self._ms(start))
         except Exception as e:
             self._emit(engagement_id, tool, f"Failed: {e}", "failed", domain)

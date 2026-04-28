@@ -245,6 +245,21 @@ class Orchestrator:
                 args=[],
                 parameters=[ToolSchema("target", "string", "Target domain", required=True)],
                 timeout=120),
+            ToolDefinition("subfinder", "subfinder",
+                description="Fast passive subdomain enumeration tool",
+                args=["-silent"],
+                parameters=[
+                    ToolSchema("target", "string", "Target domain", flag="-d", required=True),
+                    ToolSchema("all", "boolean", "Use all sources", flag="-all"),
+                ],
+                timeout=300),
+            ToolDefinition("alterx", "alterx",
+                description="Subdomain permutation generator",
+                args=["-silent"],
+                parameters=[
+                    ToolSchema("domain", "string", "Root domain", flag="-d"),
+                ],
+                timeout=120),
             ToolDefinition("nmap", "nmap",
                 description="Network port scanner",
                 args=["-oX", "-"],
@@ -707,7 +722,51 @@ class Orchestrator:
         except Exception as e:
             _emit("amass", f"Subdomain enumeration failed: {str(e)}", "failed")
             logger.warning(f"amass failed: {e}")
-        
+
+        # Execute subfinder for additional subdomain enumeration (passive)
+        _emit("subfinder", f"Enumerating subdomains via passive sources ({target_domain})", "started")
+        try:
+            emit_tool_start(self.engagement_id, "subfinder", ["-d", target_domain, "-silent"])
+            subfinder_result = self.tool_runner.run(
+                "subfinder",
+                ["-d", target_domain, "-silent"],
+                timeout=TOOL_TIMEOUT_SHORT
+            )
+            parsed_count = 0
+            if subfinder_result.get("success"):
+                parsed = self.parser.parse("subfinder", subfinder_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "subfinder")
+                    if normalized:
+                        all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("subfinder", f"Subdomain enumeration complete — found {parsed_count} subdomains", "completed", items=parsed_count)
+        except Exception as e:
+            _emit("subfinder", f"Subdomain enumeration failed: {str(e)}", "failed")
+            logger.warning(f"subfinder failed: {e}")
+
+        # Execute alterx for subdomain permutation generation
+        _emit("alterx", f"Generating subdomain permutations for {target_domain}", "started")
+        try:
+            emit_tool_start(self.engagement_id, "alterx", ["-d", target_domain, "-silent"])
+            alterx_result = self.tool_runner.run(
+                "alterx",
+                ["-d", target_domain, "-silent"],
+                timeout=120
+            )
+            parsed_count = 0
+            if alterx_result.get("success"):
+                parsed = self.parser.parse("alterx", alterx_result.get("stdout", ""))
+                for p in parsed:
+                    normalized = self._normalize_finding(p, "alterx")
+                    if normalized:
+                        all_findings.append(normalized)
+                        parsed_count += 1
+            _emit("alterx", f"Permutation generation complete — generated {parsed_count} variants", "completed", items=parsed_count)
+        except Exception as e:
+            _emit("alterx", f"Permutation generation failed: {str(e)}", "failed")
+            logger.warning(f"alterx failed: {e}")
+
         # Execute naabu for port scanning
         port_desc = "top 1000" if agg == "default" else "top 10,000" if agg == "high" else "full range 1-65535"
         _emit("naabu", f"Probing open ports on {target_domain} ({port_desc})", "started")

@@ -104,6 +104,21 @@ class FindingNormalizer:
         "ssti": "SERVER_SIDE_TEMPLATE_INJECTION",
         "lfi": "PATH_TRAVERSAL",
         "xxe": "XML_EXTERNAL_ENTITY",
+
+        # pip-audit
+        "dependency_vulnerability": "DEPENDENCY_VULNERABILITY",
+        "pip_audit": "DEPENDENCY_VULNERABILITY",
+
+        # bandit
+        "bandit_*": "CODE_VULNERABILITY",
+        "code_vulnerability": "CODE_VULNERABILITY",
+
+        # subfinder
+        "subdomain_discovery": "SUBDOMAIN_DISCOVERY",
+        "subdomain_permutation": "SUBDOMAIN_PERMUTATION",
+
+        # alterx
+        "subdomain_permutation": "SUBDOMAIN_PERMUTATION",
     }
     
     # CWE to vulnerability type mappings
@@ -208,6 +223,11 @@ class FindingNormalizer:
         "commix": 0.05,
         "semgrep": 0.12,
         "web_scanner": 0.15,
+        "pip_audit": 0.10,
+        "bandit": 0.15,
+        "nmap": 0.10,
+        "subfinder": 0.10,
+        "alterx": 0.30,
     }
     
     def normalize(self, raw_finding: Dict, source_tool: str) -> VulnerabilityFinding:

@@ -1,0 +1,16 @@
+name: "subfinder"
+command: "subfinder"
+description: "Fast passive subdomain enumeration tool"
+args: ["-silent"]
+enabled: true
+timeout: 300
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target domain"
+    flag: "-d"
+    required: true
+  - name: "all"
+    type: "boolean"
+    description: "Use all sources"
+    flag: "-all"

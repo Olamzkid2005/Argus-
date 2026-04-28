@@ -237,6 +237,30 @@ _register(ToolDefinition(
     timeout=300,
 ))
 
+_register(ToolDefinition(
+    name="subfinder",
+    description="Fast passive subdomain enumeration tool",
+    phases=["recon"],
+    default_args=["-silent"],
+    parameters=[
+        ToolParameter("target", "Target domain", flag="-d", required=True),
+        ToolParameter("all", "Use all sources", flag="-all"),
+    ],
+    timeout=300,
+))
+
+_register(ToolDefinition(
+    name="alterx",
+    description="Subdomain permutation generator",
+    phases=["recon"],
+    default_args=["-silent"],
+    parameters=[
+        ToolParameter("target", "Input subdomains (pipe via stdin)"),
+        ToolParameter("domain", "Root domain", flag="-d"),
+    ],
+    timeout=120,
+))
+
 
 # ── Scanning phase ──
 
