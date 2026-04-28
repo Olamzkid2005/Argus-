@@ -1,6 +1,9 @@
 # Argus — Clean Production Architecture
 ## Next.js + Python Workers (v3.0 Final)
 
+> **Status:** This document describes the target architecture. Items marked with ✅ are implemented.
+> Items marked with 🔲 are planned but not yet implemented. See the codebase for current state.
+
 ---
 
 ## 0. One-Line Vision
