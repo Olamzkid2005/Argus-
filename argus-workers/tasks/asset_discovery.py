@@ -3,18 +3,18 @@ Celery task for automatic asset discovery and classification
 
 Requirements: 28.1, 28.2, 28.3, 28.4
 """
+import logging
 import os
 from celery_app import app
 from database.connection import connect
 
-from tasks.loader import load_module
+from tracing import TracingManager
 
-_tracing = load_module("tracing")
-TracingManager = _tracing.TracingManager
+logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="tasks.asset_discovery.run_asset_discovery")
-def run_asset_discovery(self, engagement_id: str, target: str, org_id: str, trace_id: str = None):
+def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = None):
     """
     Execute automatic asset discovery for an engagement.
     
@@ -23,10 +23,24 @@ def run_asset_discovery(self, engagement_id: str, target: str, org_id: str, trac
     Args:
         engagement_id: Engagement ID
         target: Primary target URL/domain
-        org_id: Organization ID
         trace_id: Optional trace ID
     """
     db_conn_string = os.getenv("DATABASE_URL")
+
+    # Self-resolve org_id from engagement
+    org_id = None
+    try:
+        from database.connection import db_cursor
+        with db_cursor() as cursor:
+            cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+            row = cursor.fetchone()
+            org_id = str(row[0]) if row else None
+    except Exception as e:
+        logger.warning("Could not resolve org_id for engagement %s: %s", engagement_id, e)
+    
+    if not org_id:
+        logger.warning("No org_id found for engagement %s, skipping asset discovery", engagement_id)
+        return {"status": "skipped", "reason": "no_org_id"}
     
     # Initialize tracing manager
     tracing_manager = TracingManager(db_conn_string)

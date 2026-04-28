@@ -13,7 +13,7 @@ export interface PhaseEstimate {
 }
 
 function formatDuration(ms: number): string {
-  if (ms <= 0) return "0s";
+  if (ms <= 0) return "—";
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;

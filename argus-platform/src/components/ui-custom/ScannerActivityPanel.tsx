@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Terminal, CheckCircle2, XCircle, Loader2, Activity } from "lucide-react";
 import { ScannerActivity } from "@/lib/use-scanner-activities";
 
@@ -40,6 +41,14 @@ export default function ScannerActivityPanel({
   activities,
   isLoading = false,
 }: ScannerActivityPanelProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [activities]);
+
   if (activities.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-text-secondary/40 gap-3">
@@ -52,7 +61,7 @@ export default function ScannerActivityPanel({
   }
 
   return (
-    <div className="max-h-[420px] overflow-y-auto space-y-1 pr-1">
+    <div ref={scrollRef} className="max-h-[420px] overflow-y-auto space-y-1 pr-1">
       {isLoading && activities.length === 0 && (
         <div className="flex items-center justify-center py-6">
           <Loader2 size={16} className="animate-spin text-text-secondary" />

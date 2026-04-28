@@ -11,6 +11,7 @@ import os
 import json
 import subprocess
 import glob
+import socket
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,20 @@ def get_nuclei_templates_path() -> Path:
         return home_path
     
     return base  # May not exist - caller should check
+
+
+def tool_timeout(base: int, aggressiveness: str = "default") -> int:
+    """Compute tool timeout based on aggressiveness level.
+    
+    Args:
+        base: Base timeout in seconds for the tool
+        aggressiveness: Aggressiveness level (default, high, extreme)
+    
+    Returns:
+        Timeout in seconds scaled by aggressiveness
+    """
+    multiplier = {"default": 1.0, "high": 1.5, "extreme": 3.0}
+    return int(base * multiplier.get(aggressiveness, 1.0))
 
 
 class EngagementTimeoutError(Exception):
@@ -954,9 +969,12 @@ class Orchestrator:
             # Pre-resolve target to fail fast if DNS is broken
             hostname = target.replace("https://", "").replace("http://", "").split("/")[0]
             try:
-                import socket
+                original_timeout = socket.getdefaulttimeout()
                 socket.setdefaulttimeout(5)
-                socket.getaddrinfo(hostname, None)
+                try:
+                    socket.getaddrinfo(hostname, None)
+                finally:
+                    socket.setdefaulttimeout(original_timeout)
             except socket.gaierror as e:
                 logger.warning(f"DNS resolution failed for {hostname}: {e}. Skipping target.")
                 continue

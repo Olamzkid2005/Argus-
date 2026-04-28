@@ -16,14 +16,9 @@ import uuid
 from celery_app import app
 from database.connection import connect
 
-from tasks.loader import load_module
 from utils.validation import validate_uuid
-
-_orchestrator = load_module("orchestrator")
-Orchestrator = _orchestrator.Orchestrator
-
-_tracing = load_module("tracing")
-TracingManager = _tracing.TracingManager
+from orchestrator import Orchestrator
+from tracing import TracingManager
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +72,8 @@ def _load_license_policy():
 
 LICENSE_POLICY = _load_license_policy()
 
-_distributed_lock = load_module("distributed_lock")
-LockContext = _distributed_lock.LockContext
-DistributedLock = _distributed_lock.DistributedLock
-
-_state_machine = load_module("state_machine")
-EngagementStateMachine = _state_machine.EngagementStateMachine
+from distributed_lock import LockContext, DistributedLock
+from state_machine import EngagementStateMachine
 
 
 @app.task(bind=True, name="tasks.repo_scan.run_repo_scan", soft_time_limit=600, time_limit=1200)

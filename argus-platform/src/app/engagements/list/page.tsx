@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { Skeleton } from "@/components/ui/Skeleton";
+import EmptyState from "@/components/ui-custom/EmptyState";
 import { log } from "@/lib/logger";
 import {
   Loader2,
@@ -15,6 +16,7 @@ import {
   GitBranch,
   Globe,
   StopCircle,
+  Target,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -196,9 +198,13 @@ export default function EngagementsListPage() {
         {/* Engagements List */}
         <div className="space-y-4">
           {engagements.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No engagements yet. Create your first scan!
-            </div>
+            <EmptyState
+              icon={<Target className="h-6 w-6 text-primary" />}
+              title="No engagements yet"
+              description="Create your first security engagement to start scanning."
+              actionLabel="New Engagement"
+              onAction={() => router.push('/engagements/new')}
+            />
           ) : (
             engagements.map((eng) => (
               <div

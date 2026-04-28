@@ -6,25 +6,15 @@ Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 import logging
 import os
 from celery_app import app
-from database.connection import connect
+from database.connection import connect, db_cursor
 
 logger = logging.getLogger(__name__)
 
-from tasks.loader import load_module
 from utils.validation import validate_uuid
-
-_orchestrator = load_module("orchestrator")
-Orchestrator = _orchestrator.Orchestrator
-
-_tracing = load_module("tracing")
-TracingManager = _tracing.TracingManager
-
-_distributed_lock = load_module("distributed_lock")
-LockContext = _distributed_lock.LockContext
-DistributedLock = _distributed_lock.DistributedLock
-
-_state_machine = load_module("state_machine")
-EngagementStateMachine = _state_machine.EngagementStateMachine
+from orchestrator import Orchestrator
+from tracing import TracingManager
+from distributed_lock import LockContext, DistributedLock
+from state_machine import EngagementStateMachine
 
 
 @app.task(bind=True, name="tasks.recon.run_recon")
@@ -71,30 +61,15 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
                 result = orchestrator.run_recon(job)
 
-                # Discover assets from the recon target
+                # Fire-and-forget asset discovery (non-blocking, independently retryable)
                 try:
-                    conn = connect(db_conn_string)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
-                    row = cursor.fetchone()
-                    org_id = str(row[0]) if row else None
-                    cursor.close()
-                    conn.close()
-
-                    if org_id:
-                        # Run asset discovery (creates domain/endpoint asset records)
-                        app.send_task(
-                            'tasks.asset_discovery.run_asset_discovery',
-                            args=[engagement_id, target, org_id, trace_id],
-                        )
-                        # Then update risk scores based on any existing findings
-                        app.send_task(
-                            'tasks.asset_discovery.update_asset_risk_scores',
-                            args=[org_id],
-                        )
+                    app.send_task(
+                        'tasks.asset_discovery.run_asset_discovery',
+                        args=[engagement_id, target, trace_id],
+                        countdown=5,
+                    )
                 except Exception as e:
-                    # Asset discovery is non-critical — log and continue
-                    print(f"Asset discovery skipped for {engagement_id}: {e}")
+                    logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
                 # Don't transition to "scanning" here — scan.py handles that transition
                 # and verifies the state is valid before proceeding
@@ -198,12 +173,10 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
     try:
         # Validate UUID before DB query to prevent InvalidTextRepresentation errors
         valid_id = validate_uuid(engagement_id, "engagement_id")
-        conn = connect(db_conn_string)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        from database.connection import db_cursor
+        with db_cursor() as cursor:
+            cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
+            row = cursor.fetchone()
         return row[0] if row else "created"
     except Exception:
         return "created"

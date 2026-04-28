@@ -958,6 +958,18 @@ export default function DashboardPage() {
     },
   ];
 
+  // Keyboard shortcut: Cmd/Ctrl+N = new engagement
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n' && !e.repeat) {
+        e.preventDefault();
+        router.push('/engagements/new');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [router]);
+
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface matrix-grid">

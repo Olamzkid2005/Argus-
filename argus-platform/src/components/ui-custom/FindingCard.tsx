@@ -33,6 +33,18 @@ interface Finding {
  *
  * Requirements: 32.3, 32.4
  */
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function FindingCard({ finding }: { finding: Finding }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -185,7 +197,7 @@ export function FindingCard({ finding }: { finding: Finding }) {
                   Trace ID: {finding.id}
                 </p>
                 <p className="text-[9px] font-mono uppercase font-bold tracking-widest">
-                  Timestamp: {new Date(finding.created_at).toLocaleString()}
+                  Timestamp: {relativeTime(finding.created_at)}
                 </p>
               </div>
             </div>

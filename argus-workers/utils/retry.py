@@ -58,6 +58,7 @@ def retry(
                         logger.warning(
                             "Attempt %d/%d failed for %s: %s. Retrying in %.1fs...",
                             attempt, max_attempts, func.__name__, e, delay,
+                            exc_info=True,
                         )
                         time.sleep(delay)
                     else:

@@ -7,27 +7,13 @@ import os
 from celery_app import app
 from database.connection import connect
 
-from tasks.loader import load_module
 from utils.validation import validate_uuid
-
-_orchestrator = load_module("orchestrator")
-Orchestrator = _orchestrator.Orchestrator
-
-_tracing = load_module("tracing")
-TracingManager = _tracing.TracingManager
-
-_distributed_lock = load_module("distributed_lock")
-LockContext = _distributed_lock.LockContext
-DistributedLock = _distributed_lock.DistributedLock
-
-_state_machine = load_module("state_machine")
-EngagementStateMachine = _state_machine.EngagementStateMachine
-
-_intelligence_engine = load_module("intelligence_engine")
-IntelligenceEngine = _intelligence_engine.IntelligenceEngine
-
-_snapshot_manager = load_module("snapshot_manager")
-SnapshotManager = _snapshot_manager.SnapshotManager
+from orchestrator import Orchestrator
+from tracing import TracingManager
+from distributed_lock import LockContext, DistributedLock
+from state_machine import EngagementStateMachine
+from intelligence_engine import IntelligenceEngine
+from snapshot_manager import SnapshotManager
 
 
 @app.task(bind=True, name="tasks.analyze.run_analysis")

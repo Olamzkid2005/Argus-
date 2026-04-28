@@ -39,6 +39,7 @@ import {
 } from "recharts";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
+import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 
 interface Engagement {
   id: string;
@@ -210,11 +211,7 @@ export default function EngagementsPage() {
   }, [liveEngagements]);
 
   if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background dark:bg-[#0A0A0F] matrix-grid">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <SkeletonLoader className="min-h-screen" />;
   }
 
   if (!session) return null;
