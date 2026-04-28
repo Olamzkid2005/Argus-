@@ -4,8 +4,7 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
--- Note: pgvector extension will be added later when available
--- CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- ============================================================================
 -- CORE TABLES
