@@ -369,6 +369,22 @@ CREATE TABLE user_settings (
 CREATE INDEX idx_user_settings_email ON user_settings(user_email);
 
 -- ============================================================================
+-- PASSWORD RESET TOKENS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
+
+-- ============================================================================
 -- GRANTS (Adjust based on your user setup)
 -- ============================================================================
 

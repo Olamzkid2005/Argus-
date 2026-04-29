@@ -405,3 +405,118 @@ Traceback (most recent call last):
 psycopg2.errors.ForeignKeyViolation: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
 DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
 
+[2026-04-27 12:40:58,933: INFO/MainProcess] Task tasks.recon.run_recon[04f687ab-1820-4f94-a1d3-d29e0e228f0f] received
+[2026-04-27 12:40:59,628: WARNING/ForkPoolWorker-2] [7e8553d3] job_started: Job started: recon
+[2026-04-27 12:41:00,203: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-04-27 12:41:00,262: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: recon
+[2026-04-27 12:41:02,123: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: httpx
+[2026-04-27 12:41:02,124: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 1530ms
+[2026-04-27 12:41:14,085: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: katana
+[2026-04-27 12:41:14,087: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 11857ms
+[2026-04-27 12:41:14,089: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: katana
+[2026-04-27 12:41:14,089: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 2ms
+[2026-04-27 12:41:30,868: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: ffuf
+[2026-04-27 12:41:30,869: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 16619ms
+[2026-04-27 12:41:30,873: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: ffuf
+[2026-04-27 12:41:30,874: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 3ms
+[2026-04-27 12:41:31,419: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: amass
+[2026-04-27 12:41:31,419: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 403ms
+[2026-04-27 12:41:41,021: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: naabu
+[2026-04-27 12:41:41,022: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 9533ms
+[2026-04-27 12:41:41,026: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: naabu
+[2026-04-27 12:41:41,027: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 4ms
+[2026-04-27 12:41:43,322: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: whatweb
+[2026-04-27 12:41:43,322: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 2197ms
+[2026-04-27 12:42:32,583: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: nikto
+[2026-04-27 12:42:32,583: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 49169ms
+[2026-04-27 12:42:32,586: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: nikto
+[2026-04-27 12:42:32,586: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 2ms
+[2026-04-27 12:45:32,904: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: gau
+[2026-04-27 12:45:32,905: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 180182ms
+[2026-04-27 12:45:59,016: WARNING/MainProcess] Soft time limit (300s) exceeded for tasks.recon.run_recon[04f687ab-1820-4f94-a1d3-d29e0e228f0f]
+[2026-04-27 12:45:59,176: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: waybackurls
+[2026-04-27 12:45:59,178: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 26238ms
+[2026-04-27 12:45:59,695: INFO/MainProcess] Task tasks.asset_discovery.run_asset_discovery[87d85549-e56f-4dde-a27e-fa240cd268f4] received
+[2026-04-27 12:45:59,700: INFO/ForkPoolWorker-2] Task 04f687ab-1820-4f94-a1d3-d29e0e228f0f succeeded
+[2026-04-27 12:45:59,701: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[04f687ab-1820-4f94-a1d3-d29e0e228f0f] succeeded in 300.67638235300547s: {'phase': 'recon', 'status': 'completed', 'findings_count': 9, 'next_state': 'scanning', 'trace_id': None}
+[2026-04-27 12:45:59,713: INFO/MainProcess] Task tasks.scan.run_scan[c1662b21-6bdb-456e-92fa-06bfafee4e71] received
+[2026-04-27 12:45:59,732: INFO/MainProcess] Task tasks.asset_discovery.update_asset_risk_scores[a7e197c4-73f0-4da6-8d7c-a948714864c0] received
+[2026-04-27 12:45:59,836: WARNING/ForkPoolWorker-2] [7e8553d3] job_started: Job started: asset_discovery
+[2026-04-27 12:46:00,018: WARNING/ForkPoolWorker-4] [7e8553d3] job_started: Job started: scan
+[2026-04-27 12:46:00,166: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-04-27 12:46:00,178: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: scan
+[2026-04-27 12:46:00,263: INFO/ForkPoolWorker-1] Task a7e197c4-73f0-4da6-8d7c-a948714864c0 succeeded
+[2026-04-27 12:46:00,272: INFO/ForkPoolWorker-1] Task tasks.asset_discovery.update_asset_risk_scores[a7e197c4-73f0-4da6-8d7c-a948714864c0] succeeded in 0.38997886498691514s: {'status': 'completed', 'assets_scored': 0}
+[2026-04-27 12:46:00,304: INFO/ForkPoolWorker-2] Task 87d85549-e56f-4dde-a27e-fa240cd268f4 succeeded
+[2026-04-27 12:46:00,305: INFO/ForkPoolWorker-2] Task tasks.asset_discovery.run_asset_discovery[87d85549-e56f-4dde-a27e-fa240cd268f4] succeeded in 0.5817668899981072s: {'status': 'completed', 'assets_discovered': 2, 'assets': [{'id': '06be12bc-1e57-4cab-a851-75d15bb1e9d3', 'type': 'domain', 'identifier': 'example.com'}, {'id': '89643c10-fd9d-48e1-b7bc-320a15832fcd', 'type': 'endpoint', 'identifier': 'https://example.com'}], 'trace_id': '7e8553d3-2440-4057-9478-7aa529a6e098'}
+[2026-04-27 12:46:00,321: INFO/ForkPoolWorker-4] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
+[2026-04-27 12:50:53,528: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: nuclei
+[2026-04-27 12:50:53,533: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 293208ms
+[2026-04-27 12:50:53,535: WARNING/ForkPoolWorker-4] NUCLEI RESULT for https://example.com: success=True, returncode=0, stdout_len=7585, stderr=
+[2026-04-27 12:50:53,547: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: nuclei
+[2026-04-27 12:50:53,550: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 14ms
+[2026-04-27 12:50:53,551: WARNING/ForkPoolWorker-4] NUCLEI PARSED: 0 findings from 7585 bytes of output
+[2026-04-27 12:50:53,978: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: dalfox
+[2026-04-27 12:50:53,981: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 428ms
+[2026-04-27 12:50:53,984: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: dalfox
+[2026-04-27 12:50:53,986: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 2ms
+[2026-04-27 12:51:13,196: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: sqlmap
+[2026-04-27 12:51:13,197: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 19210ms
+[2026-04-27 12:51:24,314: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: arjun
+[2026-04-27 12:51:24,315: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 11113ms
+[2026-04-27 12:51:25,779: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: jwt_tool
+[2026-04-27 12:51:25,780: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 1460ms
+[2026-04-27 12:51:27,645: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: commix
+[2026-04-27 12:51:27,646: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 1864ms
+[2026-04-27 12:53:20,209: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 112559ms
+
+worker: Warm shutdown (MainProcess)
+
+worker: Warm shutdown (MainProcess)
+[2026-04-27 12:53:21,311: ERROR/MainProcess] Process 'ForkPoolWorker-4' pid:87146 exited with 'signal 15 (SIGTERM)'
+[2026-04-27 12:53:21,328: ERROR/MainProcess] Process 'ForkPoolWorker-3' pid:87145 exited with 'signal 15 (SIGTERM)'
+[2026-04-27 12:53:21,340: ERROR/MainProcess] Process 'ForkPoolWorker-2' pid:87144 exited with 'signal 15 (SIGTERM)'
+[2026-04-27 12:53:21,353: ERROR/MainProcess] Process 'ForkPoolWorker-1' pid:87142 exited with 'exitcode 15'
+[2026-04-27 12:53:21,430: ERROR/MainProcess] Task handler raised error: WorkerLostError('Worker exited prematurely: signal 15 (SIGTERM) Job: 9.')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.einfo.ExceptionWithTraceback: 
+"""
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/worker.py", line 203, in start
+    self.blueprint.start(self)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 365, in start
+    return self.obj.start()
+           ~~~~~~~~~~~~~~^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 346, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 788, in start
+    c.loop(*c.loop_args())
+    ~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/loops.py", line 86, in asynloop
+    state.maybe_shutdown()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/state.py", line 93, in maybe_shutdown
+    raise WorkerShutdown(should_stop)
+celery.exceptions.WorkerShutdown: 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.exceptions.WorkerLostError: Worker exited prematurely: signal 15 (SIGTERM) Job: 9.
+"""

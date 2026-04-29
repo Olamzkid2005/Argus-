@@ -3,6 +3,7 @@ import { pool } from "@/lib/db";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { redis } from "@/lib/redis";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 const RATE_LIMIT_WINDOW = 3600; // 1 hour
 const MAX_REQUESTS_PER_EMAIL = 3; // 3 attempts per hour per email
@@ -85,14 +86,11 @@ export async function POST(req: Request) {
       [hashedToken, resetTokenExpiry, user.id]
     );
 
-    // TODO: Send email with reset link
-    // For now, just log the token (in production, send via email)
-    // SECURITY: Token in URL is necessary for email link, but:
-    // - Short expiration (1 hour)
-    // - Single use (cleared after use)
-    // - HTTPS required in production
-    const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${resetToken}`;
-    console.log("Password reset URL:", resetUrl);
+    // Send password reset email
+    const emailResult = await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+    if (!emailResult.success) {
+      console.error("Failed to send password reset email:", emailResult.error);
+    }
 
     return NextResponse.json(
       { message: "If an account exists, a reset email has been sent" },

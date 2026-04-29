@@ -1,8 +1,37 @@
 # Argus — Clean Production Architecture
 ## Next.js + Python Workers (v3.0 Final)
 
-> **Status:** This document describes the target architecture. Items marked with ✅ are implemented.
-> Items marked with 🔲 are planned but not yet implemented. See the codebase for current state.
+> **Implementation Status (as of current commit)**
+>
+> | Component | Status |
+> |-----------|--------|
+> | Next.js UI + API | ✅ Implemented |
+> | PostgreSQL + pgvector | ✅ Implemented |
+> | Redis + Celery | ✅ Implemented |
+> | Python Worker System | ✅ Implemented |
+> | Orchestrator (workflow executor) | ✅ Implemented |
+> | Intelligence Engine | ✅ Implemented |
+> | Attack Graph Engine | ✅ Implemented |
+> | Loop Budget Manager | ✅ Implemented |
+> | Tool Runner (sandboxed) | ✅ Implemented |
+> | Parser Layer | ✅ Implemented |
+> | AI Explainer | ✅ Implemented |
+> | State Machine | ✅ Implemented |
+> | Failure Handler | ✅ Implemented |
+> | Observability Layer | ✅ Implemented |
+> | Data Normalization | ✅ Implemented |
+> | Security Tool Integrations (25+) | ✅ Implemented |
+> | Docker Infrastructure | ✅ Implemented |
+> | CI/CD Pipeline | ✅ Implemented |
+> | Password Reset Emails | ✅ Implemented |
+> | Rate Limiting & Target Protection | ✅ Implemented |
+> | Distributed Locking | ✅ Implemented |
+> | Scope Validation | ✅ Implemented |
+> | Snapshot Manager | ✅ Implemented |
+> | Tool Adapter Versioning | ✅ Implemented |
+> | Robots.txt Respect | ✅ Implemented |
+> | Container Isolation (Docker) | 🔲 Planned (MVP uses subprocess) |
+> | Latency-Aware Loop Budget | ⚠️ Partially Implemented |
 
 ---
 
@@ -66,7 +95,7 @@
 
 ## 3. ⚠️ FIXED CORE DESIGN ISSUES
 
-### 🔥 3.1 Orchestrator (DE-GODDED)
+### 🔥 3.1 Orchestrator (DE-GODDED) ✅ Implemented
 
 **❌ Old problem:** Orchestrator was making decisions.
 
