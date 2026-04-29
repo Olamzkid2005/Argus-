@@ -129,7 +129,7 @@ class Orchestrator:
 
 ---
 
-### 🧠 3.2 Intelligence Engine (NOW THE REAL BRAIN)
+### 🧠 3.2 Intelligence Engine (NOW THE REAL BRAIN) ✅ Implemented
 
 This is now the **ONLY decision-making system**.
 
@@ -173,7 +173,7 @@ class IntelligenceEngine:
 
 ---
 
-### 🔗 3.3 Attack Graph Engine (NOW NON-ARBITRARY)
+### 🔗 3.3 Attack Graph Engine (NOW NON-ARBITRARY) ✅ Implemented
 
 **❌ Old issue:** Static multipliers = fake realism at scale
 
@@ -207,7 +207,7 @@ class AttackGraph:
 
 ---
 
-### 🤖 3.4 AI LAYER (STRICT CONSTRAINT MODEL)
+### 🤖 3.4 AI LAYER (STRICT CONSTRAINT MODEL) ✅ Implemented
 
 **❌ Old issue:** AI was doing grouping + reasoning + summarization
 
@@ -245,7 +245,7 @@ class AttackGraph:
 
 ---
 
-### 🔁 3.5 LOOP BUDGET SYSTEM (CRITICAL NEW FIX)
+### 🔁 3.5 LOOP BUDGET SYSTEM (CRITICAL NEW FIX) ✅ Implemented
 
 This is what your previous design was missing.
 
@@ -280,7 +280,7 @@ class LoopBudgetManager:
 
 ---
 
-### 🧩 3.6 TOOL RUNNER (NOW FULLY SECURED)
+### 🧩 3.6 TOOL RUNNER (NOW FULLY SECURED) ✅ Implemented
 
 Upgrade from "sandbox-ish" → **controlled execution boundary**
 
@@ -360,7 +360,7 @@ This version guarantees:
 
 ## 6. 📦 COMPLETE COMPONENT BREAKDOWN
 
-### 6.1 Next.js (Control Plane)
+### 6.1 Next.js (Control Plane) ✅ Implemented
 
 **API Routes:**
 ```typescript
@@ -384,7 +384,7 @@ WS /ws/engagement/{id}
 
 ---
 
-### 6.2 Redis Queue (Celery)
+### 6.2 Redis Queue (Celery) ✅ Implemented
 
 **Technology Choice:** Celery + Redis (pure Python stack)
 
@@ -410,7 +410,7 @@ WS /ws/engagement/{id}
 
 ---
 
-### 6.3 Python Worker System
+### 6.3 Python Worker System ✅ Implemented
 
 **Project Structure:**
 ```
@@ -434,7 +434,7 @@ worker/
 
 ---
 
-### 6.4 Intelligence Engine (Complete Implementation)
+### 6.4 Intelligence Engine (Complete Implementation) ✅ Implemented
 
 ```python
 class IntelligenceEngine:
@@ -564,7 +564,7 @@ class IntelligenceEngine:
 
 ---
 
-### 6.5 Attack Graph Engine (Complete Implementation)
+### 6.5 Attack Graph Engine (Complete Implementation) ✅ Implemented
 
 ```python
 class AttackGraph:
@@ -656,7 +656,7 @@ class AttackGraph:
 
 ---
 
-### 6.6 Loop Budget Manager (Complete Implementation)
+### 6.6 Loop Budget Manager (Complete Implementation) ✅ Implemented
 
 ```python
 class LoopBudgetManager:
@@ -713,7 +713,7 @@ class LoopBudgetManager:
 
 ---
 
-### 6.7 Tool Runner (Complete Implementation)
+### 6.7 Tool Runner (Complete Implementation) ✅ Implemented
 
 **Execution Strategy:**
 - **MVP/Demo:** subprocess.run() with locked environment
@@ -792,7 +792,7 @@ class ToolRunner:
 
 ---
 
-### 6.8 Parser Layer (Complete Implementation)
+### 6.8 Parser Layer (Complete Implementation) ✅ Implemented
 
 ```python
 class Parser:
@@ -857,7 +857,7 @@ class Parser:
 
 ---
 
-### 6.9 AI Explainer (Complete Implementation)
+### 6.9 AI Explainer (Complete Implementation) ✅ Implemented
 
 ```python
 class AIExplainer:
@@ -910,7 +910,7 @@ class AIExplainer:
 
 ---
 
-## 7. 📊 DATABASE SCHEMA (COMPLETE)
+## 7. 📊 DATABASE SCHEMA (COMPLETE) ✅ Implemented
 
 ```sql
 -- Organizations (multi-tenant)
@@ -1049,7 +1049,7 @@ CREATE TABLE job_states (
 
 ## 10. 🔴 CRITICAL PRODUCTION SYSTEMS (REQUIRED)
 
-### 10.1 Task State Machine (STRICT LIFECYCLE)
+### 10.1 Task State Machine (STRICT LIFECYCLE) ✅ Implemented
 
 **Problem:** Components exist but no strict state model ties them together.
 
@@ -1138,7 +1138,7 @@ ON engagement_states(engagement_id, created_at DESC);
 
 ---
 
-### 10.2 Failure Handling System (PRODUCTION STABILITY)
+### 10.2 Failure Handling System (PRODUCTION STABILITY) ✅ Implemented
 
 **Problem:** No defined behavior for crashes, failures, or duplicates.
 
@@ -1344,7 +1344,7 @@ ON checkpoints(engagement_id, created_at DESC);
 
 ---
 
-### 10.3 Observability Layer (DEBUGGING ESSENTIAL)
+### 10.3 Observability Layer (DEBUGGING ESSENTIAL) ✅ Implemented
 
 **Problem:** No structured logging, tracing, or metrics.
 
@@ -1513,7 +1513,7 @@ CREATE INDEX idx_tool_metrics_tool ON tool_metrics(tool_name, created_at DESC);
 
 ---
 
-### 10.4 Data Normalization Layer (UNIFIED SCHEMA)
+### 10.4 Data Normalization Layer (UNIFIED SCHEMA) ✅ Implemented
 
 **Problem:** No strict unified vulnerability schema defined.
 
@@ -1967,7 +1967,7 @@ Before going to production, verify ALL items:
 
 ## 15. 🔴 CRITICAL PRODUCTION FIXES (HIDDEN RISKS)
 
-### 15.1 Decision State Snapshot Layer (PREVENTS SPLIT-BRAIN)
+### 15.1 Decision State Snapshot Layer (PREVENTS SPLIT-BRAIN) ✅ Implemented
 
 **Problem:** Orchestrator and Intelligence Engine can see different states during failures.
 
@@ -2083,7 +2083,7 @@ ON decision_snapshots(engagement_id, version);
 
 ---
 
-### 15.2 Dependency-Aware Attack Graph (CORRELATION MODEL)
+### 15.2 Dependency-Aware Attack Graph (CORRELATION MODEL) ✅ Implemented
 
 **Problem:** Current graph treats vulnerabilities as independent, but real exploits are correlated.
 
@@ -2175,7 +2175,7 @@ risk_score = 5.0 * 1.5 (causes) * 1.3 (amplifies) = 9.75
 
 ---
 
-### 15.3 Latency-Aware Loop Budget (ECONOMIC REALISM)
+### 15.3 Latency-Aware Loop Budget (ECONOMIC REALISM) ⚠️ Partially Implemented
 
 **Problem:** Current budget only tracks cycles/depth/cost, not tool time variance.
 
@@ -2270,7 +2270,7 @@ class LatencyAwareLoopBudget:
 
 ---
 
-### 15.4 Container Isolation Layer (PRODUCTION SECURITY)
+### 15.4 Container Isolation Layer (PRODUCTION SECURITY) 🔲 Planned
 
 **Problem:** `subprocess.run()` with `cwd="/sandbox"` is not production-secure.
 
@@ -2355,7 +2355,7 @@ class SecureToolRunner:
 
 ---
 
-### 15.5 AI Explainability Trace (AUDIT TRAIL)
+### 15.5 AI Explainability Trace (AUDIT TRAIL) ✅ Implemented
 
 **Problem:** AI output exists but no link back to input decisions.
 
@@ -2421,7 +2421,7 @@ CREATE TABLE ai_explainability_traces (
 
 ---
 
-### 15.6 Tool Adapter Versioning (INGESTION BOUNDARY)
+### 15.6 Tool Adapter Versioning (INGESTION BOUNDARY) ✅ Implemented
 
 **Problem:** Tool output schemas change between versions, breaking parsers silently.
 
@@ -2513,7 +2513,7 @@ adapter_registry.register("nuclei", "3.2.1", NucleiAdapterV3())
 
 ---
 
-### 15.7 Distributed Locking (CONCURRENCY CONTROL)
+### 15.7 Distributed Locking (CONCURRENCY CONTROL) ✅ Implemented
 
 **Problem:** Multiple workers can pick same engagement, causing duplicate scans.
 
@@ -2621,7 +2621,7 @@ def process_job(job):
 
 ---
 
-### 15.8 Explicit System Split (TWO SYSTEMS, NOT ONE)
+### 15.8 Explicit System Split (TWO SYSTEMS, NOT ONE) ⚠️ Partially Implemented
 
 **Problem:** System accidentally blends deterministic scanner + probabilistic planner.
 
@@ -2731,7 +2731,7 @@ class DecisionIntelligence:
 
 ---
 
-## 17. 🚨 CRITICAL: RATE LIMITING & TARGET PROTECTION
+## 17. 🚨 CRITICAL: RATE LIMITING & TARGET PROTECTION ✅ Implemented
 
 ### Problem: System Can Accidentally DOS Targets
 
@@ -3345,9 +3345,9 @@ export function RateLimitMonitor({ engagementId }) {
 
 ---
 
-## 20. 🔐 AUTHORIZATION & SCOPE VALIDATION
+## 20. 🔐 AUTHORIZATION & SCOPE VALIDATION ✅ Implemented
 
-### 20.1 Scope Validator (CRITICAL SECURITY)
+### 20.1 Scope Validator (CRITICAL SECURITY) ✅ Implemented
 
 **Problem:** Users could authorize `staging.app.com` but scan `production.app.com`.
 
@@ -3491,7 +3491,7 @@ ON scope_violations(engagement_id, created_at DESC);
 
 ---
 
-### 20.2 Authentication System
+### 20.2 Authentication System ✅ Implemented
 
 **Technology Choice:** NextAuth.js (recommended)
 
