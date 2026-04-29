@@ -11,19 +11,11 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: |
-          $CURSOR.execute(f"SELECT ...{$VAR}...")
-      - pattern: |
-          $CURSOR.execute("SELECT ..." + $VAR + "...")
-      - pattern: |
-          $CURSOR.execute("SELECT ...'%s'..." % $VAR)
-      - pattern: |
-          $DB.execute(f"SELECT ...{$VAR}...")
-      - pattern: |
-          db.execute("...{}".format($VAR))
-      - pattern: |
-          $QUERY = "SELECT ..." + $VAR + "..."
-          $CURSOR.execute($QUERY)
+      - pattern: $CURSOR.execute(f"...{$VAR}...")
+      - pattern: $CURSOR.execute("..." + $VAR + "...")
+      - pattern: $CURSOR.execute("...%s..." % $VAR)
+      - pattern: $DB.execute(f"...{$VAR}...")
+      - pattern: db.execute("...{}".format($VAR))
 
   - id: sql-injection-format-string
     severity: ERROR
@@ -36,11 +28,7 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: |
-          $CURSOR.execute("SELECT ...%s..." % $VAR, ...)
-      - pattern: |
-          $QUERY = "SELECT ...$VAR..."
-          $DB.execute($QUERY)
+      - pattern: $CURSOR.execute("...%s..." % $VAR, ...)
 
   - id: nosql-injection-mongodb
     severity: ERROR
@@ -54,18 +42,9 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: |
-          db.$COLLECTION.find_one({ $FIELD: $INPUT, ... })
-      - pattern: |
-          db.$COLLECTION.find({ $FIELD: $INPUT, ... })
-      - pattern: |
-          collection.findOne({ $FIELD: $INPUT })
-      - patterns:
-          - pattern: $DB.$COLLECTION.find($WHERE)
-          - pattern-inside: |
-              $WHERE = $INPUT
-          - pattern-inside: |
-              import ...
+      - pattern: 'db.$COLLECTION.findOne({$FIELD: $INPUT, ...})'
+      - pattern: 'db.$COLLECTION.find({$FIELD: $INPUT, ...})'
+      - pattern: 'collection.findOne({$FIELD: $INPUT})'
 
   - id: sql-injection-javascript
     severity: ERROR
@@ -78,12 +57,10 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: |
-          $DB.query(`SELECT ...${...}...`)
-      - pattern: |
-          $DB.execute(`SELECT ...${...}...`)
-      - pattern: |
-          $DB.all("SELECT ..." + $VAR + "...")
+      - pattern: $DB.query(`SELECT ...${...}...`)
+      - pattern: $DB.execute(`SELECT ...${...}...`)
+      - pattern: $DB.all("SELECT ..." + $VAR + "...")
+      - pattern: $DB.run("SELECT ..." + $VAR + "...")
 
   - id: sql-injection-ruby
     severity: ERROR
@@ -96,10 +73,8 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: |
-          $CONN.execute("...#{...}...")
-      - pattern: |
-          $DB.execute("...#{$VAR}...")
+      - pattern: $CONN.execute("...#{...}...")
+      - pattern: $DB.execute("...#{$VAR}...")
 
   - id: sql-injection-java
     severity: ERROR
@@ -112,8 +87,5 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: |
-          $STMT = "SELECT ... " + $VAR + " ..."
-          $CONN.createStatement($STMT)
-      - pattern: |
-          $STMT.executeQuery("SELECT ... " + $VAR)
+      - pattern: $STMT.executeQuery("SELECT ... " + $VAR)
+      - pattern: $CONN.prepareStatement("SELECT ... " + $VAR)

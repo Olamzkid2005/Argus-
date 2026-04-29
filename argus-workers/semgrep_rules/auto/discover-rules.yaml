@@ -56,9 +56,7 @@ rules:
       owasp: "A01:2021-Broken Access Control"
       category: security
       confidence: LOW
-    pattern-either:
-      - pattern: IP_ADDRESS = "$VALUE"
-      - pattern: 'host\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"'
+    pattern-regex: "host\\s*=\\s*[\"'][0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+[\"']"
 
   - id: missing-rate-limit
     severity: WARNING
@@ -72,9 +70,9 @@ rules:
       category: security
       confidence: LOW
     pattern-either:
-      - pattern: '@app.post("'
-      - pattern: '@app.put("'
-      - pattern: '@app.delete("'
-      - pattern: 'app.post('
-      - pattern: 'app.put('
-      - pattern: 'router.post('
+      - pattern: app.post(...)
+      - pattern: app.put(...)
+      - pattern: app.delete(...)
+      - pattern: router.post(...)
+      - pattern: router.put(...)
+      - pattern: router.delete(...)

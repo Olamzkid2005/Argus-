@@ -1,0 +1,18 @@
+rules:
+  - id: unsafe-deserialization
+    severity: ERROR
+    languages: [python, javascript, typescript, java]
+    message: >-
+      Unsafe deserialization of untrusted data. This can lead to remote code execution.
+      Use safe deserialization libraries and validate input.
+    metadata:
+      cwe: "CWE-502"
+      owasp: "A08:2021-Software and Data Integrity Failures"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: pickle.load($DATA)
+      - pattern: pickle.loads($DATA)
+      - pattern: yaml.load($DATA)
+      - pattern: jsonpickle.decode($DATA)
+      - pattern: XMLDecoder().readObject(...)

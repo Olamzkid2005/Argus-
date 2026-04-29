@@ -11,15 +11,13 @@ rules:
       category: security
       confidence: HIGH
     pattern-either:
-      - pattern: options={"verify_signature": False}
-      - pattern: algorithms=["none", "None", "NONE"]
-      - pattern: |
-          jwt.verify($TOKEN, $SECRET, { algorithms: [...] })
-      - pattern: algorithm\s*=\s*["']?none["']?
+      - pattern: 'options={"verify_signature": False}'
+      - pattern: 'algorithms=["none", "None", "NONE"]'
+      - pattern-regex: "algorithm\\s*=\\s*[\"']?none[\"']?"
 
-  - id: jwt-no-expiration
+  - id: jwt-no-expiration-python
     severity: WARNING
-    languages: [python, javascript, typescript]
+    languages: [python]
     message: >-
       JWT token has no expiration (exp claim). This allows replay attacks.
       Use short-lived access tokens (15 min) with rotating refresh tokens.
@@ -30,25 +28,35 @@ rules:
       confidence: MEDIUM
     pattern-either:
       - pattern: jwt.encode($PAYLOAD, $KEY, algorithm="HS256")
-      - pattern: |
-          const token = jwt.sign($PAYLOAD, $KEY)
-      - pattern: |
-          $PAYLOAD = { user_id: ..., ... }  # No exp claim
 
-  - id: jwt-excessive-lifetime
+  - id: jwt-no-expiration-javascript
     severity: WARNING
-    languages: [python, javascript, typescript]
+    languages: [javascript, typescript]
     message: >-
-      JWT token has excessive lifetime (> 1 hour for access). Use short-lived tokens.
+      JWT token has no expiration (exp claim). This allows replay attacks.
+      Use short-lived access tokens (15 min) with rotating refresh tokens.
     metadata:
       cwe: "CWE-613"
       owasp: "A02:2021-Cryptographic Failures"
       category: security
       confidence: MEDIUM
     pattern-either:
-      - pattern: exp: $>3600  # > 1 hour in seconds
-      - pattern: expiresIn: "24h"
-      - pattern: expiresIn: "7d"
+      - pattern: jwt.sign($PAYLOAD, $KEY)
+
+  - id: jwt-excessive-lifetime
+    severity: WARNING
+    languages: [javascript, typescript]
+    message: >-
+      JWT token has excessive lifetime. Use short-lived tokens.
+    metadata:
+      cwe: "CWE-613"
+      owasp: "A02:2021-Cryptographic Failures"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: 'expiresIn: "24h"'
+      - pattern: 'expiresIn: "7d"'
+      - pattern: 'expiresIn: "30d"'
 
   - id: jwt-local-storage
     severity: WARNING

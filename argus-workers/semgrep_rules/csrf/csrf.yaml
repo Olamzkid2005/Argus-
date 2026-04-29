@@ -1,33 +1,16 @@
 rules:
-  - id: csrf-missing-token
+  - id: cors-wildcard-origin
     severity: WARNING
     languages: [python, javascript, typescript]
     message: >-
-      State-changing endpoint without CSRF protection. Use SameSite cookies or CSRF tokens.
-    metadata:
-      cwe: "CWE-352"
-      owasp: "A01:2021-Broken Access Control"
-      category: security
-      confidence: MEDIUM
-    pattern-either:
-      - pattern: |
-          @app.post("/$ACTION")
-          def $ACTION():
-            # No CSRF check
-
-  - id: cors-missing-origin-check
-    severity: WARNING
-    languages: [python, javascript, typescript]
-    message: >-
-      CORS allows all origins (Access-Control-Allow-Origin: *).
-      Restrict to known origins.
+      CORS allows all origins. Restrict to known origins.
     metadata:
       cwe: "CWE-346"
       owasp: "A01:2021-Broken Access Control"
       category: security
       confidence: MEDIUM
     pattern-either:
-      - pattern: Access-Control-Allow-Origin: "*"
-      - pattern: 'Access-Control-Allow-Origin\s*:\s*["']*["']*'
-      - pattern: corsOrigin\s*=\s*"*"
-      - pattern: origin\s*=\s*"*"
+      - pattern: 'Access-Control-Allow-Origin: "*"'
+      - pattern: 'origin="*"'
+      - pattern: 'corsOrigin="*"'
+      - pattern-regex: "Access-Control-Allow-Origin\\s*:\\s*[\"']\\*[\"']"

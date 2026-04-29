@@ -543,6 +543,15 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: Dict, aggressiveness:
                         registry_configs.append(rc)
 
         custom_configs = []
+        rule_subdirs = [
+            "secrets", "auth", "injection", "xss", "ssrf",
+            "csrf", "auto", "business-logic", "deserialization",
+        ]
+        for subdir in rule_subdirs:
+            config_dir = os.path.join(rules_dir, subdir)
+            if os.path.isdir(config_dir):
+                custom_configs.append(config_dir)
+
         if custom_rules_path and os.path.isdir(custom_rules_path):
             custom_configs.append(custom_rules_path)
         elif custom_rules_path and os.path.isfile(custom_rules_path):

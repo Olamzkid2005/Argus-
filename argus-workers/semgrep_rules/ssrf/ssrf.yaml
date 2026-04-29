@@ -14,13 +14,8 @@ rules:
       - pattern: requests.get($URL)
       - pattern: requests.post($URL)
       - pattern: urllib.request.urlopen($URL)
-      - pattern: urllib3.PoolManager().request("GET", $URL)
-      - pattern: |
-          fetch($URL, ...)
-      - pattern: |
-          axios.get($URL)
-      - pattern: |
-          $HTTP.get($URL)
+      - pattern: fetch($URL, ...)
+      - pattern: axios.get($URL)
 
   - id: ssrf-unrestricted-url-param
     severity: ERROR
@@ -40,9 +35,9 @@ rules:
       - pattern: fetch(req.params.url)
       - pattern: axios.get(req.body.url)
 
-  - id: xxe-xml-unrestricted-parser
+  - id: xxe-xml-unrestricted-parser-python
     severity: ERROR
-    languages: [python, javascript]
+    languages: [python]
     message: >-
       XML parser without XXE protection. Attackers can read local files, SSRF, DoS.
       Use defusedxml or disable external entities.
@@ -55,4 +50,17 @@ rules:
       - pattern: ET.parse($XML)
       - pattern: etree.parse($XML)
       - pattern: xml.etree.ElementTree.parse($XML)
-      - pattern: new DOMParser().parseFromString($XML)
+
+  - id: xxe-xml-unrestricted-parser-javascript
+    severity: ERROR
+    languages: [javascript, typescript]
+    message: >-
+      XML parser without XXE protection. Attackers can read local files, SSRF, DoS.
+      Use a secure XML parser and disable external entities.
+    metadata:
+      cwe: "CWE-611"
+      owasp: "A04:2021-Insecure Design"
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: new DOMParser().parseFromString($XML, ...)
