@@ -1,15 +1,11 @@
 """
-SSE Streaming System - Real-time tool output streaming
+SSE Streaming System and EventBus - Real-time event publishing.
 
-Replaces Celery task push model with SSE (Server-Sent Events) for:
-- Thinking deltas ("Running nuclei against target...")
-- Tool output chunks (line-by-line results)
-- Finding discovered events
-- State transitions
-- Progress updates
+Provides a unified EventBus interface with in-process and Redis adapters,
+replacing the dual system of StreamManager + WebSocketEventPublisher.
 
-This mirrors CyberStrikeAI's streaming architecture where
-the frontend receives real-time updates via SSE endpoints.
+Callers should use the emit_* convenience functions (emit_thinking,
+emit_tool_start, etc.) which delegate to the configured EventBus.
 """
 import json
 import logging
@@ -20,28 +16,89 @@ from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
 
+# ── Unified Event schema ──
+
+@dataclass
+class Event:
+    """Single event with unified field names for both SSE and Redis consumers."""
+    type: str
+    engagement_id: str
+    data: Dict = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def to_sse(self) -> str:
+        return f"data: {json.dumps(self.to_dict())}\n\n"
+
+    def to_dict(self) -> Dict:
+        return {
+            "type": self.type,
+            "engagement_id": self.engagement_id,
+            "data": self.data,
+            "timestamp": self.timestamp,
+        }
+
+
+# ── Event types (single source) ──
+
+class EventType:
+    """Unified event type constants."""
+    THINKING = "thinking"
+    TOOL_OUTPUT = "tool_output"
+    TOOL_START = "tool_start"
+    TOOL_COMPLETE = "tool_complete"
+    FINDING = "finding"
+    STATE_CHANGE = "state_change"
+    PROGRESS = "progress"
+    ERROR = "error"
+    COMPLETE = "complete"
+    REPORT_CHUNK = "report_chunk"
+    REPORT_COMPLETE = "report_complete"
+    AGENT_DECISION = "agent_decision"
+
+
+# ── EventBus Port (ABC) ──
+
+class EventBus(ABC):
+    """Port: the single interface all event producers use."""
+
+    @abstractmethod
+    def publish(self, event: Event) -> None:
+        ...
+
+    @abstractmethod
+    def subscribe(self, engagement_id: str) -> queue.Queue:
+        ...
+
+    @abstractmethod
+    def get_history(self, engagement_id: str, since: str = None) -> List[Dict]:
+        ...
+
+
+# ── Backward-compatible StreamEventType and StreamEvent ──
+
 class StreamEventType(Enum):
-    """Types of SSE events that can be emitted."""
-    THINKING = "thinking"           # "Running nuclei against target..."
-    TOOL_OUTPUT = "tool_output"     # Line-by-line tool stdout/stderr
-    TOOL_START = "tool_start"       # Tool execution started
-    TOOL_COMPLETE = "tool_complete" # Tool execution finished
-    FINDING = "finding"             # New finding discovered
-    STATE_CHANGE = "state_change"   # Engagement state transition
-    PROGRESS = "progress"           # Progress percentage
-    ERROR = "error"                 # Error event
-    COMPLETE = "complete"           # Scan phase complete
-    REPORT_CHUNK = "report_chunk"   # Incremental report text from LLM
-    REPORT_COMPLETE = "report_complete"  # Final report ready
+    """Types of SSE events (legacy, use EventType for new code)."""
+    THINKING = EventType.THINKING
+    TOOL_OUTPUT = EventType.TOOL_OUTPUT
+    TOOL_START = EventType.TOOL_START
+    TOOL_COMPLETE = EventType.TOOL_COMPLETE
+    FINDING = EventType.FINDING
+    STATE_CHANGE = EventType.STATE_CHANGE
+    PROGRESS = EventType.PROGRESS
+    ERROR = EventType.ERROR
+    COMPLETE = EventType.COMPLETE
+    REPORT_CHUNK = EventType.REPORT_CHUNK
+    REPORT_COMPLETE = EventType.REPORT_COMPLETE
 
 
 @dataclass
 class StreamEvent:
-    """A single SSE event."""
+    """A single SSE event (legacy, use Event for new code)."""
     event_type: StreamEventType
     data: Dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -67,15 +124,12 @@ class StreamEvent:
         }
 
 
-class StreamManager:
+class StreamManager(EventBus):
     """
-    Manages SSE event streams for multiple engagements.
+    Manages SSE event streams for multiple engagements (in-process).
 
-    Supports:
-    - Multiple subscribers per engagement
-    - Event queuing with backpressure
-    - Thread-safe publish/subscribe
-    - Automatic cleanup of disconnected clients
+    Implements EventBus port. Supports multiple subscribers per engagement,
+    event queuing with backpressure, and thread-safe publish/subscribe.
     """
 
     def __init__(self):
@@ -128,15 +182,23 @@ class StreamManager:
                     try:
                         q.put_nowait(event)
                     except queue.Full:
-                        # Consumer is too slow - drop event
                         dead_queues.append(q)
 
-                # Clean up dead queues
                 for q in dead_queues:
                     try:
                         self._queues[engagement_id].remove(q)
                     except ValueError:
                         pass
+
+    def publish_event(self, event: Event):
+        """Publish a new-format Event (wraps to StreamEvent for backward compat)."""
+        stream_event = StreamEvent(
+            event_type=StreamEventType(event.type),
+            data=event.data,
+            engagement_id=event.engagement_id,
+            timestamp=event.timestamp,
+        )
+        self.publish(stream_event)
 
     def get_history(self, engagement_id: str, since: str = None) -> List[Dict]:
         """Get event history for an engagement, optionally since a timestamp."""

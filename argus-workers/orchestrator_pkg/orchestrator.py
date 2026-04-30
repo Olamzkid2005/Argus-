@@ -531,9 +531,11 @@ class Orchestrator:
         synthesis = {}
         if self.llm_client and self.llm_client.is_available():
             try:
+                from llm_service import LLMService
                 from llm_synthesizer import LLMSynthesizer
+                llm_svc = LLMService(self.llm_client)
                 recon_ctx = load_recon_context(self.engagement_id)
-                synthesizer = LLMSynthesizer(self.llm_client)
+                synthesizer = LLMSynthesizer(llm_svc)
                 synthesis = synthesizer.synthesize(
                     scored_findings=evaluation.get("scored_findings", []),
                     attack_paths=snapshot.get("attack_graph", {}).get("paths", []),
@@ -594,15 +596,16 @@ class Orchestrator:
         report_data = {}
         if self.llm_client and self.llm_client.is_available():
             try:
+                from llm_service import LLMService
                 from llm_report_generator import LLMReportGenerator
                 from database.repositories.report_repository import ReportRepository
-                from models.recon_context import ReconContext
 
                 recon_ctx = load_recon_context(self.engagement_id)
                 scored_findings = job.get("scored_findings", [])
                 synthesis = job.get("synthesis", {})
 
-                generator = LLMReportGenerator(self.llm_client)
+                llm_svc = LLMService(self.llm_client)
+                generator = LLMReportGenerator(llm_svc)
                 engagement_info = {"target_url": job.get("target", ""), "scan_type": job.get("type", "")}
 
                 report_data = generator.generate_report(

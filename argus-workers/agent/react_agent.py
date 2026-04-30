@@ -133,45 +133,32 @@ class ReActAgent:
         recon_context: Any,
         llm_client: Any = None,
     ) -> Optional[AgentAction]:
-        """Call LLM to decide next tool. Returns None if __done__ or on failure."""
+        """Call LLM to decide next tool. Returns _DONE, AgentAction, or None on failure."""
         client = llm_client or self.llm_client
         if not client:
             return None
 
-        from llm_client import LLMResponse
-
-        messages = [
-            {"role": "system", "content": TOOL_SELECTION_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": build_tool_selection_prompt(
-                    recon_context.to_llm_summary() if hasattr(recon_context, "to_llm_summary") else str(recon_context),
-                    self.registry.list_tools(),
-                    tried_tools,
-                    context,
-                ),
-            },
-        ]
+        user_prompt = build_tool_selection_prompt(
+            recon_context.to_llm_summary() if hasattr(recon_context, "to_llm_summary") else str(recon_context),
+            self.registry.list_tools(),
+            tried_tools,
+            context,
+        )
 
         try:
             raw = client.chat_sync(
-                messages,
+                [
+                    {"role": "system", "content": TOOL_SELECTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
                 temperature=LLM_AGENT_TEMPERATURE,
                 max_tokens=300,
                 response_format={"type": "json_object"},
                 timeout=LLM_AGENT_TIMEOUT_SECONDS,
             )
 
-            if isinstance(raw, LLMResponse):
-                response_text = raw.text
-                input_tokens = raw.input_tokens
-                output_tokens = raw.output_tokens
-                cost_usd = raw.cost_usd
-            else:
-                response_text = raw
-                input_tokens = 0
-                output_tokens = 0
-                cost_usd = 0.0
+            response_text = raw.text if hasattr(raw, "text") else str(raw)
+            cost_usd = getattr(raw, "cost_usd", 0.0)
 
             decision = json.loads(response_text)
             tool_name = decision.get("tool")
