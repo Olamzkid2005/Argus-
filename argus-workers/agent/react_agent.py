@@ -154,6 +154,7 @@ class ReActAgent:
                 temperature=LLM_AGENT_TEMPERATURE,
                 max_tokens=300,
                 response_format={"type": "json_object"},
+                timeout=LLM_AGENT_TIMEOUT_SECONDS,
             )
 
             if isinstance(raw, LLMResponse):

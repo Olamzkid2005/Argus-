@@ -18,7 +18,7 @@ from state_machine import EngagementStateMachine
 
 
 @app.task(bind=True, name="tasks.recon.run_recon")
-def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None):
+def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None, agent_mode: bool = True):
     """
     Execute reconnaissance phase for an engagement
 
@@ -47,6 +47,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
             "target": target,
             "budget": budget,
             "trace_id": trace_id,
+            "agent_mode": agent_mode,
         }
 
         lock = DistributedLock(redis_url)
@@ -76,7 +77,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 # Auto-push scan job (skip awaiting_approval phase)
                 app.send_task(
                     'tasks.scan.run_scan',
-                    args=[engagement_id, [target], budget, trace_id],
+                    args=[engagement_id, [target], budget, trace_id, agent_mode],
                 )
 
                 return result

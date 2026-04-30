@@ -15,7 +15,7 @@ from state_machine import EngagementStateMachine
 
 
 @app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=600, time_limit=1200)
-def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None):
+def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None, agent_mode: bool = True):
     """
     Execute scanning phase for an engagement
 
@@ -37,12 +37,18 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
 
     # Execute with trace context
     with tracing_manager.trace_execution(engagement_id, "scan", trace_id):
+        # Load recon context from Redis for agent mode dispatch
+        from tasks.utils import load_recon_context
+        recon_context = load_recon_context(engagement_id, redis_url)
+
         job = {
             "type": "scan",
             "engagement_id": engagement_id,
             "targets": targets,
             "budget": budget,
             "trace_id": trace_id,
+            "agent_mode": agent_mode,
+            "recon_context": recon_context,
         }
 
         lock = DistributedLock(redis_url)

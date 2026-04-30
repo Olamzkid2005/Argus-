@@ -38,6 +38,7 @@ from tools.llm_payload_generator import LLMPayloadGenerator
 from .recon import execute_recon_tools, summarize_recon_findings
 from .scan import execute_scan_tools
 from .repo_scan import execute_repo_scan
+from tasks.utils import save_recon_context, load_recon_context
 
 logger = logging.getLogger(__name__)
 
@@ -454,6 +455,13 @@ class Orchestrator:
             reason="Reconnaissance completed — auto-advancing to scan"
         )
 
+        # Save recon context to Redis for cross-task access (Step 9)
+        if recon_context:
+            try:
+                save_recon_context(self.engagement_id, recon_context)
+            except Exception as e:
+                logger.warning(f"Failed to save recon context to Redis: {e}")
+
         return {
             "phase": "recon",
             "status": "completed",
@@ -478,6 +486,68 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"Failed to normalize finding: {e}")
             return None
+
+    def run_scan_with_agent(
+        self,
+        targets: List[str],
+        recon_context: "ReconContext",
+        aggressiveness: str = DEFAULT_AGGRESSIVENESS,
+    ) -> List[Dict]:
+        """
+        Run the scan phase using the LLM ReAct agent.
+
+        Falls back to execute_scan_tools() if agent raises.
+
+        Args:
+            targets: List of target URLs
+            recon_context: ReconContext from recon phase
+            aggressiveness: Scan aggressiveness level
+
+        Returns:
+            List of findings
+        """
+        from agent import create_phase_agent
+        from database.repositories.agent_decision_repository import AgentDecisionRepository
+
+        db_conn = os.getenv("DATABASE_URL")
+        decision_repo = AgentDecisionRepository(db_conn) if db_conn else None
+        all_findings = []
+
+        for target in targets:
+            try:
+                agent = create_phase_agent(
+                    phase="scan",
+                    tool_runner=self.tool_runner,
+                    engagement_id=self.engagement_id,
+                    llm_client=self.llm_client,
+                    decision_repo=decision_repo,
+                )
+
+                emit_thinking(
+                    self.engagement_id,
+                    f"LLM agent selecting scan tools for {target}...",
+                )
+
+                results = agent.run(
+                    task=f"scan: {target}",
+                    initial_context={"recon_context": recon_context, "target": target},
+                    recon_context=recon_context,
+                )
+
+                for r in results:
+                    if r.success and r.output:
+                        parsed = self.parser.parse(r.tool, r.output)
+                        for p in parsed:
+                            norm = self._normalize_finding(p, r.tool)
+                            if norm:
+                                all_findings.append(norm)
+
+            except Exception as e:
+                logger.warning(f"Agent scan failed for {target}: {e}. Falling back.")
+                fallback = execute_scan_tools(self, [target], {}, aggressiveness)
+                all_findings.extend(fallback)
+
+        return all_findings
 
     def run_scan(self, job: Dict) -> Dict:
         """Execute scanning phase."""
@@ -511,7 +581,32 @@ class Orchestrator:
             logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
-        findings = execute_scan_tools(self, targets, job.get("budget", {}), scan_aggressiveness)
+
+        # Step 10: Dispatch to LLM agent if available, else deterministic
+        recon_context = load_recon_context(self.engagement_id)
+        agent_mode_enabled = job.get("agent_mode", True)
+
+        if (
+            agent_mode_enabled
+            and recon_context is not None
+            and self.llm_client is not None
+            and self.llm_client.is_available()
+        ):
+            emit_thinking(
+                self.engagement_id,
+                "LLM agent mode active — analyzing recon results and selecting scan tools...",
+            )
+            findings = self.run_scan_with_agent(targets, recon_context, scan_aggressiveness)
+        else:
+            mode = "deterministic"
+            if not recon_context:
+                mode += " (no recon context)"
+            elif not agent_mode_enabled:
+                mode += " (agent mode disabled)"
+            else:
+                mode += " (LLM unavailable)"
+            logger.info(f"Running {mode} scan")
+            findings = execute_scan_tools(self, targets, job.get("budget", {}), scan_aggressiveness)
 
         findings_count = len(findings)
         if self.finding_repo and findings:

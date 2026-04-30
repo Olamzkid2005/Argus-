@@ -233,16 +233,19 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 500,
         response_format: Optional[Dict] = None,
+        timeout: Optional[int] = None,
     ) -> str:
         """
         Send chat completion request (synchronous).
         Used by scan-phase code that can't use async.
         
-        Same parameters as chat().
+        Same parameters as chat(), plus:
+        timeout: Per-request timeout in seconds. Defaults to 30.
         """
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
         
+        req_timeout = timeout or 30
         last_error = None
         for attempt in range(self.max_retries + 1):
             try:
@@ -252,6 +255,7 @@ class LLMClient:
                         "messages": messages,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
+                        "timeout": req_timeout,
                     }
                     if response_format:
                         kwargs["response_format"] = response_format
@@ -260,7 +264,7 @@ class LLMClient:
                     return response.choices[0].message.content
                 else:
                     import httpx
-                    with httpx.Client(timeout=30) as client:
+                    with httpx.Client(timeout=req_timeout) as client:
                         payload = {
                             "model": self.model,
                             "messages": messages,
