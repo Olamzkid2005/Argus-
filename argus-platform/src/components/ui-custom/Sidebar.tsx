@@ -18,6 +18,7 @@ import {
   HelpCircle,
   Terminal,
   Plus,
+  Activity,
 } from "lucide-react";
 import { AIStatusIndicator } from "./AIStatus";
 
@@ -34,6 +35,7 @@ const navItems = [
   { to: "/rules", icon: FileCode2, label: "Rules" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings", tour: "settings" },
+  { to: "/system", icon: Activity, label: "System Health" },
 ];
 
 export default function Sidebar({ onOpenCommandPalette, onClose }: SidebarProps) {
