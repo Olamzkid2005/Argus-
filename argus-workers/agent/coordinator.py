@@ -13,32 +13,21 @@ logger = logging.getLogger(__name__)
 class CoordinatorAgent:
     """Multi-Agent Coordinator — delegates phases to specialized sub-agents."""
 
-    PHASE_AGENTS = {
-        "recon": {
-            "description": "Reconnaissance and asset discovery",
-            "tools": ["httpx", "subfinder", "gau", "waybackurls", "nmap"],
-        },
-        "scan": {
-            "description": "Active vulnerability scanning",
-            "tools": ["nuclei", "dalfox", "sqlmap", "testssl", "ffuf"],
-        },
-        "deep_scan": {
-            "description": "Deep targeted scanning on priority targets",
-            "tools": ["nuclei", "dalfox", "sqlmap", "nikto"],
-        },
-        "repo_scan": {
-            "description": "Repository code analysis",
-            "tools": ["semgrep", "bandit", "gitleaks", "npm-audit"],
-        },
-        "analyze": {
-            "description": "Findings analysis and intelligence",
-            "tools": ["llm-review", "attack-graph"],
-        },
-        "report": {
-            "description": "Report generation",
-            "tools": ["compliance-check", "report-generator"],
-        },
-    }
+    PHASE_AGENTS = {}
+    _phase_agents_loaded = False
+
+    @classmethod
+    def _ensure_phase_agents(cls):
+        if not cls._phase_agents_loaded:
+            from tool_definitions import get_tools_for_phase
+            cls.PHASE_AGENTS = {
+                phase: {
+                    "description": f"{phase.capitalize().replace('_', ' ')}",
+                    "tools": [t.name for t in get_tools_for_phase(phase)],
+                }
+                for phase in ["recon", "scan", "deep_scan", "repo_scan", "analyze", "report"]
+            }
+            cls._phase_agents_loaded = True
 
     VALID_TRANSITIONS = {
         "recon": ["scan"],
@@ -56,6 +45,7 @@ class CoordinatorAgent:
 
     def can_transition_to(self, next_phase: str) -> bool:
         """Check if transition to next phase is valid."""
+        self._ensure_phase_agents()
         return next_phase in self.VALID_TRANSITIONS.get(self.current_phase, [])
 
     def transition_to(self, next_phase: str) -> bool:
@@ -82,6 +72,7 @@ class CoordinatorAgent:
     def run_phase(self, phase: str, context: Dict, tool_runner=None,
                   llm_client=None, decision_repo=None) -> List:
         """Run a single phase with tools."""
+        self._ensure_phase_agents()
         agent = create_phase_agent(
             phase,
             tool_runner=tool_runner,
@@ -116,6 +107,7 @@ def create_phase_agent(
         Configured ReActAgent
     """
     registry = ToolRegistry()
+    ReActAgent._ensure_phase_tools()
     phase_tools = ReActAgent.PHASE_TOOLS.get(phase, [])
 
     if tool_runner:

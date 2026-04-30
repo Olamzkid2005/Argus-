@@ -76,6 +76,14 @@ class ScopeValidator:
             f"Authorized domains: {self._scope['domains']}"
         )
 
+    def is_in_scope(self, target: str) -> bool:
+        """Convenience: return boolean without raising."""
+        try:
+            self.validate_target(target)
+            return True
+        except ScopeViolationError:
+            return False
+
     def _extract_hostname(self, target: str) -> str:
         """Extract hostname from URL or raw hostname."""
         target = target.strip().lower()

@@ -49,14 +49,17 @@ class ReActAgent:
     4. Maintains an observation history for context
     """
 
-    PHASE_TOOLS = {
-        "recon": ["httpx", "katana", "gau", "waybackurls", "nmap", "naabu", "whatweb"],
-        "scan": ["nuclei", "dalfox", "sqlmap", "testssl", "ffuf", "arjun", "jwt_tool", "commix"],
-        "deep_scan": ["nuclei", "dalfox", "sqlmap", "nikto"],
-        "repo_scan": ["semgrep", "bandit", "gitleaks", "npm-audit"],
-        "analyze": ["intelligence-engine"],
-        "report": ["report-generator"],
-    }
+    _phase_tools_loaded = False
+
+    @classmethod
+    def _ensure_phase_tools(cls):
+        """Lazy-load PHASE_TOOLS from tool_definitions SSOT."""
+        if not cls._phase_tools_loaded:
+            from tool_definitions import build_phase_tools_dict
+            cls.PHASE_TOOLS = build_phase_tools_dict()
+            cls._phase_tools_loaded = True
+
+    PHASE_TOOLS = {}
 
     def __init__(
         self,
@@ -98,10 +101,12 @@ class ReActAgent:
 
     def set_phase(self, phase: str):
         """Set the current phase to determine which tools to use."""
+        self._ensure_phase_tools()
         self._phase = phase
 
     def set_tool_runner(self, tool_runner):
         """Register all tools from a ToolRunner instance."""
+        self._ensure_phase_tools()
         phase_tools = self.PHASE_TOOLS.get(self._phase, [])
         for tool_name in phase_tools:
             def make_runner(tn):
@@ -191,6 +196,7 @@ class ReActAgent:
 
     def _deterministic_plan(self, task: str, tried_tools: set) -> Optional[AgentAction]:
         """Fallback: deterministic phase-based tool planning."""
+        self._ensure_phase_tools()
         phase_tools = None
         for phase_name, tools in self.PHASE_TOOLS.items():
             if phase_name in task.lower() or task.lower() in phase_name:
@@ -285,6 +291,7 @@ class ReActAgent:
         total_cost_usd = 0.0
         zero_finding_consecutive = 0
 
+        self._ensure_phase_tools()
         self.add_to_history("system", f"Task: {task}")
         initial_target = task.split(":")[-1].strip() if ":" in task else task
 
