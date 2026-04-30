@@ -11,8 +11,18 @@ API key resolution order (first found wins):
 import os
 import logging
 from typing import List, Dict, Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LLMResponse:
+    """Response from an LLM call with token and cost tracking."""
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
 
 
 class LLMClient:

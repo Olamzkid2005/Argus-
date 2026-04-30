@@ -1,5 +1,7 @@
 """Named constants for the Argus worker system."""
 
+import os
+
 # Timeouts (seconds)
 HARD_TIMEOUT_SECONDS = 3600          # 1 hour max engagement time
 TOOL_TIMEOUT_DEFAULT = 180           # 3 minutes default tool timeout
@@ -51,3 +53,23 @@ LLM_PAYLOAD_GENERATION_MODEL = "gpt-4o-mini"
 
 # ── Budget ──
 LLM_MAX_COST_PER_ENGAGEMENT = 0.50        # $0.50 max LLM spend per engagement
+
+# ── LLM Agent (ReAct Loop) ──────────────────────────────────────────────
+LLM_AGENT_ENABLED = True
+LLM_AGENT_MODEL = os.getenv("LLM_AGENT_MODEL", "gpt-4o-mini")
+LLM_AGENT_MAX_ITERATIONS = int(os.getenv("LLM_AGENT_MAX_ITERATIONS", "10"))
+LLM_AGENT_TEMPERATURE = float(os.getenv("LLM_AGENT_TEMPERATURE", "0.1"))
+LLM_AGENT_MAX_TOKENS_PLAN = 300            # tokens per tool selection call
+LLM_AGENT_MAX_TOKENS_SYNTH = 2000          # tokens for findings synthesis
+LLM_AGENT_MAX_TOKENS_REPORT = 3000         # tokens for final report
+LLM_AGENT_CONTEXT_MAX_TOKENS = 3500        # max context passed to LLM
+
+# ── LLM Agent Cost Guard ────────────────────────────────────────────────
+LLM_AGENT_MAX_COST_USD = float(os.getenv("LLM_AGENT_MAX_COST_USD", "0.25"))
+LLM_AGENT_COST_PER_1K_INPUT = 0.000150     # gpt-4o-mini input cost
+LLM_AGENT_COST_PER_1K_OUTPUT = 0.000600    # gpt-4o-mini output cost
+
+# ── Mitigations: Timeout & Retry ────────────────────────────────────────
+LLM_AGENT_TIMEOUT_SECONDS = int(os.getenv("LLM_AGENT_TIMEOUT_SECONDS", "30"))
+LLM_AGENT_MAX_RETRIES = int(os.getenv("LLM_AGENT_MAX_RETRIES", "2"))
+LLM_AGENT_ZERO_FINDING_STOP = int(os.getenv("LLM_AGENT_ZERO_FINDING_STOP", "2"))

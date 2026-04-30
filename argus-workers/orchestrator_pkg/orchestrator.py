@@ -35,7 +35,7 @@ from streaming import (
 from llm_client import LLMClient
 from tools.llm_payload_generator import LLMPayloadGenerator
 
-from .recon import execute_recon_tools
+from .recon import execute_recon_tools, summarize_recon_findings
 from .scan import execute_scan_tools
 from .repo_scan import execute_repo_scan
 
@@ -429,7 +429,7 @@ class Orchestrator:
         emit_state_change(self.engagement_id, "created", "recon", "Starting reconnaissance")
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
-        findings = execute_recon_tools(self, target, job.get("budget", {}), aggressiveness)
+        findings, recon_context = execute_recon_tools(self, target, job.get("budget", {}), aggressiveness)
 
         findings_count = len(findings)
         if self.finding_repo and findings:
@@ -459,6 +459,7 @@ class Orchestrator:
             "status": "completed",
             "findings_count": findings_count,
             "next_state": "scanning",
+            "recon_context": recon_context,
             "trace_id": get_trace_id(),
         }
 

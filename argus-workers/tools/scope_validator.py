@@ -1,157 +1,115 @@
 """
-Scope Validator - Ensures scan targets are within authorized scope
+Scope Validator - Ensures LLM-selected tools stay within authorized scope.
+Prevents prompt injection from tricking the agent into scanning unauthorized targets.
 """
-from typing import Dict
-from urllib.parse import urlparse
-import ipaddress
+import json
+import logging
 import fnmatch
+from typing import Dict, List, Optional
+from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 class ScopeViolationError(Exception):
-    """Raised when target is outside authorized scope"""
+    """Raised when a tool is requested for an out-of-scope target."""
     pass
 
 
 class ScopeValidator:
     """
-    Validates scan targets against authorized scope
-    Supports exact domain matching, wildcard subdomains, and IP ranges
+    Validates that tool execution targets are within the engagement's authorized scope.
+
+    Supports:
+    - Domain matching (including wildcard: *.example.com)
+    - IP range matching (CIDR notation)
+    - Exact URL prefix matching
     """
-    
-    def __init__(self, engagement_id: str, authorized_scope: Dict):
+
+    def __init__(self, engagement_id: str, authorized_scope: Optional[Dict] = None):
         """
-        Initialize Scope Validator
-        
         Args:
-            engagement_id: Engagement ID for logging
-            authorized_scope: Dictionary with 'domains' and 'ipRanges' lists
+            engagement_id: Engagement UUID
+            authorized_scope: Dict with 'domains' and 'ipRanges' lists, or JSON string
         """
         self.engagement_id = engagement_id
-        self.authorized_domains = authorized_scope.get("domains", [])
-        self.authorized_ip_ranges = authorized_scope.get("ipRanges", [])
-        
-        # Parse IP ranges into network objects
-        self.ip_networks = []
-        for ip_range in self.authorized_ip_ranges:
+        self._scope = self._parse_scope(authorized_scope)
+
+    def _parse_scope(self, scope) -> Dict:
+        """Parse authorized scope from dict or JSON string."""
+        if isinstance(scope, str):
             try:
-                self.ip_networks.append(ipaddress.ip_network(ip_range, strict=False))
-            except ValueError as e:
-                print(f"Invalid IP range {ip_range}: {e}")
-    
-    def validate_target(self, target_url: str) -> bool:
+                scope = json.loads(scope)
+            except (json.JSONDecodeError, TypeError):
+                scope = {}
+        return {
+            "domains": [d.lower() for d in (scope or {}).get("domains", []) if d],
+            "ipRanges": list((scope or {}).get("ipRanges", [])),
+        }
+
+    def validate_target(self, target: str) -> bool:
         """
-        Validate target is within authorized scope
-        
+        Validate a target URL/hostname against authorized scope.
+
         Args:
-            target_url: Target URL to validate
-            
+            target: Target URL or hostname
+
         Returns:
-            True if within scope
-            
+            True if target is in scope
+
         Raises:
-            ScopeViolationError: If target is outside scope
+            ScopeViolationError: If target is out of scope
         """
-        # Parse URL
-        parsed = urlparse(target_url)
-        hostname = parsed.hostname or parsed.netloc
-        
-        if not hostname:
-            raise ScopeViolationError(f"Invalid URL: {target_url}")
-        
-        # Check if it's an IP address
-        try:
-            ip_addr = ipaddress.ip_address(hostname)
-            if self._is_ip_in_ranges(ip_addr):
-                return True
-        except ValueError:
-            # Not an IP address, treat as domain
-            if self._domain_matches(hostname):
-                return True
-        
-        # Not in scope
-        self._log_violation(target_url, hostname)
+        if not target:
+            return True
+
+        hostname = self._extract_hostname(target)
+
+        if self._matches_domain(hostname):
+            return True
+
+        if self._matches_ip_range(hostname):
+            return True
+
         raise ScopeViolationError(
-            f"Target {target_url} is outside authorized scope for engagement {self.engagement_id}"
+            f"Target '{target}' (hostname: {hostname}) is not in authorized scope. "
+            f"Authorized domains: {self._scope['domains']}"
         )
-    
-    def _domain_matches(self, target: str) -> bool:
-        """
-        Check if target domain matches allowed patterns
-        
-        Supports:
-        - Exact matching: "staging.app.com"
-        - Wildcard subdomains: "*.dev.app.com"
-        
-        Args:
-            target: Target domain
-            
-        Returns:
-            True if matches any allowed pattern
-        """
-        target_lower = target.lower()
-        
-        for allowed in self.authorized_domains:
-            allowed_lower = allowed.lower()
-            
-            # Exact match
-            if target_lower == allowed_lower:
+
+    def _extract_hostname(self, target: str) -> str:
+        """Extract hostname from URL or raw hostname."""
+        target = target.strip().lower()
+
+        if target.startswith(("http://", "https://")):
+            return urlparse(target).hostname or target
+
+        return target.split("/")[0].split(":")[0]
+
+    def _matches_domain(self, hostname: str) -> bool:
+        """Check if hostname matches any authorized domain (with wildcard support)."""
+        for domain in self._scope.get("domains", []):
+            if fnmatch.fnmatch(hostname, domain):
                 return True
-            
-            # Wildcard match
-            if "*" in allowed_lower:
-                # Convert wildcard pattern to fnmatch pattern
-                if fnmatch.fnmatch(target_lower, allowed_lower):
-                    return True
-                
-                # Also check if target is subdomain of wildcard
-                # e.g., "*.dev.app.com" should match "test.dev.app.com"
-                wildcard_base = allowed_lower.replace("*.", "")
-                if target_lower.endswith("." + wildcard_base) or target_lower == wildcard_base:
-                    return True
-        
-        return False
-    
-    def _is_ip_in_ranges(self, target_ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-        """
-        Check if IP is in authorized ranges
-        
-        Args:
-            target_ip: Target IP address
-            
-        Returns:
-            True if IP is in any authorized range
-        """
-        for network in self.ip_networks:
-            if target_ip in network:
+            if hostname == domain:
                 return True
-        
+            if hostname.endswith("." + domain.lstrip("*.")):
+                return True
         return False
-    
-    def _log_violation(self, target_url: str, hostname: str):
-        """
-        Log scope violation for security audit
-        
-        Args:
-            target_url: Full target URL
-            hostname: Extracted hostname
-        """
-        # In production, this would write to scope_violations table
-        print(f"SCOPE VIOLATION: Engagement {self.engagement_id} attempted to access {target_url}")
-        print(f"  Hostname: {hostname}")
-        print(f"  Authorized domains: {self.authorized_domains}")
-        print(f"  Authorized IP ranges: {self.authorized_ip_ranges}")
-    
-    def is_in_scope(self, target_url: str) -> bool:
-        """
-        Check if target is in scope without raising exception
-        
-        Args:
-            target_url: Target URL to check
-            
-        Returns:
-            True if in scope, False otherwise
-        """
+
+    def _matches_ip_range(self, hostname: str) -> bool:
+        """Check if hostname matches any authorized IP range (CIDR)."""
+        import ipaddress
+
         try:
-            return self.validate_target(target_url)
-        except ScopeViolationError:
-            return False
+            addr = ipaddress.ip_address(hostname)
+            for cidr in self._scope.get("ipRanges", []):
+                try:
+                    network = ipaddress.ip_network(cidr, strict=False)
+                    if addr in network:
+                        return True
+                except ValueError:
+                    continue
+        except ValueError:
+            pass  # Not an IP address
+
+        return False

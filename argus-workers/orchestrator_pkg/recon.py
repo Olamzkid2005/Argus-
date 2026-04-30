@@ -36,7 +36,8 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     # Guard against None/empty target
     if not target:
         logger.warning(f"[execute_recon_tools] No valid target for engagement {orchestrator.engagement_id}, skipping recon")
-        return []
+        from models.recon_context import ReconContext
+        return [], ReconContext(target_url=target or "")
 
     target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
 
@@ -321,4 +322,62 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
         _emit("waybackurls", f"Historical URL retrieval failed: {str(e)}", "failed")
         logger.warning(f"waybackurls failed: {e}")
 
-    return all_findings
+    recon_context = summarize_recon_findings(target, all_findings)
+    return all_findings, recon_context
+
+
+def summarize_recon_findings(target: str, findings: List[Dict]) -> "ReconContext":
+    """
+    Convert raw recon findings list into ReconContext.
+
+    Called at end of execute_recon_tools() before returning.
+
+    Args:
+        target: Target URL
+        findings: List of normalized finding dicts
+
+    Returns:
+        Populated ReconContext
+    """
+    from models.recon_context import ReconContext
+
+    if not findings:
+        return ReconContext(target_url=target)
+
+    live_endpoints = [f["endpoint"] for f in findings if f.get("source_tool") == "httpx"]
+    subdomains = [f["endpoint"] for f in findings if f.get("source_tool") in ("amass", "subfinder")]
+    open_ports = [f.get("evidence", {}) for f in findings if f.get("source_tool") == "naabu"]
+    tech_stack = [
+        t
+        for f in findings
+        if f.get("source_tool") == "whatweb"
+        for t in f.get("evidence", {}).get("technologies", [])
+    ]
+    crawled_paths = [f["endpoint"] for f in findings if f.get("source_tool") in ("katana", "ffuf")][:50]
+    param_urls = [
+        f["endpoint"]
+        for f in findings
+        if "?" in f.get("endpoint", "") and f.get("source_tool") in ("gau", "waybackurls")
+    ]
+
+    auth_kw = ("login", "signin", "auth", "oauth", "sso", "password", "reset")
+    api_kw = ("/api/", "/v1/", "/v2/", "/graphql", "/rest/")
+    upload_kw = ("upload", "file", "attach", "media")
+
+    all_paths = [f.get("endpoint", "").lower() for f in findings]
+
+    return ReconContext(
+        target_url=target,
+        live_endpoints=list(set(live_endpoints))[:100],
+        subdomains=list(set(subdomains))[:50],
+        open_ports=open_ports[:20],
+        tech_stack=list(set(tech_stack))[:20],
+        crawled_paths=crawled_paths,
+        parameter_bearing_urls=param_urls[:30],
+        auth_endpoints=[p for p in crawled_paths if any(k in p.lower() for k in auth_kw)],
+        api_endpoints=[p for p in crawled_paths if any(k in p.lower() for k in api_kw)],
+        findings_count=len(findings),
+        has_login_page=any(any(k in p for k in auth_kw) for p in all_paths),
+        has_api=any(any(k in p for k in api_kw) for p in all_paths),
+        has_file_upload=any(any(k in p for k in upload_kw) for p in all_paths),
+    )
