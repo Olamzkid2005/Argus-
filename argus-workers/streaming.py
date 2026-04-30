@@ -35,6 +35,8 @@ class StreamEventType(Enum):
     PROGRESS = "progress"           # Progress percentage
     ERROR = "error"                 # Error event
     COMPLETE = "complete"           # Scan phase complete
+    REPORT_CHUNK = "report_chunk"   # Incremental report text from LLM
+    REPORT_COMPLETE = "report_complete"  # Final report ready
 
 
 @dataclass
@@ -248,6 +250,24 @@ def emit_complete(engagement_id: str, phase: str, summary: Dict = None):
     get_stream_manager().publish(StreamEvent(
         event_type=StreamEventType.COMPLETE,
         data={"phase": phase, "summary": summary or {}},
+        engagement_id=engagement_id,
+    ))
+
+
+def emit_report_chunk(engagement_id: str, text: str):
+    """Emit an incremental report chunk."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.REPORT_CHUNK,
+        data={"text": text},
+        engagement_id=engagement_id,
+    ))
+
+
+def emit_report_complete(engagement_id: str, summary: Dict = None):
+    """Emit a report complete event."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.REPORT_COMPLETE,
+        data={"summary": summary or {}},
         engagement_id=engagement_id,
     ))
 

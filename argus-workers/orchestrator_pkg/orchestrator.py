@@ -25,6 +25,7 @@ from database.repositories.engagement_repository import EngagementRepository
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
     HARD_TIMEOUT_SECONDS,
+    LLM_AGENT_MODEL,
 )
 from mcp_server import get_mcp_server, ToolDefinition, ToolSchema
 from streaming import (
@@ -699,6 +700,26 @@ class Orchestrator:
 
         evaluation = engine.evaluate(snapshot)
 
+        # Step 14: LLM synthesis pass on top of rule-based evaluation
+        synthesis = {}
+        if self.llm_client and self.llm_client.is_available():
+            try:
+                from llm_synthesizer import LLMSynthesizer
+                recon_ctx = load_recon_context(self.engagement_id)
+                synthesizer = LLMSynthesizer(self.llm_client)
+                synthesis = synthesizer.synthesize(
+                    scored_findings=evaluation.get("scored_findings", []),
+                    attack_paths=snapshot.get("attack_graph", {}).get("paths", []),
+                    recon_context=recon_ctx,
+                )
+                emit_thinking(
+                    self.engagement_id,
+                    f'LLM analysis: {synthesis.get("risk_level", "unknown")} risk — '
+                    f'{synthesis.get("executive_summary", "")[:100]}...',
+                )
+            except Exception as e:
+                logger.warning(f"LLM synthesis failed (non-fatal): {e}")
+
         actions = evaluation.get("actions", [])
 
         next_state = "reporting"
@@ -723,6 +744,7 @@ class Orchestrator:
             "actions": actions,
             "scored_findings": evaluation.get("scored_findings", []),
             "reasoning": evaluation.get("reasoning", ""),
+            "synthesis": synthesis,
             "next_state": next_state,
             "trace_id": get_trace_id(),
         }
@@ -741,6 +763,40 @@ class Orchestrator:
             engagement_id=self.engagement_id
         )
 
+        # LLM report generation (if available)
+        report_data = {}
+        if self.llm_client and self.llm_client.is_available():
+            try:
+                from llm_report_generator import LLMReportGenerator
+                from database.repositories.report_repository import ReportRepository
+                from models.recon_context import ReconContext
+
+                recon_ctx = load_recon_context(self.engagement_id)
+                scored_findings = job.get("scored_findings", [])
+                synthesis = job.get("synthesis", {})
+
+                generator = LLMReportGenerator(self.llm_client)
+                engagement_info = {"target_url": job.get("target", ""), "scan_type": job.get("type", "")}
+
+                report_data = generator.generate_report(
+                    synthesis=synthesis,
+                    scored_findings=scored_findings,
+                    engagement=engagement_info,
+                    recon_context=recon_ctx,
+                )
+
+                repo = ReportRepository()
+                repo.upsert_report(
+                    engagement_id=self.engagement_id,
+                    report_data=report_data,
+                    model_used=LLM_AGENT_MODEL,
+                )
+
+                emit_thinking(self.engagement_id, "LLM report generated successfully")
+
+            except Exception as e:
+                logger.warning(f"LLM report generation failed (non-fatal): {e}")
+
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
             from_state="reporting",
@@ -752,6 +808,7 @@ class Orchestrator:
             "phase": "report",
             "status": "completed",
             "next_state": "complete",
+            "report": report_data,
             "trace_id": get_trace_id(),
         }
 
