@@ -240,20 +240,7 @@ class Orchestrator:
         findings, recon_context = execute_recon_tools(self, target, job.get("budget", {}), aggressiveness)
 
         findings_count = len(findings)
-        if self.finding_repo and findings:
-            try:
-                for finding in findings:
-                    self.finding_repo.create_finding(
-                        engagement_id=self.engagement_id,
-                        finding_type=finding.get("type", "UNKNOWN"),
-                        severity=finding.get("severity", "INFO"),
-                        endpoint=finding.get("endpoint", ""),
-                        evidence=finding.get("evidence", {}),
-                        confidence=finding.get("confidence", 0.5),
-                        source_tool=finding.get("tool", "unknown"),
-                    )
-            except Exception as e:
-                logger.error(f"Failed to save findings: {e}")
+        self._save_findings(findings, "tool")
 
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
@@ -293,6 +280,24 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"Failed to normalize finding: {e}")
             return None
+
+    def _save_findings(self, findings: List[Dict], source_tool_key: str = "source_tool"):
+        """Save findings to the database (used by run_recon, run_scan, run_repo_scan)."""
+        if not self.finding_repo or not findings:
+            return
+        try:
+            for finding in findings:
+                self.finding_repo.create_finding(
+                    engagement_id=self.engagement_id,
+                    finding_type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    evidence=finding.get("evidence", {}),
+                    confidence=finding.get("confidence", 0.5),
+                    source_tool=finding.get(source_tool_key, "unknown"),
+                )
+        except Exception as e:
+            logger.error(f"Failed to save findings: {e}")
 
     def run_scan_with_agent(
         self,
@@ -437,20 +442,7 @@ class Orchestrator:
             findings = execute_scan_tools(self, targets, job.get("budget", {}), scan_aggressiveness)
 
         findings_count = len(findings)
-        if self.finding_repo and findings:
-            try:
-                for finding in findings:
-                    self.finding_repo.create_finding(
-                        engagement_id=self.engagement_id,
-                        finding_type=finding.get("type", "UNKNOWN"),
-                        severity=finding.get("severity", "INFO"),
-                        endpoint=finding.get("endpoint", ""),
-                        evidence=finding.get("evidence", {}),
-                        confidence=finding.get("confidence", 0.5),
-                        source_tool=finding.get("source_tool", "unknown"),
-                    )
-            except Exception as e:
-                logger.error(f"Failed to save findings: {e}")
+        self._save_findings(findings)
 
         from llm_client import load_llm_setting
         llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
@@ -665,20 +657,7 @@ class Orchestrator:
         findings = execute_repo_scan(self, repo_url, job.get("budget", {}), repo_aggressiveness, custom_rules_path)
 
         findings_count = len(findings)
-        if self.finding_repo and findings:
-            try:
-                for finding in findings:
-                    self.finding_repo.create_finding(
-                        engagement_id=self.engagement_id,
-                        finding_type=finding.get("type", "UNKNOWN"),
-                        severity=finding.get("severity", "INFO"),
-                        endpoint=finding.get("endpoint", ""),
-                        evidence=finding.get("evidence", {}),
-                        confidence=finding.get("confidence", 0.5),
-                        source_tool=finding.get("tool", "semgrep"),
-                    )
-            except Exception as e:
-                logger.error(f"Failed to save repo findings: {e}")
+        self._save_findings(findings, source_tool_key="tool")
 
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
