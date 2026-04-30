@@ -6,12 +6,12 @@ error classification, logging, dead-letter queue integration, and
 engagement state transitions.
 
 Usage:
-    from tasks.base import task_error_boundary
-    
+    from tasks.base import task_context, task_error_boundary
+
     @app.task(bind=True)
     def my_task(self, engagement_id):
-        with task_error_boundary(self, engagement_id, "my_phase"):
-            # Task logic here
+        with task_context(self, engagement_id, "my_phase") as ctx:
+            result = ctx.orchestrator.run_xxx(ctx.job)
             ...
 
 Stolen from: Shannon's two-layer architecture pattern (thin orchestration + service boundary)
@@ -20,10 +20,111 @@ Stolen from: Shannon's two-layer architecture pattern (thin orchestration + serv
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import contextmanager
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TaskContext:
+    """Encapsulates all the scaffolding a task needs."""
+
+    engagement_id: str
+    job_type: str
+    job: dict
+    trace_id: str
+    orchestrator: Any = None
+    db_conn_string: str = ""
+    redis_url: str = ""
+
+
+@contextmanager
+def task_context(
+    task,
+    engagement_id: str,
+    job_type: str,
+    job_extra: dict = None,
+    trace_id: str = None,
+    current_state: str = None,
+):
+    """
+    Unified task scaffolding context manager.
+
+    Handles:
+    1. DATABASE_URL / REDIS_URL resolution
+    2. TracingManager init and trace_id generation
+    3. DistributedLock acquisition
+    4. EngagementStateMachine init and initial transition
+    5. Orchestrator init
+    6. Error handling with state transition to 'failed'
+
+    Yields:
+        TaskContext with .orchestrator, .job, .trace_id
+
+    Usage:
+        with task_context(self, id, "recon",
+                          job_extra={"target": target, "budget": budget},
+                          current_state="created") as ctx:
+            result = ctx.orchestrator.run_recon(ctx.job)
+            ctx.state.transition("scanning", "...")
+    """
+    from orchestrator import Orchestrator
+    from tracing import TracingManager
+    from distributed_lock import DistributedLock, LockContext
+    from state_machine import EngagementStateMachine
+
+    db_conn_string = os.getenv("DATABASE_URL")
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+    tracing_manager = TracingManager(db_conn_string)
+    if not trace_id:
+        trace_id = tracing_manager.generate_trace_id()
+
+    ctx = TaskContext(
+        engagement_id=engagement_id,
+        job_type=job_type,
+        job={
+            "type": job_type,
+            "engagement_id": engagement_id,
+            "trace_id": trace_id,
+            **(job_extra or {}),
+        },
+        trace_id=trace_id,
+        db_conn_string=db_conn_string,
+        redis_url=redis_url,
+    )
+
+    with tracing_manager.trace_execution(engagement_id, job_type, trace_id):
+        lock = DistributedLock(redis_url)
+        try:
+            with LockContext(lock, engagement_id):
+                sm = EngagementStateMachine(
+                    engagement_id,
+                    db_connection_string=db_conn_string,
+                    current_state=current_state or _get_engagement_state(engagement_id, db_conn_string),
+                )
+                ctx.state = sm
+
+                orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
+                ctx.orchestrator = orchestrator
+
+                yield ctx
+        except Exception as e:
+            current = _get_engagement_state(engagement_id, db_conn_string)
+            if current not in ("complete", "failed"):
+                try:
+                    sm = EngagementStateMachine(
+                        engagement_id,
+                        db_connection_string=db_conn_string,
+                        current_state=current,
+                    )
+                    sm.transition("failed", f"{job_type} failed: {e}")
+                except Exception as sm_error:
+                    logger.error("State transition to failed error: %s", sm_error)
+            raise
 
 
 @contextmanager
@@ -56,7 +157,6 @@ def task_error_boundary(
     try:
         yield
     except Exception as e:
-        # 1. Classify the error
         from error_classifier import classify_error_with_code, log_classified_error
 
         classification = classify_error_with_code(
@@ -65,7 +165,6 @@ def task_error_boundary(
             retry_count=getattr(task.request, "retries", 0) if hasattr(task, "request") else 0,
         )
 
-        # 2. Log with full classification
         log_classified_error(
             classification=classification,
             task_id=getattr(task.request, "id", "unknown") if hasattr(task, "request") else "unknown",
@@ -74,7 +173,6 @@ def task_error_boundary(
             extra_context={"engagement_id": engagement_id, "phase": phase_name},
         )
 
-        # 3. Send non-retryable errors to dead-letter queue
         if not classification.should_retry:
             try:
                 from dead_letter_queue import get_dlq
@@ -92,7 +190,6 @@ def task_error_boundary(
             except Exception as dlq_error:
                 logger.error("Failed to enqueue to DLQ: %s", dlq_error)
 
-        # 4. Transition engagement to failed (skip if already terminal)
         try:
             from database.connection import db_cursor
             with db_cursor() as cursor:
@@ -113,5 +210,23 @@ def task_error_boundary(
         except Exception as state_error:
             logger.error("Failed to update engagement state after error: %s", state_error)
 
-        # 5. Re-raise the original exception
         raise
+
+
+def _get_engagement_state(engagement_id: str, db_conn_string: str = None) -> str:
+    """Query the current engagement state from the database."""
+    if not db_conn_string:
+        db_conn_string = os.getenv("DATABASE_URL")
+    try:
+        from database.connection import connect
+        from utils.validation import validate_uuid
+        valid_id = validate_uuid(engagement_id, "engagement_id")
+        conn = connect(db_conn_string)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row[0] if row else "created"
+    except Exception:
+        return "created"

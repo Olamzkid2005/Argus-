@@ -5,7 +5,6 @@ Requirements: 20.1, 20.2, 20.3, 23.4, 23.5, 17.1, 17.2, 17.3, 17.4
 """
 import json
 import logging
-import os
 from datetime import datetime, timedelta, UTC
 from typing import Any, Dict, List, Optional
 from celery_app import app
@@ -14,11 +13,7 @@ from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 
-from utils.validation import validate_uuid
-from orchestrator import Orchestrator
-from tracing import TracingManager
-from distributed_lock import LockContext, DistributedLock
-from state_machine import EngagementStateMachine
+from tasks.base import task_context
 from compliance_reporting import ComplianceReportGenerator
 
 
@@ -26,51 +21,12 @@ from compliance_reporting import ComplianceReportGenerator
 def generate_report(self, engagement_id: str, trace_id: str = None):
     """
     Generate final report for an engagement
-
-    Args:
-        engagement_id: Engagement ID
-        trace_id: Optional trace_id for distributed tracing (generated if not provided)
     """
-    db_conn_string = os.getenv("DATABASE_URL")
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-
-    # Initialize tracing manager
-    tracing_manager = TracingManager(db_conn_string)
-
-    # Create or use existing trace context
-    if not trace_id:
-        trace_id = tracing_manager.generate_trace_id()
-
-    # Execute with trace context
-    with tracing_manager.trace_execution(engagement_id, "report", trace_id):
-        job = {
-            "type": "report",
-            "engagement_id": engagement_id,
-            "trace_id": trace_id,
-        }
-
-        lock = DistributedLock(redis_url)
-
-        try:
-            with LockContext(lock, engagement_id):
-                state_machine = EngagementStateMachine(
-                    engagement_id, db_connection_string=db_conn_string, current_state="reporting"
-                )
-
-                orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-                result = orchestrator.run_reporting(job)
-
-                state_machine.transition("complete", "Report generated")
-
-                return result
-        except Exception as e:
-            # Query actual current state from DB before transitioning to failed
-            current_state = _get_engagement_state(engagement_id, db_conn_string)
-            state_machine = EngagementStateMachine(
-                engagement_id, db_connection_string=db_conn_string, current_state=current_state
-            )
-            state_machine.safe_transition("failed", f"Reporting failed: {str(e)}")
-            raise
+    with task_context(self, engagement_id, "report",
+                      trace_id=trace_id, current_state="reporting") as ctx:
+        result = ctx.orchestrator.run_reporting(ctx.job)
+        ctx.state.transition("complete", "Report generated")
+        return result
 
 
 @app.task(bind=True, name="tasks.report.get_findings_summary")
