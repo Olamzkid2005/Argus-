@@ -323,6 +323,20 @@ class ReActAgent:
             logger.info("Agent iteration %d: calling %s (cost: $%.6f)",
                         iteration, action.tool, action.cost_usd)
 
+            # Step 23: Emit agent decision event for frontend reasoning feed
+            try:
+                from streaming import emit_agent_decision
+                if self.engagement_id:
+                    emit_agent_decision(
+                        engagement_id=self.engagement_id,
+                        iteration=iteration,
+                        tool=action.tool,
+                        reasoning=action.reasoning,
+                        was_fallback=not (self.llm_client and self.llm_client.is_available()),
+                    )
+            except Exception:
+                pass
+
             # Execute tool (Risk 3: tool error handling — tool errors are captured as failed AgentResults)
             result = self.registry.call(action.tool, **action.arguments)
             results.append(result)

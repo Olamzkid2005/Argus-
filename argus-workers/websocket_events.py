@@ -41,6 +41,7 @@ class WebSocketEventPublisher:
     EVENT_JOB_COMPLETED = "job_completed"
     EVENT_SCANNER_ACTIVITY = "scanner_activity"
     EVENT_ERROR = "error"
+    EVENT_AGENT_DECISION = "agent_decision"
     
     # Severity levels
     SEVERITY_CRITICAL = "CRITICAL"
@@ -439,6 +440,37 @@ class WebSocketEventPublisher:
             items_found=items_found,
             duration_ms=duration_ms,
         )
+
+    def publish_agent_decision(
+        self,
+        engagement_id: str,
+        iteration: int,
+        tool: str,
+        reasoning: str,
+        was_fallback: bool,
+    ) -> None:
+        """
+        Publish an agent decision event for real-time frontend display.
+
+        Args:
+            engagement_id: Engagement ID
+            iteration: Iteration number
+            tool: Selected tool name
+            reasoning: LLM's reasoning
+            was_fallback: Whether deterministic fallback was used
+        """
+        event = {
+            "type": self.EVENT_AGENT_DECISION,
+            "engagement_id": engagement_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": {
+                "iteration": iteration,
+                "tool": tool,
+                "reasoning": reasoning[:200] if reasoning else "",
+                "was_fallback": was_fallback,
+            }
+        }
+        self._publish_event(event)
 
     def _persist_scanner_activity(
         self,

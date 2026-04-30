@@ -13,6 +13,8 @@ import logging
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
+from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
+
 logger = logging.getLogger(__name__)
 
 
@@ -234,13 +236,16 @@ class LLMClient:
         max_tokens: int = 500,
         response_format: Optional[Dict] = None,
         timeout: Optional[int] = None,
-    ) -> str:
+    ) -> "LLMResponse":
         """
         Send chat completion request (synchronous).
         Used by scan-phase code that can't use async.
         
         Same parameters as chat(), plus:
         timeout: Per-request timeout in seconds. Defaults to 30.
+
+        Returns:
+            LLMResponse with .text, .input_tokens, .output_tokens, .cost_usd
         """
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
@@ -261,7 +266,19 @@ class LLMClient:
                         kwargs["response_format"] = response_format
                     
                     response = self._openai_client.chat.completions.create(**kwargs)
-                    return response.choices[0].message.content
+                    usage = response.usage
+                    input_tokens = usage.prompt_tokens if usage else 0
+                    output_tokens = usage.completion_tokens if usage else 0
+                    cost = (
+                        (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
+                        + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                    )
+                    return LLMResponse(
+                        text=response.choices[0].message.content,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cost_usd=cost,
+                    )
                 else:
                     import httpx
                     with httpx.Client(timeout=req_timeout) as client:
@@ -281,13 +298,30 @@ class LLMClient:
                         resp = client.post(self.api_url, json=payload, headers=headers)
                         resp.raise_for_status()
                         data = resp.json()
+
+                        input_tokens = 0
+                        output_tokens = 0
+                        if "usage" in data:
+                            input_tokens = data["usage"].get("prompt_tokens", 0)
+                            output_tokens = data["usage"].get("completion_tokens", 0)
+                        cost = (
+                            (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
+                            + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                        )
                         
                         if "choices" in data and len(data["choices"]) > 0:
-                            return data["choices"][0]["message"]["content"]
+                            text = data["choices"][0]["message"]["content"]
                         elif "content" in data:
-                            return data["content"]
+                            text = data["content"]
                         else:
-                            return str(data)
+                            text = str(data)
+
+                        return LLMResponse(
+                            text=text,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            cost_usd=cost,
+                        )
             
             except Exception as e:
                 last_error = e

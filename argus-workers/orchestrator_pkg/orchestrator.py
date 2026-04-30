@@ -493,6 +493,7 @@ class Orchestrator:
         targets: List[str],
         recon_context: "ReconContext",
         aggressiveness: str = DEFAULT_AGGRESSIVENESS,
+        authorized_scope: Dict = None,
     ) -> List[Dict]:
         """
         Run the scan phase using the LLM ReAct agent.
@@ -503,12 +504,14 @@ class Orchestrator:
             targets: List of target URLs
             recon_context: ReconContext from recon phase
             aggressiveness: Scan aggressiveness level
+            authorized_scope: Optional authorized scope for validation
 
         Returns:
             List of findings
         """
-        from agent import create_phase_agent
+        from agent import create_phase_agent, AgentResult
         from database.repositories.agent_decision_repository import AgentDecisionRepository
+        from tools.scope_validator import ScopeValidator, ScopeViolationError
 
         db_conn = os.getenv("DATABASE_URL")
         decision_repo = AgentDecisionRepository(db_conn) if db_conn else None
@@ -523,6 +526,24 @@ class Orchestrator:
                     llm_client=self.llm_client,
                     decision_repo=decision_repo,
                 )
+
+                # Step 21: Wrap registry.call with scope validation
+                if authorized_scope:
+                    scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
+                    original_call = agent.registry.call
+
+                    def scoped_call(name, **kwargs):
+                        target = kwargs.get("target", "")
+                        if target:
+                            try:
+                                scope_validator.validate_target(target)
+                            except ScopeViolationError as e:
+                                logger.warning(f"Scope violation blocked: {e}")
+                                emit_thinking(self.engagement_id, f"Blocked: {target} is out of scope")
+                                return AgentResult(tool=name, success=False, error=f"Scope violation: {str(e)}")
+                        return original_call(name, **kwargs)
+
+                    agent.registry.call = scoped_call
 
                 emit_thinking(
                     self.engagement_id,

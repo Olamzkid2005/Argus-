@@ -272,6 +272,21 @@ def emit_report_complete(engagement_id: str, summary: Dict = None):
     ))
 
 
+def emit_agent_decision(engagement_id: str, iteration: int, tool: str, reasoning: str, was_fallback: bool = False):
+    """Emit an agent decision event for the frontend reasoning feed."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.THINKING,
+        data={
+            "type": "agent_decision",
+            "iteration": iteration,
+            "tool": tool,
+            "reasoning": reasoning[:200] if reasoning else "",
+            "was_fallback": was_fallback,
+        },
+        engagement_id=engagement_id,
+    ))
+
+
 # Singleton
 _stream_manager: Optional[StreamManager] = None
 _stream_lock = threading.Lock()

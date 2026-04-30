@@ -225,8 +225,10 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
                 response_format={"type": "json_object"},
             )
 
+            response_text = raw_response.text if hasattr(raw_response, "text") else raw_response
+
             # Parse payloads
-            payloads = self._parse_payloads(raw_response)
+            payloads = self._parse_payloads(response_text)
             
             # Inject callback marker into payloads (ensure detectability)
             payloads = [p.replace(callback, callback) for p in payloads]  # just ensure marker present
