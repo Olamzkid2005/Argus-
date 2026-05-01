@@ -272,6 +272,11 @@ fi
 
 # Start Celery with PYTHONPATH so forked workers can find local modules
 export PYTHONPATH="$PWD:$PYTHONPATH"
+export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())' 2>/dev/null || echo '')"
+# Remove stale env vars that might override Redis-stored settings
+# The LLMClient prefers env vars over Redis, so unset to force Redis lookup
+unset OPENAI_API_KEY 2>/dev/null || true
+unset LLM_API_KEY 2>/dev/null || true
 celery -A celery_app worker --loglevel=info --concurrency=4 -Q celery,recon,scan,analyze,report,repo_scan > ../logs/celery.log 2>&1 &
 CELERY_PID=$!
 cd ..

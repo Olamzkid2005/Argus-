@@ -68,6 +68,40 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function DELETE(req: NextRequest) {
+  log.api('DELETE', '/api/webhooks');
+  try {
+    const session = await requireAuth();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "webhook id required" }, { status: 400 });
+    }
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `DELETE FROM webhooks WHERE id = $1 AND org_id = $2 RETURNING id`,
+        [id, session.user.orgId],
+      );
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
+      }
+      log.apiEnd('DELETE', '/api/webhooks', 200, { id });
+      return NextResponse.json({ success: true });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json({ error: "Failed to delete webhook" }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   log.api('GET', '/api/webhooks');
   try {

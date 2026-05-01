@@ -7,7 +7,7 @@
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 6.5s
+ ✓ Ready in 4.1s
  ○ Compiling /src/middleware ...
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
@@ -29,4 +29,894 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-[?25h
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (153kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET / 200 in 21450ms
+ GET / 200 in 97ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /auth/signin 200 in 3136ms
+2026-05-01T09:13:51.136Z [Argus] [API] GET /api/auth/session {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:13:52.963Z [Argus] [API] GET /api/auth/providers {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:13:55.522Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:13:56.317Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/providers 200 in 3353ms
+ GET /api/auth/session 200 in 5202ms
+2026-05-01T09:13:56.381Z [Argus] [API] GET /api/auth/csrf {"query":""}
+2026-05-01T09:13:56.383Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/csrf 200 in 50ms
+ GET /api/auth/session 200 in 50ms
+2026-05-01T09:13:56.464Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
+ POST /api/auth/callback/credentials 200 in 59ms
+2026-05-01T09:13:56.547Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 59ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:13:57.668Z [Argus] [Auth] NextAuth route initialized 
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:14:13.069Z [Argus] [API] POST /api/engagement/create {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:14:14.368Z [Argus] [API] POST /api/engagement/create 
+2026-05-01T09:14:14.377Z [Argus] [Error] Create engagement error:: Error: Unauthorized
+(node:99403) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ POST /api/engagement/create 401 in 1308ms
+ GET /auth/signin 200 in 423ms
+2026-05-01T09:15:00.095Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:15:00.119Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 32ms
+2026-05-01T09:15:00.141Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 14ms
+2026-05-01T09:15:01.566Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:15:01.896Z [Argus] [API] GET /api/auth/providers {"query":""}
+ GET /api/auth/providers 200 in 25ms
+2026-05-01T09:15:02.005Z [Argus] [API] GET /api/auth/csrf {"query":""}
+ GET /api/auth/csrf 200 in 25ms
+2026-05-01T09:15:02.053Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
+Database client connected
+Database client connected
+2026-05-01T09:15:03.594Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/auth/callback/credentials 200 in 1598ms
+2026-05-01T09:15:03.680Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 51ms
+2026-05-01T09:15:04.633Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:15:04.634Z [Argus] [API] GET /api/settings {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:15:05.026Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:15:05.028Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:15:05.030Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:15:06.387Z [Argus] [Auth] NextAuth route initialized 
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:15:26.094Z [Argus] [API] GET /api/dashboard/stats 
+ GET /api/security-rating 200 in 21726ms
+ GET /api/ai/explain 200 in 22273ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /api/tools/performance?days=7 200 in 21816ms
+ GET /api/settings 200 in 22345ms
+ GET /api/dashboard/stats 200 in 21816ms
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+2026-05-01T09:15:27.048Z [Argus] [API] GET /api/dashboard/stats -> 200 
+2026-05-01T09:15:27.112Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:15:27.113Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:15:27.124Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+ GET /engagements 200 in 16320ms
+2026-05-01T09:15:28.425Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:15:28.465Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 44ms
+2026-05-01T09:15:28.488Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 35ms
+2026-05-01T09:15:28.686Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:15:28.687Z [Argus] [API] GET /api/engagements {"query":"?limit=10"}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/settings 200 in 363ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:15:30.587Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:15:31.977Z [Argus] [API] POST /api/engagement/create {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/engagements?limit=10 200 in 3469ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:15:32.774Z [Argus] [API] POST /api/engagement/create 
+ POST /api/engagement/create 200 in 834ms
+2026-05-01T09:15:33.648Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:15:33.649Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:15:33.650Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/findings {"query":"?limit=50"}
+2026-05-01T09:15:33.651Z [Argus] [API] GET /api/ws/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/poll {"query":"?limit=50"}
+2026-05-01T09:15:33.654Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/activities {"query":"?limit=50"}
+2026-05-01T09:15:33.655Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/dashboard/stats 200 in 1395ms
+ GET /api/ai/explain 200 in 1398ms
+ GET /api/settings 200 in 1396ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:15:36.531Z [Argus] [API] GET /api/dashboard/stats 
+2026-05-01T09:15:36.909Z [Argus] [API] GET /api/dashboard/stats -> 200 
+(node:99729) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Get scanner activities error: Error: NotFound: Engagement does not exist
+    at canAccessEngagement (webpack-internal:///(rsc)/./src/lib/authorization.ts:41:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async requireEngagementAccess (webpack-internal:///(rsc)/./src/lib/authorization.ts:51:21)
+    at async GET (webpack-internal:///(rsc)/./src/app/api/engagement/[id]/activities/route.ts:27:9)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+Polling endpoint error: Error: NotFound: Engagement does not exist
+    at canAccessEngagement (webpack-internal:///(rsc)/./src/lib/authorization.ts:41:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async requireEngagementAccess (webpack-internal:///(rsc)/./src/lib/authorization.ts:51:21)
+    at async GET (webpack-internal:///(rsc)/./src/app/api/ws/engagement/[id]/poll/route.ts:48:9)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+(node:99730) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-01T09:15:38.433Z [Argus] [API] GET /api/engagement/[id]/findings {"engagementId":"96d631c1-3556-4a1a-899f-5ac80c100d1d"}
+(node:99728) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-01T09:15:38.436Z [Argus] [Error] Get findings error:: Error: NotFound: Engagement does not exist
+2026-05-01T09:15:38.437Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/findings -> 500 
+ GET /auth/signin 200 in 465ms
+2026-05-01T09:18:27.581Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:18:27.614Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 45ms
+2026-05-01T09:18:27.653Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 45ms
+2026-05-01T09:18:28.944Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:18:29.287Z [Argus] [API] GET /api/auth/providers {"query":""}
+ GET /api/auth/providers 200 in 18ms
+2026-05-01T09:18:29.344Z [Argus] [API] GET /api/auth/csrf {"query":""}
+ GET /api/auth/csrf 200 in 33ms
+2026-05-01T09:18:29.403Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
+2026-05-01T09:18:30.494Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/auth/callback/credentials 200 in 1147ms
+2026-05-01T09:18:30.568Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 125ms
+2026-05-01T09:18:31.467Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:18:31.468Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:18:31.468Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:18:31.469Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:18:31.470Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:18:31.813Z [Argus] [API] GET /api/dashboard/stats 
+ GET /api/security-rating 200 in 443ms
+ GET /api/tools/performance?days=7 200 in 488ms
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+ GET /api/ai/explain 200 in 552ms
+ GET /api/settings 200 in 568ms
+2026-05-01T09:18:32.081Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 633ms
+2026-05-01T09:18:32.146Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:18:32.147Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:18:32.148Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:18:32.149Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:18:32.181Z [Argus] [API] POST /api/ai/test {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/security-rating 200 in 283ms
+2026-05-01T09:18:33.509Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:18:33.660Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/tools/performance?days=7 200 in 5761ms
+2026-05-01T09:18:37.956Z [Argus] [API] GET /api/dashboard/stats 
+ GET /api/ai/explain 200 in 6236ms
+ GET /api/settings 200 in 6283ms
+2026-05-01T09:18:38.457Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 4792ms
+ POST /api/ai/test 200 in 6334ms
+ GET /engagements 200 in 3947ms
+2026-05-01T09:18:40.413Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:18:40.439Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 31ms
+2026-05-01T09:18:40.520Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:18:40.535Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:18:40.536Z [Argus] [API] GET /api/engagements {"query":"?limit=10"}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/auth/session 200 in 166ms
+2026-05-01T09:18:42.325Z [Argus] [Auth] NextAuth route initialized 
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/settings 200 in 3468ms
+ GET /api/engagements?limit=10 200 in 3504ms
+2026-05-01T09:18:44.562Z [Argus] [API] POST /api/engagement/create {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:18:45.410Z [Argus] [API] POST /api/engagement/create 
+ POST /api/engagement/create 200 in 843ms
+2026-05-01T09:18:46.106Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/findings {"query":"?limit=50"}
+2026-05-01T09:18:46.111Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:18:46.112Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:18:46.165Z [Argus] [API] GET /api/ws/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/poll {"query":"?limit=50"}
+2026-05-01T09:18:46.166Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/activities {"query":"?limit=50"}
+2026-05-01T09:18:46.166Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/settings 200 in 127ms
+2026-05-01T09:18:46.310Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/timeline {"query":"?limit=100"}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-01T09:18:49.168Z [Argus] [API] GET /api/dashboard/stats 
+2026-05-01T09:18:49.227Z [Argus] [API] GET /api/engagement/[id]/findings {"engagementId":"96d631c1-3556-4a1a-899f-5ac80c100d1d"}
+Polling endpoint error: Error: NotFound: Engagement does not exist
+    at canAccessEngagement (webpack-internal:///(rsc)/./src/lib/authorization.ts:41:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async requireEngagementAccess (webpack-internal:///(rsc)/./src/lib/authorization.ts:51:21)
+    at async GET (webpack-internal:///(rsc)/./src/app/api/ws/engagement/[id]/poll/route.ts:48:9)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+ GET /api/ws/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/poll?limit=50 404 in 3327ms
+Get scanner activities error: Error: NotFound: Engagement does not exist
+    at canAccessEngagement (webpack-internal:///(rsc)/./src/lib/authorization.ts:41:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async requireEngagementAccess (webpack-internal:///(rsc)/./src/lib/authorization.ts:51:21)
+    at async GET (webpack-internal:///(rsc)/./src/app/api/engagement/[id]/activities/route.ts:27:9)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+ GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/activities?limit=50 404 in 3476ms
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+ GET /api/dashboard/stats 200 in 3489ms
+ GET /api/ai/explain 200 in 3527ms
+ GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/timeline?limit=100 200 in 3322ms
+ GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/findings?limit=50 200 in 3508ms
+2026-05-01T09:18:49.685Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d {"query":""}
+2026-05-01T09:18:49.688Z [Argus] [API] GET /api/dashboard/stats -> 200 
+2026-05-01T09:18:49.703Z [Argus] [Error] Get findings error:: Error: NotFound: Engagement does not exist
+2026-05-01T09:18:49.703Z [Argus] [API] GET /api/engagement/96d631c1-3556-4a1a-899f-5ac80c100d1d/findings -> 500 
+(node:99908) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:99907) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:99906) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:99905) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Get timeline error: Error: NotFound: Engagement does not exist
+    at canAccessEngagement (webpack-internal:///(rsc)/./src/lib/authorization.ts:41:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async requireEngagementAccess (webpack-internal:///(rsc)/./src/lib/authorization.ts:51:21)
+    at async GET (webpack-internal:///(rsc)/./src/app/api/engagement/[id]/timeline/route.ts:27:9)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:57228
+    at async eT.execute (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:46851)
+    at async eT.handle (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/compiled/next-server/app-route.runtime.dev.js:6:58760)
+    at async doRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1496:28)
+    at async DevServer.renderPageComponent (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:1962:32)
+    at async DevServer.pipeImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/next-server.js:272:17)
+    at async DevServer.handleRequestImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/base-server.js:818:17)
+    at async /Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:179:21)
+    at async handleRequest (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:359:24)
+    at async requestHandlerImpl (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/router-server.js:383:13)
+    at async Server.requestListener (/Users/mac/Documents/Argus-/argus-platform/node_modules/next/dist/server/lib/start-server.js:141:13)
+ GET /auth/signin 200 in 517ms
+2026-05-01T09:20:06.717Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:20:06.734Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 22ms
+2026-05-01T09:20:06.749Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 49ms
+2026-05-01T09:20:08.372Z [Argus] [API] GET /api/auth/providers {"query":""}
+ GET /api/auth/providers 200 in 22ms
+2026-05-01T09:20:08.442Z [Argus] [API] GET /api/auth/csrf {"query":""}
+ GET /api/auth/csrf 200 in 17ms
+2026-05-01T09:20:08.481Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
+2026-05-01T09:20:08.883Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/auth/callback/credentials 200 in 1011ms
+2026-05-01T09:20:09.511Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 74ms
+2026-05-01T09:20:10.557Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:20:10.557Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:20:10.558Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:20:10.559Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:20:10.559Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:20:10.793Z [Argus] [API] GET /api/dashboard/stats 
+ GET /api/ai/explain 200 in 421ms
+2026-05-01T09:20:11.028Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/security-rating 200 in 466ms
+2026-05-01T09:20:11.066Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:20:11.068Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 507ms
+ GET /api/settings 200 in 515ms
+2026-05-01T09:20:11.108Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:20:11.109Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 81ms
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+ GET /api/security-rating 200 in 245ms
+ GET /api/tools/performance?days=7 200 in 775ms
+2026-05-01T09:20:11.400Z [Argus] [API] GET /api/dashboard/stats 
+2026-05-01T09:20:11.409Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:20:11.410Z [Argus] [API] POST /api/ai/test {"query":""}
+2026-05-01T09:20:11.475Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 364ms
+ GET /api/settings 200 in 457ms
+2026-05-01T09:20:11.616Z [Argus] [API] POST /api/ai/test {"query":""}
+ GET /api/tools/performance?days=7 200 in 227ms
+2026-05-01T09:20:12.081Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/ai/test 502 in 845ms
+ POST /api/ai/test 502 in 1037ms
+ GET /engagements 200 in 453ms
+2026-05-01T09:20:15.462Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 26ms
+2026-05-01T09:20:15.534Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 13ms
+2026-05-01T09:20:15.744Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:20:15.826Z [Argus] [API] GET /api/engagements {"query":"?limit=10"}
+ GET /api/settings 200 in 126ms
+ GET /api/engagements?limit=10 200 in 101ms
+2026-05-01T09:20:16.884Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:20:18.341Z [Argus] [API] POST /api/engagement/create {"query":""}
+2026-05-01T09:20:18.379Z [Argus] [API] POST /api/engagement/create 
+2026-05-01T09:20:20.513Z [Argus] [API] POST /api/engagement/create -> 200 {"engagementId":"f661d8e9-6b03-4bda-adb7-6761eeff2adf","scanType":"repo"}
+ POST /api/engagement/create 200 in 2171ms
+2026-05-01T09:20:21.031Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:20:21.032Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 98ms
+ GET /api/settings 200 in 110ms
+2026-05-01T09:20:21.226Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/findings {"query":"?limit=50"}
+2026-05-01T09:20:21.227Z [Argus] [API] GET /api/ws/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/poll {"query":"?limit=50"}
+2026-05-01T09:20:21.228Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/activities {"query":"?limit=50"}
+2026-05-01T09:20:21.237Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:20:21.267Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:20:21.439Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:20:21.479Z [Argus] [API] GET /api/engagement/[id]/findings {"engagementId":"f661d8e9-6b03-4bda-adb7-6761eeff2adf"}
+2026-05-01T09:20:21.666Z [Argus] [API] GET /api/dashboard/stats 
+ GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/activities?limit=50 200 in 522ms
+2026-05-01T09:20:21.928Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/timeline {"query":"?limit=100"}
+2026-05-01T09:20:22.097Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/findings -> 200 {"total":0,"returned":0}
+ GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/findings?limit=50 200 in 869ms
+2026-05-01T09:20:22.119Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+Database client connected
+2026-05-01T09:20:22.379Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 1148ms
+ GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/timeline?limit=100 200 in 497ms
+ GET /api/security-rating 200 in 1178ms
+ GET /api/tools/performance?days=7 200 in 1001ms
+2026-05-01T09:20:23.509Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:20:23.511Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:20:23.528Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/activities {"query":"?limit=50"}
+2026-05-01T09:20:23.756Z [Argus] [API] POST /api/ai/test {"query":""}
+Error: aborted
+    at abortIncoming (node:_http_server:845:17)
+    at socketOnClose (node:_http_server:839:3)
+    at Socket.emit (node:events:520:35)
+    at TCP.<anonymous> (node:net:346:12) {
+  code: 'ECONNRESET'
+}
+ ⨯ uncaughtException: Error: aborted
+    at abortIncoming (node:_http_server:845:17)
+    at socketOnClose (node:_http_server:839:3)
+    at Socket.emit (node:events:520:35)
+    at TCP.<anonymous> (node:net:346:12) {
+  code: 'ECONNRESET'
+}
+ ⨯ uncaughtException: Error: aborted
+    at abortIncoming (node:_http_server:845:17)
+    at socketOnClose (node:_http_server:839:3)
+    at Socket.emit (node:events:520:35)
+    at TCP.<anonymous> (node:net:346:12) {
+  code: 'ECONNRESET'
+}
+ GET /api/ws/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf/poll?limit=50 200 in 2866ms
+(node:99991) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:99994) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:99990) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:99992) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+(node:99403) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [BoundPool]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:99403) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 connect listeners added to [BoundPool]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+2026-05-01T09:20:27.869Z [Argus] [API] GET /api/engagement/[id] {"engagementId":"f661d8e9-6b03-4bda-adb7-6761eeff2adf"}
+(node:116) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-01T09:20:27.904Z [Argus] [API] GET /api/engagement/f661d8e9-6b03-4bda-adb7-6761eeff2adf -> 200 
+ GET /auth/signin 200 in 346ms
+2026-05-01T09:29:06.137Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-01T09:29:06.179Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 39ms
+2026-05-01T09:29:06.213Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 33ms
+2026-05-01T09:29:07.459Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:29:07.808Z [Argus] [API] GET /api/auth/providers {"query":""}
+ GET /api/auth/providers 200 in 20ms
+2026-05-01T09:29:07.841Z [Argus] [API] GET /api/auth/csrf {"query":""}
+ GET /api/auth/csrf 200 in 16ms
+2026-05-01T09:29:07.868Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
+2026-05-01T09:29:08.848Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/auth/callback/credentials 200 in 1059ms
+2026-05-01T09:29:08.940Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 32ms
+2026-05-01T09:29:09.746Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-01T09:29:09.748Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:29:09.758Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:29:09.793Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-01T09:29:09.795Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-01T09:29:10.015Z [Argus] [API] GET /api/dashboard/stats 
+2026-05-01T09:29:10.096Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 338ms
+ GET /api/ai/explain 200 in 464ms
+ GET /api/tools/performance?days=7 200 in 462ms
+ GET /api/security-rating 200 in 456ms
+ GET /api/settings 200 in 515ms
+2026-05-01T09:29:10.312Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-01T09:29:10.313Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-01T09:29:10.475Z [Argus] [API] POST /api/engagement/create {"query":""}
+2026-05-01T09:29:10.503Z [Argus] [API] POST /api/engagement/create 
+2026-05-01T09:29:10.565Z [Argus] [Auth] NextAuth route initialized 
+2026-05-01T09:29:11.825Z [Argus] [API] POST /api/engagement/create -> 200 {"engagementId":"6b494fec-1859-4cb5-be84-b32bee396ca6","scanType":"repo"}
+ POST /api/engagement/create 200 in 1349ms

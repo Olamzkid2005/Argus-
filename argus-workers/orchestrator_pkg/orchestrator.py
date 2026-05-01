@@ -40,6 +40,7 @@ from .recon import execute_recon_tools, summarize_recon_findings
 from .scan import execute_scan_tools
 from .repo_scan import execute_repo_scan
 from tasks.utils import save_recon_context, load_recon_context
+from models.recon_context import ReconContext
 
 logger = logging.getLogger(__name__)
 
@@ -654,15 +655,100 @@ class Orchestrator:
 
         repo_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         custom_rules_path = job.get("custom_rules_path")
-        findings = execute_repo_scan(self, repo_url, job.get("budget", {}), repo_aggressiveness, custom_rules_path)
+        try:
+            findings = execute_repo_scan(self, repo_url, job.get("budget", {}), repo_aggressiveness, custom_rules_path)
+        except RuntimeError as e:
+            err_str = str(e)
+            if err_str.startswith("REPO_CLONE_FAILED:"):
+                _, failed_url, reason = err_str.split(":", 2)
+                logger.error(f"Repository clone failed for {failed_url}: {reason}")
+                self.ws_publisher.publish_state_transition(
+                    engagement_id=self.engagement_id,
+                    from_state="recon",
+                    to_state="failed",
+                    reason=f"Repository clone failed: {reason[:200]}"
+                )
+                return {
+                    "phase": "repo_scan",
+                    "status": "failed",
+                    "findings_count": 0,
+                    "next_state": "failed",
+                    "trace_id": get_trace_id(),
+                }
+            raise
 
         findings_count = len(findings)
         self._save_findings(findings, source_tool_key="tool")
 
+        next_state = "scanning"
+        if findings_count == 0:
+            logger.info(f"Repository scan completed with no findings for {repo_url}")
+
+        # Build recon context from repo findings for LLM agent
+        if findings_count > 0:
+            try:
+                vuln_types = list(set(f.get("type", "UNKNOWN") for f in findings))
+                severity_breakdown = {}
+                critical_files = []
+                has_secrets = False
+                dep_vulns = 0
+                for f in findings:
+                    sev = f.get("severity", "INFO")
+                    severity_breakdown[sev] = severity_breakdown.get(sev, 0) + 1
+                    if sev in ("CRITICAL", "HIGH"):
+                        fp = f.get("file_path") or f.get("endpoint", "")
+                        if fp and fp not in critical_files:
+                            critical_files.append(fp)
+                    if f.get("type") in ("EXPOSED_SECRET", "COMMITTED_SECRET", "HARDCODED_SECRET"):
+                        has_secrets = True
+                    if f.get("type") == "DEPENDENCY_VULNERABILITY":
+                        dep_vulns += 1
+
+                # Detect languages from findings
+                lang_extensions = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript",
+                                   ".java": "Java", ".go": "Go", ".rb": "Ruby", ".php": "PHP",
+                                   ".rs": "Rust", ".cs": "C#", ".swift": "Swift"}
+                detected_langs = set()
+                for f in findings:
+                    fp = f.get("file_path") or f.get("endpoint", "")
+                    ext = os.path.splitext(fp)[1]
+                    if ext in lang_extensions:
+                        detected_langs.add(lang_extensions[ext])
+
+                # Detect frameworks from findings content
+                frameworks = []
+                for f in findings:
+                    fp = (f.get("file_path") or f.get("endpoint", "")).lower()
+                    if "flask" in fp or "django" in fp: frameworks.append("Django")
+                    elif "express" in fp or "nestjs" in fp: frameworks.append("Express")
+                    elif "spring" in fp: frameworks.append("Spring")
+                    elif "laravel" in fp: frameworks.append("Laravel")
+                    elif "rails" in fp: frameworks.append("Rails")
+                    elif "fastapi" in fp: frameworks.append("FastAPI")
+
+                ctx = ReconContext(
+                    target_url=repo_url,
+                    scan_type="repo",
+                    repo_url=repo_url,
+                    findings_count=findings_count,
+                    repo_clone_success=True,
+                    languages_detected=sorted(detected_langs),
+                    vulnerability_types=sorted(set(vuln_types)),
+                    severity_breakdown=severity_breakdown,
+                    critical_files=critical_files[:20],
+                    frameworks_detected=list(set(frameworks)),
+                    has_hardcoded_secrets=has_secrets,
+                    dependency_vulns_count=dep_vulns,
+                )
+                save_recon_context(self.engagement_id, ctx)
+                logger.info(f"Saved repo recon context for {self.engagement_id}: {len(detected_langs)} languages, {len(vuln_types)} vuln types")
+            except Exception as e:
+                logger.warning(f"Failed to build repo recon context (non-fatal): {e}")
+
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id,
             from_state="created",
-            to_state="scanning",
+            to_state=next_state,
             reason="Repository scan completed — auto-advancing to web scan"
         )
 
@@ -670,7 +756,7 @@ class Orchestrator:
             "phase": "repo_scan",
             "status": "completed",
             "findings_count": findings_count,
-            "next_state": "scanning",
+            "next_state": next_state,
             "trace_id": get_trace_id(),
         }
 

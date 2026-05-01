@@ -16,6 +16,7 @@ import {
 import {
   Activity,
   Shield,
+  Globe,
   Zap,
   Clock,
   Loader2,

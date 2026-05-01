@@ -247,9 +247,10 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: Dict, aggressiveness:
         )
 
         if clone_result.returncode != 0:
-            logger.warning(f"Failed to clone repo {repo_url}: {clone_result.stderr}")
-            _emit("git", f"Clone failed: {clone_result.stderr[:200]}", "failed")
-            return []
+            err_msg = clone_result.stderr[:500] if clone_result.stderr else "Unknown clone error"
+            logger.warning(f"Failed to clone repo {repo_url}: {err_msg}")
+            _emit("git", f"Clone failed: {err_msg[:200]}", "failed")
+            raise RuntimeError(f"REPO_CLONE_FAILED:{repo_url}:{err_msg}")
 
         _emit("git", f"Cloned repository ({'shallow' if clone_depth else 'full'} clone)", "completed")
 

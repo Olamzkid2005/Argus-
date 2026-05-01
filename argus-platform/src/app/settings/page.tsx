@@ -32,6 +32,9 @@ import {
   Search,
   Wand2,
   Brain,
+  Bell,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 
@@ -174,6 +177,11 @@ export default function SettingsPage() {
     limit: 0,
     percent: 0,
   });
+  const [webhooks, setWebhooks] = useState<{ id: string; webhook_url: string; events: string[]; created_at: string; last_triggered: string | null }[]>([]);
+  const [showWebhookForm, setShowWebhookForm] = useState(false);
+  const [newWebhookUrl, setNewWebhookUrl] = useState("");
+  const [isAddingWebhook, setIsAddingWebhook] = useState(false);
+  const [webhookEvents, setWebhookEvents] = useState<string[]>(["scan.completed", "finding.critical"]);
 
   // Track Chrome tab memory usage (estimated from JS heap)
   const JS_HEAP_MULTIPLIER = 2.5; // Rough estimate: JS heap is ~40% of total tab memory
@@ -228,6 +236,11 @@ export default function SettingsPage() {
           llm_payload_generation_enabled: "true",
           ...data.settings,
         });
+      }
+      const whRes = await fetch("/api/webhooks");
+      if (whRes.ok) {
+        const whData = await whRes.json();
+        setWebhooks(whData.webhooks || []);
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -804,6 +817,136 @@ export default function SettingsPage() {
                 <LogOut size={14} />
                 Revoke Access
               </button>
+            </div>
+          </motion.div>
+
+          {/* Webhooks Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                <Bell className="h-5 w-5 text-cyan-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  Webhook Notifications
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">Send events to external services</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {webhooks.length === 0 && !showWebhookForm && (
+                <div className="py-4 text-center text-[11px] font-mono text-on-surface-variant/40 uppercase tracking-widest">
+                  No webhooks configured
+                </div>
+              )}
+
+              {webhooks.map((wh) => (
+                <div
+                  key={wh.id}
+                  className="flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-on-surface font-mono truncate">{wh.webhook_url}</div>
+                    <div className="text-[10px] text-on-surface-variant mt-0.5">
+                      Events: {(wh.events || []).join(", ") || "all"}
+                      {wh.last_triggered && ` · Last: ${new Date(wh.last_triggered).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch(`/api/webhooks?id=${wh.id}`, { method: "DELETE" });
+                      if (res.ok) {
+                        setWebhooks((prev) => prev.filter((w) => w.id !== wh.id));
+                      }
+                    }}
+                    className="p-1.5 text-on-surface-variant hover:text-error transition-colors shrink-0"
+                    title="Delete webhook"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+
+              {showWebhookForm && (
+                <div className="space-y-3 pt-2">
+                  <input
+                    type="url"
+                    value={newWebhookUrl}
+                    onChange={(e) => setNewWebhookUrl(e.target.value)}
+                    placeholder="https://hooks.example.com/notify"
+                    className="w-full px-3 py-2 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {["scan.completed", "scan.started", "finding.critical", "finding.high", "engagement.created"].map((ev) => (
+                      <button
+                        key={ev}
+                        onClick={() => {
+                          setWebhookEvents((prev) =>
+                            prev.includes(ev) ? prev.filter((e) => e !== ev) : [...prev, ev]
+                          );
+                        }}
+                        className={`px-2 py-1 text-[9px] font-bold uppercase tracking-widest rounded border transition-all ${
+                          webhookEvents.includes(ev)
+                            ? "bg-primary/10 text-primary border-primary/30"
+                            : "bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant border-outline-variant dark:border-[#ffffff08]"
+                        }`}
+                      >
+                        {ev}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!newWebhookUrl.trim()) return;
+                        setIsAddingWebhook(true);
+                        try {
+                          const res = await fetch("/api/webhooks", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ webhook_url: newWebhookUrl, events: webhookEvents }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setWebhooks((prev) => [...prev, { id: data.webhook_id, webhook_url: newWebhookUrl, events: webhookEvents, created_at: new Date().toISOString(), last_triggered: null }]);
+                            setNewWebhookUrl("");
+                            setShowWebhookForm(false);
+                          }
+                        } finally {
+                          setIsAddingWebhook(false);
+                        }
+                      }}
+                      disabled={isAddingWebhook || !newWebhookUrl.trim()}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-primary/90 transition-all disabled:opacity-50"
+                    >
+                      {isAddingWebhook ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                      Add Webhook
+                    </button>
+                    <button
+                      onClick={() => { setShowWebhookForm(false); setNewWebhookUrl(""); }}
+                      className="px-4 py-2 text-[10px] font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!showWebhookForm && (
+                <button
+                  onClick={() => setShowWebhookForm(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 border border-dashed border-outline-variant text-on-surface-variant text-[10px] font-bold uppercase tracking-widest rounded-lg hover:border-primary/30 hover:text-primary transition-all w-full justify-center"
+                >
+                  <Plus size={12} />
+                  Add Webhook
+                </button>
+              )}
             </div>
           </motion.div>
 

@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { log } from "@/lib/logger";
 import {
   Activity,
+  Shield,
   ShieldAlert,
   Globe,
   Clock,
@@ -376,6 +377,7 @@ export default function DashboardPage() {
   } | null>(null);
   const [recentEngagements, setRecentEngagements] = useState<any[]>([]);
   const [dbFindings, setDbFindings] = useState<any[]>([]);
+  const [securityRating, setSecurityRating] = useState<{ rating: number; label: string; color: string } | null>(null);
   const [toolMetrics, setToolMetrics] = useState<any[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
   const accessDeniedNotifiedRef = useRef(false);
@@ -704,6 +706,21 @@ export default function DashboardPage() {
     fetchStats();
   }, [status]);
 
+  // Fetch security rating
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const fetchRating = async () => {
+      try {
+        const res = await fetch("/api/security-rating");
+        if (res.ok) {
+          const data = await res.json();
+          setSecurityRating({ rating: data.rating, label: data.label, color: data.color });
+        }
+      } catch {}
+    };
+    fetchRating();
+  }, [status]);
+
   // Fetch tool performance metrics
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -949,6 +966,12 @@ export default function DashboardPage() {
       value: dbStats?.criticalCount ?? 0,
       icon: Globe,
       color: "#BA1A1A",
+    },
+    {
+      label: "Security Rating",
+      value: securityRating ? `${securityRating.rating}%` : "—",
+      icon: Shield,
+      color: securityRating?.color || "#A78BFA",
     },
     {
       label: "Verified",
@@ -1200,7 +1223,7 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {/* ── Stats Grid ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {stats.map((s, i) => (
             <StatCard key={s.label} {...s} index={i} />
           ))}

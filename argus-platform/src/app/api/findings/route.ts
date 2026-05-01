@@ -42,7 +42,12 @@ export async function GET(req: NextRequest) {
         JOIN engagements e ON f.engagement_id = e.id
         WHERE e.org_id = $1
       `;
-      const params: unknown[] = [session.user.orgId];
+      const orgId = session.user.orgId || '';
+      if (!orgId) {
+        log.apiEnd('GET', '/api/findings', 400, { error: 'No org ID in session' });
+        return createErrorResponse('No organization ID in session', ErrorCodes.VALIDATION_ERROR, undefined, 400);
+      }
+      const params: unknown[] = [orgId];
       let paramIndex = 2;
 
       if (severity && severity !== "ALL") {
@@ -94,7 +99,7 @@ export async function GET(req: NextRequest) {
         "SELECT COUNT(*)",
       );
       const countResult = await client.query(countQuery, params);
-      const total = parseInt(countResult.rows[0].count);
+      const total = countResult.rows[0] ? parseInt(countResult.rows[0].count) : 0;
 
       // Build dynamic ORDER BY clause based on sort parameters
       let orderClause = "";
@@ -162,8 +167,8 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    log.error("Findings API error:", error);
     const err = error as Error;
+    log.error("Findings API error:", err.message || String(err));
     if (err.message === "Unauthorized") {
       return createErrorResponse(
         "Unauthorized",
@@ -295,8 +300,8 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    log.error("Findings bulk operation error:", error);
     const err = error as Error;
+    log.error("Findings bulk operation error:", err.message || String(err));
     if (err.message === "Unauthorized") {
       return createErrorResponse(
         "Unauthorized",

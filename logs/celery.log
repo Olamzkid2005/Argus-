@@ -1,10 +1,10 @@
  
- -------------- celery@MacBook-Air.local v5.6.3 (recovery)
+ -------------- celery@MacBook-Air v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-04-27 09:20:44
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-01 10:12:26
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x107f69400
+- ** ---------- .> app:         argus_workers:0x10a3c9400
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -19,7 +19,6 @@
                 .> scan             exchange=scan(direct) key=scan
 
 [tasks]
-  . tasks.analyze.evaluate_findings
   . tasks.analyze.run_analysis
   . tasks.asset_discovery.run_asset_discovery
   . tasks.asset_discovery.update_asset_risk_scores
@@ -45,218 +44,235 @@
   . tasks.scan.run_scan
   . tasks.security.run_self_scan
 
-[2026-04-27 09:20:46,803: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-04-27 09:20:46,812: INFO/MainProcess] mingle: searching for neighbors
-[2026-04-27 09:20:47,877: INFO/MainProcess] mingle: all alone
-[2026-04-27 09:20:47,996: INFO/MainProcess] celery@MacBook-Air.local ready.
-[2026-04-27 09:20:48,042: INFO/MainProcess] Task tasks.health.ping[8bebf486-e9ae-45e6-a518-27ee17665cee] received
-[2026-04-27 09:20:48,388: INFO/ForkPoolWorker-2] Task 8bebf486-e9ae-45e6-a518-27ee17665cee succeeded
-[2026-04-27 09:20:48,389: INFO/ForkPoolWorker-2] Task tasks.health.ping[8bebf486-e9ae-45e6-a518-27ee17665cee] succeeded in 0.33924663600191707s: {'status': 'ok', 'worker': 'celery@MacBook-Air.local', 'pid': 87144, 'timestamp': '2026-04-27T08:20:48.310648+00:00'}
-[2026-04-27 10:28:56,507: INFO/MainProcess] Task tasks.recon.run_recon[a68d4546-0a4b-4d75-8ff0-59cc56c3fc6c] received
-[2026-04-27 10:28:59,421: WARNING/ForkPoolWorker-2] [9899b536] job_started: Job started: recon
-[2026-04-27 10:29:01,420: INFO/ForkPoolWorker-2] LLM payload generator initialized
-[2026-04-27 10:29:01,466: INFO/ForkPoolWorker-2] Loaded tool definition: arjun
-[2026-04-27 10:29:01,479: INFO/ForkPoolWorker-2] Loaded tool definition: katana
-[2026-04-27 10:29:01,486: INFO/ForkPoolWorker-2] Loaded tool definition: semgrep
-[2026-04-27 10:29:01,491: INFO/ForkPoolWorker-2] Loaded tool definition: trivy
-[2026-04-27 10:29:01,495: INFO/ForkPoolWorker-2] Loaded tool definition: sqlmap
-[2026-04-27 10:29:01,507: INFO/ForkPoolWorker-2] Loaded tool definition: amass
-[2026-04-27 10:29:01,513: INFO/ForkPoolWorker-2] Loaded tool definition: ffuf
-[2026-04-27 10:29:01,520: INFO/ForkPoolWorker-2] Loaded tool definition: gau
-[2026-04-27 10:29:01,526: INFO/ForkPoolWorker-2] Loaded tool definition: nuclei
-[2026-04-27 10:29:01,528: INFO/ForkPoolWorker-2] Loaded tool definition: waybackurls
-[2026-04-27 10:29:01,532: INFO/ForkPoolWorker-2] Loaded tool definition: testssl
-[2026-04-27 10:29:01,540: INFO/ForkPoolWorker-2] Loaded tool definition: gospider
-[2026-04-27 10:29:01,546: INFO/ForkPoolWorker-2] Loaded tool definition: naabu
-[2026-04-27 10:29:01,552: INFO/ForkPoolWorker-2] Loaded tool definition: bandit
-[2026-04-27 10:29:01,557: INFO/ForkPoolWorker-2] Loaded tool definition: gitleaks
-[2026-04-27 10:29:01,560: INFO/ForkPoolWorker-2] Loaded tool definition: jwt_tool
-[2026-04-27 10:29:01,570: INFO/ForkPoolWorker-2] Loaded tool definition: nmap
-[2026-04-27 10:29:01,577: INFO/ForkPoolWorker-2] Loaded tool definition: pip-audit
-[2026-04-27 10:29:01,585: INFO/ForkPoolWorker-2] Loaded tool definition: wpscan
-[2026-04-27 10:29:01,588: INFO/ForkPoolWorker-2] Loaded tool definition: commix
-[2026-04-27 10:29:01,592: INFO/ForkPoolWorker-2] Loaded tool definition: nikto
-[2026-04-27 10:29:01,596: INFO/ForkPoolWorker-2] Loaded tool definition: dalfox
-[2026-04-27 10:29:01,602: INFO/ForkPoolWorker-2] Loaded tool definition: whatweb
-[2026-04-27 10:29:01,607: INFO/ForkPoolWorker-2] Loaded tool definition: httpx
-[2026-04-27 10:29:01,630: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: recon
-[2026-04-27 10:29:07,244: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: httpx
-[2026-04-27 10:29:07,246: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 4986ms
-[2026-04-27 10:29:24,175: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: katana
-[2026-04-27 10:29:24,176: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 16395ms
-[2026-04-27 10:29:24,249: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: katana
-[2026-04-27 10:29:24,251: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 70ms
-[2026-04-27 10:29:51,337: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: ffuf
-[2026-04-27 10:29:51,341: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 26736ms
-[2026-04-27 10:29:51,349: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: ffuf
-[2026-04-27 10:29:51,349: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 6ms
-[2026-04-27 10:29:52,367: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: amass
-[2026-04-27 10:29:52,371: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 771ms
-[2026-04-27 10:30:01,158: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: naabu
-[2026-04-27 10:30:01,159: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 8693ms
-[2026-04-27 10:30:01,162: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: naabu
-[2026-04-27 10:30:01,163: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 3ms
-[2026-04-27 10:30:14,953: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: whatweb
-[2026-04-27 10:30:14,954: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 13512ms
-[2026-04-27 10:31:53,350: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: nikto
-[2026-04-27 10:31:53,354: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 89863ms
-[2026-04-27 10:31:53,356: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: nikto
-[2026-04-27 10:31:53,356: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 2ms
-[2026-04-27 10:33:17,349: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: gau
-[2026-04-27 10:33:17,350: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 83787ms
-[2026-04-27 10:33:17,355: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: gau
-[2026-04-27 10:33:17,355: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 4ms
-[2026-04-27 10:33:52,794: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: waybackurls
-[2026-04-27 10:33:52,797: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 35332ms
-[2026-04-27 10:33:52,799: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: waybackurls
-[2026-04-27 10:33:52,800: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 1ms
-[2026-04-27 10:33:56,729: WARNING/MainProcess] Soft time limit (300s) exceeded for tasks.recon.run_recon[a68d4546-0a4b-4d75-8ff0-59cc56c3fc6c]
-[2026-04-27 10:33:56,737: WARNING/ForkPoolWorker-2] Asset discovery skipped for cb63846d-4b1c-43a3-81f1-d6aa4882fded: SoftTimeLimitExceeded()
-[2026-04-27 10:33:56,907: INFO/MainProcess] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] received
-[2026-04-27 10:33:56,913: INFO/ForkPoolWorker-2] Task a68d4546-0a4b-4d75-8ff0-59cc56c3fc6c succeeded
-[2026-04-27 10:33:56,914: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[a68d4546-0a4b-4d75-8ff0-59cc56c3fc6c] succeeded in 300.17627562599955s: {'phase': 'recon', 'status': 'completed', 'findings_count': 25, 'next_state': 'scanning', 'trace_id': None}
-[2026-04-27 10:33:58,525: WARNING/ForkPoolWorker-4] [9899b536] job_started: Job started: scan
-[2026-04-27 10:33:58,645: INFO/ForkPoolWorker-4] LLM payload generator initialized
-[2026-04-27 10:33:58,655: INFO/ForkPoolWorker-4] Loaded tool definition: arjun
-[2026-04-27 10:33:58,662: INFO/ForkPoolWorker-4] Loaded tool definition: katana
-[2026-04-27 10:33:58,666: INFO/ForkPoolWorker-4] Loaded tool definition: semgrep
-[2026-04-27 10:33:58,670: INFO/ForkPoolWorker-4] Loaded tool definition: trivy
-[2026-04-27 10:33:58,677: INFO/ForkPoolWorker-4] Loaded tool definition: sqlmap
-[2026-04-27 10:33:58,684: INFO/ForkPoolWorker-4] Loaded tool definition: amass
-[2026-04-27 10:33:58,690: INFO/ForkPoolWorker-4] Loaded tool definition: ffuf
-[2026-04-27 10:33:58,692: INFO/ForkPoolWorker-4] Loaded tool definition: gau
-[2026-04-27 10:33:58,697: INFO/ForkPoolWorker-4] Loaded tool definition: nuclei
-[2026-04-27 10:33:58,700: INFO/ForkPoolWorker-4] Loaded tool definition: waybackurls
-[2026-04-27 10:33:58,703: INFO/ForkPoolWorker-4] Loaded tool definition: testssl
-[2026-04-27 10:33:58,707: INFO/ForkPoolWorker-4] Loaded tool definition: gospider
-[2026-04-27 10:33:58,711: INFO/ForkPoolWorker-4] Loaded tool definition: naabu
-[2026-04-27 10:33:58,714: INFO/ForkPoolWorker-4] Loaded tool definition: bandit
-[2026-04-27 10:33:58,717: INFO/ForkPoolWorker-4] Loaded tool definition: gitleaks
-[2026-04-27 10:33:58,719: INFO/ForkPoolWorker-4] Loaded tool definition: jwt_tool
-[2026-04-27 10:33:58,722: INFO/ForkPoolWorker-4] Loaded tool definition: nmap
-[2026-04-27 10:33:58,725: INFO/ForkPoolWorker-4] Loaded tool definition: pip-audit
-[2026-04-27 10:33:58,728: INFO/ForkPoolWorker-4] Loaded tool definition: wpscan
-[2026-04-27 10:33:58,730: INFO/ForkPoolWorker-4] Loaded tool definition: commix
-[2026-04-27 10:33:58,731: INFO/ForkPoolWorker-4] Loaded tool definition: nikto
-[2026-04-27 10:33:58,735: INFO/ForkPoolWorker-4] Loaded tool definition: dalfox
-[2026-04-27 10:33:58,737: INFO/ForkPoolWorker-4] Loaded tool definition: whatweb
-[2026-04-27 10:33:58,743: INFO/ForkPoolWorker-4] Loaded tool definition: httpx
-[2026-04-27 10:33:58,750: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: scan
-[2026-04-27 10:33:58,957: INFO/ForkPoolWorker-4] Loaded 1 custom rule(s) for engagement cb63846d-4b1c-43a3-81f1-d6aa4882fded
-[2026-04-27 10:33:59,149: INFO/ForkPoolWorker-4] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
-[2026-04-27 10:38:55,011: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: nuclei
-[2026-04-27 10:38:55,014: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 295864ms
-[2026-04-27 10:38:55,016: WARNING/ForkPoolWorker-4] NUCLEI RESULT for https://preview.owasp-juice.shop/#/: success=True, returncode=0, stdout_len=4462, stderr=
-[2026-04-27 10:38:55,019: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: nuclei
-[2026-04-27 10:38:55,019: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 2ms
-[2026-04-27 10:38:55,019: WARNING/ForkPoolWorker-4] NUCLEI PARSED: 0 findings from 4462 bytes of output
-[2026-04-27 10:38:55,265: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: dalfox
-[2026-04-27 10:38:55,266: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 245ms
-[2026-04-27 10:38:55,267: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: dalfox
-[2026-04-27 10:38:55,268: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 0ms
-[2026-04-27 10:39:02,441: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: sqlmap
-[2026-04-27 10:39:02,442: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 7173ms
-[2026-04-27 10:39:10,822: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: arjun
-[2026-04-27 10:39:10,824: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 8375ms
-[2026-04-27 10:39:11,078: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: jwt_tool
-[2026-04-27 10:39:11,080: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 255ms
-[2026-04-27 10:39:11,409: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: commix
-[2026-04-27 10:39:11,410: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 328ms
-[2026-04-27 10:42:12,535: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: testssl
-[2026-04-27 10:42:12,538: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 181127ms
-[2026-04-27 10:42:12,559: INFO/ForkPoolWorker-4] Starting comprehensive web scan: https://preview.owasp-juice.shop/#
-[2026-04-27 10:42:14,566: INFO/ForkPoolWorker-4] Running parameter discovery
-[2026-04-27 10:42:14,872: INFO/ForkPoolWorker-4] Running parameter fuzzing
-[2026-04-27 10:42:46,947: INFO/ForkPoolWorker-4] Parameter fuzzing complete: 96 tests performed
-[2026-04-27 10:43:13,070: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:13,074: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:14,476: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:14,479: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:16,888: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:16,892: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:16,893: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:19,681: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:19,683: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:21,084: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:21,087: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:23,452: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:23,455: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:23,455: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:24,809: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:24,810: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:26,179: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:26,180: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:28,566: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:28,567: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:28,567: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:30,137: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:30,139: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:31,502: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:31,505: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:33,885: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:33,893: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:33,896: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:36,213: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:36,217: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:37,584: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:37,587: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:39,950: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:39,955: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:39,955: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:41,790: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:41,793: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:43,185: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:43,189: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:45,599: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:45,601: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:45,603: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:47,420: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:47,422: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 1 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:48,799: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:48,800: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 2 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:51,171: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
-[2026-04-27 10:43:51,175: WARNING/ForkPoolWorker-4] LLM chat_sync attempt 3 failed: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:51,175: WARNING/ForkPoolWorker-4] LLM payload generation failed: LLM call failed after 3 retries: Client error '401 Unauthorized' for url 'https://openrouter.ai/api/v1/chat/completions'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
-[2026-04-27 10:43:57,010: WARNING/MainProcess] Soft time limit (600s) exceeded for tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac]
-[2026-04-27 10:43:57,019: ERROR/ForkPoolWorker-4] check_cache_poisoning failed (non-fatal): SoftTimeLimitExceeded()
+[2026-05-01 10:12:27,230: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-05-01 10:12:27,247: INFO/MainProcess] mingle: searching for neighbors
+[2026-05-01 10:12:28,453: INFO/MainProcess] mingle: all alone
+[2026-05-01 10:12:28,602: INFO/MainProcess] celery@MacBook-Air ready.
+[2026-05-01 10:12:30,060: INFO/MainProcess] Task tasks.health.ping[52fc13b7-14d9-4ec7-9b9b-d98590f111db] received
+[2026-05-01 10:12:31,289: INFO/ForkPoolWorker-2] Task 52fc13b7-14d9-4ec7-9b9b-d98590f111db succeeded
+[2026-05-01 10:12:31,290: INFO/ForkPoolWorker-2] Task tasks.health.ping[52fc13b7-14d9-4ec7-9b9b-d98590f111db] succeeded in 0.3565787929983344s: {'status': 'ok', 'worker': 'celery@MacBook-Air', 'pid': 99479, 'timestamp': '2026-05-01T09:12:31.173290+00:00'}
+[2026-05-01 10:20:20,238: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[24b0e7d7-13c3-450e-919c-89043ae5f986] received
+[2026-05-01 10:20:21,051: WARNING/ForkPoolWorker-2] [f3b91e7a] job_started: Job started: repo_scan
+[2026-05-01 10:20:21,456: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:20:21,673: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-01 10:20:21,697: INFO/ForkPoolWorker-2] Loaded tool definition: alterx
+[2026-05-01 10:20:21,705: INFO/ForkPoolWorker-2] Loaded tool definition: arjun
+[2026-05-01 10:20:21,712: INFO/ForkPoolWorker-2] Loaded tool definition: katana
+[2026-05-01 10:20:21,717: INFO/ForkPoolWorker-2] Loaded tool definition: semgrep
+[2026-05-01 10:20:21,723: INFO/ForkPoolWorker-2] Loaded tool definition: trivy
+[2026-05-01 10:20:21,729: INFO/ForkPoolWorker-2] Loaded tool definition: sqlmap
+[2026-05-01 10:20:21,741: INFO/ForkPoolWorker-2] Loaded tool definition: amass
+[2026-05-01 10:20:21,748: INFO/ForkPoolWorker-2] Loaded tool definition: ffuf
+[2026-05-01 10:20:21,752: INFO/ForkPoolWorker-2] Loaded tool definition: gau
+[2026-05-01 10:20:21,759: INFO/ForkPoolWorker-2] Loaded tool definition: nuclei
+[2026-05-01 10:20:21,780: INFO/ForkPoolWorker-2] Loaded tool definition: waybackurls
+[2026-05-01 10:20:21,783: INFO/ForkPoolWorker-2] Loaded tool definition: testssl
+[2026-05-01 10:20:22,077: INFO/ForkPoolWorker-2] Loaded tool definition: gospider
+[2026-05-01 10:20:22,085: INFO/ForkPoolWorker-2] Loaded tool definition: naabu
+[2026-05-01 10:20:22,089: INFO/ForkPoolWorker-2] Loaded tool definition: bandit
+[2026-05-01 10:20:22,099: INFO/ForkPoolWorker-2] Loaded tool definition: gitleaks
+[2026-05-01 10:20:22,105: INFO/ForkPoolWorker-2] Loaded tool definition: jwt_tool
+[2026-05-01 10:20:22,112: INFO/ForkPoolWorker-2] Loaded tool definition: nmap
+[2026-05-01 10:20:22,117: INFO/ForkPoolWorker-2] Loaded tool definition: pip-audit
+[2026-05-01 10:20:22,126: INFO/ForkPoolWorker-2] Loaded tool definition: subfinder
+[2026-05-01 10:20:22,151: INFO/ForkPoolWorker-2] Loaded tool definition: wpscan
+[2026-05-01 10:20:22,333: INFO/ForkPoolWorker-2] Loaded tool definition: commix
+[2026-05-01 10:20:22,588: INFO/ForkPoolWorker-2] Loaded tool definition: nikto
+[2026-05-01 10:20:22,593: INFO/ForkPoolWorker-2] Loaded tool definition: dalfox
+[2026-05-01 10:20:22,601: INFO/ForkPoolWorker-2] Loaded tool definition: whatweb
+[2026-05-01 10:20:22,605: INFO/ForkPoolWorker-2] Loaded tool definition: httpx
+[2026-05-01 10:20:23,520: WARNING/ForkPoolWorker-2] [f3b91e7a] job_started: Job started: repo_scan
+[2026-05-01 10:20:44,684: WARNING/ForkPoolWorker-2] Failed to clone repo https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792: Cloning into '/var/folders/18/77k50l4d5d96qqly44kyw41w0000gn/T/argus_repo_scan_b8cslg4a'...
+warning: redirecting to https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/
+fatal: https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/info/refs not valid: is this a git repository?
+
+[2026-05-01 10:20:44,824: WARNING/ForkPoolWorker-2] Repo scan failed: REPO_CLONE_FAILED:https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792:Cloning into '/var/folders/18/77k50l4d5d96qqly44kyw41w0000gn/T/argus_repo_scan_b8cslg4a'...
+warning: redirecting to https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/
+fatal: https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/info/refs not valid: is this a git repository?
+
+[2026-05-01 10:20:44,865: INFO/ForkPoolWorker-2] Repository scan completed with no findings for https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792
+[2026-05-01 10:20:44,870: INFO/ForkPoolWorker-2] SBOM generation skipped for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf: no dependency data available (result keys: ['phase', 'status', 'findings_count', 'next_state', 'trace_id', 'sbom_paths'])
+[2026-05-01 10:20:44,892: INFO/MainProcess] Task tasks.scan.run_scan[8db6b36c-d658-48a7-8a76-826d2d670782] received
+[2026-05-01 10:20:44,935: INFO/ForkPoolWorker-2] Task 24b0e7d7-13c3-450e-919c-89043ae5f986 succeeded
+[2026-05-01 10:20:44,935: INFO/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[24b0e7d7-13c3-450e-919c-89043ae5f986] succeeded in 24.632823285995983s: {'phase': 'repo_scan', 'status': 'completed', 'findings_count': 0, 'next_state': 'scanning', 'trace_id': 'f3b91e7a-08da-4fb0-b853-6a2efa64ede1', 'sbom_paths': {}}
+[2026-05-01 10:20:45,175: WARNING/ForkPoolWorker-4] [f3b91e7a] job_started: Job started: scan
+[2026-05-01 10:20:45,211: INFO/ForkPoolWorker-4] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:20:45,217: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-05-01 10:20:45,221: INFO/ForkPoolWorker-4] Loaded tool definition: alterx
+[2026-05-01 10:20:45,223: INFO/ForkPoolWorker-4] Loaded tool definition: arjun
+[2026-05-01 10:20:45,225: INFO/ForkPoolWorker-4] Loaded tool definition: katana
+[2026-05-01 10:20:45,227: INFO/ForkPoolWorker-4] Loaded tool definition: semgrep
+[2026-05-01 10:20:45,229: INFO/ForkPoolWorker-4] Loaded tool definition: trivy
+[2026-05-01 10:20:45,232: INFO/ForkPoolWorker-4] Loaded tool definition: sqlmap
+[2026-05-01 10:20:45,234: INFO/ForkPoolWorker-4] Loaded tool definition: amass
+[2026-05-01 10:20:45,237: INFO/ForkPoolWorker-4] Loaded tool definition: ffuf
+[2026-05-01 10:20:45,239: INFO/ForkPoolWorker-4] Loaded tool definition: gau
+[2026-05-01 10:20:45,241: INFO/ForkPoolWorker-4] Loaded tool definition: nuclei
+[2026-05-01 10:20:45,242: INFO/ForkPoolWorker-4] Loaded tool definition: waybackurls
+[2026-05-01 10:20:45,244: INFO/ForkPoolWorker-4] Loaded tool definition: testssl
+[2026-05-01 10:20:45,247: INFO/ForkPoolWorker-4] Loaded tool definition: gospider
+[2026-05-01 10:20:45,250: INFO/ForkPoolWorker-4] Loaded tool definition: naabu
+[2026-05-01 10:20:45,251: INFO/ForkPoolWorker-4] Loaded tool definition: bandit
+[2026-05-01 10:20:45,256: INFO/ForkPoolWorker-4] Loaded tool definition: gitleaks
+[2026-05-01 10:20:45,258: INFO/ForkPoolWorker-4] Loaded tool definition: jwt_tool
+[2026-05-01 10:20:45,261: INFO/ForkPoolWorker-4] Loaded tool definition: nmap
+[2026-05-01 10:20:45,263: INFO/ForkPoolWorker-4] Loaded tool definition: pip-audit
+[2026-05-01 10:20:45,265: INFO/ForkPoolWorker-4] Loaded tool definition: subfinder
+[2026-05-01 10:20:45,273: INFO/ForkPoolWorker-4] Loaded tool definition: wpscan
+[2026-05-01 10:20:45,274: INFO/ForkPoolWorker-4] Loaded tool definition: commix
+[2026-05-01 10:20:45,284: INFO/ForkPoolWorker-4] Loaded tool definition: nikto
+[2026-05-01 10:20:45,287: INFO/ForkPoolWorker-4] Loaded tool definition: dalfox
+[2026-05-01 10:20:45,289: INFO/ForkPoolWorker-4] Loaded tool definition: whatweb
+[2026-05-01 10:20:45,291: INFO/ForkPoolWorker-4] Loaded tool definition: httpx
+[2026-05-01 10:20:45,347: WARNING/ForkPoolWorker-4] [f3b91e7a] job_started: Job started: scan
+[2026-05-01 10:20:45,421: INFO/ForkPoolWorker-4] Loaded 2 custom rule(s) for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf
+[2026-05-01 10:20:45,426: INFO/ForkPoolWorker-4] Running deterministic (no recon context) scan
+[2026-05-01 10:20:45,432: INFO/ForkPoolWorker-4] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
+[2026-05-01 10:25:45,905: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: nuclei
+[2026-05-01 10:25:45,968: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 300473ms
+[2026-05-01 10:25:45,969: WARNING/ForkPoolWorker-4] NUCLEI RESULT for https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792: success=False, returncode=-1, stdout_len=0, stderr=Tool execution timed out after 300 seconds
+[2026-05-01 10:25:46,271: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: dalfox
+[2026-05-01 10:25:46,290: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 301ms
+[2026-05-01 10:25:46,311: WARNING/ForkPoolWorker-4] [f3b91e7a] parser_completed: Parser completed: dalfox
+[2026-05-01 10:25:46,335: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN parsing: 21ms
+[2026-05-01 10:25:49,656: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: sqlmap
+[2026-05-01 10:25:49,672: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 3320ms
+[2026-05-01 10:26:11,018: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: arjun
+[2026-05-01 10:26:11,033: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 21345ms
+[2026-05-01 10:26:11,119: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: jwt_tool
+[2026-05-01 10:26:11,133: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 85ms
+[2026-05-01 10:26:11,221: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: commix
+[2026-05-01 10:26:11,237: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 88ms
+[2026-05-01 10:26:11,279: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: testssl
+[2026-05-01 10:26:11,292: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 41ms
+[2026-05-01 10:26:11,294: INFO/ForkPoolWorker-4] Starting comprehensive web scan: https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792
+[2026-05-01 10:26:24,059: INFO/ForkPoolWorker-4] Running parameter discovery
+[2026-05-01 10:26:30,421: INFO/ForkPoolWorker-4] Running parameter fuzzing
+[2026-05-01 10:28:30,424: WARNING/ForkPoolWorker-4] parameter_fuzzing exceeded 120s soft time limit
+[2026-05-01 10:29:11,675: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[aaba1dff-e71a-4480-82b7-81a0e30d9f06] received
+[2026-05-01 10:29:12,027: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: repo_scan
+[2026-05-01 10:29:12,102: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:29:12,106: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-01 10:29:12,169: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: repo_scan
+[2026-05-01 10:29:45,948: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: gitleaks
+[2026-05-01 10:29:45,962: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 241ms
+[2026-05-01 10:29:46,023: WARNING/ForkPoolWorker-2] [a700ce14] parser_completed: Parser completed: gitleaks
+[2026-05-01 10:29:46,038: WARNING/ForkPoolWorker-2] [a700ce14] SPAN parsing: 60ms
+[2026-05-01 10:29:47,210: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: trivy
+[2026-05-01 10:29:47,224: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 1140ms
+[2026-05-01 10:29:47,241: WARNING/ForkPoolWorker-2] [a700ce14] parser_completed: Parser completed: trivy
+[2026-05-01 10:29:47,257: WARNING/ForkPoolWorker-2] [a700ce14] SPAN parsing: 16ms
+[2026-05-01 10:29:47,952: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: bandit
+[2026-05-01 10:29:47,967: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 614ms
+[2026-05-01 10:29:48,091: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: snyk
+[2026-05-01 10:29:48,148: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 87ms
+[2026-05-01 10:29:59,261: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: semgrep
+[2026-05-01 10:29:59,315: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 9543ms
+[2026-05-01 10:29:59,375: WARNING/ForkPoolWorker-2] [a700ce14] parser_completed: Parser completed: semgrep
+[2026-05-01 10:29:59,392: WARNING/ForkPoolWorker-2] [a700ce14] SPAN parsing: 60ms
+[2026-05-01 10:30:00,114: INFO/ForkPoolWorker-2] Saved repo recon context for 6b494fec-1859-4cb5-be84-b32bee396ca6: 0 languages, 3 vuln types
+[2026-05-01 10:30:00,116: INFO/ForkPoolWorker-2] SBOM generation skipped for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6: no dependency data available (result keys: ['phase', 'status', 'findings_count', 'next_state', 'trace_id', 'sbom_paths'])
+[2026-05-01 10:30:00,121: INFO/MainProcess] Task tasks.scan.run_scan[e13cf12d-0c19-44e6-876c-a19586e530b5] received
+[2026-05-01 10:30:00,122: INFO/ForkPoolWorker-2] Task aaba1dff-e71a-4480-82b7-81a0e30d9f06 succeeded
+[2026-05-01 10:30:00,123: INFO/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[aaba1dff-e71a-4480-82b7-81a0e30d9f06] succeeded in 48.43898715398973s: {'phase': 'repo_scan', 'status': 'completed', 'findings_count': 26, 'next_state': 'scanning', 'trace_id': 'a700ce14-6cea-4e38-a236-bcaa74cb8159', 'sbom_paths': {}}
+[2026-05-01 10:30:00,441: WARNING/ForkPoolWorker-1] [a700ce14] job_started: Job started: scan
+[2026-05-01 10:30:00,470: INFO/ForkPoolWorker-1] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:30:00,475: INFO/ForkPoolWorker-1] LLM payload generator initialized
+[2026-05-01 10:30:00,480: INFO/ForkPoolWorker-1] Loaded tool definition: alterx
+[2026-05-01 10:30:00,483: INFO/ForkPoolWorker-1] Loaded tool definition: arjun
+[2026-05-01 10:30:00,486: INFO/ForkPoolWorker-1] Loaded tool definition: katana
+[2026-05-01 10:30:00,489: INFO/ForkPoolWorker-1] Loaded tool definition: semgrep
+[2026-05-01 10:30:00,492: INFO/ForkPoolWorker-1] Loaded tool definition: trivy
+[2026-05-01 10:30:00,496: INFO/ForkPoolWorker-1] Loaded tool definition: sqlmap
+[2026-05-01 10:30:00,500: INFO/ForkPoolWorker-1] Loaded tool definition: amass
+[2026-05-01 10:30:00,503: INFO/ForkPoolWorker-1] Loaded tool definition: ffuf
+[2026-05-01 10:30:00,505: INFO/ForkPoolWorker-1] Loaded tool definition: gau
+[2026-05-01 10:30:00,509: INFO/ForkPoolWorker-1] Loaded tool definition: nuclei
+[2026-05-01 10:30:00,511: INFO/ForkPoolWorker-1] Loaded tool definition: waybackurls
+[2026-05-01 10:30:00,514: INFO/ForkPoolWorker-1] Loaded tool definition: testssl
+[2026-05-01 10:30:00,517: INFO/ForkPoolWorker-1] Loaded tool definition: gospider
+[2026-05-01 10:30:00,520: INFO/ForkPoolWorker-1] Loaded tool definition: naabu
+[2026-05-01 10:30:00,522: INFO/ForkPoolWorker-1] Loaded tool definition: bandit
+[2026-05-01 10:30:00,525: INFO/ForkPoolWorker-1] Loaded tool definition: gitleaks
+[2026-05-01 10:30:00,527: INFO/ForkPoolWorker-1] Loaded tool definition: jwt_tool
+[2026-05-01 10:30:00,530: INFO/ForkPoolWorker-1] Loaded tool definition: nmap
+[2026-05-01 10:30:00,531: INFO/ForkPoolWorker-1] Loaded tool definition: pip-audit
+[2026-05-01 10:30:00,535: INFO/ForkPoolWorker-1] Loaded tool definition: subfinder
+[2026-05-01 10:30:00,538: INFO/ForkPoolWorker-1] Loaded tool definition: wpscan
+[2026-05-01 10:30:00,540: INFO/ForkPoolWorker-1] Loaded tool definition: commix
+[2026-05-01 10:30:00,543: INFO/ForkPoolWorker-1] Loaded tool definition: nikto
+[2026-05-01 10:30:00,545: INFO/ForkPoolWorker-1] Loaded tool definition: dalfox
+[2026-05-01 10:30:00,548: INFO/ForkPoolWorker-1] Loaded tool definition: whatweb
+[2026-05-01 10:30:00,551: INFO/ForkPoolWorker-1] Loaded tool definition: httpx
+[2026-05-01 10:30:00,645: WARNING/ForkPoolWorker-1] [a700ce14] job_started: Job started: scan
+[2026-05-01 10:30:00,698: INFO/ForkPoolWorker-1] Loaded 2 custom rule(s) for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6
+[2026-05-01 10:30:01,394: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:01,824: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:02,566: INFO/ForkPoolWorker-1] Agent iteration 0: calling pip_audit (cost: $0.000201)
+[2026-05-01 10:30:02,654: WARNING/ForkPoolWorker-1] [a700ce14] tool_executed: Tool executed: pip_audit
+[2026-05-01 10:30:02,669: WARNING/ForkPoolWorker-1] [a700ce14] SPAN tool_execution: 88ms
+[2026-05-01 10:30:02,690: INFO/ForkPoolWorker-1] Database pool initialized (min=2, max=20, pgbouncer_mode=session)
+[2026-05-01 10:30:02,692: WARNING/ForkPoolWorker-1] Failed to log agent decision: relation "agent_decisions" does not exist
+LINE 2:                     INSERT INTO agent_decisions
+                                        ^
+
+[2026-05-01 10:30:03,885: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:04,460: INFO/ForkPoolWorker-1] Agent iteration 1: calling ffuf (cost: $0.000202)
+[2026-05-01 10:30:04,639: WARNING/ForkPoolWorker-1] [a700ce14] tool_executed: Tool executed: ffuf
+[2026-05-01 10:30:04,652: WARNING/ForkPoolWorker-1] [a700ce14] SPAN tool_execution: 178ms
+[2026-05-01 10:30:04,652: INFO/ForkPoolWorker-1] Two consecutive tools found nothing – stopping agent early
+[2026-05-01 10:30:04,677: WARNING/ForkPoolWorker-1] [a700ce14] parser_completed: Parser completed: pip_audit
+[2026-05-01 10:30:04,695: WARNING/ForkPoolWorker-1] [a700ce14] SPAN parsing: 24ms
+[2026-05-01 10:30:04,714: WARNING/ForkPoolWorker-1] [a700ce14] parser_completed: Parser completed: ffuf
+[2026-05-01 10:30:04,732: WARNING/ForkPoolWorker-1] [a700ce14] SPAN parsing: 21ms
+[2026-05-01 10:30:04,755: INFO/ForkPoolWorker-1] Enqueued LLM review for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6
+[2026-05-01 10:30:04,760: INFO/MainProcess] Task tasks.llm_review.run_llm_review[2160a6b2-dcd3-42e4-ab0c-5fecd44eb118] received
+[2026-05-01 10:30:04,779: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:30:04,806: INFO/ForkPoolWorker-2] No candidate findings for LLM review (engagement 6b494fec-1859-4cb5-be84-b32bee396ca6)
+[2026-05-01 10:30:04,808: INFO/ForkPoolWorker-2] Task 2160a6b2-dcd3-42e4-ab0c-5fecd44eb118 succeeded
+[2026-05-01 10:30:04,808: INFO/ForkPoolWorker-2] Task tasks.llm_review.run_llm_review[2160a6b2-dcd3-42e4-ab0c-5fecd44eb118] succeeded in 0.043383823009207845s: {'status': 'completed', 'analyzed': 0, 'total': 0}
+[2026-05-01 10:30:04,838: INFO/MainProcess] Task tasks.analyze.run_analysis[54a141e5-5773-45ca-966f-11481b171fff] received
+[2026-05-01 10:30:04,838: INFO/ForkPoolWorker-1] Task e13cf12d-0c19-44e6-876c-a19586e530b5 succeeded
+[2026-05-01 10:30:04,838: INFO/ForkPoolWorker-1] Task tasks.scan.run_scan[e13cf12d-0c19-44e6-876c-a19586e530b5] succeeded in 4.557314953010064s: {'phase': 'scan', 'status': 'completed', 'findings_count': 0, 'next_state': 'analyzing', 'trace_id': 'a700ce14-6cea-4e38-a236-bcaa74cb8159', 'analysis_task_id': '54a141e5-5773-45ca-966f-11481b171fff'}
+[2026-05-01 10:30:04,905: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: analyze
+[2026-05-01 10:30:04,916: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:30:04,920: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-01 10:30:04,938: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: analyze
+[2026-05-01 10:30:05,158: WARNING/ForkPoolWorker-2] [a700ce14] intelligence_decision: Intelligence decision: 2 actions generated
+[2026-05-01 10:30:05,184: WARNING/ForkPoolWorker-2] [a700ce14] SPAN intelligence_evaluation: 59ms
+[2026-05-01 10:30:07,345: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:10,354: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:15,872: INFO/MainProcess] Task tasks.recon.expand_recon[f7a16d6b-5c6c-436b-a0a8-114f8287b255] received
+[2026-05-01 10:30:15,873: INFO/ForkPoolWorker-2] Task 54a141e5-5773-45ca-966f-11481b171fff succeeded
+[2026-05-01 10:30:15,873: INFO/ForkPoolWorker-2] Task tasks.analyze.run_analysis[54a141e5-5773-45ca-966f-11481b171fff] succeeded in 11.031256307993317s: {'phase': 'analyze', 'status': 'completed', 'actions': [{'type': 'deep_scan', 'targets': [...], 'reason': 'high_value_targets_identified', 'description': 'High-value targets with potential vulnerabilities identified. Performing deep scan.'}, {'type': 'auth_focused_scan', 'endpoints': [...], 'budget': {...}, 'reason': 'weak_auth_signals', 'description': 'Weak authentication signals detected. Focusing on authentication mechanisms.'}], 'scored_findings': [{'id': '0c083b8e-e1a5-4041-bc00-1cb2ad269aec', 'engagement_id': '6b494fec-1859-4cb5-be84-b32bee396ca6', 'type': 'CODE_VULNERABILITY', 'severity': 'HIGH', 'confidence': 0.35, 'endpoint': 'file:/var/folders/18/77k50l4d5d96qqly44kyw41w0000gn/T/argus_repo_scan_fhl65itd/app/schemas.py:121', 'evidence': {...}, 'source_tool': 'unknown', 'repro_steps': None, 'cvss_score': None, 'owasp_category': None, 'cwe_id': None, 'evidence_strength': None, 'tool_agreement_level': 'single_tool', 'fp_likelihood': None, 'verified': False, 'created_at': datetime.datetime(2026, 5, 1,..., ...}]}
+[2026-05-01 10:30:15,876: WARNING/ForkPoolWorker-1] expand_recon called with empty/invalid targets for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6, skipping
+[2026-05-01 10:30:15,879: INFO/ForkPoolWorker-1] Task f7a16d6b-5c6c-436b-a0a8-114f8287b255 succeeded
+[2026-05-01 10:30:15,880: INFO/ForkPoolWorker-1] Task tasks.recon.expand_recon[f7a16d6b-5c6c-436b-a0a8-114f8287b255] succeeded in 0.004787579993717372s: {'phase': 'recon_expand', 'status': 'skipped', 'reason': 'no_valid_targets'}
+[2026-05-01 10:30:16,799: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:22,738: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:29,531: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:36,778: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:30:44,919: WARNING/MainProcess] Soft time limit (600s) exceeded for tasks.scan.run_scan[8db6b36c-d658-48a7-8a76-826d2d670782]
+[2026-05-01 10:30:44,924: ERROR/ForkPoolWorker-4] check_lfi failed (non-fatal): SoftTimeLimitExceeded()
 Traceback (most recent call last):
   File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 273, in scan
     method()
     ~~~~~~^^
-  File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 1377, in check_cache_poisoning
-    resp = self._safe_request("GET", self.target_url, headers=self.CACHE_POISONING_HEADERS)
+  File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 1208, in check_lfi
+    resp = self._safe_request("GET", self.target_url)
   File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 293, in _safe_request
     resp = self.session.request(method, url, **kwargs)
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 592, in request
     resp = self.send(prep, **send_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 727, in send
+    history = [resp for resp in gen]
+                                ^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 266, in resolve_redirects
+    resp = self.send(
+        req,
+    ...<6 lines>...
+        **adapter_kwargs,
+    )
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 706, in send
     r = adapter.send(request, **kwargs)
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/adapters.py", line 645, in send
@@ -296,227 +312,86 @@ Traceback (most recent call last):
   File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 228, in soft_timeout_sighandler
     raise SoftTimeLimitExceeded()
 billiard.exceptions.SoftTimeLimitExceeded: SoftTimeLimitExceeded()
-[2026-04-27 10:44:01,097: INFO/ForkPoolWorker-4] Running differential analysis
-[2026-04-27 10:44:03,055: INFO/ForkPoolWorker-4] Running WAF detection
-[2026-04-27 10:44:04,443: INFO/ForkPoolWorker-4] Running time-based vulnerability detection
-[2026-04-27 10:44:07,790: INFO/ForkPoolWorker-4] Running SSL/TLS verification
-[2026-04-27 10:44:08,134: INFO/ForkPoolWorker-4] Running response analysis
-[2026-04-27 10:44:08,418: INFO/ForkPoolWorker-4] Scan complete: 47 findings
-[2026-04-27 10:44:08,962: ERROR/ForkPoolWorker-4] Failed to save findings: new row violates row-level security policy for table "findings"
+[2026-05-01 10:31:17,512: INFO/ForkPoolWorker-4] Running differential analysis
+[2026-05-01 10:31:21,993: INFO/ForkPoolWorker-4] Running WAF detection
+[2026-05-01 10:31:27,060: INFO/ForkPoolWorker-4] Running time-based vulnerability detection
+[2026-05-01 10:31:40,711: INFO/ForkPoolWorker-4] Running SSL/TLS verification
+[2026-05-01 10:31:41,114: INFO/ForkPoolWorker-4] Running response analysis
+[2026-05-01 10:31:42,262: INFO/ForkPoolWorker-4] Scan complete: 32 findings
+[2026-05-01 10:31:43,150: INFO/ForkPoolWorker-4] Enqueued LLM review for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf
+[2026-05-01 10:31:43,151: INFO/MainProcess] Task tasks.llm_review.run_llm_review[dff30ad2-74dd-47c0-ba71-7a8a46e8633a] received
+[2026-05-01 10:31:43,178: INFO/MainProcess] Task tasks.analyze.run_analysis[92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c] received
+[2026-05-01 10:31:43,179: INFO/ForkPoolWorker-4] Task 8db6b36c-d658-48a7-8a76-826d2d670782 succeeded
+[2026-05-01 10:31:43,180: INFO/ForkPoolWorker-4] Task tasks.scan.run_scan[8db6b36c-d658-48a7-8a76-826d2d670782] succeeded in 658.26712261801s: {'phase': 'scan', 'status': 'completed', 'findings_count': 32, 'next_state': 'analyzing', 'trace_id': 'f3b91e7a-08da-4fb0-b853-6a2efa64ede1', 'analysis_task_id': '92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c'}
+[2026-05-01 10:31:43,182: INFO/ForkPoolWorker-2] LLM review: 17 candidate findings for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf
+[2026-05-01 10:31:43,240: WARNING/ForkPoolWorker-1] [f3b91e7a] job_started: Job started: analyze
+[2026-05-01 10:31:43,250: INFO/ForkPoolWorker-1] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
+[2026-05-01 10:31:43,254: INFO/ForkPoolWorker-1] LLM payload generator initialized
+[2026-05-01 10:31:43,272: WARNING/ForkPoolWorker-1] [f3b91e7a] job_started: Job started: analyze
+[2026-05-01 10:31:43,389: WARNING/ForkPoolWorker-1] [f3b91e7a] intelligence_decision: Intelligence decision: 2 actions generated
+[2026-05-01 10:31:43,408: WARNING/ForkPoolWorker-1] [f3b91e7a] SPAN intelligence_evaluation: 60ms
+[2026-05-01 10:31:46,011: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:31:46,619: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-[2026-04-27 10:44:09,184: INFO/ForkPoolWorker-4] Enqueued LLM review for engagement cb63846d-4b1c-43a3-81f1-d6aa4882fded
-[2026-04-27 10:44:09,199: INFO/MainProcess] Task tasks.llm_review.run_llm_review[58e5eac3-e253-43ed-bfe0-c0a36839b680] received
-[2026-04-27 10:44:09,407: WARNING/ForkPoolWorker-4] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:09,556: WARNING/ForkPoolWorker-4] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:09,589: WARNING/ForkPoolWorker-4] Task 0fba2b27-8589-40a1-bed4-5c5080d650ac retrying (attempt 0): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
+[2026-05-01 10:31:47,170: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:04,690: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:05,369: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-[2026-04-27 10:44:09,590: INFO/ForkPoolWorker-4] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] retry: Retry in 1s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".\n')
-[2026-04-27 10:44:09,601: INFO/MainProcess] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] received
-[2026-04-27 10:44:09,805: INFO/ForkPoolWorker-2] No candidate findings for LLM review (engagement cb63846d-4b1c-43a3-81f1-d6aa4882fded)
-[2026-04-27 10:44:09,812: INFO/ForkPoolWorker-2] Task 58e5eac3-e253-43ed-bfe0-c0a36839b680 succeeded
-[2026-04-27 10:44:09,812: INFO/ForkPoolWorker-2] Task tasks.llm_review.run_llm_review[58e5eac3-e253-43ed-bfe0-c0a36839b680] succeeded in 0.5743157290125964s: {'status': 'completed', 'analyzed': 0, 'total': 0}
-[2026-04-27 10:44:10,663: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:10,664: WARNING/ForkPoolWorker-2] [9899b536] job_started: Job started: scan
-[2026-04-27 10:44:10,744: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:10,846: INFO/MainProcess] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] received
-[2026-04-27 10:44:10,877: WARNING/ForkPoolWorker-2] Task 0fba2b27-8589-40a1-bed4-5c5080d650ac retrying (attempt 1): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
+[2026-05-01 10:32:08,039: INFO/MainProcess] Task tasks.recon.expand_recon[e282013e-c5e1-471c-abeb-d61f8465d1e3] received
+[2026-05-01 10:32:08,043: WARNING/ForkPoolWorker-4] expand_recon called with empty/invalid targets for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf, skipping
+[2026-05-01 10:32:08,043: INFO/ForkPoolWorker-1] Task 92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c succeeded
+[2026-05-01 10:32:08,043: INFO/ForkPoolWorker-1] Task tasks.analyze.run_analysis[92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c] succeeded in 24.861570607987233s: {'phase': 'analyze', 'status': 'completed', 'actions': [{'type': 'deep_scan', 'targets': [...], 'reason': 'high_value_targets_identified', 'description': 'High-value targets with potential vulnerabilities identified. Performing deep scan.'}, {'type': 'auth_focused_scan', 'endpoints': [...], 'budget': {...}, 'reason': 'weak_auth_signals', 'description': 'Weak authentication signals detected. Focusing on authentication mechanisms.'}], 'scored_findings': [{'id': 'ba4d38e7-b76c-4387-8f60-c9f01b590f6d', 'engagement_id': 'f661d8e9-6b03-4bda-adb7-6761eeff2adf', 'type': 'INTERNAL_IP_DISCLOSURE', 'severity': 'LOW', 'confidence': 0.35, 'endpoint': 'https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792', 'evidence': {...}, 'source_tool': 'web_scanner', 'repro_steps': None, 'cvss_score': None, 'owasp_category': None, 'cwe_id': None, 'evidence_strength': None, 'tool_agreement_level': 'single_tool', 'fp_likelihood': None, 'verified': False, 'created_at': datetime.datetime(2026, 5, 1, 10, 31, 43, 112863,..., 'e...', ...}]}
+[2026-05-01 10:32:08,044: INFO/ForkPoolWorker-4] Task e282013e-c5e1-471c-abeb-d61f8465d1e3 succeeded
+[2026-05-01 10:32:08,044: INFO/ForkPoolWorker-4] Task tasks.recon.expand_recon[e282013e-c5e1-471c-abeb-d61f8465d1e3] succeeded in 0.003093903011176735s: {'phase': 'recon_expand', 'status': 'skipped', 'reason': 'no_valid_targets'}
+[2026-05-01 10:32:09,130: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:09,968: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-[2026-04-27 10:44:10,878: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] retry: Retry in 2s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".\n')
-[2026-04-27 10:44:12,829: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:12,830: WARNING/ForkPoolWorker-2] [9899b536] job_started: Job started: scan
-[2026-04-27 10:44:13,061: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:13,066: INFO/MainProcess] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] received
-[2026-04-27 10:44:13,073: WARNING/ForkPoolWorker-2] Task 0fba2b27-8589-40a1-bed4-5c5080d650ac retrying (attempt 2): insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
+[2026-05-01 10:32:12,908: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:13,402: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-[2026-04-27 10:44:13,073: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] retry: Retry in 1s: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".\n')
-[2026-04-27 10:44:14,192: WARNING/ForkPoolWorker-2] Failed to store log: insert or update on table "execution_logs" violates foreign key constraint "execution_logs_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:14,192: WARNING/ForkPoolWorker-2] [9899b536] job_started: Job started: scan
-[2026-04-27 10:44:14,278: WARNING/ForkPoolWorker-2] Failed to persist state transition: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
-[2026-04-27 10:44:14,320: WARNING/ForkPoolWorker-2] MEDIUM ERROR: {'task_id': '0fba2b27-8589-40a1-bed4-5c5080d650ac', 'task_name': 'tasks.scan.run_scan', 'error_type': 'ForeignKeyViolation', 'error_message': 'insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".\n', 'category': 'unknown', 'severity': 'medium', 'should_retry': True, 'retry_delay': 30, 'context': {'args': "['cb63846d-4b1c-43a3-81f1-d6aa4882fded', ['https://preview.owasp-juice.shop/#/'], {'max_cycles': 5, 'max_depth': 3}, '9899b536-1d7e-4357-bc9b-b9350d432ec8']", 'kwargs': '{}'}}
-[2026-04-27 10:44:14,320: ERROR/ForkPoolWorker-2] Task 0fba2b27-8589-40a1-bed4-5c5080d650ac failed: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
+[2026-05-01 10:32:31,453: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:32,090: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-[2026-04-27 10:44:14,321: ERROR/ForkPoolWorker-2] Task tasks.scan.run_scan[0fba2b27-8589-40a1-bed4-5c5080d650ac] raised unexpected: ForeignKeyViolation('insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"\nDETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".\n')
-Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/tasks/scan.py", line 67, in run_scan
-    state_machine.transition("scanning", "Starting scan")
-    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 106, in transition
-    raise InvalidStateTransition(
-    ...<2 lines>...
-    )
-state_machine.InvalidStateTransition: Invalid transition from created to scanning. Valid transitions: ['recon', 'failed']
+[2026-05-01 10:32:34,578: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:36,489: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-During handling of the above exception, another exception occurred:
+[2026-05-01 10:32:54,351: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:32:55,142: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
-    R = retval = fun(*args, **kwargs)
-                 ~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 277, in __call__
-    return self.run(*args, **kwargs)
-           ~~~~~~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
-    ret = task.retry(exc=exc, **retry_kwargs)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
-    raise_with_context(exc)
-    ~~~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
-    return task._orig_run(*args, **kwargs)
-           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/tasks/scan.py", line 89, in run_scan
-    state_machine.safe_transition("failed", f"Scan failed: {str(e)}")
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 244, in safe_transition
-    self.transition(new_state, reason)
-    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 114, in transition
-    self._persist_state_and_budget(
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
-        from_state=old_state,
-        ^^^^^^^^^^^^^^^^^^^^^
-        to_state=new_state,
-        ^^^^^^^^^^^^^^^^^^^
-        reason=reason or f"Transition to {new_state}"
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 140, in _persist_state_and_budget
-    cursor.execute(
-    ~~~~~~~~~~~~~~^
-        """
-        ^^^
-    ...<6 lines>...
-        (transition_id, self.engagement_id, from_state, to_state, reason)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-psycopg2.errors.ForeignKeyViolation: insert or update on table "engagement_states" violates foreign key constraint "engagement_states_engagement_id_fkey"
-DETAIL:  Key (engagement_id)=(cb63846d-4b1c-43a3-81f1-d6aa4882fded) is not present in table "engagements".
+[2026-05-01 10:33:13,295: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:33:13,702: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-[2026-04-27 12:40:58,933: INFO/MainProcess] Task tasks.recon.run_recon[04f687ab-1820-4f94-a1d3-d29e0e228f0f] received
-[2026-04-27 12:40:59,628: WARNING/ForkPoolWorker-2] [7e8553d3] job_started: Job started: recon
-[2026-04-27 12:41:00,203: INFO/ForkPoolWorker-2] LLM payload generator initialized
-[2026-04-27 12:41:00,262: WARNING/ForkPoolWorker-2] [NO_TRACE] job_started: Job started: recon
-[2026-04-27 12:41:02,123: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: httpx
-[2026-04-27 12:41:02,124: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 1530ms
-[2026-04-27 12:41:14,085: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: katana
-[2026-04-27 12:41:14,087: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 11857ms
-[2026-04-27 12:41:14,089: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: katana
-[2026-04-27 12:41:14,089: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 2ms
-[2026-04-27 12:41:30,868: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: ffuf
-[2026-04-27 12:41:30,869: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 16619ms
-[2026-04-27 12:41:30,873: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: ffuf
-[2026-04-27 12:41:30,874: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 3ms
-[2026-04-27 12:41:31,419: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: amass
-[2026-04-27 12:41:31,419: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 403ms
-[2026-04-27 12:41:41,021: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: naabu
-[2026-04-27 12:41:41,022: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 9533ms
-[2026-04-27 12:41:41,026: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: naabu
-[2026-04-27 12:41:41,027: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 4ms
-[2026-04-27 12:41:43,322: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: whatweb
-[2026-04-27 12:41:43,322: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 2197ms
-[2026-04-27 12:42:32,583: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: nikto
-[2026-04-27 12:42:32,583: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 49169ms
-[2026-04-27 12:42:32,586: WARNING/ForkPoolWorker-2] [NO_TRACE] parser_completed: Parser completed: nikto
-[2026-04-27 12:42:32,586: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN parsing: 2ms
-[2026-04-27 12:45:32,904: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: gau
-[2026-04-27 12:45:32,905: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 180182ms
-[2026-04-27 12:45:59,016: WARNING/MainProcess] Soft time limit (300s) exceeded for tasks.recon.run_recon[04f687ab-1820-4f94-a1d3-d29e0e228f0f]
-[2026-04-27 12:45:59,176: WARNING/ForkPoolWorker-2] [NO_TRACE] tool_executed: Tool executed: waybackurls
-[2026-04-27 12:45:59,178: WARNING/ForkPoolWorker-2] [NO_TRACE] SPAN tool_execution: 26238ms
-[2026-04-27 12:45:59,695: INFO/MainProcess] Task tasks.asset_discovery.run_asset_discovery[87d85549-e56f-4dde-a27e-fa240cd268f4] received
-[2026-04-27 12:45:59,700: INFO/ForkPoolWorker-2] Task 04f687ab-1820-4f94-a1d3-d29e0e228f0f succeeded
-[2026-04-27 12:45:59,701: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[04f687ab-1820-4f94-a1d3-d29e0e228f0f] succeeded in 300.67638235300547s: {'phase': 'recon', 'status': 'completed', 'findings_count': 9, 'next_state': 'scanning', 'trace_id': None}
-[2026-04-27 12:45:59,713: INFO/MainProcess] Task tasks.scan.run_scan[c1662b21-6bdb-456e-92fa-06bfafee4e71] received
-[2026-04-27 12:45:59,732: INFO/MainProcess] Task tasks.asset_discovery.update_asset_risk_scores[a7e197c4-73f0-4da6-8d7c-a948714864c0] received
-[2026-04-27 12:45:59,836: WARNING/ForkPoolWorker-2] [7e8553d3] job_started: Job started: asset_discovery
-[2026-04-27 12:46:00,018: WARNING/ForkPoolWorker-4] [7e8553d3] job_started: Job started: scan
-[2026-04-27 12:46:00,166: INFO/ForkPoolWorker-4] LLM payload generator initialized
-[2026-04-27 12:46:00,178: WARNING/ForkPoolWorker-4] [NO_TRACE] job_started: Job started: scan
-[2026-04-27 12:46:00,263: INFO/ForkPoolWorker-1] Task a7e197c4-73f0-4da6-8d7c-a948714864c0 succeeded
-[2026-04-27 12:46:00,272: INFO/ForkPoolWorker-1] Task tasks.asset_discovery.update_asset_risk_scores[a7e197c4-73f0-4da6-8d7c-a948714864c0] succeeded in 0.38997886498691514s: {'status': 'completed', 'assets_scored': 0}
-[2026-04-27 12:46:00,304: INFO/ForkPoolWorker-2] Task 87d85549-e56f-4dde-a27e-fa240cd268f4 succeeded
-[2026-04-27 12:46:00,305: INFO/ForkPoolWorker-2] Task tasks.asset_discovery.run_asset_discovery[87d85549-e56f-4dde-a27e-fa240cd268f4] succeeded in 0.5817668899981072s: {'status': 'completed', 'assets_discovered': 2, 'assets': [{'id': '06be12bc-1e57-4cab-a851-75d15bb1e9d3', 'type': 'domain', 'identifier': 'example.com'}, {'id': '89643c10-fd9d-48e1-b7bc-320a15832fcd', 'type': 'endpoint', 'identifier': 'https://example.com'}], 'trace_id': '7e8553d3-2440-4057-9478-7aa529a6e098'}
-[2026-04-27 12:46:00,321: INFO/ForkPoolWorker-4] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
-[2026-04-27 12:50:53,528: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: nuclei
-[2026-04-27 12:50:53,533: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 293208ms
-[2026-04-27 12:50:53,535: WARNING/ForkPoolWorker-4] NUCLEI RESULT for https://example.com: success=True, returncode=0, stdout_len=7585, stderr=
-[2026-04-27 12:50:53,547: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: nuclei
-[2026-04-27 12:50:53,550: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 14ms
-[2026-04-27 12:50:53,551: WARNING/ForkPoolWorker-4] NUCLEI PARSED: 0 findings from 7585 bytes of output
-[2026-04-27 12:50:53,978: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: dalfox
-[2026-04-27 12:50:53,981: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 428ms
-[2026-04-27 12:50:53,984: WARNING/ForkPoolWorker-4] [NO_TRACE] parser_completed: Parser completed: dalfox
-[2026-04-27 12:50:53,986: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN parsing: 2ms
-[2026-04-27 12:51:13,196: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: sqlmap
-[2026-04-27 12:51:13,197: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 19210ms
-[2026-04-27 12:51:24,314: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: arjun
-[2026-04-27 12:51:24,315: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 11113ms
-[2026-04-27 12:51:25,779: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: jwt_tool
-[2026-04-27 12:51:25,780: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 1460ms
-[2026-04-27 12:51:27,645: WARNING/ForkPoolWorker-4] [NO_TRACE] tool_executed: Tool executed: commix
-[2026-04-27 12:51:27,646: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 1864ms
-[2026-04-27 12:53:20,209: WARNING/ForkPoolWorker-4] [NO_TRACE] SPAN tool_execution: 112559ms
+[2026-05-01 10:33:27,680: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:33:28,361: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-worker: Warm shutdown (MainProcess)
+[2026-05-01 10:33:31,312: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:33:32,051: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-worker: Warm shutdown (MainProcess)
-[2026-04-27 12:53:21,311: ERROR/MainProcess] Process 'ForkPoolWorker-4' pid:87146 exited with 'signal 15 (SIGTERM)'
-[2026-04-27 12:53:21,328: ERROR/MainProcess] Process 'ForkPoolWorker-3' pid:87145 exited with 'signal 15 (SIGTERM)'
-[2026-04-27 12:53:21,340: ERROR/MainProcess] Process 'ForkPoolWorker-2' pid:87144 exited with 'signal 15 (SIGTERM)'
-[2026-04-27 12:53:21,353: ERROR/MainProcess] Process 'ForkPoolWorker-1' pid:87142 exited with 'exitcode 15'
-[2026-04-27 12:53:21,430: ERROR/MainProcess] Task handler raised error: WorkerLostError('Worker exited prematurely: signal 15 (SIGTERM) Job: 9.')
-Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
-    raise WorkerLostError(
-    ...<2 lines>...
-    )
-billiard.einfo.ExceptionWithTraceback: 
-"""
-Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/worker.py", line 203, in start
-    self.blueprint.start(self)
-    ~~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
-    step.start(parent)
-    ~~~~~~~~~~^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 365, in start
-    return self.obj.start()
-           ~~~~~~~~~~~~~~^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 346, in start
-    blueprint.start(self)
-    ~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/bootsteps.py", line 116, in start
-    step.start(parent)
-    ~~~~~~~~~~^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/consumer/consumer.py", line 788, in start
-    c.loop(*c.loop_args())
-    ~~~~~~^^^^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/loops.py", line 86, in asynloop
-    state.maybe_shutdown()
-    ~~~~~~~~~~~~~~~~~~~~^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/worker/state.py", line 93, in maybe_shutdown
-    raise WorkerShutdown(should_stop)
-celery.exceptions.WorkerShutdown: 0
+[2026-05-01 10:33:35,666: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-05-01 10:33:36,994: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
+LINE 5:                     updated_at = NOW()
+                            ^
 
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
-    raise WorkerLostError(
-    ...<2 lines>...
-    )
-billiard.exceptions.WorkerLostError: Worker exited prematurely: signal 15 (SIGTERM) Job: 9.
-"""
+[2026-05-01 10:33:54,689: INFO/ForkPoolWorker-2] LLM review complete: 11 analyzed, 0 confirmed, all processed
+[2026-05-01 10:33:54,692: INFO/ForkPoolWorker-2] Task dff30ad2-74dd-47c0-ba71-7a8a46e8633a succeeded
+[2026-05-01 10:33:54,692: INFO/ForkPoolWorker-2] Task tasks.llm_review.run_llm_review[dff30ad2-74dd-47c0-ba71-7a8a46e8633a] succeeded in 131.47272526301094s: {'status': 'completed', 'analyzed': 11, 'confirmed': 0, 'total_candidates': 17, 'budget_exhausted': False}

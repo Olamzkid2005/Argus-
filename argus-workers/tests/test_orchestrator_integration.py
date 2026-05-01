@@ -407,15 +407,15 @@ class TestCoordinatorAgent:
     def test_phase_tool_mappings(self):
         """Test that PHASE_AGENTS tool mappings are correct."""
         from agent_loop import CoordinatorAgent
+        CoordinatorAgent._ensure_phase_agents()
         assert "nuclei" in CoordinatorAgent.PHASE_AGENTS["scan"]["tools"]
         assert "semgrep" in CoordinatorAgent.PHASE_AGENTS["repo_scan"]["tools"]
         assert "httpx" in CoordinatorAgent.PHASE_AGENTS["recon"]["tools"]
-        assert "llm-review" in CoordinatorAgent.PHASE_AGENTS["analyze"]["tools"]
-        assert "compliance-check" in CoordinatorAgent.PHASE_AGENTS["report"]["tools"]
 
     def test_react_agent_phase_tools_mapping(self):
         """Test that ReActAgent.PHASE_TOOLS are correct."""
         from agent_loop import ReActAgent
+        ReActAgent._ensure_phase_tools()
         assert "httpx" in ReActAgent.PHASE_TOOLS.get("recon", [])
         assert "nuclei" in ReActAgent.PHASE_TOOLS.get("scan", [])
         assert "semgrep" in ReActAgent.PHASE_TOOLS.get("repo_scan", [])

@@ -26,6 +26,9 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  StopCircle,
+  RefreshCw,
+  Brain,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 import {
@@ -146,9 +149,12 @@ export default function EngagementsPage() {
   const [scanType, setScanType] = useState<"url" | "repo">("url");
   const [target, setTarget] = useState("");
   const [scanAggressiveness, setScanAggressiveness] = useState("default");
+  const [agentMode, setAgentMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progressStep, setProgressStep] = useState("");
   const [error, setError] = useState("");
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [rescannings, setRescannings] = useState<Set<string>>(new Set());
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
 
@@ -250,6 +256,7 @@ export default function EngagementsPage() {
           targetUrl: target,
           scanType: scanType,
           scanAggressiveness: scanAggressiveness,
+          agentMode: agentMode,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: validatedScope,
         }),
@@ -294,7 +301,6 @@ export default function EngagementsPage() {
       if (response.ok) {
         showToast("success", "Engagement deleted");
         setLiveEngagements((prev) => prev.filter((e) => e.id !== id));
-        // Refresh list from server to ensure sync
         const res = await fetch("/api/engagements", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
@@ -306,6 +312,55 @@ export default function EngagementsPage() {
       }
     } catch (err) {
       showToast("error", "Failed to delete engagement");
+    }
+  };
+
+  const handleStop = async (id: string) => {
+    if (!confirm("Stop this scan?")) return;
+    setStoppingId(id);
+    try {
+      const response = await fetch(`/api/engagement/${id}/stop`, { method: "POST" });
+      if (response.ok) {
+        showToast("success", "Scan stopped");
+        const res = await fetch("/api/engagements", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveEngagements(data.engagements || []);
+        }
+      } else {
+        const data = await response.json().catch(() => ({}));
+        showToast("error", data.error || "Failed to stop scan");
+      }
+    } catch {
+      showToast("error", "Failed to stop scan");
+    } finally {
+      setStoppingId(null);
+    }
+  };
+
+  const handleRescan = async (id: string) => {
+    setRescannings((prev) => new Set(prev).add(id));
+    try {
+      const response = await fetch(`/api/engagement/${id}/rescan`, { method: "POST" });
+      if (response.ok) {
+        showToast("success", "Rescan triggered");
+        const res = await fetch("/api/engagements", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveEngagements(data.engagements || []);
+        }
+      } else {
+        const data = await response.json().catch(() => ({}));
+        showToast("error", data.error || "Failed to rescan");
+      }
+    } catch {
+      showToast("error", "Failed to rescan");
+    } finally {
+      setRescannings((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -531,6 +586,39 @@ export default function EngagementsPage() {
                 )}
               </div>
 
+              {/* AI Agent Mode Toggle */}
+              <div>
+                <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
+                  AI Agent Mode
+                </label>
+                <div className="flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Brain size={18} className={agentMode ? "text-primary" : "text-on-surface-variant/40"} />
+                    <div>
+                      <div className="text-xs font-medium text-on-surface dark:text-[#F0F0F5]">
+                        LLM-Driven Scanning Agent
+                      </div>
+                      <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E]">
+                        {agentMode
+                          ? "Agent autonomously selects and sequences tools based on recon results"
+                          : "Deterministic scan pipeline with predefined tool sequence"}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAgentMode(!agentMode)}
+                    className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
+                      agentMode ? "bg-primary" : "bg-surface-container-high dark:bg-[#2A2A35]"
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${
+                      agentMode ? "left-[22px]" : "left-0.5"
+                    }`} />
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={isLoading || !target}
@@ -671,6 +759,34 @@ export default function EngagementsPage() {
                           >
                             <Eye size={14} />
                           </button>
+                          {eng.status !== "complete" && eng.status !== "failed" && eng.status !== "paused" && (
+                            <button
+                              onClick={() => handleStop(eng.id)}
+                              disabled={stoppingId === eng.id}
+                              className="p-1.5 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-md hover:bg-error/5 disabled:opacity-40"
+                              title="Stop scan"
+                            >
+                              {stoppingId === eng.id ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <StopCircle size={14} />
+                              )}
+                            </button>
+                          )}
+                          {["complete", "failed", "paused"].includes(eng.status) && (
+                            <button
+                              onClick={() => handleRescan(eng.id)}
+                              disabled={rescannings.has(eng.id)}
+                              className="p-1.5 text-on-surface-variant dark:text-[#8A8A9E] hover:text-primary transition-all duration-300 rounded-md hover:bg-primary/5 disabled:opacity-40"
+                              title="Rescan"
+                            >
+                              {rescannings.has(eng.id) ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <RefreshCw size={14} />
+                              )}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(eng.id)}
                             className="p-1.5 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-md hover:bg-error/5"

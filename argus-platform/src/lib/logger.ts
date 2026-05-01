@@ -2,9 +2,18 @@ type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
 const PREFIX = '[Argus]';
 
+function serializeArg(a: unknown): string {
+  if (typeof a === 'string') return a;
+  if (a instanceof Error) return `${a.name}: ${a.message}`;
+  if (typeof a === 'object') {
+    try { return JSON.stringify(a); } catch { return String(a); }
+  }
+  return String(a);
+}
+
 function logMsg(level: LogLevel, category: string, ...args: unknown[]): void {
   const timestamp = new Date().toISOString();
-  const message = `${PREFIX} [${category}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`;
+  const message = `${PREFIX} [${category}] ${args.map(serializeArg).join(' ')}`;
   switch (level) {
     case 'error':
       console.error(timestamp, message);

@@ -32,6 +32,7 @@ export async function POST(req: Request) {
       rateLimitConfig,
       scanType,
       scanAggressiveness,
+      agentMode,
     } = body;
 
     // Default to "url" scan type if not specified
@@ -98,10 +99,11 @@ export async function POST(req: Request) {
       // Create engagement
       const engagementId = uuidv4();
       const effectiveAggressiveness = scanAggressiveness || "default";
+      const effectiveAgentMode = agentMode === true;
       const engagementResult = await client.query(
         `INSERT INTO engagements 
-         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, agent_mode, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
          RETURNING *`,
         [
           engagementId,
@@ -114,6 +116,7 @@ export async function POST(req: Request) {
           rateLimitConfig ? JSON.stringify(rateLimitConfig) : null,
           effectiveScanType,
           effectiveAggressiveness,
+          effectiveAgentMode,
         ],
       );
 
@@ -156,6 +159,7 @@ export async function POST(req: Request) {
               max_depth: 3,
             },
             aggressiveness: effectiveAggressiveness,
+            agent_mode: effectiveAgentMode,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });
@@ -170,6 +174,7 @@ export async function POST(req: Request) {
               max_depth: 3,
             },
             aggressiveness: effectiveAggressiveness,
+            agent_mode: effectiveAgentMode,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });

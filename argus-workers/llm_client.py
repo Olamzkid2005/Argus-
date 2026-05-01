@@ -194,7 +194,8 @@ class LLMClient:
                 else:
                     # Generic HTTP API
                     import httpx
-                    async with httpx.AsyncClient(timeout=30) as client:
+                    import certifi
+                    async with httpx.AsyncClient(timeout=30, verify=certifi.where()) as client:
                         payload = {
                             "model": self.model,
                             "messages": messages,
@@ -281,7 +282,8 @@ class LLMClient:
                     )
                 else:
                     import httpx
-                    with httpx.Client(timeout=req_timeout) as client:
+                    import certifi
+                    with httpx.Client(timeout=req_timeout, verify=certifi.where()) as client:
                         payload = {
                             "model": self.model,
                             "messages": messages,

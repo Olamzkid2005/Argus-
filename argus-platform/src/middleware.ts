@@ -218,7 +218,7 @@ export async function middleware(request: NextRequest) {
   // Enhanced Content Security Policy
   response.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; " +
+    "default-src 'self' data:; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
       "style-src 'self' 'unsafe-inline'; " +
       "img-src 'self' data: https: blob:; " +

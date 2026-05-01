@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Bug,
   FileBarChart,
+  BarChart3,
   Settings,
   Command,
   Sun,
@@ -34,6 +35,7 @@ const navItems = [
   { to: "/assets", icon: Server, label: "Assets" },
   { to: "/rules", icon: FileCode2, label: "Rules" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },
+  { to: "/analytics", icon: BarChart3, label: "Analytics" },
   { to: "/settings", icon: Settings, label: "Settings", tour: "settings" },
   { to: "/system", icon: Activity, label: "System Health" },
 ];
