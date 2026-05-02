@@ -130,6 +130,68 @@ function CircuitBreakerCard({ breaker, index }: { breaker: CircuitBreaker; index
   );
 }
 
+const TOOL_HEALTH_COLORS: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  healthy: { bg: "bg-green-500/10", text: "text-green-500", border: "border-green-500/30", label: "Healthy" },
+  degraded: { bg: "bg-yellow-500/10", text: "text-yellow-500", border: "border-yellow-500/30", label: "Degraded" },
+  down: { bg: "bg-error/10", text: "text-error", border: "border-error/30", label: "Down" },
+};
+
+interface ToolHealthData {
+  tool_name: string;
+  success_rate_24h: number;
+  avg_duration_seconds: number;
+  total_runs_24h: number;
+  last_success_at: string | null;
+  consecutive_failures: number;
+  status: string;
+}
+
+function ToolHealthCard({ tool }: { tool: ToolHealthData }) {
+  const cfg = TOOL_HEALTH_COLORS[tool.status] || TOOL_HEALTH_COLORS.healthy;
+  const ratePct = (tool.success_rate_24h * 100).toFixed(0);
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-surface-container rounded-xl border border-outline/20 p-4 space-y-3"
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold font-mono text-on-surface uppercase">{tool.tool_name}</span>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.bg} ${cfg.text} ${cfg.border} border`}>
+          {cfg.label}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-on-surface-variant">
+        <div>
+          <span className="block uppercase tracking-wider opacity-60">Success Rate</span>
+          <span className="text-sm font-bold text-on-surface">{ratePct}%</span>
+        </div>
+        <div>
+          <span className="block uppercase tracking-wider opacity-60">Runs (24h)</span>
+          <span className="text-sm font-bold text-on-surface">{tool.total_runs_24h}</span>
+        </div>
+        <div>
+          <span className="block uppercase tracking-wider opacity-60">Avg Duration</span>
+          <span className={`text-sm font-bold ${tool.avg_duration_seconds > 30 ? "text-yellow-500" : "text-on-surface"}`}>
+            {tool.avg_duration_seconds.toFixed(1)}s
+          </span>
+        </div>
+        <div>
+          <span className="block uppercase tracking-wider opacity-60">Consec Fails</span>
+          <span className={`text-sm font-bold ${tool.consecutive_failures >= 3 ? "text-error" : "text-on-surface"}`}>
+            {tool.consecutive_failures}
+          </span>
+        </div>
+      </div>
+      {tool.last_success_at && (
+        <div className="text-[9px] font-mono text-on-surface-variant/50">
+          Last success: {new Date(tool.last_success_at).toLocaleString()}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 function SystemHealthCard({
   label,
   icon: Icon,
@@ -191,6 +253,7 @@ export default function SystemHealthPage() {
   const [workerHealth, setWorkerHealth] = useState<{ status: string; detail: string }>({ status: "healthy", detail: "All workers online" });
   const [dbHealth, setDbHealth] = useState<{ status: string; detail: string }>({ status: "healthy", detail: "Connected" });
   const [redisHealth, setRedisHealth] = useState<{ status: string; detail: string }>({ status: "healthy", detail: "Connected" });
+  const [toolHealth, setToolHealth] = useState<ToolHealthData[]>([]);
 
   // Threat enrichment state
   const [enrichTarget, setEnrichTarget] = useState("");
@@ -227,6 +290,7 @@ export default function SystemHealthPage() {
           if (data.workers) setWorkerHealth(data.workers);
           if (data.database) setDbHealth(data.database);
           if (data.redis) setRedisHealth(data.redis);
+          if (data.tool_health) setToolHealth(data.tool_health);
         }
       } catch (err) {
         console.error("Failed to fetch system health:", err);
@@ -341,6 +405,27 @@ export default function SystemHealthPage() {
               ))}
             </div>
           </motion.div>
+
+          {/* Tool Health Status */}
+          {toolHealth.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Activity size={16} className="text-primary" />
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  Tool Health (24h)
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {toolHealth.map((tool) => (
+                  <ToolHealthCard key={tool.tool_name} tool={tool} />
+                ))}
+              </div>
+            </motion.div>
+          )}
 
           {/* LLM Usage & Cost */}
           <motion.div

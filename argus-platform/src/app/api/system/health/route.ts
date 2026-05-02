@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { log } from "@/lib/logger";
 import { pool } from "@/lib/db";
 
+interface ToolHealthData {
+  tool_name: string;
+  success_rate_24h: number;
+  avg_duration_seconds: number;
+  total_runs_24h: number;
+  last_success_at: string | null;
+  consecutive_failures: number;
+  status: string;
+}
+
 export async function GET() {
   log.api("GET", "/api/system/health");
   try {
@@ -10,6 +20,7 @@ export async function GET() {
     let workerStatus = { status: "healthy", detail: "All workers online" };
     let circuitBreakers: Record<string, Record<string, unknown>> = {};
     let llmUsage = null;
+    let toolHealth: ToolHealthData[] = [];
 
     // Check database
     try {
@@ -26,6 +37,47 @@ export async function GET() {
       await redis.ping();
     } catch {
       redisStatus = { status: "degraded", detail: "Connection failed" };
+    }
+
+    // Tool health from tool_metrics table
+    if (dbStatus.status === "healthy") {
+      try {
+        const client = await pool.connect();
+        const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+        const result = await client.query(`
+          SELECT
+            tool_name,
+            COUNT(*)::int AS total_runs,
+            ROUND(SUM(CASE WHEN success THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0), 3) AS success_rate,
+            ROUND(AVG(duration_ms)::float / 1000.0, 2) AS avg_duration_seconds,
+            MAX(CASE WHEN success THEN created_at ELSE NULL END) AS last_success_at
+          FROM tool_metrics
+          WHERE created_at >= $1
+          GROUP BY tool_name
+          ORDER BY tool_name
+        `, [cutoff]);
+        client.release();
+
+        toolHealth = (result.rows || []).map((row: Record<string, unknown>) => {
+          const successRate = parseFloat(String(row.success_rate || "0"));
+          const consecutiveFailures = 0;
+          let status = "healthy";
+          if (successRate < 0.5) status = "down";
+          else if (successRate < 0.8) status = "degraded";
+          return {
+            tool_name: row.tool_name as string,
+            success_rate_24h: successRate,
+            avg_duration_seconds: parseFloat(String(row.avg_duration_seconds || "0")),
+            total_runs_24h: parseInt(String(row.total_runs || "0")),
+            last_success_at: row.last_success_at ? new Date(row.last_success_at as string).toISOString() : null,
+            consecutive_failures: consecutiveFailures,
+            status,
+          };
+        });
+      } catch (e) {
+        log.error("Tool health query failed:", (e as Error).message);
+      }
     }
 
     // Circuit breaker data from dedicated endpoint
@@ -64,6 +116,7 @@ export async function GET() {
       workers: workerStatus,
       circuit_breakers: circuitBreakers,
       llm_usage: llmUsage,
+      tool_health: toolHealth,
     });
   } catch (error) {
     const err = error as Error;

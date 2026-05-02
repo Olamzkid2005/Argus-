@@ -2,13 +2,14 @@
 Worker Health Monitoring and Self-Healing
 
 Monitors worker health metrics and performs self-healing actions.
+Also tracks per-tool health from the tool_metrics table.
 """
 
 import logging
 import os
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psutil
 import redis
@@ -236,3 +237,110 @@ def get_health_monitor(worker_id: str | None = None) -> WorkerHealthMonitor:
     if _health_monitor is None:
         _health_monitor = WorkerHealthMonitor(worker_id=worker_id)
     return _health_monitor
+
+
+@dataclass
+class ToolHealth:
+    """Health snapshot for a single security tool."""
+    tool_name: str
+    success_rate_24h: float
+    avg_duration_seconds: float
+    total_runs_24h: int
+    last_success_at: str | None
+    consecutive_failures: int
+    status: str  # healthy | degraded | down
+
+
+class ToolHealthTracker:
+    """Queries tool_metrics to surface per-tool health scores."""
+
+    _db_conn: str | None = None
+
+    def __init__(self, db_connection_string: str | None = None):
+        self._db_conn = db_connection_string or os.getenv("DATABASE_URL")
+
+    def get_tool_health(self) -> list[ToolHealth]:
+        """Query tool_metrics for the last 24 hours and return per-tool health."""
+        try:
+            import psycopg2
+            conn = psycopg2.connect(self._db_conn)
+            cursor = conn.cursor()
+            cutoff = datetime.now(UTC) - timedelta(hours=24)
+
+            cursor.execute("""
+                SELECT
+                    tool_name,
+                    COUNT(*) AS total_runs,
+                    SUM(CASE WHEN success THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0) AS success_rate,
+                    AVG(duration_ms)::float / 1000.0 AS avg_duration_sec,
+                    MAX(CASE WHEN success THEN created_at ELSE NULL END) AS last_success_at
+                FROM tool_metrics
+                WHERE created_at >= %s
+                GROUP BY tool_name
+                ORDER BY tool_name
+            """, (cutoff,))
+            rows = cursor.fetchall()
+
+            # Count consecutive failures per tool from recent runs
+            cursor.execute("""
+                SELECT tool_name, success
+                FROM tool_metrics
+                WHERE created_at >= %s
+                ORDER BY tool_name, created_at DESC
+            """, (cutoff,))
+            all_metrics = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            # Compute consecutive failures per tool
+            cons_failures: dict[str, int] = {}
+            for row in all_metrics:
+                tool = row[0]
+                success = row[1]
+                if tool not in cons_failures:
+                    cons_failures[tool] = 0
+                if not success:
+                    cons_failures[tool] += 1
+                else:
+                    cons_failures.setdefault(tool, 0)
+
+            results = []
+            for row in rows:
+                tool_name, total_runs, success_rate, avg_duration_sec, last_success_at = row
+                if success_rate is None:
+                    success_rate = 0.0
+                consecutive = cons_failures.get(tool_name, 0)
+
+                if success_rate < 0.5 or consecutive >= 5:
+                    status = "down"
+                elif success_rate < 0.8 or consecutive >= 3:
+                    status = "degraded"
+                else:
+                    status = "healthy"
+
+                results.append(ToolHealth(
+                    tool_name=tool_name,
+                    success_rate_24h=float(success_rate),
+                    avg_duration_seconds=float(avg_duration_sec) if avg_duration_sec else 0.0,
+                    total_runs_24h=int(total_runs),
+                    last_success_at=last_success_at.isoformat() if last_success_at else None,
+                    consecutive_failures=consecutive,
+                    status=status,
+                ))
+
+            return results
+
+        except Exception as e:
+            logger.warning(f"Tool health query failed: {e}")
+            return []
+
+
+_tool_health_tracker: ToolHealthTracker | None = None
+
+
+def get_tool_health_tracker(db_conn: str | None = None) -> ToolHealthTracker:
+    """Get singleton tool health tracker instance."""
+    global _tool_health_tracker
+    if _tool_health_tracker is None:
+        _tool_health_tracker = ToolHealthTracker(db_connection_string=db_conn)
+    return _tool_health_tracker
