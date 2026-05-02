@@ -1,6 +1,7 @@
 """
 Tests for dead_letter_queue.py
 """
+
 import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -36,7 +37,7 @@ class TestDeadLetterQueue:
             error_class="TimeoutError",
             worker_id="worker-1",
             retry_count=3,
-            engagement_id="ENG-001"
+            engagement_id="ENG-001",
         )
 
         assert result is True
@@ -159,8 +160,8 @@ class TestDeadLetterQueue:
         assert count == 5
         mock_redis.zcard.assert_called_once_with("dlq:task:engagement:ENG-001")
 
-    def test_replay_task_found(self, dlq, mock_redis):
-        """Test replaying a failed task"""
+    def test_get_task_by_id_found(self, dlq, mock_redis):
+        """Test looking up a task by ID"""
         task_data = {
             "task_id": "task-001",
             "task_name": "tasks.scan.run_scan",
@@ -169,33 +170,26 @@ class TestDeadLetterQueue:
         }
         mock_redis.zrange.return_value = [json.dumps(task_data)]
 
-        with patch("celery_app.app") as mock_app:
-            result = dlq.replay_task("task-001")
+        result = dlq.get_task_by_id("task-001")
 
-        assert result is True
-        mock_app.send_task.assert_called_once_with(
-            "tasks.scan.run_scan",
-            args=["ENG-001"],
-            kwargs={"tool": "nuclei"},
-            task_id="task-001.replay"
-        )
+        assert result is not None
+        assert result["task_id"] == "task-001"
+        assert result["task_name"] == "tasks.scan.run_scan"
 
-    def test_replay_task_not_found(self, dlq, mock_redis):
-        """Test replaying a task that doesn't exist"""
+    def test_get_task_by_id_not_found(self, dlq, mock_redis):
+        """Test looking up a task that doesn't exist"""
         mock_redis.zrange.return_value = []
 
-        with patch("celery_app.app") as mock_app:
-            result = dlq.replay_task("task-999")
+        result = dlq.get_task_by_id("task-999")
 
-        assert result is False
-        mock_app.send_task.assert_not_called()
+        assert result is None
 
-    def test_replay_task_error(self, dlq, mock_redis):
-        """Test replay handles errors"""
+    def test_get_task_by_id_error(self, dlq, mock_redis):
+        """Test get_task_by_id handles errors"""
         mock_redis.zrange.side_effect = Exception("Redis error")
 
-        result = dlq.replay_task("task-001")
-        assert result is False
+        result = dlq.get_task_by_id("task-001")
+        assert result is None
 
     def test_purge_all(self, dlq, mock_redis):
         """Test purging all tasks"""

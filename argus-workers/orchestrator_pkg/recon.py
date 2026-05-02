@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def execute_recon_tools(
-    orchestrator,
+    ctx,
     target: str,
     budget: dict,
     aggressiveness: str = DEFAULT_AGGRESSIVENESS,
@@ -33,7 +33,7 @@ def execute_recon_tools(
     Execute reconnaissance tools against target.
 
     Args:
-        orchestrator: Orchestrator instance (for tool_runner, parser, normalizer, ws_publisher, etc.)
+        ctx: ToolContext or Orchestrator (provides tool_runner, parser, normalizer)
         target: Target URL
         budget: Budget configuration
         aggressiveness: Scan aggressiveness level (default, high, extreme)
@@ -41,12 +41,18 @@ def execute_recon_tools(
     Returns:
         List of findings
     """
+    # Lazily get a ToolContext-aware wrapper
+    if not hasattr(ctx, "publish_activity"):
+        from tools.context import ToolContext
+
+        ctx = ToolContext.from_orchestrator(ctx)
+
     all_findings = []
 
     # Guard against None/empty target
     if not target:
         logger.warning(
-            f"[execute_recon_tools] No valid target for engagement {orchestrator.engagement_id}, skipping recon"
+            f"[execute_recon_tools] No valid target for engagement {ctx.engagement_id}, skipping recon"
         )
         from models.recon_context import ReconContext
 
@@ -72,30 +78,26 @@ def execute_recon_tools(
     def _emit(
         tool: str, activity: str, status: str, items: int = None, details: str = None
     ):
-        orchestrator.ws_publisher.publish_scanner_activity(
-            engagement_id=orchestrator.engagement_id,
-            tool_name=tool,
+        ctx.publish_activity(
+            tool=tool,
             activity=activity,
             status=status,
-            target=target_domain,
-            items_found=items,
+            items=items,
             details=details,
         )
 
     # Execute httpx for endpoint discovery
     _emit("httpx", "Discovering live endpoints and probing HTTP services", "started")
     try:
-        emit_tool_start(
-            orchestrator.engagement_id, "httpx", ["-u", target, "-json", "-silent"]
-        )
-        httpx_result = orchestrator.tool_runner.run(
+        emit_tool_start(ctx.engagement_id, "httpx", ["-u", target, "-json", "-silent"])
+        httpx_result = ctx.tool_runner.run(
             "httpx", ["-u", target, "-json", "-silent"], timeout=TOOL_TIMEOUT_SHORT
         )
         parsed_count = 0
         if httpx_result.get("success"):
-            parsed = orchestrator.parser.parse("httpx", httpx_result.get("stdout", ""))
+            parsed = ctx.parser.parse("httpx", httpx_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "httpx")
+                normalized = ctx._normalize_finding(p, "httpx")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -114,22 +116,20 @@ def execute_recon_tools(
     )
     try:
         emit_tool_start(
-            orchestrator.engagement_id,
+            ctx.engagement_id,
             "katana",
             ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
         )
-        katana_result = orchestrator.tool_runner.run(
+        katana_result = ctx.tool_runner.run(
             "katana",
             ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
             timeout=TOOL_TIMEOUT_DEFAULT if agg == "extreme" else 120,
         )
         parsed_count = 0
         if katana_result.get("success"):
-            parsed = orchestrator.parser.parse(
-                "katana", katana_result.get("stdout", "")
-            )
+            parsed = ctx.parser.parse("katana", katana_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "katana")
+                normalized = ctx._normalize_finding(p, "katana")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -157,17 +157,17 @@ def execute_recon_tools(
             ffuf_cmd.extend(["-t", "50"])
         elif agg == "extreme":
             ffuf_cmd.extend(["-t", "100", "-mc", "all"])
-        emit_tool_start(orchestrator.engagement_id, "ffuf", ffuf_cmd)
-        ffuf_result = orchestrator.tool_runner.run(
+        emit_tool_start(ctx.engagement_id, "ffuf", ffuf_cmd)
+        ffuf_result = ctx.tool_runner.run(
             "ffuf",
             ffuf_cmd,
             timeout=TOOL_TIMEOUT_LONG if agg == "extreme" else TOOL_TIMEOUT_DEFAULT,
         )
         parsed_count = 0
         if ffuf_result.get("success"):
-            parsed = orchestrator.parser.parse("ffuf", ffuf_result.get("stdout", ""))
+            parsed = ctx.parser.parse("ffuf", ffuf_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "ffuf")
+                normalized = ctx._normalize_finding(p, "ffuf")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -192,15 +192,13 @@ def execute_recon_tools(
         amass_timeout = (
             TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
         )
-        emit_tool_start(orchestrator.engagement_id, "amass", amass_cmd)
-        amass_result = orchestrator.tool_runner.run(
-            "amass", amass_cmd, timeout=amass_timeout
-        )
+        emit_tool_start(ctx.engagement_id, "amass", amass_cmd)
+        amass_result = ctx.tool_runner.run("amass", amass_cmd, timeout=amass_timeout)
         parsed_count = 0
         if amass_result.get("success"):
-            parsed = orchestrator.parser.parse("amass", amass_result.get("stdout", ""))
+            parsed = ctx.parser.parse("amass", amass_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "amass")
+                normalized = ctx._normalize_finding(p, "amass")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -222,18 +220,16 @@ def execute_recon_tools(
     )
     try:
         emit_tool_start(
-            orchestrator.engagement_id, "subfinder", ["-d", target_domain, "-silent"]
+            ctx.engagement_id, "subfinder", ["-d", target_domain, "-silent"]
         )
-        subfinder_result = orchestrator.tool_runner.run(
+        subfinder_result = ctx.tool_runner.run(
             "subfinder", ["-d", target_domain, "-silent"], timeout=TOOL_TIMEOUT_SHORT
         )
         parsed_count = 0
         if subfinder_result.get("success"):
-            parsed = orchestrator.parser.parse(
-                "subfinder", subfinder_result.get("stdout", "")
-            )
+            parsed = ctx.parser.parse("subfinder", subfinder_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "subfinder")
+                normalized = ctx._normalize_finding(p, "subfinder")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -250,19 +246,15 @@ def execute_recon_tools(
     # Execute alterx for subdomain permutation generation
     _emit("alterx", f"Generating subdomain permutations for {target_domain}", "started")
     try:
-        emit_tool_start(
-            orchestrator.engagement_id, "alterx", ["-d", target_domain, "-silent"]
-        )
-        alterx_result = orchestrator.tool_runner.run(
+        emit_tool_start(ctx.engagement_id, "alterx", ["-d", target_domain, "-silent"])
+        alterx_result = ctx.tool_runner.run(
             "alterx", ["-d", target_domain, "-silent"], timeout=120
         )
         parsed_count = 0
         if alterx_result.get("success"):
-            parsed = orchestrator.parser.parse(
-                "alterx", alterx_result.get("stdout", "")
-            )
+            parsed = ctx.parser.parse("alterx", alterx_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "alterx")
+                normalized = ctx._normalize_finding(p, "alterx")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -294,15 +286,13 @@ def execute_recon_tools(
         naabu_timeout = (
             120 if agg == "default" else TOOL_TIMEOUT_LONG if agg == "high" else 900
         )
-        emit_tool_start(orchestrator.engagement_id, "naabu", naabu_cmd)
-        naabu_result = orchestrator.tool_runner.run(
-            "naabu", naabu_cmd, timeout=naabu_timeout
-        )
+        emit_tool_start(ctx.engagement_id, "naabu", naabu_cmd)
+        naabu_result = ctx.tool_runner.run("naabu", naabu_cmd, timeout=naabu_timeout)
         parsed_count = 0
         if naabu_result.get("success"):
-            parsed = orchestrator.parser.parse("naabu", naabu_result.get("stdout", ""))
+            parsed = ctx.parser.parse("naabu", naabu_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "naabu")
+                normalized = ctx._normalize_finding(p, "naabu")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -319,19 +309,15 @@ def execute_recon_tools(
     # Execute whatweb for technology fingerprinting
     _emit("whatweb", "Fingerprinting web technologies and server stack", "started")
     try:
-        emit_tool_start(
-            orchestrator.engagement_id, "whatweb", ["--format=json", target]
-        )
-        whatweb_result = orchestrator.tool_runner.run(
+        emit_tool_start(ctx.engagement_id, "whatweb", ["--format=json", target])
+        whatweb_result = ctx.tool_runner.run(
             "whatweb", ["--format=json", target], timeout=120
         )
         parsed_count = 0
         if whatweb_result.get("success"):
-            parsed = orchestrator.parser.parse(
-                "whatweb", whatweb_result.get("stdout", "")
-            )
+            parsed = ctx.parser.parse("whatweb", whatweb_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "whatweb")
+                normalized = ctx._normalize_finding(p, "whatweb")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -350,17 +336,15 @@ def execute_recon_tools(
         "nikto", "Scanning web server for misconfigurations and known issues", "started"
     )
     try:
-        emit_tool_start(
-            orchestrator.engagement_id, "nikto", ["-h", target, "-Format", "csv"]
-        )
-        nikto_result = orchestrator.tool_runner.run(
+        emit_tool_start(ctx.engagement_id, "nikto", ["-h", target, "-Format", "csv"])
+        nikto_result = ctx.tool_runner.run(
             "nikto", ["-h", target, "-Format", "csv"], timeout=TOOL_TIMEOUT_LONG
         )
         parsed_count = 0
         if nikto_result.get("success"):
-            parsed = orchestrator.parser.parse("nikto", nikto_result.get("stdout", ""))
+            parsed = ctx.parser.parse("nikto", nikto_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "nikto")
+                normalized = ctx._normalize_finding(p, "nikto")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -372,15 +356,15 @@ def execute_recon_tools(
     # Execute gau for known URLs
     _emit("gau", "Fetching known URLs from passive archives (gau)", "started")
     try:
-        emit_tool_start(orchestrator.engagement_id, "gau", [target, "--json"])
-        gau_result = orchestrator.tool_runner.run(
+        emit_tool_start(ctx.engagement_id, "gau", [target, "--json"])
+        gau_result = ctx.tool_runner.run(
             "gau", [target, "--json"], timeout=TOOL_TIMEOUT_DEFAULT
         )
         parsed_count = 0
         if gau_result.get("success"):
-            parsed = orchestrator.parser.parse("gau", gau_result.get("stdout", ""))
+            parsed = ctx.parser.parse("gau", gau_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "gau")
+                normalized = ctx._normalize_finding(p, "gau")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
@@ -392,17 +376,13 @@ def execute_recon_tools(
     # Execute waybackurls for historical URLs
     _emit("waybackurls", "Retrieving historical URLs from Wayback Machine", "started")
     try:
-        emit_tool_start(orchestrator.engagement_id, "waybackurls", [target])
-        wayback_result = orchestrator.tool_runner.run(
-            "waybackurls", [target], timeout=120
-        )
+        emit_tool_start(ctx.engagement_id, "waybackurls", [target])
+        wayback_result = ctx.tool_runner.run("waybackurls", [target], timeout=120)
         parsed_count = 0
         if wayback_result.get("success"):
-            parsed = orchestrator.parser.parse(
-                "waybackurls", wayback_result.get("stdout", "")
-            )
+            parsed = ctx.parser.parse("waybackurls", wayback_result.get("stdout", ""))
             for p in parsed:
-                normalized = orchestrator._normalize_finding(p, "waybackurls")
+                normalized = ctx._normalize_finding(p, "waybackurls")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1

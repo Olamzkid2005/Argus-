@@ -7,21 +7,21 @@ Uses Redis for temporary storage and PostgreSQL for persistence.
 
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import redis
 
-logger = logging.getLogger(__name__)
+from config.redis import REDIS_URL
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class FailedTask:
     """Represents a failed task entry"""
+
     task_id: str
     task_name: str
     args: list
@@ -66,7 +66,7 @@ class DeadLetterQueue:
         error_class: str,
         worker_id: str | None = None,
         retry_count: int = 0,
-        engagement_id: str | None = None
+        engagement_id: str | None = None,
     ) -> bool:
         """
         Add a failed task to the dead letter queue.
@@ -96,7 +96,7 @@ class DeadLetterQueue:
                 worker_id=worker_id,
                 retry_count=retry_count,
                 failed_at=datetime.now(UTC).isoformat(),
-                engagement_id=engagement_id
+                engagement_id=engagement_id,
             )
 
             # Store in Redis sorted set by timestamp
@@ -124,10 +124,7 @@ class DeadLetterQueue:
             return False
 
     def get_failed_tasks(
-        self,
-        engagement_id: str | None = None,
-        limit: int = 50,
-        offset: int = 0
+        self, engagement_id: str | None = None, limit: int = 50, offset: int = 0
     ) -> list[dict[str, Any]]:
         """
         Retrieve failed tasks from the DLQ.
@@ -149,7 +146,10 @@ class DeadLetterQueue:
                 main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 for raw_task in self.redis.zrange(main_key, 0, -1):
                     task = json.loads(raw_task)
-                    if task["task_id"] in [tid.decode() if isinstance(tid, bytes) else tid for tid in task_ids]:
+                    if task["task_id"] in [
+                        tid.decode() if isinstance(tid, bytes) else tid
+                        for tid in task_ids
+                    ]:
                         tasks.append(task)
                 return tasks
             else:
@@ -174,43 +174,32 @@ class DeadLetterQueue:
             logger.error(f"Failed to get DLQ count: {e}")
             return 0
 
-    def replay_task(self, task_id: str) -> bool:
+    def get_task_by_id(self, task_id: str) -> dict | None:
         """
-        Replay a failed task by re-sending it to Celery.
+        Find a task in the DLQ by its ID.
 
         Args:
-            task_id: The task ID to replay
+            task_id: The task ID to find
 
         Returns:
-            True if replay initiated successfully
+            Task dict if found, None otherwise
         """
         try:
-            # Find the task in DLQ
             key = f"{self.REDIS_KEY_PREFIX}:tasks"
             all_tasks = self.redis.zrange(key, 0, -1)
 
             for raw_task in all_tasks:
                 task = json.loads(raw_task)
                 if task["task_id"] == task_id:
-                    # Send task back to Celery
-                    from celery_app import app
-                    app.send_task(
-                        task["task_name"],
-                        args=task["args"],
-                        kwargs=task["kwargs"],
-                        task_id=task_id + ".replay"
-                    )
-                    logger.info(f"Replayed task {task_id}")
-                    return True
-
-            logger.warning(f"Task {task_id} not found in DLQ")
-            return False
-
+                    return task
+            return None
         except Exception as e:
-            logger.error(f"Failed to replay task {task_id}: {e}")
-            return False
+            logger.error(f"Failed to look up task {task_id}: {e}")
+            return None
 
-    def purge(self, engagement_id: str | None = None, older_than_hours: int | None = None) -> int:
+    def purge(
+        self, engagement_id: str | None = None, older_than_hours: int | None = None
+    ) -> int:
         """
         Remove tasks from DLQ.
 

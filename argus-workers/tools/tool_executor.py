@@ -2,6 +2,7 @@
 Tool Executor - End-to-end tool execution flow
 Wires together: Tool Runner → Parser → Normalizer → PostgreSQL
 """
+
 import time
 import uuid
 
@@ -11,6 +12,7 @@ from database.connection import connect
 from models.finding import VulnerabilityFinding
 from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser, ParserError
+from tools.models import ToolResult
 from tools.scope_validator import ScopeValidator, ScopeViolationError
 from tools.tool_runner import SecurityException, ToolRunner
 
@@ -40,7 +42,7 @@ class ToolExecutor:
         authorized_scope: dict,
         target_url: str,
         timeout: int = 60,
-        max_retries: int = 3
+        max_retries: int = 3,
     ) -> dict:
         """
         Execute tool with full pipeline
@@ -72,27 +74,20 @@ class ToolExecutor:
             }
 
         # Execute tool with retries
-        tool_result = self._execute_with_retries(
-            tool_name,
-            args,
-            timeout,
-            max_retries
-        )
+        tool_result = self._execute_with_retries(tool_name, args, timeout, max_retries)
 
-        if not tool_result["success"]:
+        if not tool_result.success:
             return {
                 "success": False,
                 "error": "tool_execution_failed",
-                "message": tool_result.get("stderr", "Unknown error"),
+                "message": tool_result.stderr or "Unknown error",
                 "tool": tool_name,
                 "duration_ms": int((time.time() - start_time) * 1000),
             }
 
         # Parse output with retries
         parsed_findings = self._parse_with_retries(
-            tool_name,
-            tool_result["stdout"],
-            max_retries=2
+            tool_name, tool_result.stderr or tool_result.stdout, max_retries=2
         )
 
         if parsed_findings is None:
@@ -100,8 +95,8 @@ class ToolExecutor:
             self._store_raw_output(
                 engagement_id,
                 tool_name,
-                tool_result["stdout"],
-                "Parser failed after retries"
+                tool_result.stdout,
+                "Parser failed after retries",
             )
             return {
                 "success": False,
@@ -113,15 +108,11 @@ class ToolExecutor:
 
         # Normalize findings
         normalized_findings = self.normalizer.normalize_batch(
-            parsed_findings,
-            tool_name
+            parsed_findings, tool_name
         )
 
         # Store findings in PostgreSQL
-        stored_count = self._store_findings(
-            engagement_id,
-            normalized_findings
-        )
+        stored_count = self._store_findings(engagement_id, normalized_findings)
 
         duration_ms = int((time.time() - start_time) * 1000)
 
@@ -133,12 +124,8 @@ class ToolExecutor:
         }
 
     def _execute_with_retries(
-        self,
-        tool_name: str,
-        args: list[str],
-        timeout: int,
-        max_retries: int
-    ) -> dict:
+        self, tool_name: str, args: list[str], timeout: int, max_retries: int
+    ) -> ToolResult:
         """
         Execute tool with exponential backoff retries
 
@@ -149,7 +136,7 @@ class ToolExecutor:
             max_retries: Maximum retry attempts
 
         Returns:
-            Tool execution result
+            ToolResult
         """
         attempt = 0
         backoff_seconds = 1
@@ -158,7 +145,7 @@ class ToolExecutor:
             try:
                 result = self.tool_runner.run(tool_name, args, timeout)
 
-                if result["success"]:
+                if result.success:
                     return result
 
                 # Tool failed, retry
@@ -169,34 +156,34 @@ class ToolExecutor:
 
             except SecurityException as e:
                 # Don't retry security exceptions
-                return {
-                    "success": False,
-                    "stderr": str(e),
-                    "tool": tool_name,
-                }
+                return ToolResult(
+                    success=False,
+                    stderr=str(e),
+                    tool=tool_name,
+                    error=str(e),
+                )
             except Exception as e:
                 attempt += 1
                 if attempt < max_retries:
                     time.sleep(backoff_seconds)
                     backoff_seconds *= 2
                 else:
-                    return {
-                        "success": False,
-                        "stderr": str(e),
-                        "tool": tool_name,
-                    }
+                    return ToolResult(
+                        success=False,
+                        stderr=str(e),
+                        tool=tool_name,
+                        error=str(e),
+                    )
 
-        return {
-            "success": False,
-            "stderr": f"Tool failed after {max_retries} attempts",
-            "tool": tool_name,
-        }
+        return ToolResult(
+            success=False,
+            stderr=f"Tool failed after {max_retries} attempts",
+            tool=tool_name,
+            error=f"Tool failed after {max_retries} attempts",
+        )
 
     def _parse_with_retries(
-        self,
-        tool_name: str,
-        raw_output: str,
-        max_retries: int = 2
+        self, tool_name: str, raw_output: str, max_retries: int = 2
     ) -> list[dict] | None:
         """
         Parse tool output with linear backoff retries
@@ -228,9 +215,7 @@ class ToolExecutor:
         return None
 
     def _store_findings(
-        self,
-        engagement_id: str,
-        findings: list[VulnerabilityFinding]
+        self, engagement_id: str, findings: list[VulnerabilityFinding]
     ) -> int:
         """
         Store findings in PostgreSQL
@@ -269,7 +254,9 @@ class ToolExecutor:
                         finding_id,
                         engagement_id,
                         finding.type,
-                        finding.severity.value if hasattr(finding.severity, 'value') else finding.severity,
+                        finding.severity.value
+                        if hasattr(finding.severity, "value")
+                        else finding.severity,
                         finding.confidence,
                         finding.endpoint,
                         Json(finding.evidence),
@@ -277,10 +264,13 @@ class ToolExecutor:
                         finding.cvss_score,
                         finding.owasp_category,
                         finding.cwe_id,
-                        finding.evidence_strength.value if finding.evidence_strength and hasattr(finding.evidence_strength, 'value') else (finding.evidence_strength or None),
+                        finding.evidence_strength.value
+                        if finding.evidence_strength
+                        and hasattr(finding.evidence_strength, "value")
+                        else (finding.evidence_strength or None),
                         finding.tool_agreement_level,
                         finding.fp_likelihood,
-                    )
+                    ),
                 )
 
                 stored_count += 1
@@ -297,11 +287,7 @@ class ToolExecutor:
             conn.close()
 
     def _store_raw_output(
-        self,
-        engagement_id: str,
-        tool_name: str,
-        raw_output: str,
-        error_message: str
+        self, engagement_id: str, tool_name: str, raw_output: str, error_message: str
     ):
         """
         Store raw output when parser fails
@@ -326,7 +312,7 @@ class ToolExecutor:
                     %s, %s, %s, %s, %s, NOW()
                 )
                 """,
-                (output_id, engagement_id, tool_name, raw_output, error_message)
+                (output_id, engagement_id, tool_name, raw_output, error_message),
             )
 
             conn.commit()

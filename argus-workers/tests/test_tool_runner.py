@@ -1,6 +1,7 @@
 """
 Tests for Tool Runner
 """
+
 import tempfile
 from pathlib import Path
 
@@ -44,25 +45,25 @@ class TestToolRunner:
         """Test that safe commands execute successfully"""
         result = self.runner.run("echo", ["test"])
 
-        assert result["success"] is True
-        assert "test" in result["stdout"]
-        assert result["returncode"] == 0
+        assert result.success is True
+        assert "test" in result.stdout
+        assert result.returncode == 0
 
     def test_run_captures_stderr(self):
         """Test that stderr is captured"""
         result = self.runner.run("ls", ["/nonexistent"])
 
-        assert result["success"] is False
-        assert result["returncode"] != 0
-        assert len(result["stderr"]) > 0
+        assert result.success is False
+        assert result.returncode != 0
+        assert len(result.stderr) > 0
 
     def test_run_enforces_timeout(self):
         """Test that timeout is enforced"""
         result = self.runner.run("sleep", ["10"], timeout=1)
 
-        assert result["success"] is False
-        assert result.get("timeout") is True
-        assert "timed out" in result["stderr"].lower()
+        assert result.success is False
+        assert result.timeout is True
+        assert "timed out" in result.stderr.lower()
 
     def test_locked_env_has_minimal_variables(self):
         """Test that locked environment has minimal variables"""

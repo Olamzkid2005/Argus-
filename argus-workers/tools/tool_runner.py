@@ -20,6 +20,7 @@ from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
 )
+from tools.models import ToolResult
 from tracing import ExecutionSpan, StructuredLogger, get_trace_id
 
 
@@ -266,7 +267,7 @@ class ToolRunner:
                 return candidate
         return tool
 
-    def run(self, tool: str, args: list[str], timeout: int = 180) -> dict:
+    def run(self, tool: str, args: list[str], timeout: int = 180) -> ToolResult:
         """
         Execute tool with safety validation
 
@@ -276,7 +277,7 @@ class ToolRunner:
             timeout: Timeout in seconds (default: 60)
 
         Returns:
-            Dictionary with stdout, stderr, returncode, tool
+            ToolResult with stdout, stderr, returncode, success
 
         Raises:
             SecurityException: If dangerous payload detected
@@ -355,17 +356,17 @@ class ToolRunner:
                 except Exception as log_err:
                     logger.warning("Failed to log tool execution: %s", log_err)
 
-                return {
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "returncode": result.returncode,
-                    "tool": tool,
-                    "success": success,
-                    "duration_ms": duration_ms,
-                    "timeout": False,
-                    "error": None,
-                    "trace_id": get_trace_id(),
-                }
+                return ToolResult(
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    returncode=result.returncode,
+                    tool=tool,
+                    success=success,
+                    duration_ms=duration_ms,
+                    timeout=False,
+                    error=None,
+                    trace_id=get_trace_id(),
+                )
 
             except subprocess.TimeoutExpired:
                 duration_ms = int((time.time() - start_time) * 1000)
@@ -391,17 +392,17 @@ class ToolRunner:
                     return_code=-1,
                 )
 
-                return {
-                    "stdout": "",
-                    "stderr": f"Tool execution timed out after {timeout} seconds",
-                    "returncode": -1,
-                    "tool": tool,
-                    "success": False,
-                    "duration_ms": duration_ms,
-                    "timeout": True,
-                    "error": None,
-                    "trace_id": get_trace_id(),
-                }
+                return ToolResult(
+                    stdout="",
+                    stderr=f"Tool execution timed out after {timeout} seconds",
+                    returncode=-1,
+                    tool=tool,
+                    success=False,
+                    duration_ms=duration_ms,
+                    timeout=True,
+                    error=None,
+                    trace_id=get_trace_id(),
+                )
             except Exception as e:
                 duration_ms = int((time.time() - start_time) * 1000)
 
@@ -426,17 +427,17 @@ class ToolRunner:
                     return_code=-1,
                 )
 
-                return {
-                    "stdout": "",
-                    "stderr": str(e),
-                    "returncode": -1,
-                    "tool": tool,
-                    "success": False,
-                    "duration_ms": duration_ms,
-                    "timeout": False,
-                    "error": str(e),
-                    "trace_id": get_trace_id(),
-                }
+                return ToolResult(
+                    stdout="",
+                    stderr=str(e),
+                    returncode=-1,
+                    tool=tool,
+                    success=False,
+                    duration_ms=duration_ms,
+                    timeout=False,
+                    error=str(e),
+                    trace_id=get_trace_id(),
+                )
 
     def run_nuclei(
         self,
