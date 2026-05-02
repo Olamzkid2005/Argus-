@@ -186,6 +186,11 @@ app.conf.update(
             "task": "tasks.maintenance.worker_health_check",
             "schedule": 60.0,
         },
+        # Update nuclei templates daily (ensure new CVEs are detected)
+        "update-nuclei-templates": {
+            "task": "tasks.maintenance.update_nuclei_templates",
+            "schedule": 86400.0,  # daily
+        },
     },
 )
 

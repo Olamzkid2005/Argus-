@@ -227,3 +227,30 @@ def worker_health_check(self):
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+
+@app.task(bind=True, name="tasks.maintenance.update_nuclei_templates")
+def update_nuclei_templates(self):
+    """
+    Update nuclei vulnerability templates to latest version.
+
+    Runs daily via Celery Beat to ensure new CVEs are detected.
+    """
+    logger.info("Starting daily nuclei templates update")
+    try:
+        from tools.update_nuclei_templates import update_nuclei_templates as _do_update
+        from tools.update_nuclei_templates import get_template_count
+
+        success = _do_update(timeout=300)
+        count = get_template_count()
+        logger.info(
+            f"Nuclei templates update {'succeeded' if success else 'failed'}. "
+            f"Total templates: {count}"
+        )
+        return {
+            "status": "completed" if success else "failed",
+            "template_count": count,
+        }
+    except Exception as e:
+        logger.error(f"Nuclei templates update task failed: {e}")
+        return {"status": "error", "error": str(e)}

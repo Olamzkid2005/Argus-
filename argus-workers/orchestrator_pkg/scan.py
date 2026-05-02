@@ -67,6 +67,15 @@ def execute_scan_tools(
             )
             continue
 
+        # Auto-update nuclei templates if feature flag is enabled
+        try:
+            from feature_flags import is_enabled
+            if is_enabled("nuclei_templates_auto_update"):
+                from tools.update_nuclei_templates import update_nuclei_templates as _update_templates
+                _update_templates(timeout=120)
+        except Exception:
+            pass  # Non-blocking — scan proceeds even if update fails
+
         # Get local nuclei templates path
         nuclei_templates = get_nuclei_templates_path()
         templates_exist = nuclei_templates.exists() and any(
