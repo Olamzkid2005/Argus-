@@ -58,7 +58,7 @@ def execute_recon_pipeline(
 
 def execute_scan_pipeline(
     ctx, targets: list[str], budget: dict, aggressiveness: str = "default",
-    auth_config: dict | None = None,
+    auth_config: dict | None = None, tech_stack: list[str] | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools via the appropriate pipeline.
@@ -69,6 +69,7 @@ def execute_scan_pipeline(
         budget: Budget config
         aggressiveness: Scan aggressiveness
         auth_config: Optional authentication configuration for scanning
+        tech_stack: Detected technology stack (triggers browser scanner for SPAs)
 
     Returns:
         List of findings
@@ -92,4 +93,4 @@ def execute_scan_pipeline(
         )
         from orchestrator_pkg.scan import execute_scan_tools as _legacy_scan
 
-        return _legacy_scan(ctx, targets, budget, aggressiveness, auth_config)
+        return _legacy_scan(ctx, targets, budget, aggressiveness, auth_config, tech_stack)

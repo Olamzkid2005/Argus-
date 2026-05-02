@@ -451,7 +451,7 @@ class Orchestrator:
 
             except Exception as e:
                 logger.warning(f"Agent scan failed for {target}: {e}. Falling back.")
-                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config)
+                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config, recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
 
         return all_findings
@@ -515,8 +515,9 @@ class Orchestrator:
             else:
                 mode += " (LLM unavailable)"
             logger.info(f"Running {mode} scan")
+            tech_stack = recon_context.tech_stack if recon_context else None
             findings = execute_scan_pipeline(
-                self, targets, job.get("budget", {}), scan_aggressiveness, auth_config
+                self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack
             )
 
         findings_count = len(findings)

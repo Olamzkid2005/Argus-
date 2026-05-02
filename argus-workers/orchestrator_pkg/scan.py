@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def execute_scan_tools(
     ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS,
-    auth_config: dict | None = None,
+    auth_config: dict | None = None, tech_stack: list[str] | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools against targets.
@@ -33,6 +33,7 @@ def execute_scan_tools(
         budget: Budget configuration
         aggressiveness: Scan aggressiveness level (default, high, extreme)
         auth_config: Optional authentication configuration for scanning
+        tech_stack: Detected technology stack (triggers browser scanner for SPAs)
 
     Returns:
         List of findings
@@ -302,5 +303,24 @@ def execute_scan_tools(
                     all_findings.append(normalized)
         except Exception as e:
             logger.warning(f"WebScanner failed for {target}: {e}")
+
+        # Browser-based SPA scanner (optional, triggered by tech_stack)
+        if tech_stack:
+            try:
+                from tools.browser_scanner import is_spa_target, scan as browser_scan
+                if is_spa_target(tech_stack):
+                    emit_tool_start(ctx.engagement_id, "browser_scanner", [target])
+                    logger.info(f"SPA detected — running browser scanner for {target}")
+                    browser_findings = browser_scan(target)
+                    for bf in browser_findings:
+                        normalized = ctx._normalize_finding(bf, "browser_scanner")
+                        if normalized:
+                            all_findings.append(normalized)
+                else:
+                    logger.debug(f"No SPA framework in tech_stack, skipping browser scanner")
+            except ImportError:
+                logger.debug("Playwright not available, skipping browser scanner")
+            except Exception as e:
+                logger.warning(f"Browser scanner failed for {target}: {e}")
 
     return all_findings

@@ -430,10 +430,10 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
         f.get("evidence", {}) for f in findings if f.get("source_tool") == "naabu"
     ]
     tech_stack = [
-        t
+        str(t)
         for f in findings
         if f.get("source_tool") == "whatweb"
-        for t in f.get("evidence", {}).get("technologies", [])
+        for t in f.get("evidence", {}).get("plugins", {})
     ]
     crawled_paths = [
         f["endpoint"] for f in findings if f.get("source_tool") in ("katana", "ffuf")
