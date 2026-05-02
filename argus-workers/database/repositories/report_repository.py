@@ -29,6 +29,7 @@ class ReportRepository:
         report_data: dict,
         generated_by: str = "llm",
         model_used: str = None,
+        sbom_json: dict = None,
     ) -> str | None:
         """
         Insert or update a report for an engagement.
@@ -38,6 +39,7 @@ class ReportRepository:
             report_data: Full report dict (must contain executive_summary, risk_level, etc.)
             generated_by: 'llm' or 'template'
             model_used: LLM model name used for generation
+            sbom_json: Optional CycloneDX SBOM JSON dict
 
         Returns:
             Report ID string, or None on failure
@@ -59,8 +61,8 @@ class ReportRepository:
                     INSERT INTO reports
                         (engagement_id, generated_by, executive_summary, full_report_json,
                          risk_level, total_findings, critical_count, high_count,
-                         medium_count, low_count, model_used)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         medium_count, low_count, model_used, sbom_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (engagement_id)
                     DO UPDATE SET
                         generated_by = EXCLUDED.generated_by,
@@ -73,6 +75,7 @@ class ReportRepository:
                         medium_count = EXCLUDED.medium_count,
                         low_count = EXCLUDED.low_count,
                         model_used = EXCLUDED.model_used,
+                        sbom_json = EXCLUDED.sbom_json,
                         created_at = CURRENT_TIMESTAMP
                     RETURNING id
                     """,
@@ -88,6 +91,7 @@ class ReportRepository:
                         medium,
                         low,
                         model_used,
+                        json.dumps(sbom_json) if sbom_json else None,
                     ),
                 )
                 row = cursor.fetchone()
@@ -111,7 +115,7 @@ class ReportRepository:
                 cursor.execute(
                     """
                     SELECT id, engagement_id, generated_by, executive_summary,
-                           full_report_json, risk_level, total_findings,
+                           full_report_json, sbom_json, risk_level, total_findings,
                            critical_count, high_count, medium_count, low_count,
                            model_used, created_at
                     FROM reports

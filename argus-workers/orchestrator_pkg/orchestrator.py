@@ -695,10 +695,26 @@ class Orchestrator:
                 )
 
                 repo = ReportRepository()
+                sbom_json = None
+                try:
+                    from database.repositories.finding_repository import FindingRepository
+                    from tools.sbom_generator import generate_sbom_from_findings
+                    fr = FindingRepository()
+                    all_findings = fr.get_findings_by_engagement(self.engagement_id)
+                    sbom_json = generate_sbom_from_findings(
+                        engagement_id=self.engagement_id,
+                        findings=all_findings,
+                        target_url=job.get("target", ""),
+                        repo_url=job.get("repo_url", ""),
+                    )
+                except Exception as e:
+                    logger.warning(f"SBOM generation failed (non-fatal): {e}")
+
                 repo.upsert_report(
                     engagement_id=self.engagement_id,
                     report_data=report_data,
                     model_used=LLM_AGENT_MODEL,
+                    sbom_json=sbom_json,
                 )
 
                 emit_thinking(self.engagement_id, "LLM report generated successfully")
