@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { log } from "@/lib/logger";
+import CronExpressionParser from "cron-parser";
 
 export async function GET() {
   log.api("GET", "/api/reports/scheduled");
@@ -49,22 +50,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "target_url and cron_expression are required" }, { status: 400 });
       }
 
-      // Calculate next_run_at from cron
-      const now = new Date();
-      let nextRun = new Date(now);
-      if (cron_expression === "0 2 * * *") {
-        nextRun.setDate(nextRun.getDate() + 1);
-        nextRun.setHours(2, 0, 0, 0);
-      } else if (cron_expression === "0 2 * * 1") {
-        nextRun.setDate(nextRun.getDate() + (8 - nextRun.getDay()) % 7 || 7);
-        nextRun.setHours(2, 0, 0, 0);
-      } else if (cron_expression === "0 2 1 * *") {
-        nextRun.setMonth(nextRun.getMonth() + 1);
-        nextRun.setDate(1);
-        nextRun.setHours(2, 0, 0, 0);
-      } else {
-        nextRun.setDate(nextRun.getDate() + 7);
-      }
+      // Calculate next_run_at from cron using cron-parser
+      const interval = CronExpressionParser.parse(cron_expression);
+      const nextRun = interval.next().toDate();
 
       const result = await pool.query(
         `
