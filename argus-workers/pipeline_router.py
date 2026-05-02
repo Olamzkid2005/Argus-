@@ -57,7 +57,8 @@ def execute_recon_pipeline(
 
 
 def execute_scan_pipeline(
-    ctx, targets: list[str], budget: dict, aggressiveness: str = "default"
+    ctx, targets: list[str], budget: dict, aggressiveness: str = "default",
+    auth_config: dict | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools via the appropriate pipeline.
@@ -67,6 +68,7 @@ def execute_scan_pipeline(
         targets: List of target URLs
         budget: Budget config
         aggressiveness: Scan aggressiveness
+        auth_config: Optional authentication configuration for scanning
 
     Returns:
         List of findings
@@ -90,4 +92,4 @@ def execute_scan_pipeline(
         )
         from orchestrator_pkg.scan import execute_scan_tools as _legacy_scan
 
-        return _legacy_scan(ctx, targets, budget, aggressiveness)
+        return _legacy_scan(ctx, targets, budget, aggressiveness, auth_config)

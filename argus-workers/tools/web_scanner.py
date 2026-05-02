@@ -189,7 +189,7 @@ class WebScanner:
     }
 
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
-                 llm_payload_generator=None):
+                 llm_payload_generator=None, session: requests.Session | None = None):
         """
         Initialize web scanner.
 
@@ -197,11 +197,12 @@ class WebScanner:
             timeout: Request timeout in seconds
             rate_limit: Seconds between requests
             llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
+            session: Optional pre-authenticated requests.Session
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
-        self.session = requests.Session()
+        self.session = session or requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",

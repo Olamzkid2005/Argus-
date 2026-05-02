@@ -63,7 +63,8 @@ class APISecurityScanner:
     ]
 
     def __init__(
-        self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None
+        self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None,
+        session: requests.Session | None = None,
     ):
         """
         Initialize API security scanner.
@@ -73,12 +74,13 @@ class APISecurityScanner:
             rate_limit: Seconds between requests
             llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
             authorized_scope: Optional URL prefix that defines the authorized testing scope
+            session: Optional pre-authenticated requests.Session
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
         self.authorized_scope = authorized_scope
-        self.session = requests.Session()
+        self.session = session or requests.Session()
         self.session.headers.update(
             {
                 "User-Agent": "Argus-API-Scanner/1.0",

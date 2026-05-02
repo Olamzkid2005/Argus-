@@ -366,6 +366,7 @@ class Orchestrator:
         recon_context: "ReconContext",
         aggressiveness: str = DEFAULT_AGGRESSIVENESS,
         authorized_scope: dict = None,
+        auth_config: dict | None = None,
     ) -> list[dict]:
         """
         Run the scan phase using the LLM ReAct agent.
@@ -377,6 +378,7 @@ class Orchestrator:
             recon_context: ReconContext from recon phase
             aggressiveness: Scan aggressiveness level
             authorized_scope: Optional authorized scope for validation
+            auth_config: Optional authentication configuration for scanning
 
         Returns:
             List of findings
@@ -449,7 +451,7 @@ class Orchestrator:
 
             except Exception as e:
                 logger.warning(f"Agent scan failed for {target}: {e}. Falling back.")
-                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness)
+                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config)
                 all_findings.extend(fallback)
 
         return all_findings
@@ -489,6 +491,8 @@ class Orchestrator:
         recon_context = load_recon_context(self.engagement_id)
         agent_mode_enabled = job.get("agent_mode", True)
 
+        auth_config = job.get("auth_config", {})
+
         if (
             agent_mode_enabled
             and recon_context is not None
@@ -500,7 +504,7 @@ class Orchestrator:
                 "LLM agent mode active — analyzing recon results and selecting scan tools...",
             )
             findings = self.run_scan_with_agent(
-                targets, recon_context, scan_aggressiveness
+                targets, recon_context, scan_aggressiveness, auth_config=auth_config
             )
         else:
             mode = "deterministic"
@@ -512,7 +516,7 @@ class Orchestrator:
                 mode += " (LLM unavailable)"
             logger.info(f"Running {mode} scan")
             findings = execute_scan_pipeline(
-                self, targets, job.get("budget", {}), scan_aggressiveness
+                self, targets, job.get("budget", {}), scan_aggressiveness, auth_config
             )
 
         findings_count = len(findings)

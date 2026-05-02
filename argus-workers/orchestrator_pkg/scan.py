@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def execute_scan_tools(
-    ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS
+    ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS,
+    auth_config: dict | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools against targets.
@@ -31,6 +32,7 @@ def execute_scan_tools(
         targets: List of target URLs
         budget: Budget configuration
         aggressiveness: Scan aggressiveness level (default, high, extreme)
+        auth_config: Optional authentication configuration for scanning
 
     Returns:
         List of findings
@@ -272,12 +274,24 @@ def execute_scan_tools(
         except Exception as e:
             logger.warning(f"testssl failed for {target}: {e}")
 
+        # Authenticate session if auth_config is provided
+        authenticated_session = None
+        if auth_config:
+            try:
+                from tools.auth_manager import AuthManager
+                auth_manager = AuthManager(auth_config)
+                authenticated_session = auth_manager.authenticate(target)
+                logger.info(f"Authentication successful for {target}")
+            except Exception as e:
+                logger.warning(f"Authentication failed for {target}: {e}")
+
         # Execute comprehensive web scanner
         try:
             web_scanner = WebScanner(
                 timeout=SSL_TIMEOUT,
                 rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
                 llm_payload_generator=ctx.llm_payload_generator,
+                session=authenticated_session,
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
             web_findings = web_scanner.scan(target)
