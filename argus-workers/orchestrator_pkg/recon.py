@@ -94,8 +94,8 @@ def execute_recon_tools(
             "httpx", ["-u", target, "-json", "-silent"], timeout=TOOL_TIMEOUT_SHORT
         )
         parsed_count = 0
-        if httpx_result.get("success"):
-            parsed = ctx.parser.parse("httpx", httpx_result.get("stdout", ""))
+        if httpx_result.success:
+            parsed = ctx.parser.parse("httpx", httpx_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "httpx")
                 if normalized:
@@ -126,8 +126,8 @@ def execute_recon_tools(
             timeout=TOOL_TIMEOUT_DEFAULT if agg == "extreme" else 120,
         )
         parsed_count = 0
-        if katana_result.get("success"):
-            parsed = ctx.parser.parse("katana", katana_result.get("stdout", ""))
+        if katana_result.success:
+            parsed = ctx.parser.parse("katana", katana_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "katana")
                 if normalized:
@@ -164,8 +164,8 @@ def execute_recon_tools(
             timeout=TOOL_TIMEOUT_LONG if agg == "extreme" else TOOL_TIMEOUT_DEFAULT,
         )
         parsed_count = 0
-        if ffuf_result.get("success"):
-            parsed = ctx.parser.parse("ffuf", ffuf_result.get("stdout", ""))
+        if ffuf_result.success:
+            parsed = ctx.parser.parse("ffuf", ffuf_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "ffuf")
                 if normalized:
@@ -195,8 +195,8 @@ def execute_recon_tools(
         emit_tool_start(ctx.engagement_id, "amass", amass_cmd)
         amass_result = ctx.tool_runner.run("amass", amass_cmd, timeout=amass_timeout)
         parsed_count = 0
-        if amass_result.get("success"):
-            parsed = ctx.parser.parse("amass", amass_result.get("stdout", ""))
+        if amass_result.success:
+            parsed = ctx.parser.parse("amass", amass_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "amass")
                 if normalized:
@@ -226,8 +226,8 @@ def execute_recon_tools(
             "subfinder", ["-d", target_domain, "-silent"], timeout=TOOL_TIMEOUT_SHORT
         )
         parsed_count = 0
-        if subfinder_result.get("success"):
-            parsed = ctx.parser.parse("subfinder", subfinder_result.get("stdout", ""))
+        if subfinder_result.success:
+            parsed = ctx.parser.parse("subfinder", subfinder_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "subfinder")
                 if normalized:
@@ -251,8 +251,8 @@ def execute_recon_tools(
             "alterx", ["-d", target_domain, "-silent"], timeout=120
         )
         parsed_count = 0
-        if alterx_result.get("success"):
-            parsed = ctx.parser.parse("alterx", alterx_result.get("stdout", ""))
+        if alterx_result.success:
+            parsed = ctx.parser.parse("alterx", alterx_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "alterx")
                 if normalized:
@@ -289,8 +289,8 @@ def execute_recon_tools(
         emit_tool_start(ctx.engagement_id, "naabu", naabu_cmd)
         naabu_result = ctx.tool_runner.run("naabu", naabu_cmd, timeout=naabu_timeout)
         parsed_count = 0
-        if naabu_result.get("success"):
-            parsed = ctx.parser.parse("naabu", naabu_result.get("stdout", ""))
+        if naabu_result.success:
+            parsed = ctx.parser.parse("naabu", naabu_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "naabu")
                 if normalized:
@@ -314,8 +314,8 @@ def execute_recon_tools(
             "whatweb", ["--format=json", target], timeout=120
         )
         parsed_count = 0
-        if whatweb_result.get("success"):
-            parsed = ctx.parser.parse("whatweb", whatweb_result.get("stdout", ""))
+        if whatweb_result.success:
+            parsed = ctx.parser.parse("whatweb", whatweb_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "whatweb")
                 if normalized:
@@ -341,8 +341,8 @@ def execute_recon_tools(
             "nikto", ["-h", target, "-Format", "csv"], timeout=TOOL_TIMEOUT_LONG
         )
         parsed_count = 0
-        if nikto_result.get("success"):
-            parsed = ctx.parser.parse("nikto", nikto_result.get("stdout", ""))
+        if nikto_result.success:
+            parsed = ctx.parser.parse("nikto", nikto_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "nikto")
                 if normalized:
@@ -361,8 +361,8 @@ def execute_recon_tools(
             "gau", [target, "--json"], timeout=TOOL_TIMEOUT_DEFAULT
         )
         parsed_count = 0
-        if gau_result.get("success"):
-            parsed = ctx.parser.parse("gau", gau_result.get("stdout", ""))
+        if gau_result.success:
+            parsed = ctx.parser.parse("gau", gau_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "gau")
                 if normalized:
@@ -379,8 +379,8 @@ def execute_recon_tools(
         emit_tool_start(ctx.engagement_id, "waybackurls", [target])
         wayback_result = ctx.tool_runner.run("waybackurls", [target], timeout=120)
         parsed_count = 0
-        if wayback_result.get("success"):
-            parsed = ctx.parser.parse("waybackurls", wayback_result.get("stdout", ""))
+        if wayback_result.success:
+            parsed = ctx.parser.parse("waybackurls", wayback_result.stdout)
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "waybackurls")
                 if normalized:

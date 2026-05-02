@@ -310,8 +310,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             gitleaks_result = orchestrator.tool_runner.run(
                 "gitleaks", gitleaks_cmd, timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
             )
-            if gitleaks_result.get("success"):
-                parsed = orchestrator.parser.parse("gitleaks", gitleaks_result.get("stdout", ""))
+            if gitleaks_result.success:
+                parsed = orchestrator.parser.parse("gitleaks", gitleaks_result.stdout)
                 count = 0
                 for p in parsed:
                     normalized = orchestrator._normalize_finding(p, "gitleaks")
@@ -343,8 +343,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 ],
                 timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
             )
-            if trivy_result.get("success"):
-                parsed = orchestrator.parser.parse("trivy", trivy_result.get("stdout", ""))
+            if trivy_result.success:
+                parsed = orchestrator.parser.parse("trivy", trivy_result.stdout)
                 count = 0
                 for p in parsed:
                     normalized = orchestrator._normalize_finding(p, "trivy")
@@ -373,9 +373,9 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                     ],
                     timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
                 )
-                if bandit_result.get("success"):
+                if bandit_result.success:
                     try:
-                        bandit_data = json.loads(bandit_result.get("stdout", "{}"))
+                        bandit_data = json.loads(bandit_result.stdout)
                         bandit_results = bandit_data.get("results", [])
                         count = 0
                         for issue in bandit_results:
@@ -420,9 +420,9 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
             )
             count = 0
-            if snyk_result.get("success"):
+            if snyk_result.success:
                 try:
-                    snyk_data = json.loads(snyk_result.get("stdout", "{}"))
+                    snyk_data = json.loads(snyk_result.stdout)
                     vulns = snyk_data.get("vulnerabilities", [])
                     for vuln in vulns:
                         severity = vuln.get("severity", "low").upper()
@@ -576,8 +576,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             semgrep_result = orchestrator.tool_runner.run(
                 "semgrep", semgrep_cmd, timeout=semgrep_timeout
             )
-            if semgrep_result.get("success"):
-                parsed = orchestrator.parser.parse("semgrep", semgrep_result.get("stdout", ""))
+            if semgrep_result.success:
+                parsed = orchestrator.parser.parse("semgrep", semgrep_result.stdout)
                 count = 0
                 for p in parsed:
                     normalized = orchestrator._normalize_finding(p, "semgrep")
@@ -586,8 +586,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                         count += 1
                 _emit("semgrep", f"Static analysis complete — found {count} code issues", "completed", items=count)
             else:
-                logger.warning(f"Semgrep scan failed: {semgrep_result.get('stderr')}")
-                _emit("semgrep", f"Scan failed: {semgrep_result.get('stderr', 'unknown error')[:200]}", "failed")
+                logger.warning(f"Semgrep scan failed: {semgrep_result.stderr}")
+                _emit("semgrep", f"Scan failed: {semgrep_result.stderr[:200]}", "failed")
         except Exception as e:
             _emit("semgrep", f"Static analysis failed: {str(e)}", "failed")
             logger.warning(f"Semgrep failed: {e}")

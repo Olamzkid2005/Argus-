@@ -98,11 +98,11 @@ def execute_scan_tools(
             )
             # Debug: log nuclei result
             logger.warning(
-                f"NUCLEI RESULT for {target}: success={nuclei_result.get('success')}, returncode={nuclei_result.get('returncode')}, stdout_len={len(nuclei_result.get('stdout', ''))}, stderr={nuclei_result.get('stderr', '')[:200]}"
+                f"NUCLEI RESULT for {target}: success={nuclei_result.success}, returncode={nuclei_result.returncode}, stdout_len={len(nuclei_result.stdout)}, stderr={nuclei_result.stderr[:200]}"
             )
 
-            if nuclei_result.get("success"):
-                stdout = nuclei_result.get("stdout", "")
+            if nuclei_result.success:
+                stdout = nuclei_result.stdout
                 parsed = ctx.parser.parse("nuclei", stdout)
                 logger.warning(
                     f"NUCLEI PARSED: {len(parsed)} findings from {len(stdout)} bytes of output"
@@ -128,8 +128,8 @@ def execute_scan_tools(
             dalfox_result = ctx.tool_runner.run(
                 "dalfox", dalfox_cmd, timeout=dalfox_timeout
             )
-            if dalfox_result.get("success"):
-                parsed = ctx.parser.parse("dalfox", dalfox_result.get("stdout", ""))
+            if dalfox_result.success:
+                parsed = ctx.parser.parse("dalfox", dalfox_result.stdout)
                 for p in parsed:
                     normalized = ctx._normalize_finding(p, "dalfox")
                     if normalized:
@@ -152,7 +152,7 @@ def execute_scan_tools(
             sqlmap_result = ctx.tool_runner.run(
                 "sqlmap", sqlmap_cmd, timeout=sqlmap_timeout
             )
-            if sqlmap_result.get("success"):
+            if sqlmap_result.success:
                 try:
                     with open(sqlmap_out) as f:
                         sqlmap_output = f.read()
@@ -186,7 +186,7 @@ def execute_scan_tools(
                 ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
                 timeout=arjun_timeout,
             )
-            if arjun_result.get("success"):
+            if arjun_result.success:
                 try:
                     with open(arjun_out) as f:
                         arjun_output = f.read()
@@ -207,8 +207,8 @@ def execute_scan_tools(
             jwt_result = ctx.tool_runner.run(
                 "jwt_tool", ["-u", target, "-C", "-d"], timeout=120
             )
-            if jwt_result.get("success"):
-                parsed = ctx.parser.parse("jwt_tool", jwt_result.get("stdout", ""))
+            if jwt_result.success:
+                parsed = ctx.parser.parse("jwt_tool", jwt_result.stdout)
                 for p in parsed:
                     normalized = ctx._normalize_finding(p, "jwt_tool")
                     if normalized:
@@ -229,7 +229,7 @@ def execute_scan_tools(
                 ["--url", target, "--batch", "--json-output", commix_out],
                 timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
             )
-            if commix_result.get("success"):
+            if commix_result.success:
                 try:
                     with open(commix_out) as f:
                         commix_output = f.read()
@@ -257,7 +257,7 @@ def execute_scan_tools(
                 ["--jsonfile", testssl_out, target],
                 timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
             )
-            if testssl_result.get("success"):
+            if testssl_result.success:
                 try:
                     with open(testssl_out) as f:
                         testssl_output = f.read()
