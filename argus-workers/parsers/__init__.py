@@ -1,10 +1,8 @@
 """
 Tool Output Parsers Package
 
-This package contains parsers for security tool outputs:
-- nuclei_parser: Parse Nuclei JSON output
-- httpx_parser: Parse httpx JSON output
-- subfinder_parser: Parse subfinder output
-- ffuf_parser: Parse ffuf JSON output
-- sqlmap_parser: Parse sqlmap output
+Each tool output format has a dedicated parser class.
+Individual parsers live in parsers/parsers/ and are re-exported here.
 """
+
+from parsers.parsers import *  # noqa: F401, F403
