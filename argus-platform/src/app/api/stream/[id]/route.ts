@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: engagementId } = await params;
@@ -80,7 +80,7 @@ export async function GET(
         });
 
         // Handle client disconnect
-        _req.signal.addEventListener("abort", () => {
+        req.signal.addEventListener("abort", () => {
           cleanup();
         });
       } catch (err) {
