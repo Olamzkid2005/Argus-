@@ -438,6 +438,28 @@ _register(ToolDefinition(
     timeout=600,
 ))
 
+_register(ToolDefinition(
+    name="phpcs",
+    description="PHP CodeSniffer security audit",
+    phases=["repo_scan"],
+    default_args=["--standard=Security", "--extensions=php", "--report=json"],
+    parameters=[
+        ToolParameter("target", "Target path", required=True),
+    ],
+    timeout=600,
+))
+
+_register(ToolDefinition(
+    name="spotbugs",
+    description="Java/Kotlin bytecode security scanner with find-sec-bugs",
+    phases=["repo_scan"],
+    default_args=["-textui", "-low", "-effort:max"],
+    parameters=[
+        ToolParameter("target", "Target path (JAR/WAR/class directory)", required=True),
+    ],
+    timeout=600,
+))
+
 
 # ── Specialized tools ──
 

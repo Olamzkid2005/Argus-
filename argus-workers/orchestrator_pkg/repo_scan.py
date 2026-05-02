@@ -562,7 +562,118 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("eslint", f"ESLint scan failed: {str(e)}", "failed")
                 logger.warning(f"ESLint failed: {e}")
 
-        # ── 7. Snyk: dependency vulnerability scanning ──
+        # ── 7. PHPCS: PHP security scanning ──
+        if "php" in detected_langs:
+            _emit("phpcs", "Running PHP CodeSniffer security audit", "started")
+            try:
+                phpcs_result = orchestrator.tool_runner.run(
+                    "phpcs",
+                    [
+                        "--standard=Security",
+                        "--extensions=php",
+                        "--report=json",
+                        "--ignore=*/vendor/*,*/node_modules/*,*/tests/*,*/test/*",
+                        "-q",
+                        temp_dir,
+                    ],
+                    timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
+                )
+                if phpcs_result.success and phpcs_result.stdout.strip():
+                    try:
+                        phpcs_data = json.loads(phpcs_result.stdout)
+                        count = 0
+                        for file_path, file_result in phpcs_data.get("files", {}).items():
+                            for violation in file_result.get("messages", []):
+                                severity = "HIGH" if violation.get("type") == "ERROR" else "MEDIUM" if violation.get("type") == "WARNING" else "LOW"
+                                source = violation.get("source", "")
+                                finding = {
+                                    "type": f"PHPCS_{source.replace('.', '_').upper() if source else 'SECURITY'}",
+                                    "severity": severity,
+                                    "endpoint": f"file:{file_path}:{violation.get('line', 0)}",
+                                    "evidence": {
+                                        "file": file_path,
+                                        "line": violation.get("line", 0),
+                                        "column": violation.get("column", 0),
+                                        "message": violation.get("message", ""),
+                                        "source": source,
+                                        "type": violation.get("type", ""),
+                                    },
+                                    "confidence": 0.85,
+                                    "tool": "phpcs",
+                                }
+                                normalized = orchestrator._normalize_finding(finding, "phpcs")
+                                if normalized:
+                                    add_finding(normalized)
+                                    count += 1
+                        _emit("phpcs", f"PHPCS security audit complete — found {count} issues", "completed", items=count)
+                    except json.JSONDecodeError:
+                        _emit("phpcs", "PHPCS output could not be parsed", "failed")
+                else:
+                    _emit("phpcs", "No PHPCS security issues found", "completed", items=0)
+            except Exception as e:
+                _emit("phpcs", f"PHPCS scan failed: {str(e)}", "failed")
+                logger.warning(f"PHPCS failed: {e}")
+
+        # ── 8. SpotBugs: Java/Kotlin security scanning ──
+        if "java" in detected_langs:
+            _emit("spotbugs", "Running SpotBugs Java security scanner", "started")
+            try:
+                spotbugs_result = orchestrator.tool_runner.run(
+                    "spotbugs",
+                    [
+                        "-textui",
+                        "-effort:max",
+                        "-low",
+                        "-progress",
+                        "-xml:withMessages",
+                        temp_dir,
+                    ],
+                    timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
+                )
+                if spotbugs_result.success and spotbugs_result.stdout.strip():
+                    try:
+                        import xml.etree.ElementTree as ET
+                        root = ET.fromstring(spotbugs_result.stdout)
+                        count = 0
+                        for bug_instance in root.findall(".//BugInstance"):
+                            pattern = bug_instance.get("type", "UNKNOWN")
+                            rank = int(bug_instance.get("rank", "20"))
+                            severity = "CRITICAL" if rank <= 5 else "HIGH" if rank <= 10 else "MEDIUM" if rank <= 15 else "LOW"
+                            source_line = bug_instance.find("SourceLine")
+                            file_path = source_line.get("sourcepath", "") if source_line is not None else ""
+                            line_num = int(source_line.get("start", 0)) if source_line is not None else 0
+                            short_msg = bug_instance.find("ShortMessage")
+                            long_msg = bug_instance.find("LongMessage")
+                            message = (long_msg.text if long_msg is not None and long_msg.text else
+                                      short_msg.text if short_msg is not None and short_msg.text else pattern)
+                            finding = {
+                                "type": f"SPOTBUGS_{pattern}",
+                                "severity": severity,
+                                "endpoint": f"file:{file_path}:{line_num}",
+                                "evidence": {
+                                    "file": file_path,
+                                    "line": line_num,
+                                    "message": message,
+                                    "pattern": pattern,
+                                    "rank": rank,
+                                },
+                                "confidence": 0.85,
+                                "tool": "spotbugs",
+                            }
+                            normalized = orchestrator._normalize_finding(finding, "spotbugs")
+                            if normalized:
+                                add_finding(normalized)
+                                count += 1
+                        _emit("spotbugs", f"SpotBugs scan complete — found {count} bugs", "completed", items=count)
+                    except Exception:
+                        _emit("spotbugs", "SpotBugs output could not be parsed", "failed")
+                else:
+                    _emit("spotbugs", "No SpotBugs issues found", "completed", items=0)
+            except Exception as e:
+                _emit("spotbugs", f"SpotBugs scan failed: {str(e)}", "failed")
+                logger.warning(f"SpotBugs failed: {e}")
+
+        # ── 9. Snyk: dependency vulnerability scanning ──
         _emit("snyk", "Running Snyk dependency vulnerability scan", "started")
         try:
             snyk_result = orchestrator.tool_runner.run(
