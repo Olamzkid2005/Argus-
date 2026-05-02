@@ -302,9 +302,12 @@ class Orchestrator:
     def _save_findings(
         self, findings: list[dict], source_tool_key: str = "source_tool"
     ):
-        """Save findings to the database (used by run_recon, run_scan, run_repo_scan)."""
+        """Save findings to the database."""
         if not self.finding_repo or not findings:
             return
+
+        # Normalize tool key: findings may have "tool" or "source_tool"
+        _tool_key = source_tool_key
 
         # Lazy import pgvector / embedding utilities
         _pgvector = None
@@ -392,7 +395,7 @@ class Orchestrator:
 
                 # Use dedup path for secret findings to prevent unbounded duplication
                 SECRET_TOOLS = {"gitleaks", "trufflehog", "secret-scan"}
-                st = finding.get(source_tool_key, "unknown")
+                st = finding.get("tool") or finding.get("source_tool") or "unknown"
                 if st in SECRET_TOOLS or finding.get("type", "").startswith("COMMITTED_SECRET"):
                     saved_id = self.finding_repo.upsert_secret_finding(
                         engagement_id=self.engagement_id,
@@ -468,7 +471,7 @@ class Orchestrator:
                                 "type": finding.get("type"),
                                 "severity": finding.get("severity"),
                                 "endpoint": finding.get("endpoint"),
-                                "source_tool": finding.get(source_tool_key, "unknown"),
+                                "source_tool": st,
                                 "confidence": finding.get("confidence", 0),
                             }
                         )
