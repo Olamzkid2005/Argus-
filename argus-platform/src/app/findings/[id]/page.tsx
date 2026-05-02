@@ -27,6 +27,9 @@ import {
   Radio,
   ExternalLink,
   ChevronRight,
+  Package,
+  GitBranch,
+  Hash,
 } from "lucide-react";
 
 // ── Types ──
@@ -256,6 +259,14 @@ export default function FindingDetailPage() {
   const hasRequest = !!evidence.request;
   const hasResponse = !!evidence.response;
   const reproSteps = finding.repro_steps || [];
+  const isSca = finding.type === "DEPENDENCY_VULNERABILITY" || ["npm-audit", "pip-audit", "govulncheck", "trivy", "snyk"].includes(finding.source_tool);
+  const scaPackage = evidence.package as string | undefined;
+  const scaVersion = evidence.version as string | undefined;
+  const scaVulnVersions = evidence.vulnerable_versions as string | undefined;
+  const scaFixVersion = (evidence.fix_version || evidence.fixed_version) as string | undefined;
+  const scaFixAvailable = evidence.fix_available as boolean | undefined;
+  const scaCves = (evidence.cve || evidence.cves) as string[] | string | undefined;
+  const scaCveList: string[] = Array.isArray(scaCves) ? scaCves : scaCves ? [scaCves] : [];
 
   return (
     <div className="min-h-screen bg-surface">
@@ -333,6 +344,102 @@ export default function FindingDetailPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* ═══════════════════════════════════════
+           SCA DETAILS (dependency vulnerability)
+           ═══════════════════════════════════════ */}
+        {isSca && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03 }}
+            className="bg-surface-container rounded-2xl border border-outline/20 p-6 space-y-4"
+          >
+            <h2 className="text-sm font-bold font-headline text-on-surface flex items-center gap-2">
+              <Package size={16} className="text-primary" />
+              Dependency Vulnerability Details
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Package Name */}
+              {scaPackage && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Package</div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-surface-container-high text-on-surface border border-outline/20">
+                    <Package size={12} />
+                    {scaPackage}
+                  </span>
+                </div>
+              )}
+
+              {/* Current Version */}
+              {scaVersion && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Current Version</div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-surface-container-high text-on-surface border border-outline/20">
+                    <GitBranch size={12} />
+                    {scaVersion}
+                  </span>
+                </div>
+              )}
+
+              {/* Vulnerable Range */}
+              {scaVulnVersions && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Vulnerable Range</div>
+                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-mono bg-red-500/10 text-red-400 border border-red-500/20">
+                    {scaVulnVersions}
+                  </span>
+                </div>
+              )}
+
+              {/* Fix Version */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Fix</div>
+                {scaFixVersion ? (
+                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-mono bg-green-500/10 text-green-400 border border-green-500/20">
+                    {scaFixVersion}
+                  </span>
+                ) : scaFixAvailable === false ? (
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <AlertTriangle size={12} />
+                    No fix available
+                  </span>
+                ) : (
+                  <span className="text-xs text-on-surface-variant italic">N/A</span>
+                )}
+              </div>
+            </div>
+
+            {/* CVE List */}
+            {scaCveList.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  Related CVEs ({scaCveList.length})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {scaCveList.map((cve) => {
+                    const cveId = typeof cve === "string" ? cve.trim() : "";
+                    if (!cveId || !cveId.startsWith("CVE-")) return null;
+                    return (
+                      <a
+                        key={cveId}
+                        href={`https://nvd.nist.gov/vuln/detail/${cveId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors"
+                      >
+                        <Hash size={10} />
+                        {cveId}
+                        <ExternalLink size={10} />
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* ═══════════════════════════════════════
            SECTION 2: EVIDENCE PANEL
