@@ -535,6 +535,24 @@ class Orchestrator:
                 self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack
             )
 
+        # Browser-based SPA scan (complementary to requests-based scanning)
+        try:
+            from tools.browser_scanner import scan as run_browser_scan
+            tech = recon_context.tech_stack if recon_context else (tech_stack or [])
+            tech_str = " ".join(tech).lower()
+            if any(f in tech_str for f in ["react", "vue", "angular", "next", "nuxt", "svelte"]):
+                for target in targets:
+                    emit_thinking(self.engagement_id, f"SPA detected — running browser scanner for {target}")
+                    browser_findings = run_browser_scan(target, tech_stack=tech)
+                    for bf in browser_findings:
+                        norm = self._normalize_finding(bf, "browser_scanner")
+                        if norm:
+                            findings.append(norm)
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Browser scanner failed (non-fatal): {e}")
+
         findings_count = len(findings)
         self._save_findings(findings)
 

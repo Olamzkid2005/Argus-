@@ -26,12 +26,7 @@ CACHE_POISONING_HEADERS = {
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _check_host_header_injection(target_url, session, findings)
-    _check_cache_poisoning(target_url, session, findings)
-    _check_http_request_smuggling(target_url, session, findings)
-    return findings
-
-
+    return NetworkCheck().check(target_url, session, findings)
 def _check_host_header_injection(target_url, session, findings):
     for host in HOST_INJECTION:
         resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,

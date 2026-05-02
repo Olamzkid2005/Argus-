@@ -26,13 +26,7 @@ SECURITY_HEADERS = [
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _check_security_headers(target_url, session, findings)
-    _check_csp(target_url, session, findings)
-    _check_cookies(target_url, session, findings)
-    _check_cors(target_url, session, findings)
-    return findings
-
-
+    return HeadersCheck().check(target_url, session, findings)
 def _check_security_headers(target_url, session, findings):
     resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
     if not resp:

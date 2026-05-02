@@ -469,6 +469,27 @@ def generate_full_report(
             )
             findings = [dict(row) for row in cursor.fetchall()]
 
+            # 3a. Generate SBOM from dependency findings
+            try:
+                from database.repositories.report_repository import ReportRepository
+                from tools.sbom_generator import generate_sbom_from_findings
+
+                sbom = generate_sbom_from_findings(
+                    engagement_id=engagement_id,
+                    findings=findings,
+                    target_url=engagement.get("target_url", ""),
+                )
+                if sbom:
+                    report_repo = ReportRepository()
+                    report_repo.upsert_report(
+                        engagement_id=engagement_id,
+                        report_data={},
+                        generated_by="sbom",
+                        sbom_json=sbom,
+                    )
+            except Exception as e:
+                logger.warning(f"SBOM generation failed (non-fatal): {e}")
+
             # 3. Count by severity
             critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
             high_count = sum(1 for f in findings if f["severity"] == "HIGH")

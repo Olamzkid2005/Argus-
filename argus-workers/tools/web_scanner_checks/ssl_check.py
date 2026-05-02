@@ -23,65 +23,7 @@ HSTS_MIN_MAX_AGE = 31536000
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    parsed = urlparse(target_url)
-    hostname = parsed.hostname
-    port = parsed.port or 443
-
-    if not hostname:
-        return findings
-
-    if parsed.scheme != "https":
-        findings.append(make_finding("NO_HTTPS", "HIGH", target_url, {
-            "scheme": parsed.scheme,
-            "message": "Target does not use HTTPS",
-        }, 0.95))
-        return findings
-
-    _check_hsts(target_url, hostname, session, findings)
-
-    context = ssl.create_default_context()
-    sock = None
-    ssock = None
-
-    try:
-        sock = socket.create_connection((hostname, port), timeout=_DEFAULT_TIMEOUT)
-        ssock = context.wrap_socket(sock, server_hostname=hostname)
-
-        try:
-            cert = ssock.getpeercert()
-        except (ValueError, ssl.SSLError):
-            cert = None
-        cipher = ssock.cipher()
-        version = ssock.version()
-
-        if cert:
-            _check_cert_expiry(cert, hostname, port, findings)
-            _check_self_signed(cert, hostname, port, findings)
-            _check_san(cert, hostname, port, findings)
-
-        _check_tls_version(version, hostname, port, findings)
-        _check_weak_cipher(cipher, findings, hostname, port)
-
-    except ssl.SSLError as e:
-        findings.append(make_finding("SSL_ERROR", "MEDIUM", target_url, {
-            "error": str(e),
-            "message": "SSL/TLS handshake failed",
-        }, 0.8))
-    except OSError:
-        logger.debug(f"SSL verification socket error for {hostname}:{port}")
-    except Exception as e:
-        logger.debug(f"SSL verification error: {e}")
-    finally:
-        if ssock:
-            with contextlib.suppress(Exception):
-                ssock.close()
-        if sock:
-            with contextlib.suppress(Exception):
-                sock.close()
-
-    return findings
-
-
+    return SslCheck().check(target_url, session, findings)
 def _check_hsts(target_url: str, hostname: str, session, findings: list):
     try:
         resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)

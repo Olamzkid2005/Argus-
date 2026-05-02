@@ -37,12 +37,7 @@ JWT_PATTERN = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _check_mass_assignment(target_url, session, findings)
-    _check_openapi_discovery(target_url, session, findings)
-    _check_jwt_algorithm_confusion(target_url, session, findings)
-    return findings
-
-
+    return ApiCheck().check(target_url, session, findings)
 def _check_mass_assignment(target_url, session, findings):
     api_paths = ["/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts"]
     for path in api_paths:

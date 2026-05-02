@@ -77,12 +77,7 @@ HTML_DEBUG_SIGNATURES = [b"<!DOCTYPE html", b"<html", b"<!DOCTYPE", b"scroll-smo
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _check_debug_endpoints(target_url, session, findings)
-    _check_sensitive_files(target_url, session, findings)
-    _check_verb_tampering(target_url, session, findings)
-    return findings
-
-
+    return DetectionCheck().check(target_url, session, findings)
 def _check_debug_endpoints(target_url, session, findings):
     for path in DEBUG_PATHS:
         url = urljoin(target_url, path.lstrip("/"))

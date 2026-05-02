@@ -90,13 +90,7 @@ DEBUG_INDICATORS = [
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _detect_waf(target_url, session, findings)
-    _time_based_detection(target_url, session, findings)
-    _response_analysis(target_url, session, findings)
-    _differential_analysis(target_url, session, findings)
-    return findings
-
-
+    return ResponseCheck().check(target_url, session, findings)
 def _detect_waf(target_url, session, findings):
     waf_response = None
     for payload in WAF_TRIGGER_PAYLOADS:

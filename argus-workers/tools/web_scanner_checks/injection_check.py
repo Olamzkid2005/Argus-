@@ -100,17 +100,7 @@ IGNORE_PARAMS = [
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _check_sqli(target_url, session, findings)
-    _check_sqli_time_based(target_url, session, findings)
-    _check_xss(target_url, session, findings)
-    _check_xss_dom_based(target_url, session, findings)
-    _check_ssti(target_url, session, findings)
-    _check_lfi(target_url, session, findings)
-    _check_xxe(target_url, session, findings)
-    _check_cmdi(target_url, session, findings)
-    return findings
-
-
+    return InjectionCheck().check(target_url, session, findings)
 def _find_params(target_url: str, session) -> set:
     resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
     if not resp:

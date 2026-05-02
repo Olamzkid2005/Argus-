@@ -48,14 +48,7 @@ REGISTER_PATHS = [
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    _check_default_credentials(target_url, session, findings)
-    _check_brute_force(target_url, session, findings)
-    _check_session_fixation(target_url, session, findings)
-    _check_password_reset(target_url, session, findings)
-    _check_registration_endpoints(target_url, session, findings)
-    return findings
-
-
+    return AuthCheck().check(target_url, session, findings)
 def _discover_auth_endpoints(target_url: str, session) -> list[str]:
     found = []
     for path in AUTH_PATHS:

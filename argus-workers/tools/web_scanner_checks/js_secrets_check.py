@@ -29,27 +29,7 @@ JS_SECRET_PATTERNS = [
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
-    if not resp:
-        return findings
-
-    js_urls = re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']', resp.text)
-    inline_scripts = re.findall(r'<script[^>]*>(.*?)</script>', resp.text, re.DOTALL)
-
-    for script in inline_scripts:
-        if len(script) > 50:
-            _scan_content_for_secrets(script, target_url + "/inline-script", findings)
-
-    for js_url in js_urls[:MAX_PAGES_TO_CRAWL]:
-        if not js_url.startswith("http"):
-            js_url = urljoin(target_url, js_url)
-        js_resp = safe_request("GET", js_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
-        if js_resp and js_resp.status_code == 200:
-            _scan_content_for_secrets(js_resp.text, js_url, findings)
-
-    return findings
-
-
+    return JsSecretsCheck().check(target_url, session, findings)
 def _scan_content_for_secrets(content: str, source: str, findings: list):
     for pattern, secret_type in JS_SECRET_PATTERNS:
         matches = re.findall(pattern, content, re.IGNORECASE)
