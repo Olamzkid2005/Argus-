@@ -6,10 +6,10 @@ reasoning, attack chain identification, false positive analysis, and prioritizat
 on top of already-scored data.
 """
 import logging
-from typing import Dict, List, Any
+from typing import Any
 
-from config.constants import LLM_AGENT_MAX_TOKENS_SYNTH
 from agent.agent_prompts import SYNTHESIS_SYSTEM_PROMPT, build_synthesis_prompt
+from config.constants import LLM_AGENT_MAX_TOKENS_SYNTH
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,10 @@ class LLMSynthesizer:
 
     def synthesize(
         self,
-        scored_findings: List[Dict],
-        attack_paths: List[Dict],
+        scored_findings: list[dict],
+        attack_paths: list[dict],
         recon_context: Any = None,
-    ) -> Dict:
+    ) -> dict:
         recon_summary = ""
         if recon_context is not None:
             recon_summary = (

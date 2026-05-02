@@ -8,48 +8,41 @@ Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2, 31.2, 31.3
 import logging
 import os
 import time
-from typing import Dict, List, Optional
 
-from database.connection import connect
-from tracing import (
-    TracingManager,
-    get_trace_id,
-    StructuredLogger,
-    ExecutionSpan,
-)
-from websocket_events import get_websocket_publisher
-from tools.tool_runner import ToolRunner
-from parsers.parser import Parser
-from parsers.normalizer import FindingNormalizer
-from database.repositories.finding_repository import FindingRepository
-from database.repositories.engagement_repository import EngagementRepository
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
     HARD_TIMEOUT_SECONDS,
     LLM_AGENT_MODEL,
 )
-from mcp_server import get_mcp_server
-from streaming import (
-    emit_thinking,
-    emit_tool_start,
-    emit_tool_complete,
-    emit_finding,
-    emit_state_change,
-    emit_progress,
-    emit_error,
-    emit_complete,
-    get_stream_manager,
-    StreamEvent,
-    StreamEventType,
-)
+from database.connection import connect
+from database.repositories.engagement_repository import EngagementRepository
+from database.repositories.finding_repository import FindingRepository
 from llm_client import LLMClient
-from tools.llm_payload_generator import LLMPayloadGenerator
-
-from .recon import execute_recon_tools, summarize_recon_findings
-from .scan import execute_scan_tools
-from .repo_scan import execute_repo_scan
-from tasks.utils import save_recon_context, load_recon_context
+from mcp_server import get_mcp_server
 from models.recon_context import ReconContext
+from parsers.normalizer import FindingNormalizer
+from parsers.parser import Parser
+from streaming import (
+    emit_state_change,
+    emit_thinking,
+    emit_tool_complete,
+    emit_tool_start,
+    get_stream_manager,
+)
+from tasks.utils import load_recon_context, save_recon_context
+from tools.llm_payload_generator import LLMPayloadGenerator
+from tools.tool_runner import ToolRunner
+from tracing import (
+    ExecutionSpan,
+    StructuredLogger,
+    TracingManager,
+    get_trace_id,
+)
+from websocket_events import get_websocket_publisher
+
+from .recon import execute_recon_tools
+from .repo_scan import execute_repo_scan
+from .scan import execute_scan_tools
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +127,7 @@ class Orchestrator:
         for tool in build_mcp_tool_definitions():
             self.mcp.register_tool(tool)
 
-    def mcp_run(self, tool: str, arguments: Dict = None) -> Dict:
+    def mcp_run(self, tool: str, arguments: dict = None) -> dict:
         """
         Execute a tool through the MCP protocol server with streaming.
         """
@@ -149,7 +142,7 @@ class Orchestrator:
         )
         return result
 
-    def _load_custom_rules(self, engagement_id: str) -> List[Dict]:
+    def _load_custom_rules(self, engagement_id: str) -> list[dict]:
         """Fetch active custom rules for the engagement's organization."""
         db_conn = os.getenv("DATABASE_URL")
         if not db_conn:
@@ -183,7 +176,7 @@ class Orchestrator:
             columns = [desc[0] for desc in cursor.description]
             rules = []
             for row in cursor.fetchall():
-                rule = dict(zip(columns, row))
+                rule = dict(zip(columns, row, strict=False))
                 rules.append(rule)
 
             cursor.close()
@@ -193,7 +186,7 @@ class Orchestrator:
             logger.warning(f"Failed to load custom rules: {e}")
             return []
 
-    def run(self, job: Dict) -> Dict:
+    def run(self, job: dict) -> dict:
         """Execute job workflow."""
         if self.start_time is None:
             self.start_time = time.time()
@@ -222,7 +215,7 @@ class Orchestrator:
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
-    def run_recon(self, job: Dict) -> Dict:
+    def run_recon(self, job: dict) -> dict:
         """Execute reconnaissance phase."""
         self._check_timeout()
 
@@ -287,7 +280,7 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
-    def _normalize_finding(self, raw_finding: Dict, tool: str) -> Optional[Dict]:
+    def _normalize_finding(self, raw_finding: dict, tool: str) -> dict | None:
         """Normalize a raw finding to VulnerabilityFinding schema."""
         try:
             finding = self.normalizer.normalize(raw_finding, tool)
@@ -306,7 +299,7 @@ class Orchestrator:
             return None
 
     def _save_findings(
-        self, findings: List[Dict], source_tool_key: str = "source_tool"
+        self, findings: list[dict], source_tool_key: str = "source_tool"
     ):
         """Save findings to the database (used by run_recon, run_scan, run_repo_scan)."""
         if not self.finding_repo or not findings:
@@ -369,11 +362,11 @@ class Orchestrator:
 
     def run_scan_with_agent(
         self,
-        targets: List[str],
+        targets: list[str],
         recon_context: "ReconContext",
         aggressiveness: str = DEFAULT_AGGRESSIVENESS,
-        authorized_scope: Dict = None,
-    ) -> List[Dict]:
+        authorized_scope: dict = None,
+    ) -> list[dict]:
         """
         Run the scan phase using the LLM ReAct agent.
 
@@ -388,7 +381,7 @@ class Orchestrator:
         Returns:
             List of findings
         """
-        from agent import create_phase_agent, AgentResult
+        from agent import AgentResult, create_phase_agent
         from database.repositories.agent_decision_repository import (
             AgentDecisionRepository,
         )
@@ -461,7 +454,7 @@ class Orchestrator:
 
         return all_findings
 
-    def run_scan(self, job: Dict) -> Dict:
+    def run_scan(self, job: dict) -> dict:
         """Execute scanning phase."""
         self._check_timeout()
 
@@ -556,7 +549,7 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
-    def run_analysis(self, job: Dict) -> Dict:
+    def run_analysis(self, job: dict) -> dict:
         """Execute analysis phase."""
         self._check_timeout()
 
@@ -591,7 +584,7 @@ class Orchestrator:
 
         db_conn = os.getenv("DATABASE_URL")
         if not db_conn:
-            raise EnvironmentError(
+            raise OSError(
                 "DATABASE_URL is not set — cannot create snapshot for analysis"
             )
         snapshot_mgr = SnapshotManager(db_conn)
@@ -660,7 +653,7 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
-    def run_reporting(self, job: Dict) -> Dict:
+    def run_reporting(self, job: dict) -> dict:
         """Execute reporting phase."""
         self._check_timeout()
 
@@ -674,9 +667,9 @@ class Orchestrator:
         report_data = {}
         if self.llm_client and self.llm_client.is_available():
             try:
-                from llm_service import LLMService
-                from llm_report_generator import LLMReportGenerator
                 from database.repositories.report_repository import ReportRepository
+                from llm_report_generator import LLMReportGenerator
+                from llm_service import LLMService
 
                 recon_ctx = load_recon_context(self.engagement_id)
                 scored_findings = job.get("scored_findings", [])
@@ -723,7 +716,7 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
-    def run_repo_scan(self, job: Dict) -> Dict:
+    def run_repo_scan(self, job: dict) -> dict:
         """Execute repository scanning phase."""
         self._check_timeout()
 
@@ -777,7 +770,7 @@ class Orchestrator:
         # Build recon context from repo findings for LLM agent
         if findings_count > 0:
             try:
-                vuln_types = list(set(f.get("type", "UNKNOWN") for f in findings))
+                vuln_types = list({f.get("type", "UNKNOWN") for f in findings})
                 severity_breakdown = {}
                 critical_files = []
                 has_secrets = False

@@ -5,9 +5,9 @@ Celery Worker Launcher
 Simple wrapper to launch the Celery worker with proper Python environment.
 """
 import os
-import sys
-import subprocess
 import signal
+import subprocess
+import sys
 
 # Get this script's directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,30 +39,30 @@ def main():
         "--concurrency=4",
         "-Q", "celery,recon,scan,analyze,report,repo_scan",
     ]
-    
+
     print(f"Starting Celery worker with: {' '.join(args)}")
     print(f"Working directory: {os.getcwd()}")
     print(f"PYTHONPATH: {os.environ.get('PYTHONPATH', 'not set')}")
-    
+
     # Start the worker
     proc = subprocess.Popen(
         args,
         cwd=SCRIPT_DIR,
         env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
     )
-    
+
     print(f"Celery worker started with PID: {proc.pid}")
-    
+
     # Handle shutdown signals
     def handle_signal(signum, frame):
         print(f"Received signal {signum}, shutting down...")
         proc.terminate()
         proc.wait()
         sys.exit(0)
-    
+
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
-    
+
     # Wait for the worker to finish
     try:
         proc.wait()

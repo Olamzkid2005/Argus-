@@ -7,10 +7,9 @@ for the cost guard to track cumulative spend.
 """
 import json
 import logging
-from typing import Dict, List, Optional
 
-from database.connection import connect, db_cursor
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
+from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class AgentDecisionRepository:
     Provides queries for cost tracking and decision history.
     """
 
-    def __init__(self, db_conn: Optional[str] = None):
+    def __init__(self, db_conn: str | None = None):
         """
         Args:
             db_conn: Database connection string. Defaults to DATABASE_URL env var.
@@ -37,12 +36,12 @@ class AgentDecisionRepository:
         phase: str,
         iteration: int,
         tool_selected: str,
-        arguments: Dict,
+        arguments: dict,
         reasoning: str = "",
         was_fallback: bool = False,
-        input_tokens: Optional[int] = None,
-        output_tokens: Optional[int] = None,
-    ) -> Optional[str]:
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> str | None:
         """
         Insert one row into agent_decisions.
 
@@ -92,7 +91,7 @@ class AgentDecisionRepository:
             logger.warning(f"Failed to log agent decision: {e}")
             return None
 
-    def get_decisions(self, engagement_id: str) -> List[Dict]:
+    def get_decisions(self, engagement_id: str) -> list[dict]:
         """
         Fetch all decisions for an engagement, ordered by created_at.
 
@@ -116,7 +115,7 @@ class AgentDecisionRepository:
                     (engagement_id,),
                 )
                 columns = [desc[0] for desc in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
         except Exception as e:
             logger.warning(f"Failed to get decisions: {e}")
             return []
@@ -147,7 +146,7 @@ class AgentDecisionRepository:
             logger.warning(f"Failed to get total cost: {e}")
             return 0.0
 
-    def get_stats_since(self, since_hours: int = 24) -> Dict:
+    def get_stats_since(self, since_hours: int = 24) -> dict:
         """
         Get aggregate agent decision stats for system health.
 
@@ -173,7 +172,7 @@ class AgentDecisionRepository:
                 )
                 columns = [desc[0] for desc in cursor.description]
                 row = cursor.fetchone()
-                return dict(zip(columns, row)) if row else {
+                return dict(zip(columns, row, strict=False)) if row else {
                     "total_decisions": 0,
                     "total_cost_usd": 0.0,
                     "fallback_count": 0,
@@ -188,7 +187,7 @@ class AgentDecisionRepository:
                 "llm_count": 0,
             }
 
-    def get_recent_decisions(self, limit: int = 10) -> List[Dict]:
+    def get_recent_decisions(self, limit: int = 10) -> list[dict]:
         """
         Get most recent decisions across all engagements.
 
@@ -212,12 +211,12 @@ class AgentDecisionRepository:
                     (limit,),
                 )
                 columns = [desc[0] for desc in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
         except Exception as e:
             logger.warning(f"Failed to get recent decisions: {e}")
             return []
 
-    def _estimate_cost(self, input_tokens: Optional[int], output_tokens: Optional[int]) -> float:
+    def _estimate_cost(self, input_tokens: int | None, output_tokens: int | None) -> float:
         """Estimate cost based on token counts."""
         if not input_tokens and not output_tokens:
             return 0.0

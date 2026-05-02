@@ -1,21 +1,21 @@
 """
 Attack Graph Engine - Computes probabilistic risk scores with confidence decay
 """
-from typing import Dict, List, Optional
 import math
+
 from models.finding import VulnerabilityFinding
 
 
 class Node:
     """Graph node representing vulnerability or endpoint"""
-    
+
     def __init__(
         self,
         node_id: str,
         node_type: str,
-        data: Dict,
-        cvss: Optional[float] = None,
-        confidence: Optional[float] = None
+        data: dict,
+        cvss: float | None = None,
+        confidence: float | None = None
     ):
         self.id = node_id
         self.type = node_type  # "vulnerability" or "endpoint"
@@ -26,7 +26,7 @@ class Node:
 
 class Edge:
     """Graph edge connecting nodes"""
-    
+
     def __init__(
         self,
         from_node: str,
@@ -42,8 +42,8 @@ class Edge:
 
 class Path:
     """Attack path through the graph"""
-    
-    def __init__(self, nodes: List[Node], edges: List[Edge]):
+
+    def __init__(self, nodes: list[Node], edges: list[Edge]):
         self.nodes = nodes
         self.edges = edges
 
@@ -52,7 +52,7 @@ class AttackGraph:
     """
     Attack Graph Engine for computing probabilistic risk scores
     """
-    
+
     # Edge type correlation factors
     CORRELATION_FACTORS = {
         "causes": 1.5,
@@ -61,14 +61,14 @@ class AttackGraph:
         "depends_on": 0.8,
         "independent": 1.0,
     }
-    
+
     # Exposure factors
     EXPOSURE_FACTORS = {
         "public": 1.0,
         "authenticated": 0.7,
         "internal": 0.4,
     }
-    
+
     # Severity value map for comparison (higher = more severe)
     SEVERITY_VALUES = {
         "CRITICAL": 5,
@@ -160,44 +160,44 @@ class AttackGraph:
             correlation_factor=self.CORRELATION_FACTORS["independent"],
         )
         self.edges.append(edge)
-    
+
     def compute_risk(self, path: Path, exposure: str = "public") -> float:
         """
         Compute risk using:
         risk = base_risk × confidence_weight × chain_multiplier × exposure_factor
-        
+
         Args:
             path: Attack path
             exposure: Exposure level (public, authenticated, internal)
-            
+
         Returns:
             Risk score (0.0-10.0)
         """
         # Calculate base risk (average CVSS)
         base_risk = self._calculate_base_risk(path)
-        
+
         # Calculate confidence weight (geometric mean with decay)
         confidence_weight = self.compute_confidence_decay(path)
-        
+
         # Calculate chain multiplier
         chain_multiplier = self._calculate_chain_multiplier(path)
-        
+
         # Get exposure factor
         exposure_factor = self.EXPOSURE_FACTORS.get(exposure, 1.0)
-        
+
         # Compute risk
         risk = base_risk * confidence_weight * chain_multiplier * exposure_factor
-        
+
         # Normalize to max 10.0
         return min(10.0, risk)
-    
+
     def _calculate_base_risk(self, path: Path) -> float:
         """
         Calculate base risk as average CVSS score
-        
+
         Args:
             path: Attack path
-            
+
         Returns:
             Base risk score
         """
@@ -205,21 +205,21 @@ class AttackGraph:
             node.cvss for node in path.nodes
             if node.cvss is not None
         ]
-        
+
         if not cvss_scores:
             return 5.0  # Default medium risk
-        
+
         return sum(cvss_scores) / len(cvss_scores)
-    
+
     def compute_confidence_decay(self, path: Path) -> float:
         """
         Confidence decays across chain length (geometric mean)
-        
+
         Penalizes low confidence in chains.
-        
+
         Args:
             path: Attack path
-            
+
         Returns:
             Confidence weight (0.0-1.0)
         """
@@ -227,37 +227,37 @@ class AttackGraph:
             node.confidence for node in path.nodes
             if node.confidence is not None
         ]
-        
+
         if not confidences:
             return 0.5  # Default medium confidence
-        
+
         # Geometric mean
         product = 1.0
         for conf in confidences:
             product *= conf
-        
+
         return math.pow(product, 1.0 / len(confidences))
-    
+
     def _calculate_chain_multiplier(self, path: Path) -> float:
         """
         Calculate chain multiplier: 1 + (0.2 × (path_length - 1))
-        
+
         Args:
             path: Attack path
-            
+
         Returns:
             Chain multiplier
         """
         path_length = len(path.nodes)
         return 1.0 + (0.2 * (path_length - 1))
-    
+
     def _estimate_cvss(self, severity: str) -> float:
         """
         Estimate CVSS score from severity
-        
+
         Args:
             severity: Severity level
-            
+
         Returns:
             Estimated CVSS score
         """
@@ -268,57 +268,57 @@ class AttackGraph:
             "LOW": 3.0,
             "INFO": 0.0,
         }
-        
+
         return severity_to_cvss.get(severity, 5.0)
-    
+
     def attack_surface_weight(self, path: Path, exposure: str = "public") -> float:
         """
         Weight based on endpoint exposure
-        
+
         Args:
             path: Attack path
             exposure: Exposure level
-            
+
         Returns:
             Exposure factor
         """
         return self.EXPOSURE_FACTORS.get(exposure, 1.0)
-    
-    def get_all_paths(self) -> List[Path]:
+
+    def get_all_paths(self) -> list[Path]:
         """
         Get all attack paths in the graph
-        
+
         Returns:
             List of attack paths
         """
         # Simple implementation: each vulnerability-endpoint pair is a path
         paths = []
-        
+
         for edge in self.edges:
             from_node = self.nodes.get(edge.from_node)
             to_node = self.nodes.get(edge.to_node)
-            
+
             if from_node and to_node:
                 path = Path(
                     nodes=[from_node, to_node],
                     edges=[edge]
                 )
                 paths.append(path)
-        
+
         return paths
-    
-    def get_highest_risk_paths(self, limit: int = 10) -> List[Dict]:
+
+    def get_highest_risk_paths(self, limit: int = 10) -> list[dict]:
         """
         Get highest risk paths
-        
+
         Args:
             limit: Maximum number of paths to return
-            
+
         Returns:
             List of path dictionaries with risk scores
         """
         paths = self.get_all_paths()
-        
+
         # Calculate risk for each path
         path_risks = []
         for path in paths:
@@ -335,8 +335,8 @@ class AttackGraph:
                     for node in path.nodes
                 ],
             })
-        
+
         # Sort by risk score descending
         path_risks.sort(key=lambda x: x["risk_score"], reverse=True)
-        
+
         return path_risks[:limit]

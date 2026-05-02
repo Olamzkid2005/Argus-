@@ -8,9 +8,8 @@ API key resolution order (first found wins):
 3. LLM_API_KEY environment variable
 4. Redis key settings:*:openrouter_api_key (configured via UI Settings page)
 """
-import os
 import logging
-from typing import List, Dict, Optional
+import os
 from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
@@ -30,7 +29,7 @@ class LLMResponse:
 class LLMClient:
     """
     Unified LLM client supporting OpenAI SDK and generic HTTP API.
-    
+
     Automatically detects provider from environment. Provides both
     async and sync methods. Implements retry with exponential backoff.
     Graceful degradation: is_available() returns False if not configured.
@@ -38,22 +37,22 @@ class LLMClient:
 
     def __init__(
         self,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        api_url: Optional[str] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        api_url: str | None = None,
         max_retries: int = 2,
-        redis_url: Optional[str] = None,
+        redis_url: str | None = None,
     ):
         """
         Initialize LLM client.
-        
+
         API key resolution order:
         1. Explicit api_key parameter
         2. OPENAI_API_KEY environment variable
         3. LLM_API_KEY environment variable
         4. Redis key settings:*:openrouter_api_key (from UI Settings page)
-        
+
         Args:
             provider: "openai" or "generic". Auto-detects from env if None.
             model: Model name. Defaults to env LLM_MODEL or "gpt-4o-mini".
@@ -65,7 +64,7 @@ class LLMClient:
         self.provider = provider or os.getenv("LLM_PROVIDER", "openai")
         self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
         self.max_retries = max_retries
-        
+
         # Resolve API key: explicit > env var > Redis (UI Settings)
         self.api_key = (
             api_key
@@ -78,36 +77,36 @@ class LLMClient:
             self.provider = "generic"
             self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         else:
-            self.api_url = api_url or os.getenv("LLM_API_URL", 
+            self.api_url = api_url or os.getenv("LLM_API_URL",
                 "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
             )
-        
+
         # OpenAI SDK client (lazy init)
         self._openai_client = None
-    
-    def _load_key_from_redis(self, redis_url: Optional[str] = None) -> Optional[str]:
+
+    def _load_key_from_redis(self, redis_url: str | None = None) -> str | None:
         """
         Load API key from Redis, where the UI Settings page stores it.
-        
+
         Looks up keys matching settings:*:openrouter_api_key pattern.
         This allows users to configure the API key once via the UI
         and have it picked up by the worker processes automatically.
-        
+
         Args:
             redis_url: Redis URL. Defaults to REDIS_URL env var.
-            
+
         Returns:
             API key string if found, None otherwise.
         """
         redis_url = redis_url or os.getenv("REDIS_URL")
         if not redis_url:
             return None
-        
+
         try:
             import redis as redis_module
-            
+
             r = redis_module.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
-            
+
             # Scan for any settings key matching the pattern
             cursor = 0
             while True:
@@ -120,14 +119,14 @@ class LLMClient:
                         return api_key
                 if cursor == 0:
                     break
-            
+
             logger.debug("No API key found in Redis settings")
             return None
-        
+
         except Exception as e:
             logger.debug(f"Could not load API key from Redis: {e}")
             return None
-    
+
     def _get_openai_client(self):
         """Lazy-init OpenAI client."""
         if self._openai_client is None and self.api_key:
@@ -139,8 +138,8 @@ class LLMClient:
                 logger.warning("openai package not installed, falling back to HTTP API")
                 self.provider = "generic"
         return self._openai_client
-    
-    def _build_messages(self, system_prompt: str, user_prompt: str) -> List[Dict]:
+
+    def _build_messages(self, system_prompt: str, user_prompt: str) -> list[dict]:
         """Build messages list for chat completion."""
         return [
             {"role": "system", "content": system_prompt},
@@ -149,29 +148,29 @@ class LLMClient:
 
     async def chat(
         self,
-        messages: List[Dict],
+        messages: list[dict],
         temperature: float = 0.3,
         max_tokens: int = 500,
-        response_format: Optional[Dict] = None,
+        response_format: dict | None = None,
     ) -> str:
         """
         Send chat completion request (async).
-        
+
         Args:
             messages: List of {"role": ..., "content": ...} dicts
             temperature: Sampling temperature (default 0.3)
             max_tokens: Max tokens in response (default 500)
             response_format: Optional {"type": "json_object"} for structured output
-            
+
         Returns:
             Response text string
-            
+
         Raises:
             LLMUnavailableError: If client is not configured or all retries fail
         """
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
-        
+
         last_error = None
         for attempt in range(self.max_retries + 1):
             try:
@@ -184,7 +183,7 @@ class LLMClient:
                     }
                     if response_format:
                         kwargs["response_format"] = response_format
-                    
+
                     import asyncio
                     response = await asyncio.wait_for(
                         self._async_openai_client.chat.completions.create(**kwargs),
@@ -193,8 +192,8 @@ class LLMClient:
                     return response.choices[0].message.content
                 else:
                     # Generic HTTP API
-                    import httpx
                     import certifi
+                    import httpx
                     async with httpx.AsyncClient(timeout=30, verify=certifi.where()) as client:
                         payload = {
                             "model": self.model,
@@ -204,15 +203,15 @@ class LLMClient:
                         }
                         if response_format:
                             payload["response_format"] = response_format
-                        
+
                         headers = {"Content-Type": "application/json"}
                         if self.api_key:
                             headers["Authorization"] = f"Bearer {self.api_key}"
-                        
+
                         resp = await client.post(self.api_url, json=payload, headers=headers)
                         resp.raise_for_status()
                         data = resp.json()
-                        
+
                         # Try common response formats
                         if "choices" in data and len(data["choices"]) > 0:
                             return data["choices"][0]["message"]["content"]
@@ -220,28 +219,28 @@ class LLMClient:
                             return data["content"]
                         else:
                             return str(data)
-            
+
             except Exception as e:
                 last_error = e
                 logger.warning(f"LLM chat attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
                     import asyncio
                     await asyncio.sleep(2 ** attempt)  # Exponential backoff
-        
+
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 
     def chat_sync(
         self,
-        messages: List[Dict],
+        messages: list[dict],
         temperature: float = 0.3,
         max_tokens: int = 500,
-        response_format: Optional[Dict] = None,
-        timeout: Optional[int] = None,
+        response_format: dict | None = None,
+        timeout: int | None = None,
     ) -> "LLMResponse":
         """
         Send chat completion request (synchronous).
         Used by scan-phase code that can't use async.
-        
+
         Same parameters as chat(), plus:
         timeout: Per-request timeout in seconds. Defaults to 30.
 
@@ -250,7 +249,7 @@ class LLMClient:
         """
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
-        
+
         req_timeout = timeout or 30
         last_error = None
         for attempt in range(self.max_retries + 1):
@@ -265,7 +264,7 @@ class LLMClient:
                     }
                     if response_format:
                         kwargs["response_format"] = response_format
-                    
+
                     response = self._openai_client.chat.completions.create(**kwargs)
                     usage = response.usage
                     input_tokens = usage.prompt_tokens if usage else 0
@@ -281,8 +280,8 @@ class LLMClient:
                         cost_usd=cost,
                     )
                 else:
-                    import httpx
                     import certifi
+                    import httpx
                     with httpx.Client(timeout=req_timeout, verify=certifi.where()) as client:
                         payload = {
                             "model": self.model,
@@ -292,11 +291,11 @@ class LLMClient:
                         }
                         if response_format:
                             payload["response_format"] = response_format
-                        
+
                         headers = {"Content-Type": "application/json"}
                         if self.api_key:
                             headers["Authorization"] = f"Bearer {self.api_key}"
-                        
+
                         resp = client.post(self.api_url, json=payload, headers=headers)
                         resp.raise_for_status()
                         data = resp.json()
@@ -310,7 +309,7 @@ class LLMClient:
                             (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
                             + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
                         )
-                        
+
                         if "choices" in data and len(data["choices"]) > 0:
                             text = data["choices"][0]["message"]["content"]
                         elif "content" in data:
@@ -324,14 +323,14 @@ class LLMClient:
                             output_tokens=output_tokens,
                             cost_usd=cost,
                         )
-            
+
             except Exception as e:
                 last_error = e
                 logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
                     import time
                     time.sleep(2 ** attempt)
-        
+
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 
     def is_available(self) -> bool:

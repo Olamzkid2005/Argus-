@@ -2,11 +2,11 @@
 Tests for SCA (Software Composition Analysis) scanning functions.
 """
 
-import pytest
 import json
-from unittest.mock import patch, MagicMock
 import sys
-import os
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestSCAScanning:

@@ -1,8 +1,10 @@
 """
 Tests for Engagement State Machine
 """
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, call
+
 from state_machine import EngagementStateMachine, InvalidStateTransition
 
 # Valid UUID for testing (matches the format UUID columns expect)

@@ -1,9 +1,11 @@
 """
 Reconnaissance execution logic extracted from Orchestrator.
 """
+
+from __future__ import annotations
+
 import logging
-import socket
-from typing import Dict, List
+from typing import TYPE_CHECKING
 
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
@@ -15,10 +17,18 @@ from streaming import emit_tool_start
 
 from .utils import get_wordlist_path
 
+if TYPE_CHECKING:
+    from models.recon_context import ReconContext
+
 logger = logging.getLogger(__name__)
 
 
-def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS) -> List[Dict]:
+def execute_recon_tools(
+    orchestrator,
+    target: str,
+    budget: dict,
+    aggressiveness: str = DEFAULT_AGGRESSIVENESS,
+) -> list[dict]:
     """
     Execute reconnaissance tools against target.
 
@@ -35,8 +45,11 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
 
     # Guard against None/empty target
     if not target:
-        logger.warning(f"[execute_recon_tools] No valid target for engagement {orchestrator.engagement_id}, skipping recon")
+        logger.warning(
+            f"[execute_recon_tools] No valid target for engagement {orchestrator.engagement_id}, skipping recon"
+        )
         from models.recon_context import ReconContext
+
         return [], ReconContext(target_url=target or "")
 
     target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
@@ -44,11 +57,21 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     # Aggressiveness config
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     katana_depth = {"default": "3", "high": "5", "extreme": "7"}.get(agg, "3")
-    naabu_ports = {"default": "-top-ports", "high": "-top-ports", "extreme": "-p-"}.get(agg, "-top-ports")
-    naabu_port_val = {"default": "1000", "high": "10000", "extreme": "1-65535"}.get(agg, "1000")
-    amass_mode = {"default": ["enum", "-d"], "high": ["enum", "-d"], "extreme": ["enum", "-d", "-brute", "-w"]}.get(agg, ["enum", "-d"])
+    naabu_ports = {"default": "-top-ports", "high": "-top-ports", "extreme": "-p-"}.get(
+        agg, "-top-ports"
+    )
+    naabu_port_val = {"default": "1000", "high": "10000", "extreme": "1-65535"}.get(
+        agg, "1000"
+    )
+    amass_mode = {
+        "default": ["enum", "-d"],
+        "high": ["enum", "-d"],
+        "extreme": ["enum", "-d", "-brute", "-w"],
+    }.get(agg, ["enum", "-d"])
 
-    def _emit(tool: str, activity: str, status: str, items: int = None, details: str = None):
+    def _emit(
+        tool: str, activity: str, status: str, items: int = None, details: str = None
+    ):
         orchestrator.ws_publisher.publish_scanner_activity(
             engagement_id=orchestrator.engagement_id,
             tool_name=tool,
@@ -62,11 +85,11 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     # Execute httpx for endpoint discovery
     _emit("httpx", "Discovering live endpoints and probing HTTP services", "started")
     try:
-        emit_tool_start(orchestrator.engagement_id, "httpx", ["-u", target, "-json", "-silent"])
+        emit_tool_start(
+            orchestrator.engagement_id, "httpx", ["-u", target, "-json", "-silent"]
+        )
         httpx_result = orchestrator.tool_runner.run(
-            "httpx",
-            ["-u", target, "-json", "-silent"],
-            timeout=TOOL_TIMEOUT_SHORT
+            "httpx", ["-u", target, "-json", "-silent"], timeout=TOOL_TIMEOUT_SHORT
         )
         parsed_count = 0
         if httpx_result.get("success"):
@@ -76,29 +99,46 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("httpx", "Live endpoint discovery complete", "completed", items=parsed_count)
+        _emit(
+            "httpx", "Live endpoint discovery complete", "completed", items=parsed_count
+        )
     except Exception as e:
         _emit("httpx", f"Live endpoint discovery failed: {str(e)}", "failed")
         logger.warning(f"httpx failed: {e}")
 
     # Execute katana for web crawling
-    _emit("katana", f"Crawling application routes and links up to depth {katana_depth}", "started")
+    _emit(
+        "katana",
+        f"Crawling application routes and links up to depth {katana_depth}",
+        "started",
+    )
     try:
-        emit_tool_start(orchestrator.engagement_id, "katana", ["-u", target, "-jsonl", "-silent", "-d", katana_depth])
+        emit_tool_start(
+            orchestrator.engagement_id,
+            "katana",
+            ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
+        )
         katana_result = orchestrator.tool_runner.run(
             "katana",
             ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
-            timeout=TOOL_TIMEOUT_DEFAULT if agg == "extreme" else 120
+            timeout=TOOL_TIMEOUT_DEFAULT if agg == "extreme" else 120,
         )
         parsed_count = 0
         if katana_result.get("success"):
-            parsed = orchestrator.parser.parse("katana", katana_result.get("stdout", ""))
+            parsed = orchestrator.parser.parse(
+                "katana", katana_result.get("stdout", "")
+            )
             for p in parsed:
                 normalized = orchestrator._normalize_finding(p, "katana")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("katana", "Web crawling complete — mapped application surface", "completed", items=parsed_count)
+        _emit(
+            "katana",
+            "Web crawling complete — mapped application surface",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("katana", f"Web crawling failed: {str(e)}", "failed")
         logger.warning(f"katana failed: {e}")
@@ -121,7 +161,7 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
         ffuf_result = orchestrator.tool_runner.run(
             "ffuf",
             ffuf_cmd,
-            timeout=TOOL_TIMEOUT_LONG if agg == "extreme" else TOOL_TIMEOUT_DEFAULT
+            timeout=TOOL_TIMEOUT_LONG if agg == "extreme" else TOOL_TIMEOUT_DEFAULT,
         )
         parsed_count = 0
         if ffuf_result.get("success"):
@@ -137,16 +177,24 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
         logger.warning(f"ffuf failed: {e}")
 
     # Execute amass for subdomain enumeration
-    amass_desc = "passive" if agg == "default" else "active + passive" if agg == "high" else "brute force + all sources"
-    _emit("amass", f"Enumerating subdomains for {target_domain} ({amass_desc})", "started")
+    amass_desc = (
+        "passive"
+        if agg == "default"
+        else "active + passive"
+        if agg == "high"
+        else "brute force + all sources"
+    )
+    _emit(
+        "amass", f"Enumerating subdomains for {target_domain} ({amass_desc})", "started"
+    )
     try:
         amass_cmd = amass_mode + [target_domain, "-json"]
-        amass_timeout = TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
+        amass_timeout = (
+            TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
+        )
         emit_tool_start(orchestrator.engagement_id, "amass", amass_cmd)
         amass_result = orchestrator.tool_runner.run(
-            "amass",
-            amass_cmd,
-            timeout=amass_timeout
+            "amass", amass_cmd, timeout=amass_timeout
         )
         parsed_count = 0
         if amass_result.get("success"):
@@ -156,29 +204,45 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("amass", f"Subdomain enumeration complete — found {parsed_count} subdomains", "completed", items=parsed_count)
+        _emit(
+            "amass",
+            f"Subdomain enumeration complete — found {parsed_count} subdomains",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("amass", f"Subdomain enumeration failed: {str(e)}", "failed")
         logger.warning(f"amass failed: {e}")
 
     # Execute subfinder for additional subdomain enumeration (passive)
-    _emit("subfinder", f"Enumerating subdomains via passive sources ({target_domain})", "started")
+    _emit(
+        "subfinder",
+        f"Enumerating subdomains via passive sources ({target_domain})",
+        "started",
+    )
     try:
-        emit_tool_start(orchestrator.engagement_id, "subfinder", ["-d", target_domain, "-silent"])
+        emit_tool_start(
+            orchestrator.engagement_id, "subfinder", ["-d", target_domain, "-silent"]
+        )
         subfinder_result = orchestrator.tool_runner.run(
-            "subfinder",
-            ["-d", target_domain, "-silent"],
-            timeout=TOOL_TIMEOUT_SHORT
+            "subfinder", ["-d", target_domain, "-silent"], timeout=TOOL_TIMEOUT_SHORT
         )
         parsed_count = 0
         if subfinder_result.get("success"):
-            parsed = orchestrator.parser.parse("subfinder", subfinder_result.get("stdout", ""))
+            parsed = orchestrator.parser.parse(
+                "subfinder", subfinder_result.get("stdout", "")
+            )
             for p in parsed:
                 normalized = orchestrator._normalize_finding(p, "subfinder")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("subfinder", f"Subdomain enumeration complete — found {parsed_count} subdomains", "completed", items=parsed_count)
+        _emit(
+            "subfinder",
+            f"Subdomain enumeration complete — found {parsed_count} subdomains",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("subfinder", f"Subdomain enumeration failed: {str(e)}", "failed")
         logger.warning(f"subfinder failed: {e}")
@@ -186,27 +250,40 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     # Execute alterx for subdomain permutation generation
     _emit("alterx", f"Generating subdomain permutations for {target_domain}", "started")
     try:
-        emit_tool_start(orchestrator.engagement_id, "alterx", ["-d", target_domain, "-silent"])
+        emit_tool_start(
+            orchestrator.engagement_id, "alterx", ["-d", target_domain, "-silent"]
+        )
         alterx_result = orchestrator.tool_runner.run(
-            "alterx",
-            ["-d", target_domain, "-silent"],
-            timeout=120
+            "alterx", ["-d", target_domain, "-silent"], timeout=120
         )
         parsed_count = 0
         if alterx_result.get("success"):
-            parsed = orchestrator.parser.parse("alterx", alterx_result.get("stdout", ""))
+            parsed = orchestrator.parser.parse(
+                "alterx", alterx_result.get("stdout", "")
+            )
             for p in parsed:
                 normalized = orchestrator._normalize_finding(p, "alterx")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("alterx", f"Permutation generation complete — generated {parsed_count} variants", "completed", items=parsed_count)
+        _emit(
+            "alterx",
+            f"Permutation generation complete — generated {parsed_count} variants",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("alterx", f"Permutation generation failed: {str(e)}", "failed")
         logger.warning(f"alterx failed: {e}")
 
     # Execute naabu for port scanning
-    port_desc = "top 1000" if agg == "default" else "top 10,000" if agg == "high" else "full range 1-65535"
+    port_desc = (
+        "top 1000"
+        if agg == "default"
+        else "top 10,000"
+        if agg == "high"
+        else "full range 1-65535"
+    )
     _emit("naabu", f"Probing open ports on {target_domain} ({port_desc})", "started")
     try:
         naabu_cmd = ["-host", target_domain, "-json"]
@@ -214,12 +291,12 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
             naabu_cmd.append("-p-")
         else:
             naabu_cmd.extend(["-top-ports", naabu_port_val])
-        naabu_timeout = 120 if agg == "default" else TOOL_TIMEOUT_LONG if agg == "high" else 900
+        naabu_timeout = (
+            120 if agg == "default" else TOOL_TIMEOUT_LONG if agg == "high" else 900
+        )
         emit_tool_start(orchestrator.engagement_id, "naabu", naabu_cmd)
         naabu_result = orchestrator.tool_runner.run(
-            "naabu",
-            naabu_cmd,
-            timeout=naabu_timeout
+            "naabu", naabu_cmd, timeout=naabu_timeout
         )
         parsed_count = 0
         if naabu_result.get("success"):
@@ -229,7 +306,12 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("naabu", f"Port scan complete — found {parsed_count} open ports", "completed", items=parsed_count)
+        _emit(
+            "naabu",
+            f"Port scan complete — found {parsed_count} open ports",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("naabu", f"Port scan failed: {str(e)}", "failed")
         logger.warning(f"naabu failed: {e}")
@@ -237,33 +319,42 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     # Execute whatweb for technology fingerprinting
     _emit("whatweb", "Fingerprinting web technologies and server stack", "started")
     try:
-        emit_tool_start(orchestrator.engagement_id, "whatweb", ["--format=json", target])
+        emit_tool_start(
+            orchestrator.engagement_id, "whatweb", ["--format=json", target]
+        )
         whatweb_result = orchestrator.tool_runner.run(
-            "whatweb",
-            ["--format=json", target],
-            timeout=120
+            "whatweb", ["--format=json", target], timeout=120
         )
         parsed_count = 0
         if whatweb_result.get("success"):
-            parsed = orchestrator.parser.parse("whatweb", whatweb_result.get("stdout", ""))
+            parsed = orchestrator.parser.parse(
+                "whatweb", whatweb_result.get("stdout", "")
+            )
             for p in parsed:
                 normalized = orchestrator._normalize_finding(p, "whatweb")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("whatweb", "Technology fingerprinting complete", "completed", items=parsed_count)
+        _emit(
+            "whatweb",
+            "Technology fingerprinting complete",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("whatweb", f"Technology fingerprinting failed: {str(e)}", "failed")
         logger.warning(f"whatweb failed: {e}")
 
     # Execute nikto for web server scanning
-    _emit("nikto", "Scanning web server for misconfigurations and known issues", "started")
+    _emit(
+        "nikto", "Scanning web server for misconfigurations and known issues", "started"
+    )
     try:
-        emit_tool_start(orchestrator.engagement_id, "nikto", ["-h", target, "-Format", "csv"])
+        emit_tool_start(
+            orchestrator.engagement_id, "nikto", ["-h", target, "-Format", "csv"]
+        )
         nikto_result = orchestrator.tool_runner.run(
-            "nikto",
-            ["-h", target, "-Format", "csv"],
-            timeout=TOOL_TIMEOUT_LONG
+            "nikto", ["-h", target, "-Format", "csv"], timeout=TOOL_TIMEOUT_LONG
         )
         parsed_count = 0
         if nikto_result.get("success"):
@@ -283,9 +374,7 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     try:
         emit_tool_start(orchestrator.engagement_id, "gau", [target, "--json"])
         gau_result = orchestrator.tool_runner.run(
-            "gau",
-            [target, "--json"],
-            timeout=TOOL_TIMEOUT_DEFAULT
+            "gau", [target, "--json"], timeout=TOOL_TIMEOUT_DEFAULT
         )
         parsed_count = 0
         if gau_result.get("success"):
@@ -305,19 +394,24 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     try:
         emit_tool_start(orchestrator.engagement_id, "waybackurls", [target])
         wayback_result = orchestrator.tool_runner.run(
-            "waybackurls",
-            [target],
-            timeout=120
+            "waybackurls", [target], timeout=120
         )
         parsed_count = 0
         if wayback_result.get("success"):
-            parsed = orchestrator.parser.parse("waybackurls", wayback_result.get("stdout", ""))
+            parsed = orchestrator.parser.parse(
+                "waybackurls", wayback_result.get("stdout", "")
+            )
             for p in parsed:
                 normalized = orchestrator._normalize_finding(p, "waybackurls")
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
-        _emit("waybackurls", "Historical URL retrieval complete", "completed", items=parsed_count)
+        _emit(
+            "waybackurls",
+            "Historical URL retrieval complete",
+            "completed",
+            items=parsed_count,
+        )
     except Exception as e:
         _emit("waybackurls", f"Historical URL retrieval failed: {str(e)}", "failed")
         logger.warning(f"waybackurls failed: {e}")
@@ -326,7 +420,7 @@ def execute_recon_tools(orchestrator, target: str, budget: Dict, aggressiveness:
     return all_findings, recon_context
 
 
-def summarize_recon_findings(target: str, findings: List[Dict]) -> "ReconContext":
+def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
     """
     Convert raw recon findings list into ReconContext.
 
@@ -344,20 +438,31 @@ def summarize_recon_findings(target: str, findings: List[Dict]) -> "ReconContext
     if not findings:
         return ReconContext(target_url=target)
 
-    live_endpoints = [f["endpoint"] for f in findings if f.get("source_tool") == "httpx"]
-    subdomains = [f["endpoint"] for f in findings if f.get("source_tool") in ("amass", "subfinder")]
-    open_ports = [f.get("evidence", {}) for f in findings if f.get("source_tool") == "naabu"]
+    live_endpoints = [
+        f["endpoint"] for f in findings if f.get("source_tool") == "httpx"
+    ]
+    subdomains = [
+        f["endpoint"]
+        for f in findings
+        if f.get("source_tool") in ("amass", "subfinder")
+    ]
+    open_ports = [
+        f.get("evidence", {}) for f in findings if f.get("source_tool") == "naabu"
+    ]
     tech_stack = [
         t
         for f in findings
         if f.get("source_tool") == "whatweb"
         for t in f.get("evidence", {}).get("technologies", [])
     ]
-    crawled_paths = [f["endpoint"] for f in findings if f.get("source_tool") in ("katana", "ffuf")][:50]
+    crawled_paths = [
+        f["endpoint"] for f in findings if f.get("source_tool") in ("katana", "ffuf")
+    ][:50]
     param_urls = [
         f["endpoint"]
         for f in findings
-        if "?" in f.get("endpoint", "") and f.get("source_tool") in ("gau", "waybackurls")
+        if "?" in f.get("endpoint", "")
+        and f.get("source_tool") in ("gau", "waybackurls")
     ]
 
     auth_kw = ("login", "signin", "auth", "oauth", "sso", "password", "reset")
@@ -374,7 +479,9 @@ def summarize_recon_findings(target: str, findings: List[Dict]) -> "ReconContext
         tech_stack=list(set(tech_stack))[:20],
         crawled_paths=crawled_paths,
         parameter_bearing_urls=param_urls[:30],
-        auth_endpoints=[p for p in crawled_paths if any(k in p.lower() for k in auth_kw)],
+        auth_endpoints=[
+            p for p in crawled_paths if any(k in p.lower() for k in auth_kw)
+        ],
         api_endpoints=[p for p in crawled_paths if any(k in p.lower() for k in api_kw)],
         findings_count=len(findings),
         has_login_page=any(any(k in p for k in auth_kw) for p in all_paths),

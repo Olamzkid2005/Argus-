@@ -1,6 +1,7 @@
 """
 Repository scanning logic extracted from Orchestrator.
 """
+import contextlib
 import glob
 import json
 import logging
@@ -8,15 +9,17 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List
 
-from config.constants import DEFAULT_AGGRESSIVENESS, TOOL_TIMEOUT_DEFAULT, TOOL_TIMEOUT_LONG
-from streaming import emit_tool_start
+from config.constants import (
+    DEFAULT_AGGRESSIVENESS,
+    TOOL_TIMEOUT_DEFAULT,
+    TOOL_TIMEOUT_LONG,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def run_npm_audit(repo_path: str) -> List[Dict]:
+def run_npm_audit(repo_path: str) -> list[dict]:
     """Run npm audit and parse results for dependency vulnerabilities."""
     findings = []
     try:
@@ -55,7 +58,7 @@ def run_npm_audit(repo_path: str) -> List[Dict]:
     return findings
 
 
-def run_pip_audit(repo_path: str) -> List[Dict]:
+def run_pip_audit(repo_path: str) -> list[dict]:
     """Run pip-audit for Python dependencies."""
     findings = []
     try:
@@ -93,7 +96,7 @@ def run_pip_audit(repo_path: str) -> List[Dict]:
     return findings
 
 
-def run_govulncheck(repo_path: str) -> List[Dict]:
+def run_govulncheck(repo_path: str) -> list[dict]:
     """Run govulncheck for Go vulnerabilities."""
     findings = []
     try:
@@ -133,7 +136,7 @@ def run_govulncheck(repo_path: str) -> List[Dict]:
     return findings
 
 
-def check_maven_dependencies(repo_path: str) -> List[Dict]:
+def check_maven_dependencies(repo_path: str) -> list[dict]:
     """Check Maven dependencies for known vulnerabilities using pom.xml parsing."""
     findings = []
     try:
@@ -176,7 +179,7 @@ def check_maven_dependencies(repo_path: str) -> List[Dict]:
     return findings
 
 
-def execute_repo_scan(orchestrator, repo_url: str, budget: Dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS, custom_rules_path: str = None) -> List[Dict]:
+def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS, custom_rules_path: str = None) -> list[dict]:
     """
     Execute comprehensive repository scan using multiple SAST/DAST tools.
 
@@ -219,7 +222,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: Dict, aggressiveness:
 
     # Helper to deduplicate findings by endpoint + type
     seen = set()
-    def add_finding(finding: Dict):
+    def add_finding(finding: dict):
         key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{finding.get('evidence', {}).get('check_id', '') or finding.get('evidence', {}).get('cve_id', '')}"
         if key not in seen:
             seen.add(key)
@@ -553,9 +556,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: Dict, aggressiveness:
             if os.path.isdir(config_dir):
                 custom_configs.append(config_dir)
 
-        if custom_rules_path and os.path.isdir(custom_rules_path):
-            custom_configs.append(custom_rules_path)
-        elif custom_rules_path and os.path.isfile(custom_rules_path):
+        if custom_rules_path and os.path.isdir(custom_rules_path) or custom_rules_path and os.path.isfile(custom_rules_path):
             custom_configs.append(custom_rules_path)
 
         # Run Semgrep with registry configs + custom rules
@@ -595,10 +596,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: Dict, aggressiveness:
         logger.warning(f"Repo scan failed: {e}")
         _emit("repo_scan", f"Repository scan failed: {str(e)}", "failed")
     finally:
-        try:
+        with contextlib.suppress(Exception):
             shutil.rmtree(temp_dir)
-        except Exception:
-            pass
 
     _emit("repo_scan", f"Repository scan complete — {len(all_findings)} total issues found", "completed", items=len(all_findings))
 

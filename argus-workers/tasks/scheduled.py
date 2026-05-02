@@ -10,7 +10,6 @@ Requirements: Scheduled engagements table (migration 032)
 import logging
 import os
 import uuid
-from typing import Dict, List, Optional, Tuple
 
 from celery_app import app
 from tasks.recon import run_recon
@@ -102,7 +101,7 @@ def _spawn_engagement(
     sched_id: str,
     org_id: str,
     target: str,
-    scope: Dict,
+    scope: dict,
     scan_type: str,
     aggressiveness: str,
     agent_mode: bool,
@@ -115,7 +114,6 @@ def _spawn_engagement(
     """
     engagement_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
-    now = "NOW()"
 
     # Create the engagement
     cursor = conn.cursor()

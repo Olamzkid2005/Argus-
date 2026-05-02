@@ -4,31 +4,51 @@ Base repository class with common CRUD operations
 Uses the shared connection pool from database/connection.py.
 Supports passing an external connection for transaction support.
 """
-import time
+
 import logging
+import time
+from typing import Any
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from typing import Dict, List, Optional, Any, Union
 
 from database.connection import get_db
 
 # Column allowlists per table - prevents SQL injection in update_by_id
 ALLOWED_COLUMNS = {
-    "engagements": ["status", "updated_at", "completed_at", "target_url", "authorization",
-                    "authorized_scope", "rate_limit_config"],
+    "engagements": [
+        "status",
+        "updated_at",
+        "completed_at",
+        "target_url",
+        "authorization",
+        "authorized_scope",
+        "rate_limit_config",
+    ],
     "users": ["name", "role", "updated_at", "last_login_at"],
     "findings": ["verified", "fp_likelihood", "updated_at", "severity"],
-    "loop_budgets": ["current_cycles", "current_depth", "updated_at",
-                     "max_cycles", "max_depth"],
+    "loop_budgets": [
+        "current_cycles",
+        "current_depth",
+        "updated_at",
+        "max_cycles",
+        "max_depth",
+    ],
     "engagement_states": ["from_state", "to_state", "reason"],
-    "job_states": ["status", "worker_id", "error_message", "started_at", "completed_at"],
+    "job_states": [
+        "status",
+        "worker_id",
+        "error_message",
+        "started_at",
+        "completed_at",
+    ],
 }
 
 # Cache for schema columns to avoid repeated introspection
-_schema_cache: Dict[str, List[str]] = {}
+_schema_cache: dict[str, list[str]] = {}
 
 
-def _get_table_columns(table_name: str) -> List[str]:
+def _get_table_columns(table_name: str) -> list[str]:
     """
     Get actual column names from database schema.
     Uses cache to avoid repeated introspection.
@@ -48,12 +68,15 @@ def _get_table_columns(table_name: str) -> List[str]:
 
         try:
             # Query information_schema for column names
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = %s
                 AND table_schema = 'public'
-            """, (table_name,))
+            """,
+                (table_name,),
+            )
 
             columns = [row[0] for row in cursor.fetchall()]
             _schema_cache[table_name] = columns
@@ -66,7 +89,7 @@ def _get_table_columns(table_name: str) -> List[str]:
         return ALLOWED_COLUMNS.get(table_name, [])
 
 
-def validate_columns(table_name: str, columns: List[str]) -> List[str]:
+def validate_columns(table_name: str, columns: list[str]) -> list[str]:
     """
     Validate columns against database schema.
 
@@ -117,7 +140,7 @@ class BaseRepository:
     table_name: str = ""
     id_column: str = "id"
 
-    def __init__(self, connection: Optional[Union[psycopg2.extensions.connection, str]] = None):
+    def __init__(self, connection: psycopg2.extensions.connection | str | None = None):
         """
         Initialize repository.
 
@@ -127,7 +150,7 @@ class BaseRepository:
         """
         self._external_conn = connection
 
-    def _get_connection(self, org_id: Optional[str] = None):
+    def _get_connection(self, org_id: str | None = None):
         """Get a database connection (external or from pool)"""
         if self._external_conn:
             # If it's a string, create a connection from it
@@ -142,14 +165,14 @@ class BaseRepository:
         if conn and not self._external_conn:
             get_db().release_connection(conn)
 
-    def _to_dict(self, row: Any, cursor=None) -> Optional[Dict]:
+    def _to_dict(self, row: Any, cursor=None) -> dict | None:
         """Convert row to dictionary using cursor description"""
         if row is None:
             return None
 
         if cursor is not None:
             columns = [desc[0] for desc in cursor.description]
-            return dict(zip(columns, row))
+            return dict(zip(columns, row, strict=False))
 
         if hasattr(row, "_asdict"):
             return row._asdict()
@@ -164,7 +187,7 @@ class BaseRepository:
                 f"Slow query ({elapsed_ms:.1f}ms, {rows} rows): {query[:200]}"
             )
 
-    def find_by_id(self, id: str) -> Optional[Dict]:
+    def find_by_id(self, id: str) -> dict | None:
         """
         Find a record by ID
 
@@ -189,7 +212,7 @@ class BaseRepository:
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def find_all(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+    def find_all(self, limit: int = 100, offset: int = 0) -> list[dict]:
         """
         Find all records with pagination
 
@@ -230,8 +253,7 @@ class BaseRepository:
 
         try:
             cursor.execute(
-                f"DELETE FROM {self.table_name} WHERE {self.id_column} = %s",
-                (id,)
+                f"DELETE FROM {self.table_name} WHERE {self.id_column} = %s", (id,)
             )
             if not self._external_conn:
                 conn.commit()
@@ -241,7 +263,7 @@ class BaseRepository:
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def update_by_id(self, id: str, updates: Dict) -> Optional[Dict]:
+    def update_by_id(self, id: str, updates: dict) -> dict | None:
         """
         Update a record by ID
 
@@ -266,13 +288,15 @@ class BaseRepository:
             # Fall back to allowlist validation
             allowed = ALLOWED_COLUMNS.get(self.table_name, [])
             if not allowed:
-                raise ValueError(f"No column allowlist defined for table {self.table_name}")
+                raise ValueError(
+                    f"No column allowlist defined for table {self.table_name}"
+                ) from None
 
-            unauthorized = [k for k in updates.keys() if k not in allowed]
+            unauthorized = [k for k in updates if k not in allowed]
             if unauthorized:
-                raise ValueError(f"Unauthorized columns: {unauthorized}")
+                raise
 
-        set_clauses = [f"{key} = %s" for key in updates.keys()]
+        set_clauses = [f"{key} = %s" for key in updates]
         values = list(updates.values()) + [id]
 
         conn = self._get_connection()
@@ -281,7 +305,7 @@ class BaseRepository:
         try:
             query = f"""
                 UPDATE {self.table_name}
-                SET {', '.join(set_clauses)}, updated_at = NOW()
+                SET {", ".join(set_clauses)}, updated_at = NOW()
                 WHERE {self.id_column} = %s
                 RETURNING *
             """

@@ -1,9 +1,10 @@
 """
 Celery tasks for maintenance operations
 """
-from celery_app import app
-from datetime import datetime, UTC, timedelta
 import logging
+from datetime import UTC, datetime, timedelta
+
+from celery_app import app
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,9 @@ def cleanup_old_results(self):
     - Clean up old decision snapshots
     - Clean up old checkpoints
     """
-    import psycopg2
     import os
+
+    import psycopg2
 
     db_conn = os.getenv("DATABASE_URL")
 
@@ -90,8 +92,9 @@ def cleanup_failed_engagements(self):
     """
     Clean up engagements that have been in failed state for more than 7 days
     """
-    import psycopg2
     import os
+
+    import psycopg2
 
     db_conn = os.getenv("DATABASE_URL")
 
@@ -160,6 +163,7 @@ def cleanup_failed_engagements(self):
 def cleanup_checkpoints(self):
     """Clean up old checkpoints using CheckpointManager"""
     import os
+
     from checkpoint_manager import CheckpointManager
 
     db_conn = os.getenv("DATABASE_URL")
@@ -177,8 +181,9 @@ def cleanup_checkpoints(self):
 @app.task(bind=True, name="tasks.maintenance.refresh_views")
 def refresh_views(self):
     """Refresh materialized views for query performance"""
-    import psycopg2
     import os
+
+    import psycopg2
 
     db_conn = os.getenv("DATABASE_URL")
     if not db_conn:

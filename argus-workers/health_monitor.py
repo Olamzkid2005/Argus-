@@ -7,12 +7,11 @@ Monitors worker health metrics and performs self-healing actions.
 import logging
 import os
 import time
-from datetime import datetime, timezone
-from typing import Dict, Optional, List
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 
-import redis
 import psutil
+import redis
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +37,17 @@ class WorkerHealth:
 class WorkerHealthMonitor:
     """
     Monitors worker health and performs self-healing.
-    
+
     Tracks:
     - CPU and memory usage
     - Heartbeat freshness
     - Task processing rate
     - Worker crashes/restarts
     """
-    
+
     REDIS_KEY_PREFIX = "worker:health"
-    
-    def __init__(self, worker_id: Optional[str] = None, redis_url: str = None):
+
+    def __init__(self, worker_id: str | None = None, redis_url: str = None):
         self.worker_id = worker_id or f"worker-{os.getpid()}"
         self.hostname = os.uname().nodename
         self.pid = os.getpid()
@@ -56,15 +55,15 @@ class WorkerHealthMonitor:
         self._redis = None
         self.start_time = time.time()
         self.tasks_processed = 0
-    
+
     @property
     def redis(self) -> redis.Redis:
         """Lazy Redis connection"""
         if self._redis is None:
             self._redis = redis.from_url(self.redis_url)
         return self._redis
-    
-    def get_system_metrics(self) -> Dict[str, float]:
+
+    def get_system_metrics(self) -> dict[str, float]:
         """Get current system metrics for this worker"""
         try:
             process = psutil.Process(self.pid)
@@ -84,20 +83,20 @@ class WorkerHealthMonitor:
                 "open_files": 0,
                 "connections": 0,
             }
-    
-    def determine_status(self, metrics: Dict[str, float]) -> str:
+
+    def determine_status(self, metrics: dict[str, float]) -> str:
         """Determine worker status based on metrics"""
         if metrics["memory_percent"] > 90 or metrics["cpu_percent"] > 95:
             return "critical"
         elif metrics["memory_percent"] > 75 or metrics["cpu_percent"] > 80:
             return "warning"
         return "healthy"
-    
+
     def send_heartbeat(self):
         """Send heartbeat to Redis"""
         metrics = self.get_system_metrics()
         status = self.determine_status(metrics)
-        
+
         health = WorkerHealth(
             worker_id=self.worker_id,
             hostname=self.hostname,
@@ -106,35 +105,35 @@ class WorkerHealthMonitor:
             memory_percent=metrics["memory_percent"],
             memory_mb=metrics["memory_mb"],
             tasks_processed=self.tasks_processed,
-            last_heartbeat=datetime.now(timezone.utc).isoformat(),
+            last_heartbeat=datetime.now(UTC).isoformat(),
             status=status,
             uptime_seconds=int(time.time() - self.start_time)
         )
-        
+
         key = f"{self.REDIS_KEY_PREFIX}:{self.worker_id}"
         try:
             self.redis.hset(key, mapping={k: str(v) for k, v in asdict(health).items()})
             self.redis.expire(key, HEARTBEAT_TTL * 2)
-            
+
             if status == "critical":
                 logger.warning(f"Worker {self.worker_id} in CRITICAL state: {metrics}")
-            
+
         except Exception as e:
             logger.error(f"Failed to send heartbeat: {e}")
-    
+
     def increment_tasks(self, count: int = 1):
         """Increment processed task counter"""
         self.tasks_processed += count
-    
+
     def check_self_heal(self) -> bool:
         """
         Check if worker needs self-healing and perform action.
-        
+
         Returns:
             True if self-healing was performed
         """
         metrics = self.get_system_metrics()
-        
+
         # Memory pressure - suggest restart
         if metrics["memory_percent"] > 85:
             logger.warning(
@@ -142,7 +141,7 @@ class WorkerHealthMonitor:
                 "considering restart after current task"
             )
             return True
-        
+
         # Too many open files
         if metrics["open_files"] > 1000:
             logger.warning(
@@ -150,10 +149,10 @@ class WorkerHealthMonitor:
                 "suggesting restart"
             )
             return True
-        
+
         return False
-    
-    def get_all_worker_health(self) -> List[WorkerHealth]:
+
+    def get_all_worker_health(self) -> list[WorkerHealth]:
         """Get health for all workers"""
         workers = []
         try:
@@ -175,16 +174,16 @@ class WorkerHealthMonitor:
                     ))
         except Exception as e:
             logger.error(f"Failed to get worker health: {e}")
-        
+
         return workers
-    
-    def get_unhealthy_workers(self) -> List[WorkerHealth]:
+
+    def get_unhealthy_workers(self) -> list[WorkerHealth]:
         """Get list of unhealthy workers"""
         all_workers = self.get_all_worker_health()
-        
+
         unhealthy = []
-        now = datetime.now(timezone.utc)
-        
+        now = datetime.now(UTC)
+
         for worker in all_workers:
             # Check heartbeat age
             try:
@@ -195,20 +194,20 @@ class WorkerHealthMonitor:
                     continue
             except Exception:
                 pass
-            
+
             # Check status
             if worker.status in ("warning", "critical", "dead"):
                 unhealthy.append(worker)
-        
+
         return unhealthy
-    
+
     def cleanup_dead_workers(self) -> int:
         """Remove stale worker entries from Redis"""
         removed = 0
         try:
             pattern = f"{self.REDIS_KEY_PREFIX}:*"
-            now = datetime.now(timezone.utc)
-            
+            now = datetime.now(UTC)
+
             for key in self.redis.scan_iter(match=pattern):
                 data = self.redis.hgetall(key)
                 if data:
@@ -220,18 +219,18 @@ class WorkerHealthMonitor:
                             removed += 1
                     except Exception:
                         pass
-            
+
         except Exception as e:
             logger.error(f"Failed to cleanup dead workers: {e}")
-        
+
         return removed
 
 
 # Singleton instance
-_health_monitor: Optional[WorkerHealthMonitor] = None
+_health_monitor: WorkerHealthMonitor | None = None
 
 
-def get_health_monitor(worker_id: Optional[str] = None) -> WorkerHealthMonitor:
+def get_health_monitor(worker_id: str | None = None) -> WorkerHealthMonitor:
     """Get singleton health monitor instance"""
     global _health_monitor
     if _health_monitor is None:

@@ -7,7 +7,6 @@ Celery task boundary.
 import json
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ def save_recon_context(engagement_id: str, ctx, redis_url: str = None):
     r.setex(key, RECON_CONTEXT_TTL, json.dumps(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx.__dict__))
 
 
-def load_recon_context(engagement_id: str, redis_url: str = None) -> Optional[object]:
+def load_recon_context(engagement_id: str, redis_url: str = None) -> object | None:
     """
     Load a ReconContext from Redis.
 
@@ -42,6 +41,7 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> Optional[ob
         ReconContext instance or None
     """
     import redis as redis_module
+
     from models.recon_context import ReconContext
 
     r = redis_module.from_url(redis_url or os.getenv("REDIS_URL", "redis://localhost:6379"))

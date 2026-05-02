@@ -1,18 +1,15 @@
 """
 Tests for error_classifier.py
 """
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from error_classifier import (
     ErrorCategory,
-    ErrorSeverity,
     ErrorClassification,
+    ErrorSeverity,
     classify_error,
     log_classified_error,
     send_alert,
-    ERROR_PATTERNS,
-    PERMANENT_INDICATORS,
 )
 
 

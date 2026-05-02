@@ -1,11 +1,12 @@
 """
 Tests for checkpoint_manager.py
 """
-import pytest
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
-from checkpoint_manager import CheckpointManager, CheckpointContext
+import pytest
+
+from checkpoint_manager import CheckpointContext, CheckpointManager
 
 
 class TestCheckpointManager:

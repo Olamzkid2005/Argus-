@@ -2,7 +2,6 @@
 Repository for rate limit events.
 """
 
-from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,21 +9,21 @@ logger = logging.getLogger(__name__)
 
 class RateLimitRepository:
     """Repository for managing rate limit events."""
-    
+
     def __init__(self, db_connection):
         """
         Initialize repository.
-        
+
         Args:
             db_connection: Database connection
         """
         self.db = db_connection
-    
+
     def create_event(
         self,
         domain: str,
         event_type: str,
-        status_code: Optional[int],
+        status_code: int | None,
         current_rps: float
     ) -> dict:
         """

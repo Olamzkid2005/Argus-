@@ -8,17 +8,15 @@ Requires: webhooks table with columns (id, engagement_id, webhook_url, events, l
 Migration: 030_webhooks.sql
 """
 
-import json
 import logging
 import os
-from typing import Dict, List, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 
-def fire_finding_webhooks(finding: Dict, db_conn_string: Optional[str] = None) -> None:
+def fire_finding_webhooks(finding: dict, db_conn_string: str | None = None) -> None:
     """
     Called after a finding is saved to DB.
     Looks up matching webhooks and dispatches HTTP POST to each.
@@ -61,7 +59,7 @@ def fire_finding_webhooks(finding: Dict, db_conn_string: Optional[str] = None) -
         _dispatch(webhook["webhook_url"], payload, webhook["id"], db_url)
 
 
-def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> List[Dict]:
+def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict]:
     """
     Find webhooks that match this engagement.
 
@@ -103,7 +101,7 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> List[Dict
         conn.close()
 
 
-def _dispatch(url: str, payload: Dict, webhook_id: str, db_conn_string: str) -> None:
+def _dispatch(url: str, payload: dict, webhook_id: str, db_conn_string: str) -> None:
     """
     Dispatch a webhook HTTP POST with timeout.
     Updates last_triggered on success or failure.

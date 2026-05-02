@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import traceback
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 
-class ToolStatus(str, Enum):
+class ToolStatus(StrEnum):
     """Granular outcome for a single tool run."""
 
     SUCCESS = "success"              # Ran, exit 0, produced output
@@ -69,7 +69,7 @@ class ToolResult:
     findings_count: int = 0
 
     # ── Timing ────────────────────────────────────────────────────────────────
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     finished_at: datetime | None = None
     duration_seconds: float = 0.0
 
@@ -90,14 +90,14 @@ class ToolResult:
 
     def mark_finished(self) -> None:
         """Call immediately after subprocess returns."""
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         self.duration_seconds = (self.finished_at - self.started_at).total_seconds()
         self.findings_count = len(self.findings)
 
     # ── Convenience constructors ──────────────────────────────────────────────
 
     @classmethod
-    def not_installed(cls, tool_name: str, command: list[str], target: str = "") -> "ToolResult":
+    def not_installed(cls, tool_name: str, command: list[str], target: str = "") -> ToolResult:
         return cls(
             tool_name=tool_name,
             command=command,
@@ -120,7 +120,7 @@ class ToolResult:
         target: str = "",
         sandbox_dir: str = "",
         effective_env: dict[str, str] | None = None,
-    ) -> "ToolResult":
+    ) -> ToolResult:
         tb = traceback.format_exc()
         error_type = type(exc).__name__
         status = ToolStatus.IMPORT_ERROR if isinstance(exc, ModuleNotFoundError) else ToolStatus.EXCEPTION
@@ -158,7 +158,7 @@ class ToolResult:
         command: list[str],
         limit_seconds: int,
         target: str = "",
-    ) -> "ToolResult":
+    ) -> ToolResult:
         result = cls(
             tool_name=tool_name,
             command=command,
@@ -175,7 +175,7 @@ class ToolResult:
         return result
 
     @classmethod
-    def skipped(cls, tool_name: str, reason: str, target: str = "") -> "ToolResult":
+    def skipped(cls, tool_name: str, reason: str, target: str = "") -> ToolResult:
         return cls(
             tool_name=tool_name,
             target=target,

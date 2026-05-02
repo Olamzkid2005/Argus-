@@ -5,8 +5,8 @@ Allows existing tools to be called via MCP protocol while
 maintaining backward compatibility with the current ToolRunner API.
 """
 import logging
-from typing import Dict, List, Optional
-from mcp_server import get_mcp_server, ToolDefinition, ToolSchema
+
+from mcp_server import ToolDefinition, ToolSchema, get_mcp_server
 from tools.tool_runner import ToolRunner
 
 logger = logging.getLogger(__name__)
@@ -15,20 +15,20 @@ logger = logging.getLogger(__name__)
 class MCPToolBridge:
     """
     Bridges between the existing ToolRunner and the new MCP protocol.
-    
+
     Each tool in ToolRunner gets registered with MCP, enabling:
     - Discovery via tools/list
     - Execution via tools/call
     - Streaming output
     - Schema validation
     """
-    
+
     def __init__(self, tool_runner: ToolRunner, engagement_id: str = None):
         self.tool_runner = tool_runner
         self.engagement_id = engagement_id
         self.mcp = get_mcp_server()
         self._register_tools()
-    
+
     def _register_tools(self):
         """Register ToolRunner tools with MCP server."""
         tools = [
@@ -213,14 +213,14 @@ class MCPToolBridge:
         ]
         for tool in tools:
             self.mcp.register_tool(tool)
-    
-    def call_via_mcp(self, tool: str, arguments: Dict = None) -> Dict:
+
+    def call_via_mcp(self, tool: str, arguments: dict = None) -> dict:
         """
         Call a tool via MCP, falling back to direct ToolRunner.run() if needed.
         """
         return self.mcp.call_tool(tool, arguments or {})
-    
-    def call_via_runner(self, tool: str, args: List[str], timeout: int = None) -> Dict:
+
+    def call_via_runner(self, tool: str, args: list[str], timeout: int = None) -> dict:
         """Call a tool via the existing ToolRunner."""
         timeout = timeout or 300
         return self.tool_runner.run(tool, args, timeout=timeout)

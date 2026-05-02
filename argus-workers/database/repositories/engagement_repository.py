@@ -1,9 +1,9 @@
 """
 Engagement repository for database operations on engagements
 """
-from typing import Dict, List, Optional
-from psycopg2.extras import RealDictCursor
-from psycopg2.extras import Json
+
+from psycopg2.extras import Json, RealDictCursor
+
 from database.repositories.base import BaseRepository
 
 
@@ -17,7 +17,7 @@ class EngagementRepository(BaseRepository):
     table_name = "engagements"
     id_column = "id"
 
-    def create(self, engagement_data: Dict) -> Dict:
+    def create(self, engagement_data: dict) -> dict:
         """
         Create a new engagement
 
@@ -63,7 +63,7 @@ class EngagementRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def find_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> List[Dict]:
+    def find_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
         Find all engagements for an organization with pagination.
 
@@ -82,7 +82,7 @@ class EngagementRepository(BaseRepository):
             # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
-                SELECT 
+                SELECT
                     e.*,
                     u.email as created_by_email,
                     COALESCE(f.findings_count, 0) as findings_count
@@ -106,7 +106,7 @@ class EngagementRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def find_active_by_org(self, org_id: str) -> List[Dict]:
+    def find_active_by_org(self, org_id: str) -> list[dict]:
         """
         Find active engagements for an organization
 
@@ -123,7 +123,7 @@ class EngagementRepository(BaseRepository):
             # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
-                SELECT 
+                SELECT
                     e.*,
                     u.email as created_by_email,
                     COALESCE(f.findings_count, 0) as findings_count
@@ -146,7 +146,7 @@ class EngagementRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def update_status(self, engagement_id: str, status: str) -> Optional[Dict]:
+    def update_status(self, engagement_id: str, status: str) -> dict | None:
         """
         Update engagement status
 
@@ -159,7 +159,7 @@ class EngagementRepository(BaseRepository):
         """
         return self.update_by_id(engagement_id, {"status": status})
 
-    def find_by_status(self, status: str) -> List[Dict]:
+    def find_by_status(self, status: str) -> list[dict]:
         """
         Find engagements by status
 

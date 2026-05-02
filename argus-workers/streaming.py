@@ -7,16 +7,16 @@ replacing the dual system of StreamManager + WebSocketEventPublisher.
 Callers should use the emit_* convenience functions (emit_thinking,
 emit_tool_start, etc.) which delegate to the configured EventBus.
 """
+import contextlib
 import json
 import logging
-import threading
-import time
 import queue
-from typing import Dict, List, Optional, Callable, Any
-from enum import Enum
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+import threading
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +28,13 @@ class Event:
     """Single event with unified field names for both SSE and Redis consumers."""
     type: str
     engagement_id: str
-    data: Dict = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    data: dict = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_sse(self) -> str:
         return f"data: {json.dumps(self.to_dict())}\n\n"
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "type": self.type,
             "engagement_id": self.engagement_id,
@@ -75,7 +75,7 @@ class EventBus(ABC):
         ...
 
     @abstractmethod
-    def get_history(self, engagement_id: str, since: str = None) -> List[Dict]:
+    def get_history(self, engagement_id: str, since: str = None) -> list[dict]:
         ...
 
 
@@ -100,8 +100,8 @@ class StreamEventType(Enum):
 class StreamEvent:
     """A single SSE event (legacy, use Event for new code)."""
     event_type: StreamEventType
-    data: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    data: dict[str, Any] = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     engagement_id: str = ""
 
     def to_sse(self) -> str:
@@ -115,7 +115,7 @@ class StreamEvent:
             payload["engagement_id"] = self.engagement_id
         return f"data: {json.dumps(payload)}\n\n"
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "type": self.event_type.value,
             "data": self.data,
@@ -134,8 +134,8 @@ class StreamManager(EventBus):
 
     def __init__(self):
         self._lock = threading.RLock()
-        self._queues: Dict[str, List[queue.Queue]] = {}  # engagement_id -> [queues]
-        self._history: Dict[str, List[StreamEvent]] = {}  # engagement_id -> last N events
+        self._queues: dict[str, list[queue.Queue]] = {}  # engagement_id -> [queues]
+        self._history: dict[str, list[StreamEvent]] = {}  # engagement_id -> last N events
 
     def subscribe(self, engagement_id: str) -> queue.Queue:
         """
@@ -154,10 +154,8 @@ class StreamManager(EventBus):
         """Remove a subscriber queue."""
         with self._lock:
             if engagement_id in self._queues:
-                try:
+                with contextlib.suppress(ValueError):
                     self._queues[engagement_id].remove(q)
-                except ValueError:
-                    pass
 
     def publish(self, event: StreamEvent):
         """
@@ -185,10 +183,8 @@ class StreamManager(EventBus):
                         dead_queues.append(q)
 
                 for q in dead_queues:
-                    try:
+                    with contextlib.suppress(ValueError):
                         self._queues[engagement_id].remove(q)
-                    except ValueError:
-                        pass
 
     def publish_event(self, event: Event):
         """Publish a new-format Event (wraps to StreamEvent for backward compat)."""
@@ -200,7 +196,7 @@ class StreamManager(EventBus):
         )
         self.publish(stream_event)
 
-    def get_history(self, engagement_id: str, since: str = None) -> List[Dict]:
+    def get_history(self, engagement_id: str, since: str = None) -> list[dict]:
         """Get event history for an engagement, optionally since a timestamp."""
         with self._lock:
             events = self._history.get(engagement_id, [])
@@ -217,7 +213,7 @@ class StreamManager(EventBus):
 
 # Convenience functions for publishing common events
 
-def emit_thinking(engagement_id: str, message: str, details: Dict = None):
+def emit_thinking(engagement_id: str, message: str, details: dict = None):
     """Emit a thinking/reasoning event."""
     get_stream_manager().publish(StreamEvent(
         event_type=StreamEventType.THINKING,
@@ -226,7 +222,7 @@ def emit_thinking(engagement_id: str, message: str, details: Dict = None):
     ))
 
 
-def emit_tool_start(engagement_id: str, tool: str, args: List[str] = None):
+def emit_tool_start(engagement_id: str, tool: str, args: list[str] = None):
     """Emit a tool execution start event."""
     get_stream_manager().publish(StreamEvent(
         event_type=StreamEventType.TOOL_START,
@@ -307,7 +303,7 @@ def emit_error(engagement_id: str, error: str, phase: str = ""):
     ))
 
 
-def emit_complete(engagement_id: str, phase: str, summary: Dict = None):
+def emit_complete(engagement_id: str, phase: str, summary: dict = None):
     """Emit a phase complete event."""
     get_stream_manager().publish(StreamEvent(
         event_type=StreamEventType.COMPLETE,
@@ -325,7 +321,7 @@ def emit_report_chunk(engagement_id: str, text: str):
     ))
 
 
-def emit_report_complete(engagement_id: str, summary: Dict = None):
+def emit_report_complete(engagement_id: str, summary: dict = None):
     """Emit a report complete event."""
     get_stream_manager().publish(StreamEvent(
         event_type=StreamEventType.REPORT_COMPLETE,
@@ -350,7 +346,7 @@ def emit_agent_decision(engagement_id: str, iteration: int, tool: str, reasoning
 
 
 # Singleton
-_stream_manager: Optional[StreamManager] = None
+_stream_manager: StreamManager | None = None
 _stream_lock = threading.Lock()
 
 

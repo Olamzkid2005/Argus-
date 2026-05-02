@@ -5,10 +5,10 @@ Prevents cascading failures by stopping calls to failing tools.
 
 Requirements: 4.2
 """
-import time
 import threading
+import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Dict, Optional, Callable
 from functools import wraps
 
 
@@ -38,7 +38,7 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 3,
         cooldown_seconds: int = 300,
-        name: Optional[str] = None
+        name: str | None = None
     ):
         """
         Initialize circuit breaker.
@@ -54,18 +54,17 @@ class CircuitBreaker:
 
         self._state = CircuitState.CLOSED
         self._failure_count = 0
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
         self._lock = threading.RLock()
 
     @property
     def state(self) -> CircuitState:
         """Get current circuit state, checking for cooldown expiry."""
         with self._lock:
-            if self._state == CircuitState.OPEN:
-                if self._last_failure_time:
-                    elapsed = time.time() - self._last_failure_time
-                    if elapsed >= self.cooldown_seconds:
-                        self._state = CircuitState.HALF_OPEN
+            if self._state == CircuitState.OPEN and self._last_failure_time:
+                elapsed = time.time() - self._last_failure_time
+                if elapsed >= self.cooldown_seconds:
+                    self._state = CircuitState.HALF_OPEN
             return self._state
 
     def is_available(self) -> bool:
@@ -111,7 +110,7 @@ class CircuitBreaker:
                 result = func(*args, **kwargs)
                 self.record_success()
                 return result
-            except Exception as e:
+            except Exception:
                 self.record_failure()
                 raise
 
@@ -141,7 +140,7 @@ class ToolCircuitBreakerManager:
     """
 
     def __init__(self):
-        self._breakers: Dict[str, CircuitBreaker] = {}
+        self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = threading.RLock()
 
     def get_breaker(
@@ -160,7 +159,7 @@ class ToolCircuitBreakerManager:
                 )
             return self._breakers[tool_name]
 
-    def get_status(self) -> Dict[str, str]:
+    def get_status(self) -> dict[str, str]:
         """Get status of all circuit breakers."""
         with self._lock:
             return {

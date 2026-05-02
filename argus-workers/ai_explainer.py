@@ -6,12 +6,11 @@ using LLM with strict constraints to prevent hallucination and
 unauthorized modifications.
 """
 
-import logging
-from typing import List, Dict, Optional
-from dataclasses import dataclass
 import json
-import re
+import logging
 import os
+import re
+from dataclasses import dataclass
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -24,21 +23,21 @@ class ExplanationResult:
     explanation: str
     model_version: str
     token_count: int
-    input_cluster_ids: List[str]
-    used_fields: List[str]
+    input_cluster_ids: list[str]
+    used_fields: list[str]
     timestamp: datetime
 
 
 class AIExplainer:
     """
     AI-powered vulnerability explainer with strict constraints.
-    
+
     FORBIDDEN ACTIONS:
     - Re-grouping findings
     - Modifying confidence scores
     - Changing severity levels
     - Inventing new vulnerabilities
-    
+
     ALLOWED ACTIONS:
     - Explain pre-grouped clusters in plain English
     - Describe attacker scenarios
@@ -50,7 +49,7 @@ class AIExplainer:
     # Embedding model configuration
     EMBEDDING_MODEL = "text-embedding-3-small"
     EMBEDDING_DIMENSIONS = 1536
-    
+
     def __init__(
         self,
         llm_client=None,
@@ -62,7 +61,7 @@ class AIExplainer:
     ):
         """
         Initialize AI explainer.
-        
+
         Args:
             llm_client: LLM client (OpenAI, Anthropic, etc.) for explanations
             model_version: Model version to use
@@ -77,43 +76,43 @@ class AIExplainer:
         self.max_tokens = max_tokens
         self.db = db_connection
         self.embedding_client = embedding_client
-    
+
     async def explain_clusters(
         self,
-        clusters: List[Dict]
-    ) -> List[ExplanationResult]:
+        clusters: list[dict]
+    ) -> list[ExplanationResult]:
         """
         Generate explanations for pre-grouped vulnerability clusters.
-        
+
         Args:
             clusters: List of pre-grouped vulnerability clusters
-        
+
         Returns:
             List of explanation results
-        
+
         Raises:
             ValueError: If clusters are invalid or contain forbidden modifications
         """
         if not clusters:
             logger.warning("No clusters provided for explanation")
             return []
-        
+
         results = []
-        
+
         for cluster in clusters:
             try:
                 # Validate cluster structure
                 self._validate_cluster(cluster)
-                
+
                 # Sanitize cluster data to prevent prompt injection
                 sanitized_cluster = self._sanitize_cluster_data(cluster)
-                
+
                 # Build prompt with strict constraints
                 prompt = self._build_prompt(sanitized_cluster)
-                
+
                 # Generate explanation
                 explanation = await self._generate_explanation(prompt)
-                
+
                 # Create result
                 result = ExplanationResult(
                     cluster_id=cluster["cluster_id"],
@@ -124,65 +123,65 @@ class AIExplainer:
                     used_fields=list(sanitized_cluster.keys()),
                     timestamp=datetime.now()
                 )
-                
+
                 # Store explanation and trace
                 if self.db:
                     await self._store_explanation(result, sanitized_cluster)
-                
+
                 results.append(result)
-                
+
                 logger.info(
                     f"Generated explanation for cluster {cluster['cluster_id']}: "
                     f"{len(explanation)} chars"
                 )
-            
+
             except Exception as e:
                 logger.error(
                     f"Failed to explain cluster {cluster.get('cluster_id', 'unknown')}: {e}"
                 )
                 continue
-        
+
         return results
-    
-    def _validate_cluster(self, cluster: Dict) -> None:
+
+    def _validate_cluster(self, cluster: dict) -> None:
         """
         Validate cluster structure.
-        
+
         Args:
             cluster: Vulnerability cluster
-        
+
         Raises:
             ValueError: If cluster is invalid
         """
         required_fields = ["cluster_id", "findings", "severity", "confidence"]
-        
+
         for field in required_fields:
             if field not in cluster:
                 raise ValueError(f"Missing required field: {field}")
-        
+
         if not isinstance(cluster["findings"], list):
             raise ValueError("findings must be a list")
-        
+
         if len(cluster["findings"]) == 0:
             raise ValueError("findings list cannot be empty")
-    
-    def _sanitize_cluster_data(self, cluster: Dict) -> Dict:
+
+    def _sanitize_cluster_data(self, cluster: dict) -> dict:
         """
         Sanitize cluster data to prevent prompt injection.
-        
+
         Removes or escapes potentially malicious content:
         - Prompt injection attempts
         - Code execution attempts
         - Excessive length fields
-        
+
         Args:
             cluster: Raw cluster data
-        
+
         Returns:
             Sanitized cluster data
         """
         sanitized = {}
-        
+
         # Copy safe fields
         safe_fields = [
             "cluster_id",
@@ -192,23 +191,23 @@ class AIExplainer:
             "affected_endpoints",
             "common_patterns"
         ]
-        
+
         for field in safe_fields:
             if field in cluster:
                 value = cluster[field]
-                
+
                 # Sanitize strings
                 if isinstance(value, str):
                     # Remove potential prompt injection patterns
                     value = re.sub(r'(ignore|disregard|forget).*(previous|above|prior)', '', value, flags=re.IGNORECASE)
                     value = re.sub(r'(you are|act as|pretend)', '', value, flags=re.IGNORECASE)
-                    
+
                     # Limit length
                     if len(value) > 500:
                         value = value[:500] + "..."
-                
+
                 sanitized[field] = value
-        
+
         # Sanitize findings list
         if "findings" in cluster:
             sanitized_findings = []
@@ -220,18 +219,18 @@ class AIExplainer:
                     "confidence": finding.get("confidence", 0.0),
                 }
                 sanitized_findings.append(sanitized_finding)
-            
+
             sanitized["findings"] = sanitized_findings
-        
+
         return sanitized
-    
-    def _build_prompt(self, cluster: Dict) -> str:
+
+    def _build_prompt(self, cluster: dict) -> str:
         """
         Build prompt with strict constraints.
-        
+
         Args:
             cluster: Sanitized cluster data
-        
+
         Returns:
             Prompt string
         """
@@ -239,7 +238,7 @@ class AIExplainer:
             f"- {f['type']} at {f['endpoint']} (Severity: {f['severity']}, Confidence: {f['confidence']:.0%})"
             for f in cluster.get("findings", [])
         ])
-        
+
         prompt = f"""You are a security expert explaining vulnerabilities to developers.
 
 STRICT RULES:
@@ -267,9 +266,9 @@ Provide a developer-friendly explanation with:
 5. Verification steps (how to test the fix)
 
 Keep response under 500 tokens. Be factual and specific."""
-        
+
         return prompt
-    
+
     async def _generate_explanation(self, prompt: str) -> str:
         """
         Generate explanation using LLM with retry logic and timeout.
@@ -411,27 +410,27 @@ Keep response under 500 tokens. Be factual and specific."""
 
         logger.error(f"All HTTP LLM retry attempts failed: {last_error}")
         return f"Failed to generate explanation after retries: {str(last_error)}"
-    
+
     async def _store_explanation(
         self,
         result: ExplanationResult,
-        cluster: Dict
+        cluster: dict
     ) -> None:
         """
         Store explanation and explainability trace in database.
-        
+
         Args:
             result: Explanation result
             cluster: Sanitized cluster data
         """
         if not self.db:
             return
-        
+
         try:
             from database.repositories.ai_explainability_repository import (
-                AIExplainabilityRepository
+                AIExplainabilityRepository,
             )
-            
+
             repo = AIExplainabilityRepository(self.db)
 
             # Store explanation
@@ -459,19 +458,19 @@ Keep response under 500 tokens. Be factual and specific."""
                 cluster_id=result.cluster_id,
                 trace_data=trace_data
             )
-            
+
             logger.info(f"Stored explanation and trace for cluster {result.cluster_id}")
-        
+
         except Exception as e:
             logger.error(f"Failed to store explanation: {e}")
 
-    async def generate_embedding(self, text: str) -> Optional[List[float]]:
+    async def generate_embedding(self, text: str) -> list[float] | None:
         """
         Generate embedding for text using OpenAI API.
-        
+
         Args:
             text: Text to generate embedding for
-            
+
         Returns:
             List of embedding dimensions, or None if unavailable
         """
@@ -485,7 +484,7 @@ Keep response under 500 tokens. Be factual and specific."""
                 return response.data[0].embedding
             except Exception as e:
                 logger.warning(f"Embedding client failed: {e}")
-        
+
         # Try using main LLM client as fallback
         if self.llm_client:
             try:
@@ -500,74 +499,74 @@ Keep response under 500 tokens. Be factual and specific."""
                 pass
             except Exception as e:
                 logger.warning(f"LLM client embedding failed: {e}")
-        
+
         # Return placeholder embedding for testing
         logger.info("Using placeholder embedding (no API key configured)")
         return self._generate_placeholder_embedding(text)
-    
-    def _generate_placeholder_embedding(self, text: str) -> List[float]:
+
+    def _generate_placeholder_embedding(self, text: str) -> list[float]:
         """
         Generate a deterministic placeholder embedding for testing.
-        
+
         Note: This is NOT a real semantic embedding - it just provides
         consistent output for development/testing without API keys.
         """
         import hashlib
-        
+
         # Generate deterministic "random" numbers from text hash
         hash_bytes = hashlib.sha256(text.encode()).digest()
         embedding = []
-        
+
         for i in range(0, len(hash_bytes), 4):
             if i + 3 < len(hash_bytes):
                 value = int.from_bytes(hash_bytes[i:i+4], 'big')
                 normalized = (value % 10000) / 10000.0
                 embedding.append(normalized)
-        
+
         # Pad to required dimensions
         while len(embedding) < self.EMBEDDING_DIMENSIONS:
             embedding.append(0.0)
-        
+
         return embedding[:self.EMBEDDING_DIMENSIONS]
-    
+
     async def generate_and_store_embeddings(
         self,
-        findings: List[Dict],
+        findings: list[dict],
         engagement_id: str
-    ) -> Dict[str, bool]:
+    ) -> dict[str, bool]:
         """
         Generate and store embeddings for findings using pgvector.
-        
+
         Args:
             findings: List of finding dictionaries
             engagement_id: Engagement ID
-            
+
         Returns:
             Dictionary with success count and errors
         """
         from database.repositories.pgvector_repository import PGVectorRepository
-        
+
         result = {"success": 0, "errors": 0, "skipped": 0}
-        
+
         # Check if pgvector is available
         repo = PGVectorRepository(self.db)
         if not repo.check_pgvector_available():
             logger.warning("pgvector not available, skipping embeddings")
             result["skipped"] = len(findings)
             return result
-        
+
         for finding in findings:
             try:
                 # Generate text for embedding from finding
                 text_for_embedding = self._finding_to_text(finding)
-                
+
                 # Generate embedding
                 embedding = await self.generate_embedding(text_for_embedding)
-                
+
                 if embedding is None:
                     result["skipped"] += 1
                     continue
-                
+
                 # Store embedding
                 success = repo.store_embedding(
                     finding_id=finding.get("id", ""),
@@ -575,29 +574,29 @@ Keep response under 500 tokens. Be factual and specific."""
                     embedding=embedding,
                     text_content=text_for_embedding,
                 )
-                
+
                 if success:
                     result["success"] += 1
                 else:
                     result["errors"] += 1
-                    
+
             except Exception as e:
                 logger.error(f"Failed to process embedding for {finding.get('id')}: {e}")
                 result["errors"] += 1
-        
+
         logger.info(
             f"Embedding generation complete: {result['success']} success, "
             f"{result['errors']} errors, {result['skipped']} skipped"
         )
         return result
-    
-    def _finding_to_text(self, finding: Dict) -> str:
+
+    def _finding_to_text(self, finding: dict) -> str:
         """
         Convert finding to text for embedding generation.
-        
+
         Args:
             finding: Finding dictionary
-            
+
         Returns:
             Text representation
         """
@@ -606,24 +605,24 @@ Keep response under 500 tokens. Be factual and specific."""
             finding.get("endpoint", ""),
             finding.get("severity", ""),
         ]
-        
+
         evidence = finding.get("evidence", {})
         if evidence:
             payload = evidence.get("payload", "")
             if payload:
                 parts.append(f"Payload: {payload}")
-        
+
         return " | ".join([str(p) for p in parts if p])
 
     # ── AI-Powered Threat Intelligence Integration (Step 18) ──
 
-    def _build_threat_intel_context(self, cluster: Dict) -> str:
+    def _build_threat_intel_context(self, cluster: dict) -> str:
         """
         Build threat intelligence context string from cluster findings.
-        
+
         Args:
             cluster: Vulnerability cluster with potential threat_intel on findings
-            
+
         Returns:
             Threat intel context string for prompt enrichment
         """
@@ -632,109 +631,109 @@ Keep response under 500 tokens. Be factual and specific."""
         epss_alerts = []
         feed_hits = []
         fp_warnings = []
-        
+
         for finding in cluster.get("findings", []):
             threat_intel = finding.get("threat_intel", {})
-            
+
             # Collect CVEs
             cve_details = threat_intel.get("cve_details", {})
             for cve_id, details in cve_details.items():
                 cve_list.append(f"{cve_id} (CVSS: {details.get('cvss_score', 'N/A')})")
-            
+
             # Collect high EPSS scores
             epss_scores = threat_intel.get("epss_scores", {})
             for cve_id, score in epss_scores.items():
                 if score > 0.5:
                     epss_alerts.append(f"{cve_id} (EPSS: {score:.1%})")
-            
+
             # Collect threat feed hits
             for hit in threat_intel.get("threat_feed_hits", []):
                 feed_hits.append(f"{hit.get('feed', 'unknown')}: {hit.get('description', '')}")
-            
+
             # Collect FP warnings
             fp_assessment = threat_intel.get("fp_assessment", {})
             if fp_assessment.get("verdict") in ["likely_false_positive", "false_positive"]:
                 fp_warnings.append(
                     f"{finding.get('type', 'unknown')} at {finding.get('endpoint', '')} "
                     f"- {fp_assessment.get('verdict')} (confidence: {fp_assessment.get('confidence', 0)})")
-        
+
         if cve_list:
             intel_parts.append(f"Related CVEs: {', '.join(cve_list[:5])}")
-        
+
         if epss_alerts:
             intel_parts.append(f"High Exploitability (EPSS >50%): {', '.join(epss_alerts[:3])}")
-        
+
         if feed_hits:
             intel_parts.append(f"Threat Feed Matches: {', '.join(feed_hits[:3])}")
-        
+
         if fp_warnings:
             intel_parts.append(f"False Positive Warnings: {', '.join(fp_warnings[:2])}")
-        
+
         return "\n".join(intel_parts) if intel_parts else ""
 
-    def _build_prompt_with_threat_intel(self, cluster: Dict) -> str:
+    def _build_prompt_with_threat_intel(self, cluster: dict) -> str:
         """
         Build prompt enriched with threat intelligence context.
-        
+
         Args:
             cluster: Sanitized cluster data with threat intel
-            
+
         Returns:
             Prompt string with threat intel
         """
         base_prompt = self._build_prompt(cluster)
         threat_context = self._build_threat_intel_context(cluster)
-        
+
         if not threat_context:
             return base_prompt
-        
+
         # Insert threat intel before TASK section
         threat_section = f"""
 THREAT INTELLIGENCE CONTEXT:
 {threat_context}
 """
-        
+
         # Find the TASK section and insert before it
         task_marker = "TASK:"
         if task_marker in base_prompt:
             parts = base_prompt.split(task_marker, 1)
             return parts[0] + threat_section + "\n" + task_marker + parts[1]
-        
+
         return base_prompt + threat_section
 
     async def explain_clusters_with_threat_intel(
         self,
-        clusters: List[Dict]
-    ) -> List[ExplanationResult]:
+        clusters: list[dict]
+    ) -> list[ExplanationResult]:
         """
         Generate explanations enriched with threat intelligence context.
-        
+
         Args:
             clusters: List of pre-grouped vulnerability clusters with threat_intel
-            
+
         Returns:
             List of explanation results
         """
         if not clusters:
             logger.warning("No clusters provided for threat-intel explanation")
             return []
-        
+
         results = []
-        
+
         for cluster in clusters:
             try:
                 # Validate cluster structure
                 self._validate_cluster(cluster)
-                
+
                 # Sanitize cluster data
                 sanitized_cluster = self._sanitize_cluster_data(cluster)
-                
+
                 # Build prompt with threat intelligence
                 prompt = self._build_prompt_with_threat_intel(sanitized_cluster)
-                
+
                 # Generate explanation
                 explanation = await self._generate_explanation(prompt)
-                
+
                 # Create result
                 result = ExplanationResult(
                     cluster_id=cluster["cluster_id"],
@@ -745,22 +744,22 @@ THREAT INTELLIGENCE CONTEXT:
                     used_fields=list(sanitized_cluster.keys()),
                     timestamp=datetime.now()
                 )
-                
+
                 # Store explanation and trace
                 if self.db:
                     await self._store_explanation(result, sanitized_cluster)
-                
+
                 results.append(result)
-                
+
                 logger.info(
                     f"Generated threat-intel explanation for cluster {cluster['cluster_id']}: "
                     f"{len(explanation)} chars"
                 )
-            
+
             except Exception as e:
                 logger.error(
                     f"Failed to explain cluster {cluster.get('cluster_id', 'unknown')} with threat intel: {e}"
                 )
                 continue
-        
+
         return results

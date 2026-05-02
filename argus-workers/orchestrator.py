@@ -7,7 +7,11 @@ Re-exported from orchestrator_pkg for backwards compatibility.
 import logging
 
 from orchestrator_pkg import Orchestrator
-from orchestrator_pkg.utils import get_wordlist_path, get_nuclei_templates_path, tool_timeout
+from orchestrator_pkg.utils import (
+    get_nuclei_templates_path,
+    get_wordlist_path,
+    tool_timeout,
+)
 
 logger = logging.getLogger(__name__)
 

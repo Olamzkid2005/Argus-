@@ -6,10 +6,10 @@ Categorizes errors by type and severity for targeted handling and alerting.
 
 import logging
 import os
-from datetime import datetime, UTC
-from enum import Enum
-from typing import Dict, Any, Optional
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class ErrorClassification:
     severity: ErrorSeverity
     should_retry: bool
     retry_delay_seconds: int
-    alert_message: Optional[str]
+    alert_message: str | None
 
 
 # Error patterns for automatic classification
@@ -93,23 +93,23 @@ PERMANENT_INDICATORS = [
 
 def classify_error(
     error: Exception,
-    task_name: Optional[str] = None,
+    task_name: str | None = None,
     retry_count: int = 0
 ) -> ErrorClassification:
     """
     Classify an error for targeted handling.
-    
+
     Args:
         error: The exception that occurred
         task_name: Name of the task that failed
         retry_count: Number of retries already attempted
-        
+
     Returns:
         ErrorClassification with handling recommendations
     """
     error_message = str(error).lower()
     error_type = type(error).__name__
-    
+
     # Determine category
     category = ErrorCategory.UNKNOWN
     for cat, patterns in ERROR_PATTERNS.items():
@@ -119,24 +119,18 @@ def classify_error(
         if any(pattern in error_type.lower() for pattern in patterns):
             category = cat
             break
-    
+
     # Check if error is permanent (should not retry)
     is_permanent = any(ind in error_message for ind in PERMANENT_INDICATORS)
-    
+
     # Determine if should retry
-    if is_permanent or category in (ErrorCategory.VALIDATION, ErrorCategory.SECURITY):
-        should_retry = False
-        retry_delay = 0
-    elif category == ErrorCategory.TIMEOUT and retry_count >= 2:
-        should_retry = False
-        retry_delay = 0
-    elif retry_count >= 3:
+    if is_permanent or category in (ErrorCategory.VALIDATION, ErrorCategory.SECURITY) or category == ErrorCategory.TIMEOUT and retry_count >= 2 or retry_count >= 3:
         should_retry = False
         retry_delay = 0
     else:
         should_retry = True
         retry_delay = min(2 ** retry_count * 30, 600)  # Exponential backoff, max 10 min
-    
+
     # Determine severity
     if category in (ErrorCategory.INFRASTRUCTURE, ErrorCategory.RESOURCE):
         severity = ErrorSeverity.HIGH
@@ -148,7 +142,7 @@ def classify_error(
         severity = ErrorSeverity.MEDIUM
     else:
         severity = ErrorSeverity.LOW
-    
+
     # Build alert message for high/critical
     alert_message = None
     if severity in (ErrorSeverity.HIGH, ErrorSeverity.CRITICAL):
@@ -156,7 +150,7 @@ def classify_error(
             f"[{severity.value.upper()}] {category.value} error in {task_name or 'unknown task'}: "
             f"{error_type}: {str(error)[:200]}"
         )
-    
+
     return ErrorClassification(
         category=category,
         severity=severity,
@@ -171,11 +165,11 @@ def log_classified_error(
     task_id: str,
     task_name: str,
     error: Exception,
-    extra_context: Optional[Dict[str, Any]] = None
+    extra_context: dict[str, Any] | None = None
 ):
     """
     Log an error with its classification.
-    
+
     Args:
         classification: The error classification
         task_id: Celery task ID
@@ -194,7 +188,7 @@ def log_classified_error(
         "retry_delay": classification.retry_delay_seconds,
         "context": extra_context or {}
     }
-    
+
     if classification.severity == ErrorSeverity.CRITICAL:
         logger.critical(f"CRITICAL ERROR: {log_data}")
     elif classification.severity == ErrorSeverity.HIGH:
@@ -203,7 +197,7 @@ def log_classified_error(
         logger.warning(f"MEDIUM ERROR: {log_data}")
     else:
         logger.info(f"LOW ERROR: {log_data}")
-    
+
     # Send alert if applicable
     if classification.alert_message:
         send_alert(classification.alert_message, classification.severity)
@@ -212,12 +206,12 @@ def log_classified_error(
 def send_alert(message: str, severity: ErrorSeverity):
     """
     Send an alert for high/critical errors.
-    
+
     In production, this would integrate with PagerDuty, OpsGenie, Slack, etc.
     For now, it logs the alert.
     """
     alert_channel = os.getenv("ALERT_WEBHOOK_URL")
-    
+
     if alert_channel:
         try:
             import requests
@@ -246,7 +240,7 @@ def send_alert(message: str, severity: ErrorSeverity):
 # ═══════════════════════════════════════════════════════════════
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(StrEnum):
     """Specific error codes for precise, code-based classification.
 
     Each code maps to a specific error scenario. Codes are preferred
@@ -300,8 +294,8 @@ class CodeBasedClassification:
     severity: ErrorSeverity
     should_retry: bool
     retry_delay_seconds: int
-    alert_message: Optional[str]
-    error_code: Optional[ErrorCode] = None
+    alert_message: str | None
+    error_code: ErrorCode | None = None
 
 
 def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedClassification:
@@ -461,8 +455,8 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
 
 def classify_error_with_code(
     error: Exception,
-    error_code: Optional[ErrorCode] = None,
-    task_name: Optional[str] = None,
+    error_code: ErrorCode | None = None,
+    task_name: str | None = None,
     retry_count: int = 0,
 ) -> CodeBasedClassification:
     """Classify an error with optional ErrorCode override.
@@ -499,7 +493,7 @@ def classify_error_with_code(
 def tag_error(
     error: Exception,
     error_code: ErrorCode,
-    message: Optional[str] = None,
+    message: str | None = None,
 ) -> Exception:
     """Tag an exception with an ErrorCode for downstream classification.
 

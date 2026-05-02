@@ -35,12 +35,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
-from utils.result import Result, Ok, Err, ok, err, is_ok, is_err
 from error_classifier import (
     ErrorCode,
-    classify_error_with_code,
     tag_error,
 )
 
@@ -57,10 +55,10 @@ class StepResult:
         step_number: int,
         tool_name: str,
         success: bool,
-        findings: Optional[List[Dict[str, Any]]] = None,
-        error: Optional[str] = None,
+        findings: list[dict[str, Any]] | None = None,
+        error: str | None = None,
         duration_ms: int = 0,
-        error_code: Optional[ErrorCode] = None,
+        error_code: ErrorCode | None = None,
     ):
         self.step_number = step_number
         self.tool_name = tool_name
@@ -70,7 +68,7 @@ class StepResult:
         self.duration_ms = duration_ms
         self.error_code = error_code
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "step": self.step_number,
             "tool": self.tool_name,
@@ -117,7 +115,7 @@ class PipelineExecutor:
         target: str,
         engagement_id: str,
         aggressiveness: str = "default",
-    ) -> List[StepResult]:
+    ) -> list[StepResult]:
         """Execute reconnaissance tools as numbered steps.
 
         Steps:
@@ -141,7 +139,7 @@ class PipelineExecutor:
         Returns:
             List of StepResult objects (one per tool)
         """
-        results: List[StepResult] = []
+        results: list[StepResult] = []
         target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
         agg = aggressiveness or "default"
 
@@ -186,7 +184,7 @@ class PipelineExecutor:
         target: str,
         engagement_id: str,
         aggressiveness: str = "default",
-    ) -> List[StepResult]:
+    ) -> list[StepResult]:
         """Execute scanning tools as numbered steps.
 
         Steps:
@@ -206,7 +204,7 @@ class PipelineExecutor:
         Returns:
             List of StepResult objects (one per tool)
         """
-        results: List[StepResult] = []
+        results: list[StepResult] = []
         agg = aggressiveness or "default"
 
         # ── Step 1: nuclei — vulnerability scanning ──
@@ -251,7 +249,7 @@ class PipelineExecutor:
             return StepResult(step, tool, True, findings, duration_ms=self._ms(start))
         except Exception as e:
             err_code = ErrorCode.TOOL_EXECUTION_FAILED
-            tagged = tag_error(e, err_code, f"httpx failed: {e}")
+            tag_error(e, err_code, f"httpx failed: {e}")
             self._emit(engagement_id, tool, f"Failed: {e}", "failed", domain)
             return StepResult(step, tool, False, error=str(e), error_code=err_code, duration_ms=self._ms(start))
 
@@ -610,7 +608,7 @@ class PipelineExecutor:
     # Internal helpers
     # ═══════════════════════════════════════════════════════════════
 
-    def _run_tool(self, tool_name: str, args: List[str], timeout: Optional[int] = None) -> Dict[str, Any]:
+    def _run_tool(self, tool_name: str, args: list[str], timeout: int | None = None) -> dict[str, Any]:
         """Run a tool and return its result."""
         from config.constants import TOOL_TIMEOUT_DEFAULT
         return self.tool_runner.run(
@@ -619,7 +617,7 @@ class PipelineExecutor:
             timeout=timeout or TOOL_TIMEOUT_DEFAULT,
         )
 
-    def _parse_and_normalize(self, result: Dict[str, Any], tool: str) -> List[Dict[str, Any]]:
+    def _parse_and_normalize(self, result: dict[str, Any], tool: str) -> list[dict[str, Any]]:
         """Parse and normalize tool output into findings."""
         findings = []
         if result.get("success"):
@@ -632,7 +630,7 @@ class PipelineExecutor:
                         findings.append(normalized)
         return findings
 
-    def _normalize(self, raw: Dict[str, Any], tool: str) -> Optional[Dict[str, Any]]:
+    def _normalize(self, raw: dict[str, Any], tool: str) -> dict[str, Any] | None:
         """Normalize a raw finding."""
         try:
             finding = self.normalizer.normalize(raw, tool)

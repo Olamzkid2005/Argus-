@@ -1,9 +1,10 @@
 """
 Finding repository for database operations on vulnerability findings
 """
-from typing import Dict, List, Optional
 import uuid
-from psycopg2.extras import RealDictCursor, Json
+
+from psycopg2.extras import Json, RealDictCursor
+
 from database.repositories.base import BaseRepository
 
 
@@ -26,12 +27,12 @@ class FindingRepository(BaseRepository):
         evidence: dict,
         confidence: float,
         source_tool: str,
-        cvss_score: Optional[float] = None,
-        owasp_category: Optional[str] = None,
-        cwe_id: Optional[str] = None,
-        evidence_strength: Optional[str] = None,
-        tool_agreement_level: Optional[str] = None,
-        fp_likelihood: Optional[float] = None,
+        cvss_score: float | None = None,
+        owasp_category: str | None = None,
+        cwe_id: str | None = None,
+        evidence_strength: str | None = None,
+        tool_agreement_level: str | None = None,
+        fp_likelihood: float | None = None,
     ) -> str:
         """
         Create a new finding in the database.
@@ -102,7 +103,7 @@ class FindingRepository(BaseRepository):
         self,
         engagement_id: str,
         threshold: float = 0.7
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Find high confidence findings
 
@@ -131,8 +132,8 @@ class FindingRepository(BaseRepository):
             cursor.close()
             if not self._external_conn:
                 self._release_connection(conn)
-    
-    def get_summary_by_engagement(self, engagement_id: str) -> Dict:
+
+    def get_summary_by_engagement(self, engagement_id: str) -> dict:
         """
         Get summary statistics for findings.
         Uses materialized view if available for better performance.
@@ -150,7 +151,7 @@ class FindingRepository(BaseRepository):
             # Try materialized view first for better performance
             cursor.execute(
                 """
-                SELECT total_findings, critical_count, high_count, medium_count, 
+                SELECT total_findings, critical_count, high_count, medium_count,
                        low_count, info_count, avg_confidence
                 FROM mv_engagement_findings
                 WHERE engagement_id = %s
@@ -158,7 +159,7 @@ class FindingRepository(BaseRepository):
                 (engagement_id,)
             )
             row = cursor.fetchone()
-            
+
             if row:
                 summary = {}
                 for severity, key in [
@@ -176,7 +177,7 @@ class FindingRepository(BaseRepository):
                             "avg_cvss": 0,
                         }
                 return summary
-            
+
             # Fallback to direct query
             cursor.execute(
                 """
@@ -204,8 +205,8 @@ class FindingRepository(BaseRepository):
             cursor.close()
             if not self._external_conn:
                 self._release_connection(conn)
-    
-    def find_by_engagement_with_details(self, engagement_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
+
+    def find_by_engagement_with_details(self, engagement_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
         """
         Find findings with engagement details in a single query.
         Avoids N+1 query problem by using JOINs.
@@ -224,7 +225,7 @@ class FindingRepository(BaseRepository):
         try:
             cursor.execute(
                 """
-                SELECT 
+                SELECT
                     f.*,
                     e.target_url as engagement_target,
                     e.status as engagement_status
@@ -242,7 +243,7 @@ class FindingRepository(BaseRepository):
             cursor.close()
             if not self._external_conn:
                 self._release_connection(conn)
-    
+
     def update_confidence(self, finding_id: str, confidence: float) -> None:
         """
         Update confidence score for a finding.
@@ -304,7 +305,7 @@ class FindingRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_findings_by_engagement(self, engagement_id: str) -> List[Dict]:
+    def get_findings_by_engagement(self, engagement_id: str) -> list[dict]:
         """
         Get all findings for an engagement.
 
@@ -339,7 +340,7 @@ class FindingRepository(BaseRepository):
         threshold: float = 0.7,
         min_confidence: float = 0.3,
         limit: int = 50
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Find findings for an engagement that:
         - Have confidence below threshold

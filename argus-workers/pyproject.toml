@@ -13,6 +13,7 @@ exclude = [
     "build",
     ".git",
     ".tox",
+    "tool_assets",
 ]
 
 [tool.ruff.lint]

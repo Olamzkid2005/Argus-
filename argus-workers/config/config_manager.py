@@ -5,12 +5,11 @@ Mirrors CyberStrikeAI's single config.yaml with hot-reload via API pattern.
 Provides a singleton ConfigManager that reads from argus_config.yaml
 and supports runtime reload without restart.
 """
-import os
 import logging
+import os
 import threading
-import time
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -44,22 +43,22 @@ DEFAULT_CONFIG = {
 class ConfigManager:
     """
     Hot-reloadable configuration manager.
-    
+
     Usage:
         config = get_config()
         timeout = config.get("tools.timeouts.nuclei", 600)
         config.reload()  # Hot-reload from disk
     """
-    
-    def __init__(self, config_path: Optional[str] = None):
+
+    def __init__(self, config_path: str | None = None):
         self._lock = threading.RLock()
         self._config_path = config_path or os.path.join(
             os.path.dirname(__file__), "argus_config.yaml"
         )
-        self._config: Dict[str, Any] = {}
+        self._config: dict[str, Any] = {}
         self._last_mtime: float = 0
         self._reload()
-    
+
     def _reload(self):
         """Load or reload configuration from YAML file."""
         path = Path(self._config_path)
@@ -67,7 +66,7 @@ class ConfigManager:
             logger.warning("Config file not found at %s, using defaults", self._config_path)
             self._config = DEFAULT_CONFIG.copy()
             return
-        
+
         try:
             import yaml
             with open(path) as f:
@@ -85,8 +84,8 @@ class ConfigManager:
         except Exception as e:
             logger.error("Failed to load config: %s, using defaults", e)
             self._config = DEFAULT_CONFIG.copy()
-    
-    def _deep_merge(self, base: Dict, override: Dict) -> Dict:
+
+    def _deep_merge(self, base: dict, override: dict) -> dict:
         """Deep merge two dictionaries (override wins)."""
         result = base.copy()
         for key, value in override.items():
@@ -95,23 +94,23 @@ class ConfigManager:
             else:
                 result[key] = value
         return result
-    
+
     def reload(self):
         """Hot-reload configuration from disk. Call this to pick up changes."""
         with self._lock:
             self._reload()
-    
+
     def reload_if_changed(self):
         """Reload if the config file has been modified since last load."""
         path = Path(self._config_path)
         if path.exists() and path.stat().st_mtime > self._last_mtime:
             logger.info("Config file changed, reloading")
             self.reload()
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get a config value by dotted key path.
-        
+
         Example:
             config.get("tools.timeouts.nuclei", 600)
             config.get("scanning.max_pages_to_crawl", 20)
@@ -127,7 +126,7 @@ class ConfigManager:
                 else:
                     return default
             return current if current is not None else default
-    
+
     def set(self, key: str, value: Any):
         """Set a config value by dotted key path at runtime."""
         with self._lock:
@@ -138,15 +137,15 @@ class ConfigManager:
                     current[part] = {}
                 current = current[part]
             current[parts[-1]] = value
-    
-    def all(self) -> Dict:
+
+    def all(self) -> dict:
         """Get the full configuration dict."""
         with self._lock:
             return self._config.copy()
 
 
 # Singleton
-_config_manager: Optional[ConfigManager] = None
+_config_manager: ConfigManager | None = None
 _config_lock = threading.Lock()
 
 

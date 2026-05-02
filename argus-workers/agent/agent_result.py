@@ -1,7 +1,6 @@
 """
 Agent Result - Result from a tool execution within the agent loop.
 """
-from typing import Dict, Optional
 
 
 class AgentResult:
@@ -15,7 +14,7 @@ class AgentResult:
         self.duration_ms = duration_ms
         self.findings = findings or []
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "tool": self.tool,
             "success": self.success,

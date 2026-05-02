@@ -1,16 +1,14 @@
 """Tests for LLM tool selection prompts."""
-import sys
 import os
-import json
-import pytest
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from agent.agent_prompts import (
     TOOL_SELECTION_SYSTEM_PROMPT,
-    build_tool_selection_prompt,
-    build_synthesis_prompt,
     build_report_prompt,
+    build_synthesis_prompt,
+    build_tool_selection_prompt,
 )
 from models.recon_context import ReconContext
 

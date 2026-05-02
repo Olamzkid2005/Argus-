@@ -1,16 +1,15 @@
 """Tests for ReActAgent planning with LLM and deterministic fallback."""
-import sys
 import os
-import json
+import sys
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from agent.agent_result import AgentResult
 from agent.react_agent import ReActAgent
 from agent.tool_registry import ToolRegistry
-from agent.agent_action import AgentAction
-from agent.agent_result import AgentResult
 from models.recon_context import ReconContext
 
 

@@ -1,10 +1,12 @@
 """
 Tests for LLM Detector - Post-response intelligence.
 """
-import pytest
 import json
 from unittest.mock import MagicMock
-from tools.llm_detector import LLMDetector, LLMAnalysisResult
+
+import pytest
+
+from tools.llm_detector import LLMDetector
 
 
 class MockResponse:

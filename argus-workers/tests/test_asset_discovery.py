@@ -3,10 +3,11 @@ Tests for tasks/asset_discovery.py
 
 Validates: Asset classification, risk score calculation, discovery task logic
 """
-import pytest
 import os
 import sys
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Purge cached module so we can re-import with proper mocks
 for mod in list(sys.modules.keys()):
@@ -102,7 +103,7 @@ class TestAssetDiscovery:
         with patch.object(asset_discovery, 'connect', return_value=mock_conn):
             with patch.object(asset_discovery, "TracingManager", return_value=mock_tracing):
                 with patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False):
-                    result = asset_discovery.run_asset_discovery(
+                    asset_discovery.run_asset_discovery(
                         self=MagicMock(),
                         engagement_id="eng-123",
                         target="example.com",

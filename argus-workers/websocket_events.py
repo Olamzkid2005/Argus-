@@ -11,11 +11,12 @@ Requirements: 31.2, 31.3, 31.4
 """
 
 import json
+import logging
 import os
 import time
-import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
+from datetime import UTC, datetime
+from typing import Any
+
 import redis
 
 logger = logging.getLogger(__name__)
@@ -24,14 +25,14 @@ logger = logging.getLogger(__name__)
 class WebSocketEventPublisher:
     """
     Publishes events to Redis for WebSocket distribution.
-    
+
     Events are stored in Redis lists for polling and published
     to Redis channels for active subscribers.
-    
+
     Features event batching to reduce Redis overhead and
     supports filtering by severity/type.
     """
-    
+
     # Event types
     EVENT_FINDING_DISCOVERED = "finding_discovered"
     EVENT_STATE_TRANSITION = "state_transition"
@@ -42,81 +43,81 @@ class WebSocketEventPublisher:
     EVENT_SCANNER_ACTIVITY = "scanner_activity"
     EVENT_ERROR = "error"
     EVENT_AGENT_DECISION = "agent_decision"
-    
+
     # Severity levels
     SEVERITY_CRITICAL = "CRITICAL"
     SEVERITY_HIGH = "HIGH"
     SEVERITY_MEDIUM = "MEDIUM"
     SEVERITY_LOW = "LOW"
     SEVERITY_INFO = "INFO"
-    
+
     # Redis configuration
     EVENTS_TTL = 300  # 5 minutes
     MAX_EVENTS = 100
-    
+
     # Batching configuration
     BATCH_SIZE = 10
     BATCH_INTERVAL_MS = 100
-    
+
     def __init__(self, redis_url: str = None):
         """
         Initialize the WebSocket event publisher.
-        
+
         Args:
             redis_url: Redis connection URL (defaults to REDIS_URL env var)
         """
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self._redis = None
-        self._batch_buffer: Dict[str, List[Dict[str, Any]]] = {}
+        self._batch_buffer: dict[str, list[dict[str, Any]]] = {}
         self._last_flush = time.time()
-    
+
     @property
     def redis(self) -> redis.Redis:
         """Lazy Redis connection"""
         if self._redis is None:
             self._redis = redis.from_url(self.redis_url)
         return self._redis
-    
+
     def _get_channel(self, engagement_id: str) -> str:
         """Get Redis channel name for an engagement"""
         return f"ws:engagement:{engagement_id}"
-    
+
     def _get_events_key(self, engagement_id: str) -> str:
         """Get Redis key for events list"""
         return f"events:engagement:{engagement_id}"
-    
+
     def _get_state_key(self, engagement_id: str) -> str:
         """Get Redis key for current state"""
         return f"state:engagement:{engagement_id}"
-    
-    def _should_publish(self, event: Dict[str, Any], min_severity: Optional[str] = None) -> bool:
+
+    def _should_publish(self, event: dict[str, Any], min_severity: str | None = None) -> bool:
         """
         Check if event should be published based on severity filter.
-        
+
         Args:
             event: Event dictionary
             min_severity: Minimum severity to publish (CRITICAL, HIGH, MEDIUM, LOW, INFO)
-            
+
         Returns:
             True if event should be published
         """
         if not min_severity:
             return True
-        
-        severity_order = [self.SEVERITY_INFO, self.SEVERITY_LOW, self.SEVERITY_MEDIUM, 
+
+        severity_order = [self.SEVERITY_INFO, self.SEVERITY_LOW, self.SEVERITY_MEDIUM,
                          self.SEVERITY_HIGH, self.SEVERITY_CRITICAL]
-        
+
         event_severity = event.get("data", {}).get("severity", self.SEVERITY_INFO)
-        
+
         try:
             return severity_order.index(event_severity) >= severity_order.index(min_severity)
         except ValueError:
             return True
-    
-    def _publish_event(self, event: Dict[str, Any], min_severity: Optional[str] = None) -> None:
+
+    def _publish_event(self, event: dict[str, Any], min_severity: str | None = None) -> None:
         """
         Publish an event to Redis.
-        
+
         Args:
             event: Event dictionary with type, engagement_id, timestamp, and data
             min_severity: Optional minimum severity filter
@@ -124,48 +125,48 @@ class WebSocketEventPublisher:
         engagement_id = event.get("engagement_id")
         if not engagement_id:
             raise ValueError("Event must have engagement_id")
-        
+
         # Check severity filter
         if not self._should_publish(event, min_severity):
             return
-        
+
         # Store in Redis list for polling
         events_key = self._get_events_key(engagement_id)
         self.redis.lpush(events_key, json.dumps(event))
         self.redis.ltrim(events_key, 0, self.MAX_EVENTS - 1)
         self.redis.expire(events_key, self.EVENTS_TTL)
-        
+
         # Publish to channel for active subscribers
         channel = self._get_channel(engagement_id)
         self.redis.publish(channel, json.dumps(event))
-    
-    def _add_to_batch(self, event: Dict[str, Any]) -> None:
+
+    def _add_to_batch(self, event: dict[str, Any]) -> None:
         """Add event to batch buffer"""
         engagement_id = event.get("engagement_id")
         if engagement_id not in self._batch_buffer:
             self._batch_buffer[engagement_id] = []
         self._batch_buffer[engagement_id].append(event)
-    
-    def flush_batches(self, min_severity: Optional[str] = None) -> None:
+
+    def flush_batches(self, min_severity: str | None = None) -> None:
         """
         Flush all batched events to Redis.
-        
+
         Args:
             min_severity: Optional minimum severity filter
         """
         if not self._batch_buffer:
             return
-        
+
         for engagement_id, events in self._batch_buffer.items():
             if not events:
                 continue
-            
+
             events_key = self._get_events_key(engagement_id)
             channel = self._get_channel(engagement_id)
-            
+
             # Filter by severity
             filtered = [e for e in events if self._should_publish(e, min_severity)]
-            
+
             if filtered:
                 # Use pipeline for batch operations
                 pipe = self.redis.pipeline()
@@ -174,14 +175,14 @@ class WebSocketEventPublisher:
                 pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
                 pipe.expire(events_key, self.EVENTS_TTL)
                 pipe.execute()
-                
+
                 # Publish last event for notifications
                 if filtered:
                     self.redis.publish(channel, json.dumps(filtered[-1]))
-        
+
         self._batch_buffer.clear()
         self._last_flush = time.time()
-    
+
     def publish_finding(
         self,
         engagement_id: str,
@@ -195,9 +196,9 @@ class WebSocketEventPublisher:
     ) -> None:
         """
         Publish a finding discovered event.
-        
+
         Requirements: 31.2
-        
+
         Args:
             engagement_id: Engagement ID
             finding_id: Finding ID
@@ -211,7 +212,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_FINDING_DISCOVERED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "finding_id": finding_id,
                 "finding_type": finding_type,
@@ -221,7 +222,7 @@ class WebSocketEventPublisher:
                 "source_tool": source_tool,
             }
         }
-        
+
         if use_batch:
             self._add_to_batch(event)
             # Auto-flush if batch is large enough
@@ -229,19 +230,19 @@ class WebSocketEventPublisher:
                 self.flush_batches()
         else:
             self._publish_event(event)
-    
+
     def publish_state_transition(
         self,
         engagement_id: str,
         from_state: str,
         to_state: str,
-        reason: Optional[str] = None
+        reason: str | None = None
     ) -> None:
         """
         Publish a state transition event.
-        
+
         Requirements: 31.3
-        
+
         Args:
             engagement_id: Engagement ID
             from_state: Previous state
@@ -251,7 +252,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_STATE_TRANSITION,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "from_state": from_state,
                 "to_state": to_state,
@@ -259,26 +260,26 @@ class WebSocketEventPublisher:
             }
         }
         self._publish_event(event)
-        
+
         # Update current state in Redis
         state_key = self._get_state_key(engagement_id)
         self.redis.set(state_key, to_state)
         self.redis.expire(state_key, self.EVENTS_TTL)
-    
+
     def publish_rate_limit_event(
         self,
         engagement_id: str,
         domain: str,
         event_type: str,
         current_rps: float,
-        status_code: Optional[int] = None,
-        message: Optional[str] = None
+        status_code: int | None = None,
+        message: str | None = None
     ) -> None:
         """
         Publish a rate limit event.
-        
+
         Requirements: 31.4
-        
+
         Args:
             engagement_id: Engagement ID
             domain: Target domain
@@ -290,7 +291,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_RATE_LIMIT,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "domain": domain,
                 "event_type": event_type,
@@ -300,7 +301,7 @@ class WebSocketEventPublisher:
             }
         }
         self._publish_event(event)
-    
+
     def publish_tool_executed(
         self,
         engagement_id: str,
@@ -311,7 +312,7 @@ class WebSocketEventPublisher:
     ) -> None:
         """
         Publish a tool execution event.
-        
+
         Args:
             engagement_id: Engagement ID
             tool_name: Name of the tool
@@ -322,7 +323,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_TOOL_EXECUTED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "tool_name": tool_name,
                 "duration_ms": duration_ms,
@@ -331,16 +332,16 @@ class WebSocketEventPublisher:
             }
         }
         self._publish_event(event)
-    
+
     def publish_job_started(
         self,
         engagement_id: str,
         job_type: str,
-        target: Optional[str] = None
+        target: str | None = None
     ) -> None:
         """
         Publish a job started event.
-        
+
         Args:
             engagement_id: Engagement ID
             job_type: Type of job (recon, scan, analyze, report)
@@ -349,14 +350,14 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_JOB_STARTED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "job_type": job_type,
                 "target": target,
             }
         }
         self._publish_event(event)
-    
+
     def publish_job_completed(
         self,
         engagement_id: str,
@@ -367,7 +368,7 @@ class WebSocketEventPublisher:
     ) -> None:
         """
         Publish a job completed event.
-        
+
         Args:
             engagement_id: Engagement ID
             job_type: Type of job (recon, scan, analyze, report)
@@ -378,7 +379,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_JOB_COMPLETED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "job_type": job_type,
                 "status": status,
@@ -416,7 +417,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_SCANNER_ACTIVITY,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "tool_name": tool_name,
                 "activity": activity,
@@ -462,7 +463,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_AGENT_DECISION,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "iteration": iteration,
                 "tool": tool,
@@ -506,17 +507,17 @@ class WebSocketEventPublisher:
             # Non-critical: don't let DB write failure break the scan
             import logging
             logging.getLogger(__name__).warning(f"Failed to persist scanner activity: {e}")
-    
+
     def publish_error(
         self,
         engagement_id: str,
         error_message: str,
         error_code: str,
-        context: Optional[Dict[str, Any]] = None
+        context: dict[str, Any] | None = None
     ) -> None:
         """
         Publish an error event.
-        
+
         Args:
             engagement_id: Engagement ID
             error_message: Error message
@@ -526,7 +527,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_ERROR,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "error_message": error_message,
                 "error_code": error_code,
@@ -537,7 +538,7 @@ class WebSocketEventPublisher:
 
 
 # Singleton instance
-_publisher: Optional[WebSocketEventPublisher] = None
+_publisher: WebSocketEventPublisher | None = None
 
 
 def get_websocket_publisher() -> WebSocketEventPublisher:
@@ -574,7 +575,7 @@ def publish_state_transition(
     engagement_id: str,
     from_state: str,
     to_state: str,
-    reason: Optional[str] = None
+    reason: str | None = None
 ) -> None:
     """Publish a state transition event"""
     get_websocket_publisher().publish_state_transition(
@@ -590,8 +591,8 @@ def publish_rate_limit_event(
     domain: str,
     event_type: str,
     current_rps: float,
-    status_code: Optional[int] = None,
-    message: Optional[str] = None
+    status_code: int | None = None,
+    message: str | None = None
 ) -> None:
     """Publish a rate limit event"""
     get_websocket_publisher().publish_rate_limit_event(

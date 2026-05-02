@@ -12,16 +12,13 @@ Replaces scattered LLM call logic in:
 """
 import json
 import logging
-from typing import Dict, Optional, Generator, Any
 from dataclasses import dataclass
 
-from llm_client import LLMClient, LLMResponse
 from config.constants import (
     LLM_AGENT_TEMPERATURE,
     LLM_AGENT_TIMEOUT_SECONDS,
-    LLM_AGENT_COST_PER_1K_INPUT,
-    LLM_AGENT_COST_PER_1K_OUTPUT,
 )
+from llm_client import LLMClient, LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +58,7 @@ class LLMService:
         )
     """
 
-    def __init__(self, llm_client: LLMClient, config: Optional[LLMServiceConfig] = None):
+    def __init__(self, llm_client: LLMClient, config: LLMServiceConfig | None = None):
         self._client = llm_client
         self._config = config or LLMServiceConfig()
         self._cost_tracker = CostTracker(max_cost_usd=self._config.max_cost_usd)
@@ -72,8 +69,8 @@ class LLMService:
         user_prompt: str,
         *,
         max_tokens: int = 500,
-        temperature: Optional[float] = None,
-    ) -> Dict:
+        temperature: float | None = None,
+    ) -> dict:
         """
         Call LLM and return parsed JSON dict.
 
@@ -108,7 +105,7 @@ class LLMService:
             logger.warning(f"LLM call failed: {e}")
             return self._fallback(str(e))
 
-    def _fallback(self, reason: str) -> Dict:
+    def _fallback(self, reason: str) -> dict:
         """Single fallback response for all callers."""
         return {
             "_fallback": True,

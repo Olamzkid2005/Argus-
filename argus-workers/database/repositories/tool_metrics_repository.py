@@ -3,9 +3,9 @@ Tool Metrics Repository - Records and queries tool performance metrics
 
 Requirements: 22.1, 22.2
 """
-from psycopg2.extras import RealDictCursor
-from typing import Dict, List, Optional
 import uuid
+
+from psycopg2.extras import RealDictCursor
 
 from database.repositories.base import BaseRepository
 
@@ -13,13 +13,13 @@ from database.repositories.base import BaseRepository
 class ToolMetricsRepository(BaseRepository):
     """
     Repository for tool_metrics table operations.
-    
+
     Records tool execution metrics and calculates performance statistics.
     """
-    
+
     table_name = "tool_metrics"
     id_column = "id"
-    
+
     def record_metric(
         self,
         tool_name: str,
@@ -29,22 +29,22 @@ class ToolMetricsRepository(BaseRepository):
     ) -> str:
         """
         Record a tool execution metric
-        
+
         Args:
             tool_name: Name of the tool (e.g., 'nuclei', 'httpx')
             duration_ms: Execution duration in milliseconds
             success: Whether the execution succeeded
             engagement_id: Optional engagement ID for org-scoped metrics
-            
+
         Returns:
             The ID of the created metric record
         """
         conn = self._get_connection()
         cursor = conn.cursor()
-        
+
         try:
             metric_id = str(uuid.uuid4())
-            
+
             cursor.execute(
                 """
                 INSERT INTO tool_metrics (id, tool_name, duration_ms, success, engagement_id, created_at)
@@ -53,12 +53,12 @@ class ToolMetricsRepository(BaseRepository):
                 """,
                 (metric_id, tool_name, duration_ms, success, engagement_id)
             )
-            
+
             result = cursor.fetchone()
             conn.commit()
-            
+
             return result[0] if result else metric_id
-            
+
         except Exception as e:
             conn.rollback()
             raise e
@@ -66,21 +66,21 @@ class ToolMetricsRepository(BaseRepository):
             cursor.close()
             if not self._external_conn:
                 self._release_connection(conn)
-    
-    def get_recent_executions(self, tool_name: str, limit: int = 100) -> List[Dict]:
+
+    def get_recent_executions(self, tool_name: str, limit: int = 100) -> list[dict]:
         """
         Get recent executions for a specific tool
-        
+
         Args:
             tool_name: Name of the tool
             limit: Maximum number of records to return
-            
+
         Returns:
             List of execution records
         """
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
+
         try:
             cursor.execute(
                 """
@@ -92,16 +92,16 @@ class ToolMetricsRepository(BaseRepository):
                 """,
                 (tool_name, limit)
             )
-            
+
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-            
+
         finally:
             cursor.close()
             if not self._external_conn:
                 self._release_connection(conn)
-    
-    def get_performance_stats(self, days: int = 1) -> List[Dict]:
+
+    def get_performance_stats(self, days: int = 1) -> list[dict]:
         """
         Get performance statistics for all tools within the specified period.
 
@@ -138,7 +138,7 @@ class ToolMetricsRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_tool_stats(self, tool_name: str, days: int = 1) -> Optional[Dict]:
+    def get_tool_stats(self, tool_name: str, days: int = 1) -> dict | None:
         """
         Get performance statistics for a specific tool.
 
@@ -179,16 +179,16 @@ class ToolMetricsRepository(BaseRepository):
     def cleanup_old_metrics(self, days: int = 30) -> int:
         """
         Delete metrics older than specified days
-        
+
         Args:
             days: Delete metrics older than this many days
-            
+
         Returns:
             Number of deleted records
         """
         conn = self._get_connection()
         cursor = conn.cursor()
-        
+
         try:
             cursor.execute(
                 """
@@ -197,12 +197,12 @@ class ToolMetricsRepository(BaseRepository):
                 """,
                 (days,)
             )
-            
+
             deleted_count = cursor.rowcount
             conn.commit()
-            
+
             return deleted_count
-            
+
         except Exception as e:
             conn.rollback()
             raise e

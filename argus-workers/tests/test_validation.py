@@ -2,6 +2,7 @@
 Tests for validation utilities
 """
 import pytest
+
 from utils.validation import validate_uuid
 
 

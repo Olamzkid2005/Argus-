@@ -6,7 +6,6 @@ overwhelming targets with intensive scans.
 """
 
 from dataclasses import dataclass
-from typing import Dict
 
 
 @dataclass
@@ -20,7 +19,7 @@ class ToolRateLimitConfig:
 # Tool-specific rate limits
 # These are more conservative than domain limits to prevent
 # intensive tools from overwhelming targets
-TOOL_RATE_LIMITS: Dict[str, ToolRateLimitConfig] = {
+TOOL_RATE_LIMITS: dict[str, ToolRateLimitConfig] = {
     "nuclei": ToolRateLimitConfig(
         requests_per_second=10.0,
         concurrent_requests=3,
@@ -47,10 +46,10 @@ TOOL_RATE_LIMITS: Dict[str, ToolRateLimitConfig] = {
 def get_tool_rate_limit(tool_name: str) -> ToolRateLimitConfig:
     """
     Get rate limit configuration for a tool.
-    
+
     Args:
         tool_name: Name of the security tool
-    
+
     Returns:
         ToolRateLimitConfig for the tool, or default if not found
     """
@@ -71,21 +70,21 @@ def get_effective_rate_limit(
 ) -> tuple[float, int]:
     """
     Get effective rate limit by taking minimum of domain and tool limits.
-    
+
     Args:
         domain_rps: Domain requests per second limit
         domain_concurrent: Domain concurrent requests limit
         tool_name: Name of the security tool
-    
+
     Returns:
         Tuple of (effective_rps, effective_concurrent)
     """
     tool_config = get_tool_rate_limit(tool_name)
-    
+
     effective_rps = min(domain_rps, tool_config.requests_per_second)
     effective_concurrent = min(
         domain_concurrent,
         tool_config.concurrent_requests
     )
-    
+
     return effective_rps, effective_concurrent

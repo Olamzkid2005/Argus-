@@ -4,10 +4,11 @@ Database optimized connection for workers
 Uses connection pooling with automatic recycling
 """
 
-import os
 import logging
+import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator, Optional
+
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
@@ -21,13 +22,13 @@ DB_USER = os.getenv("DB_USER", "argus_user")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "argus_dev_password_change_in_production")
 
 # Connection pool - lazy initialization
-_connection_pool: Optional[pool.ThreadedConnectionPool] = None
+_connection_pool: pool.ThreadedConnectionPool | None = None
 
 
 def get_connection_pool() -> pool.ThreadedConnectionPool:
     """Get or create database connection pool"""
     global _connection_pool
-    
+
     if _connection_pool is None:
         logger.info("Creating database connection pool")
         _connection_pool = pool.ThreadedConnectionPool(
@@ -40,7 +41,7 @@ def get_connection_pool() -> pool.ThreadedConnectionPool:
             password=DB_PASSWORD,
             options="-c statement_timeout=30000",  # 30s query timeout
         )
-    
+
     return _connection_pool
 
 
@@ -53,7 +54,7 @@ def get_db_cursor() -> Generator[RealDictCursor, None, None]:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         yield cursor
         conn.commit()
-    except Exception as e:
+    except Exception:
         if conn:
             conn.rollback()
         raise
@@ -66,7 +67,7 @@ def get_db_cursor() -> Generator[RealDictCursor, None, None]:
 def close_all_connections():
     """Close all connections in the pool"""
     global _connection_pool
-    
+
     if _connection_pool:
         logger.info("Closing database connections")
         _connection_pool.closeall()

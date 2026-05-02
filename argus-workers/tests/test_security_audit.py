@@ -3,9 +3,10 @@ Tests for security_audit.py
 
 Validates: Environment checks, dependency scanning, TLS config, full audit run
 """
-import pytest
 import os
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, mock_open, patch
+
+import pytest
 
 from security_audit import SecurityAudit, SecurityFinding
 

@@ -3,10 +3,9 @@ Secrets redaction utilities for logging.
 
 Redacts sensitive information from logs to prevent credential leakage.
 """
-import re
 import logging
-from typing import Any, Dict
-
+import re
+from typing import Any
 
 # Patterns for sensitive data that should be redacted
 SECRET_PATTERNS = {
@@ -69,7 +68,7 @@ def redact_string(text: str) -> str:
     return result
 
 
-def redact_dict(data: Dict[str, Any]) -> Dict[str, Any]:
+def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
     """
     Recursively redact secrets from a dictionary.
 
@@ -154,7 +153,7 @@ class RedactedLogger:
     def __init__(self, logger: logging.Logger):
         self.logger = logger
 
-    def _redact_message(self, message: str, metadata: Dict = None) -> str:
+    def _redact_message(self, message: str, metadata: dict = None) -> str:
         """Redact secrets from message and metadata."""
         message = redact_string(message)
         if metadata:
@@ -163,19 +162,19 @@ class RedactedLogger:
 
     def debug(self, message: str, **kwargs):
         msg, meta = self._redact_message(message, kwargs)
-        self.logger.debug(msg, **({} if not meta else meta))
+        self.logger.debug(msg, **(meta if meta else {}))
 
     def info(self, message: str, **kwargs):
         msg, meta = self._redact_message(message, kwargs)
-        self.logger.info(msg, **({} if not meta else meta))
+        self.logger.info(msg, **(meta if meta else {}))
 
     def warning(self, message: str, **kwargs):
         msg, meta = self._redact_message(message, kwargs)
-        self.logger.warning(msg, **({} if not meta else meta))
+        self.logger.warning(msg, **(meta if meta else {}))
 
     def error(self, message: str, **kwargs):
         msg, meta = self._redact_message(message, kwargs)
-        self.logger.error(msg, **({} if not meta else meta))
+        self.logger.error(msg, **(meta if meta else {}))
 
 
 def get_redacted_logger(name: str) -> RedactedLogger:

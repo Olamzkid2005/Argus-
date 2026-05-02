@@ -1,9 +1,8 @@
 """
 Tests for LLM Review Celery task.
 """
+
 import pytest
-from unittest.mock import MagicMock, patch
-from datetime import datetime
 
 
 class TestLLMReviewTask:
@@ -31,7 +30,6 @@ class TestLLMReviewTask:
         """Test that request replay constructs a URL with the payload."""
         from tasks.llm_review import _replay_request
 
-        evidence = {"payload": "<script>alert(1)</script>"}
         # Just verify the function doesn't crash — it makes a real HTTP call
         # which we don't want in unit tests. We'll test the structure.
         assert callable(_replay_request)

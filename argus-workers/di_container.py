@@ -25,8 +25,8 @@ Pattern: Per-workflow DI container with explicit injection, no-op defaults,
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, Optional, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class OutputProvider:
     async def write(self, step_name: str, content: str) -> None:
         """Write output for a step."""
 
-    async def read(self, step_name: str) -> Optional[str]:
+    async def read(self, step_name: str) -> str | None:
         """Read output for a step. Returns None if not found."""
         return None
 
@@ -58,7 +58,7 @@ class TemplateProvider:
     Default no-op implementation — override to load from files/DB.
     """
 
-    async def load(self, template_name: str, variables: Dict[str, str]) -> str:
+    async def load(self, template_name: str, variables: dict[str, str]) -> str:
         """Load and render a template."""
         return f"Template: {template_name}"
 
@@ -70,11 +70,11 @@ class TemplateProvider:
 class ContainerDependencies:
     """Dependencies for creating a Container."""
 
-    db_url: Optional[str] = None
-    redis_url: Optional[str] = None
-    engagement_id: Optional[str] = None
-    output_provider: Optional[OutputProvider] = None
-    template_provider: Optional[TemplateProvider] = None
+    db_url: str | None = None
+    redis_url: str | None = None
+    engagement_id: str | None = None
+    output_provider: OutputProvider | None = None
+    template_provider: TemplateProvider | None = None
     tool_timeout: int = 300
     max_retries: int = 3
     log_level: str = "INFO"
@@ -148,7 +148,8 @@ class Container:
 # Default factory: creates a plain Container
 ContainerFactory = Callable[[ContainerDependencies], Container]
 
-_factory: ContainerFactory = lambda deps: Container(deps)
+def _factory(deps):
+    return Container(deps)
 
 
 def set_container_factory(factory: ContainerFactory) -> None:
@@ -166,13 +167,13 @@ def set_container_factory(factory: ContainerFactory) -> None:
 
 
 #: Map of engagement_id to Container instance.
-_containers: Dict[str, Container] = {}
+_containers: dict[str, Container] = {}
 
 
 def get_or_create_container(
     engagement_id: str,
-    db_url: Optional[str] = None,
-    redis_url: Optional[str] = None,
+    db_url: str | None = None,
+    redis_url: str | None = None,
     **kwargs,
 ) -> Container:
     """Get or create a Container for an engagement.
@@ -200,7 +201,7 @@ def get_or_create_container(
     return container
 
 
-def get_container(engagement_id: str) -> Optional[Container]:
+def get_container(engagement_id: str) -> Container | None:
     """Get an existing Container for an engagement, if one exists.
 
     Unlike get_or_create_container, this does NOT create a new container.

@@ -3,9 +3,10 @@ Tests for autoscale.py
 
 Validates: Queue depth calculation, target worker logic, scaling decisions
 """
-import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from autoscale import AutoscaleConfig, CeleryAutoscale
 
@@ -113,7 +114,7 @@ class TestCeleryAutoscale:
 
     def test_calculate_target_workers_empty_queues(self, scaler):
         """Test target workers when all queues empty"""
-        depths = {q: 0 for q in scaler.config.queues}
+        depths = dict.fromkeys(scaler.config.queues, 0)
         target = scaler.calculate_target_workers(depths)
         assert target == scaler.config.min_workers
 
@@ -132,7 +133,7 @@ class TestCeleryAutoscale:
 
     def test_calculate_target_workers_respects_max(self, scaler):
         """Test target workers does not exceed max_workers"""
-        depths = {q: 100 for q in scaler.config.queues}
+        depths = dict.fromkeys(scaler.config.queues, 100)
         target = scaler.calculate_target_workers(depths)
         assert target == scaler.config.max_workers
 

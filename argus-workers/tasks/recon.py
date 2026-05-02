@@ -4,6 +4,7 @@ Celery tasks for reconnaissance phase
 Requirements: 4.2, 4.4, 20.1, 20.2, 20.3
 """
 import logging
+
 from celery_app import app
 from tasks.base import task_context
 

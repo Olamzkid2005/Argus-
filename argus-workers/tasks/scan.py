@@ -14,8 +14,9 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
     """
     # Load recon context from Redis for agent mode dispatch
     redis_url = None  # resolved inside task_context
-    from tasks.utils import load_recon_context
     import os
+
+    from tasks.utils import load_recon_context
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     recon_context = load_recon_context(engagement_id, redis_url)
 

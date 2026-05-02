@@ -9,17 +9,18 @@ and the Celery worker.
 Usage: cat task.json | python dispatch_task.py
 """
 import json
-import sys
-import os
 import logging
+import os
+import sys
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from celery_app import app
 from dotenv import load_dotenv
+
+from celery_app import app
 
 load_dotenv()
 
@@ -31,12 +32,11 @@ if not os.getenv("DATABASE_URL"):
         with open(platform_env) as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith("#"):
-                    if "=" in line:
-                        key, value = line.split("=", 1)
-                        if key == "DATABASE_URL":
-                            os.environ[key] = value.strip()
-                            break
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    if key == "DATABASE_URL":
+                        os.environ[key] = value.strip()
+                        break
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,10 +79,10 @@ def dispatch_task(job_type: str, args: list, task_id: str = None) -> dict:
 
     # Ensure the correct Python path is used by setting environment
     os.environ["PYTHONPATH"] = PROJECT_ROOT
-    
+
     # Make sure DATABASE_URL is set
     if not os.getenv("DATABASE_URL"):
-        raise EnvironmentError(
+        raise OSError(
             "DATABASE_URL environment variable is not set. "
             "Set it in .env.local or export it before running dispatch_task."
         )

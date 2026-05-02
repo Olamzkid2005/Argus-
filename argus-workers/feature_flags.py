@@ -12,10 +12,10 @@ Usage:
 
 Requirements: 4.9
 """
-import os
 import logging
-from typing import Dict, Optional, Any
+import os
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class FeatureFlags:
             db_connection: Optional database connection for persistent flags
         """
         self.db = db_connection
-        self._cache: Dict[str, tuple] = {}  # name -> (value, source)
+        self._cache: dict[str, tuple] = {}  # name -> (value, source)
 
     def is_enabled(self, flag_name: str, default: bool = False) -> bool:
         """
@@ -75,7 +75,7 @@ class FeatureFlags:
         value, _ = self._get_value(flag_name, default)
         return value
 
-    def get_flag_source(self, flag_name: str) -> Optional[str]:
+    def get_flag_source(self, flag_name: str) -> str | None:
         """Get the source of a flag value."""
         _, source = self._get_value(flag_name, None)
         return source.value if source else None
@@ -130,7 +130,7 @@ class FeatureFlags:
             except ValueError:
                 return value
 
-    def _get_from_db(self, flag_name: str) -> Optional[Any]:
+    def _get_from_db(self, flag_name: str) -> Any | None:
         """Get flag value from database."""
         # This would query a feature_flags table
         # For now, return None to use default
@@ -140,7 +140,7 @@ class FeatureFlags:
         """Clear the flag cache to force re-read."""
         self._cache.clear()
 
-    def get_all_flags(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_flags(self) -> dict[str, dict[str, Any]]:
         """
         Get all configured flags.
 
@@ -162,7 +162,7 @@ class FeatureFlags:
 
 
 # Global instance for convenience
-_global_flags: Optional[FeatureFlags] = None
+_global_flags: FeatureFlags | None = None
 
 
 def get_feature_flags(db_connection=None) -> FeatureFlags:

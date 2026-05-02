@@ -2,10 +2,9 @@
 Scope Validator - Ensures LLM-selected tools stay within authorized scope.
 Prevents prompt injection from tricking the agent into scanning unauthorized targets.
 """
+import fnmatch
 import json
 import logging
-import fnmatch
-from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ class ScopeValidator:
     - Exact URL prefix matching
     """
 
-    def __init__(self, engagement_id: str, authorized_scope: Optional[Dict] = None):
+    def __init__(self, engagement_id: str, authorized_scope: dict | None = None):
         """
         Args:
             engagement_id: Engagement UUID
@@ -35,7 +34,7 @@ class ScopeValidator:
         self.engagement_id = engagement_id
         self._scope = self._parse_scope(authorized_scope)
 
-    def _parse_scope(self, scope) -> Dict:
+    def _parse_scope(self, scope) -> dict:
         """Parse authorized scope from dict or JSON string."""
         if isinstance(scope, str):
             try:

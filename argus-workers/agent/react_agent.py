@@ -6,33 +6,34 @@ ReAct Agent - LLM-driven tool selection and execution loop.
 3. Tool executes, result feeds back to context
 4. LLM decides next action (another tool or stop)
 """
-import json
+
 import logging
 import time
-from typing import Dict, List, Optional, Any
-from enum import Enum
+from typing import Any
 
-from .agent_action import AgentAction
-from .agent_result import AgentResult
-from .tool_registry import ToolRegistry
-from .agent_prompts import (
-    TOOL_SELECTION_SYSTEM_PROMPT,
-    build_tool_selection_prompt,
-)
 from config.constants import (
-    LLM_AGENT_MAX_ITERATIONS,
-    LLM_AGENT_TEMPERATURE,
     LLM_AGENT_CONTEXT_MAX_TOKENS,
     LLM_AGENT_MAX_COST_USD,
-    LLM_AGENT_TIMEOUT_SECONDS,
+    LLM_AGENT_MAX_ITERATIONS,
+    LLM_AGENT_TEMPERATURE,
     LLM_AGENT_ZERO_FINDING_STOP,
 )
 from llm_service import LLMService
 
+from .agent_action import AgentAction
+from .agent_prompts import (
+    TOOL_SELECTION_SYSTEM_PROMPT,
+    build_tool_selection_prompt,
+)
+from .agent_result import AgentResult
+from .tool_registry import ToolRegistry
+
 logger = logging.getLogger(__name__)
+
 
 class _DoneSentinel:
     """Sentinel value returned when LLM signals __done__."""
+
     pass
 
 
@@ -57,6 +58,7 @@ class ReActAgent:
         """Lazy-load PHASE_TOOLS from tool_definitions SSOT."""
         if not cls._phase_tools_loaded:
             from tool_definitions import build_phase_tools_dict
+
             cls.PHASE_TOOLS = build_phase_tools_dict()
             cls._phase_tools_loaded = True
 
@@ -76,26 +78,28 @@ class ReActAgent:
         self.llm_client = llm_client
         self.decision_repo = decision_repo
         self.engagement_id = engagement_id
-        self.history: List[Dict] = []
+        self.history: list[dict] = []
         self._phase = phase
 
-    def add_to_history(self, role: str, content: str, data: Dict = None):
+    def add_to_history(self, role: str, content: str, data: dict = None):
         """Add an entry to the agent's history/context."""
-        self.history.append({
-            "role": role,
-            "content": content,
-            "data": data or {},
-            "timestamp": time.time(),
-        })
+        self.history.append(
+            {
+                "role": role,
+                "content": content,
+                "data": data or {},
+                "timestamp": time.time(),
+            }
+        )
 
     def get_context(self, max_tokens: int = LLM_AGENT_CONTEXT_MAX_TOKENS) -> str:
         """Build context string from history. Trims to stay under token budget."""
         recent = self.history[-5:]
-        parts = [f'[{e["role"]}]: {e["content"]}' for e in recent]
+        parts = [f"[{e['role']}]: {e['content']}" for e in recent]
         context = "\n".join(parts)
 
         if len(context) / 4 > max_tokens:
-            parts = [f'[{e["role"]}]: {e["content"]}' for e in self.history[-2:]]
+            parts = [f"[{e['role']}]: {e['content']}" for e in self.history[-2:]]
             context = "\n".join(parts)
 
         return context
@@ -110,6 +114,7 @@ class ReActAgent:
         self._ensure_phase_tools()
         phase_tools = self.PHASE_TOOLS.get(self._phase, [])
         for tool_name in phase_tools:
+
             def make_runner(tn):
                 def run_tool(target: str = "", **kwargs):
                     args = kwargs.pop("args", [])
@@ -117,13 +122,19 @@ class ReActAgent:
                     if target:
                         args = [target] + (args or [])
                     return tool_runner.run(tn, args, timeout=timeout)
+
                 run_tool.__name__ = tn
                 return run_tool
+
             if self.registry.get_tool(tool_name) is None:
                 self.registry.register(
                     tool_name,
                     make_runner(tool_name),
-                    {"name": tool_name, "description": f"Run {tool_name}", "parameters": []}
+                    {
+                        "name": tool_name,
+                        "description": f"Run {tool_name}",
+                        "parameters": [],
+                    },
                 )
 
     def _call_llm_for_action(
@@ -132,14 +143,16 @@ class ReActAgent:
         context: str,
         tried_tools: set,
         recon_context: Any,
-        llm_service: Optional[LLMService] = None,
-    ) -> Optional[AgentAction]:
+        llm_service: LLMService | None = None,
+    ) -> AgentAction | None:
         """Call LLM to decide next tool via LLMService. Returns _DONE, AgentAction, or None on failure."""
         if not llm_service or not llm_service.is_available():
             return None
 
         user_prompt = build_tool_selection_prompt(
-            recon_context.to_llm_summary() if hasattr(recon_context, "to_llm_summary") else str(recon_context),
+            recon_context.to_llm_summary()
+            if hasattr(recon_context, "to_llm_summary")
+            else str(recon_context),
             self.registry.list_tools(),
             tried_tools,
             context,
@@ -174,10 +187,12 @@ class ReActAgent:
             )
 
         except Exception as e:
-            logger.warning(f"LLM tool selection failed: {e}. Using deterministic fallback.")
+            logger.warning(
+                f"LLM tool selection failed: {e}. Using deterministic fallback."
+            )
             return None
 
-    def _deterministic_plan(self, task: str, tried_tools: set) -> Optional[AgentAction]:
+    def _deterministic_plan(self, task: str, tried_tools: set) -> AgentAction | None:
         """Fallback: deterministic phase-based tool planning."""
         self._ensure_phase_tools()
         phase_tools = None
@@ -197,9 +212,7 @@ class ReActAgent:
             if tool_name not in tried_tools:
                 if self.registry.get_tool(tool_name) is not None:
                     return AgentAction(
-                        tool_name,
-                        {"target": task},
-                        f"Phase tool: {tool_name}"
+                        tool_name, {"target": task}, f"Phase tool: {tool_name}"
                     )
 
         return None
@@ -220,7 +233,9 @@ class ReActAgent:
             if param.get("required", False):
                 param_name = param.get("name", "")
                 if param_name not in action.arguments:
-                    logger.warning(f"Missing required param '{param_name}' for {action.tool}")
+                    logger.warning(
+                        f"Missing required param '{param_name}' for {action.tool}"
+                    )
                     return False
 
         return True
@@ -232,7 +247,7 @@ class ReActAgent:
         tried_tools: set = None,
         recon_context: Any = None,
         llm_client: Any = None,
-    ) -> Optional[AgentAction]:
+    ) -> AgentAction | None:
         """
         Decide the next action.
 
@@ -242,9 +257,16 @@ class ReActAgent:
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
 
-        if llm_client and hasattr(llm_client, "is_available") and llm_client.is_available() and recon_context:
+        if (
+            llm_client
+            and hasattr(llm_client, "is_available")
+            and llm_client.is_available()
+            and recon_context
+        ):
             llm_service = LLMService(llm_client=llm_client)
-            action = self._call_llm_for_action(task, context, tried_tools, recon_context, llm_service=llm_service)
+            action = self._call_llm_for_action(
+                task, context, tried_tools, recon_context, llm_service=llm_service
+            )
             if action is _DONE:
                 return None
             if action is not None:
@@ -255,9 +277,9 @@ class ReActAgent:
     def run(
         self,
         task: str,
-        initial_context: Dict = None,
+        initial_context: dict = None,
         recon_context: Any = None,
-    ) -> List[AgentResult]:
+    ) -> list[AgentResult]:
         """
         Run the agent loop for a given task.
 
@@ -280,7 +302,7 @@ class ReActAgent:
         initial_target = task.split(":")[-1].strip() if ":" in task else task
 
         for iteration in range(self.max_iterations):
-            plan_kwargs = dict(tried_tools=tried_tools)
+            plan_kwargs = {"tried_tools": tried_tools}
             if recon_context is not None:
                 plan_kwargs["recon_context"] = recon_context
             if self.llm_client is not None:
@@ -311,42 +333,56 @@ class ReActAgent:
                         results.append(result)
                 break
 
-            logger.info("Agent iteration %d: calling %s (cost: $%.6f)",
-                        iteration, action.tool, action.cost_usd)
+            logger.info(
+                "Agent iteration %d: calling %s (cost: $%.6f)",
+                iteration,
+                action.tool,
+                action.cost_usd,
+            )
 
             # Step 23: Emit agent decision event for frontend reasoning feed
             try:
                 from streaming import emit_agent_decision
+
                 if self.engagement_id:
                     emit_agent_decision(
                         engagement_id=self.engagement_id,
                         iteration=iteration,
                         tool=action.tool,
                         reasoning=action.reasoning,
-                        was_fallback=not (self.llm_client and self.llm_client.is_available()),
+                        was_fallback=not (
+                            self.llm_client and self.llm_client.is_available()
+                        ),
                     )
             except Exception:
-                pass
+                logger.warning(
+                    "Agent: failed to emit decision event (non-fatal)",
+                    exc_info=True,
+                )
 
             # Execute tool (Risk 3: tool error handling — tool errors are captured as failed AgentResults)
             result = self.registry.call(action.tool, **action.arguments)
             results.append(result)
 
             # Risk 6: auto-stop on low finding yield
-            new_findings_count = len(result.findings) if hasattr(result, "findings") else 0
+            new_findings_count = (
+                len(result.findings) if hasattr(result, "findings") else 0
+            )
             if new_findings_count == 0:
                 zero_finding_consecutive += 1
             else:
                 zero_finding_consecutive = 0
 
             if zero_finding_consecutive >= LLM_AGENT_ZERO_FINDING_STOP:
-                logger.info("Two consecutive tools found nothing – stopping agent early")
+                logger.info(
+                    "Two consecutive tools found nothing – stopping agent early"
+                )
                 break
 
             self.add_to_history(
                 "observation",
                 f"Tool {action.tool} {'succeeded' if result.success else 'failed'}"
-                + (f" — {result.error[:100]}" if not result.success else "")
+                + (f" — {result.error[:100]}" if not result.success else ""),
             )
 
             # Log decision to repository if available
@@ -359,7 +395,9 @@ class ReActAgent:
                         tool_selected=action.tool,
                         arguments=action.arguments,
                         reasoning=action.reasoning,
-                        was_fallback=not (self.llm_client and self.llm_client.is_available()),
+                        was_fallback=not (
+                            self.llm_client and self.llm_client.is_available()
+                        ),
                         input_tokens=None,
                         output_tokens=None,
                     )

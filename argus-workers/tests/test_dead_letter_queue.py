@@ -1,10 +1,11 @@
 """
 Tests for dead_letter_queue.py
 """
-import pytest
 import json
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from dead_letter_queue import DeadLetterQueue, FailedTask, get_dlq
 
@@ -99,7 +100,7 @@ class TestDeadLetterQueue:
             "error_class": "TimeoutError",
             "worker_id": None,
             "retry_count": 2,
-            "failed_at": datetime.now(timezone.utc).isoformat(),
+            "failed_at": datetime.now(UTC).isoformat(),
             "engagement_id": "ENG-001",
         }
         mock_redis.zrevrange.return_value = [json.dumps(task_data)]
@@ -121,7 +122,7 @@ class TestDeadLetterQueue:
             "error_class": "TimeoutError",
             "worker_id": None,
             "retry_count": 2,
-            "failed_at": datetime.now(timezone.utc).isoformat(),
+            "failed_at": datetime.now(UTC).isoformat(),
             "engagement_id": "ENG-001",
         }
         mock_redis.zrevrange.return_value = [b"task-001"]
@@ -257,7 +258,7 @@ class TestGetDLQ:
             error_class="TimeoutError",
             worker_id="worker-1",
             retry_count=2,
-            failed_at=datetime.now(timezone.utc).isoformat(),
+            failed_at=datetime.now(UTC).isoformat(),
             engagement_id="ENG-001",
         )
 

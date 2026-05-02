@@ -4,21 +4,20 @@ Full integration test suite for the LLM ReAct agent pipeline.
 Tests the complete flow with mocked LLM responses and mocked tool execution.
 Verifies the agent correctly selects tools, handles edge cases, and falls back.
 """
-import sys
 import os
-import json
+import sys
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from agent import (
-    ReActAgent, CoordinatorAgent, ToolRegistry, AgentAction, AgentResult, create_phase_agent,
+    AgentResult,
+    ReActAgent,
+    ToolRegistry,
 )
 from models.recon_context import ReconContext
-from agent.agent_prompts import build_tool_selection_prompt
-from config.constants import LLM_AGENT_MAX_ITERATIONS, LLM_AGENT_MAX_COST_USD
-
 
 MOCK_SCAN_DECISIONS = [
     '{"tool": "arjun", "arguments": {"target": "http://test.local"}, "reasoning": "API found, discovering params first"}',
@@ -98,7 +97,7 @@ class TestFullAgentScan:
 
     def test_scope_violation_skips_tool(self, tool_registry, recon_context):
         """Out-of-scope target should be blocked by scope validator."""
-        from tools.scope_validator import ScopeValidator, ScopeViolationError
+        from tools.scope_validator import ScopeValidator
 
         scope_validator = ScopeValidator("test-123", {"domains": ["*.allowed.com"]})
         original_call = tool_registry.call
@@ -179,7 +178,7 @@ class TestAgentFallbackRegression:
         ReActAgent.PHASE_TOOLS = {"scan": ["z_tool", "a_tool", "m_tool"]}
         agent._phase = "scan"
         try:
-            results = agent.run(task="scan: test")
+            agent.run(task="scan: test")
             assert called == ["z_tool", "a_tool", "m_tool"], f"Expected order z, a, m but got {called}"
         finally:
             ReActAgent.PHASE_TOOLS = original

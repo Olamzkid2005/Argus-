@@ -1,11 +1,13 @@
 """
 Tests for Container Security Scanner
 """
-import pytest
 import json
-import tempfile
 import os
+import tempfile
 from pathlib import Path
+
+import pytest
+
 from tools.container_scanner import ContainerSecurityScanner
 
 

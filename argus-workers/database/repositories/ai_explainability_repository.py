@@ -2,25 +2,24 @@
 Repository for AI explainability data.
 """
 
-from typing import Optional, Dict
-import logging
 import json
+import logging
 
 logger = logging.getLogger(__name__)
 
 
 class AIExplainabilityRepository:
     """Repository for managing AI explanations and traces."""
-    
+
     def __init__(self, db_connection):
         """
         Initialize repository.
-        
+
         Args:
             db_connection: Database connection
         """
         self.db = db_connection
-    
+
     def create_explanation(
         self,
         cluster_id: str,
@@ -65,11 +64,11 @@ class AIExplainabilityRepository:
         except Exception as e:
             logger.error(f"Failed to create AI explanation: {e}")
             raise
-    
+
     def create_trace(
         self,
         cluster_id: str,
-        trace_data: Dict
+        trace_data: dict
     ) -> dict:
         """
         Create explainability trace record.
@@ -103,7 +102,7 @@ class AIExplainabilityRepository:
             logger.error(f"Failed to create explainability trace: {e}")
             raise
 
-    def get_explanation(self, cluster_id: str) -> Optional[dict]:
+    def get_explanation(self, cluster_id: str) -> dict | None:
         """
         Get AI explanation for cluster.
 
@@ -128,7 +127,7 @@ class AIExplainabilityRepository:
             logger.error(f"Failed to get AI explanation: {e}")
             raise
 
-    def get_trace(self, cluster_id: str) -> Optional[dict]:
+    def get_trace(self, cluster_id: str) -> dict | None:
         """
         Get explainability trace for cluster.
 
@@ -158,14 +157,14 @@ class AIExplainabilityRepository:
         except Exception as e:
             logger.error(f"Failed to get AI explainability trace: {e}")
             raise
-    
-    async def get_explanation(self, cluster_id: str) -> Optional[dict]:
+
+    async def get_explanation(self, cluster_id: str) -> dict | None:
         """
         Get AI explanation for cluster.
-        
+
         Args:
             cluster_id: Vulnerability cluster ID
-        
+
         Returns:
             Explanation record or None
         """
@@ -176,21 +175,21 @@ class AIExplainabilityRepository:
             ORDER BY created_at DESC
             LIMIT 1
         """
-        
+
         try:
             result = await self.db.fetchrow(query, cluster_id)
             return dict(result) if result else None
         except Exception as e:
             logger.error(f"Failed to get AI explanation: {e}")
             raise
-    
-    async def get_trace(self, cluster_id: str) -> Optional[dict]:
+
+    async def get_trace(self, cluster_id: str) -> dict | None:
         """
         Get explainability trace for cluster.
-        
+
         Args:
             cluster_id: Vulnerability cluster ID
-        
+
         Returns:
             Trace record or None
         """
@@ -201,7 +200,7 @@ class AIExplainabilityRepository:
             ORDER BY created_at DESC
             LIMIT 1
         """
-        
+
         try:
             result = await self.db.fetchrow(query, cluster_id)
             if result:

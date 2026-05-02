@@ -2,7 +2,6 @@
 Coordinator Agent - Multi-Agent Coordinator that delegates phases to specialized sub-agents.
 """
 import logging
-from typing import Dict, List, Optional
 
 from .react_agent import ReActAgent
 from .tool_registry import ToolRegistry
@@ -41,7 +40,7 @@ class CoordinatorAgent:
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
         self.current_phase = "recon"
-        self.phase_results: Dict[str, List] = {}
+        self.phase_results: dict[str, list] = {}
 
     def can_transition_to(self, next_phase: str) -> bool:
         """Check if transition to next phase is valid."""
@@ -69,8 +68,8 @@ class CoordinatorAgent:
             decision_repo=decision_repo,
         )
 
-    def run_phase(self, phase: str, context: Dict, tool_runner=None,
-                  llm_client=None, decision_repo=None) -> List:
+    def run_phase(self, phase: str, context: dict, tool_runner=None,
+                  llm_client=None, decision_repo=None) -> list:
         """Run a single phase with tools."""
         self._ensure_phase_agents()
         agent = create_phase_agent(

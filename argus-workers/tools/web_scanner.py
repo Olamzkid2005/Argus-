@@ -19,35 +19,38 @@ Integrates advanced web scanning capabilities:
 - Debug endpoint detection
 - Sensitive file detection
 """
-import signal
-import time
-import re
-import json
 import base64
+import json
 import logging
-from typing import Dict, List, Optional
-from urllib.parse import urlparse, urljoin
+import re
+import signal
 import socket
-import urllib3
+import time
+from urllib.parse import urljoin, urlparse
+
 import requests
-from requests.exceptions import RequestException, Timeout, ConnectionError
+import urllib3
+from requests.exceptions import ConnectionError, RequestException, Timeout
 
 logger = logging.getLogger(__name__)
 
+import contextlib
+
 from config.constants import (
+    LLM_MAX_GENERATED_PAYLOADS,
     MAX_PAGES_TO_CRAWL,
     MAX_PARAMETERS_TO_FUZZ,
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,
 )
-from config.constants import LLM_MAX_GENERATED_PAYLOADS
+
 
 class WebScanner:
     """
     Comprehensive web application vulnerability scanner.
     Performs security configuration checks and active vulnerability testing.
     """
-    
+
     # Security headers to check
     SECURITY_HEADERS = [
         "Strict-Transport-Security",
@@ -58,7 +61,7 @@ class WebScanner:
         "X-XSS-Protection",
         "Content-Security-Policy",
     ]
-    
+
     # Sensitive file patterns
     SENSITIVE_FILES = [
         ".env", ".git/config", ".git/HEAD", ".git/COMMIT_EDITMSG",
@@ -74,7 +77,7 @@ class WebScanner:
         "/wp-admin/", "/admin/", "/phpmyadmin/",
         "/api/v1", "/api/v2", "/graphql",
     ]
-    
+
     # JS secret patterns
     JS_SECRET_PATTERNS = [
         (r'(?:api[_-]?key|apikey|api[_-]?token)\s*[:=]\s*["\']([a-zA-Z0-9_\-]{16,})["\']', "API_KEY"),
@@ -88,7 +91,7 @@ class WebScanner:
         (r'(?:database[_-]?url|db[_-]?url|connection[_-]?string)\s*[:=]\s*["\']([^"\']+)["\']', "DATABASE_URL"),
         (r'(?:webhook[_-]?url|webhook[_-]?secret)\s*[:=]\s*["\']([^"\']+)["\']', "WEBHOOK_SECRET"),
     ]
-    
+
     # XSS payloads
     XSS_PAYLOADS = [
         '<script>alert(1)</script>',
@@ -101,7 +104,7 @@ class WebScanner:
         "'\"><img src=x onerror=alert(1)>",
         '<body onload=alert(1)>',
     ]
-    
+
     # SSTI payloads
     SSTI_PAYLOADS = [
         '{{7*7}}',
@@ -110,7 +113,7 @@ class WebScanner:
         '#{7*7}',
         '*{7*7}',
     ]
-    
+
     # LFI payloads
     LFI_PAYLOADS = [
         '../../../../etc/passwd',
@@ -119,7 +122,7 @@ class WebScanner:
         '..%252fetc%252fpasswd',
         'php://filter/convert.base64-encode/resource=/etc/passwd',
     ]
-    
+
     # Host header injection targets
     HOST_INJECTION = [
         "evil.com",
@@ -127,13 +130,13 @@ class WebScanner:
         "127.0.0.1",
         "localhost",
     ]
-    
+
     # Open redirect parameters
     REDIRECT_PARAMS = [
         "redirect", "url", "next", "dest", "redirect_url",
         "return", "continue", "to", "ref", "dest_url", "target", "goto",
     ]
-    
+
     # Mass assignment payloads
     MASS_ASSIGN_PAYLOADS = [
         '{"role":"admin"}',
@@ -142,7 +145,7 @@ class WebScanner:
         '{"privilege":"superuser"}',
         '{"verified":true}',
     ]
-    
+
     # Default credentials
     DEFAULT_CREDS = [
         ("admin", "admin"),
@@ -154,7 +157,7 @@ class WebScanner:
         ("guest", "guest"),
         ("admin", "letmein"),
     ]
-    
+
     # GraphQL endpoints to check
     GRAPHQL_ENDPOINTS = [
         "/graphql",
@@ -162,7 +165,7 @@ class WebScanner:
         "/v1/graphql",
         "/query",
     ]
-    
+
     # OpenAPI/Swagger paths to check
     OPENAPI_PATHS = [
         "/.well-known/openapi",
@@ -172,24 +175,24 @@ class WebScanner:
         "/api/swagger.json",
         "/api/openapi.json",
     ]
-    
+
     # Prototype pollution payloads
     PROTOTYPE_POLLUTION_PAYLOADS = [
         "?__proto__[isAdmin]=true",
         "?constructor[prototype][isAdmin]=true",
     ]
-    
+
     # Cache poisoning headers
     CACHE_POISONING_HEADERS = {
         "X-Forwarded-For": "127.0.0.1",
         "X-Original-Forwarded-For": "127.0.0.1",
     }
-    
+
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
                  llm_payload_generator=None):
         """
         Initialize web scanner.
-        
+
         Args:
             timeout: Request timeout in seconds
             rate_limit: Seconds between requests
@@ -206,22 +209,22 @@ class WebScanner:
         })
         self.findings = []
         self.discovered_parameters = None  # Initialized before parameter_discovery()
-    
-    def scan(self, target_url: str) -> List[Dict]:
+
+    def scan(self, target_url: str) -> list[dict]:
         """
         Run comprehensive scan against target.
-        
+
         Args:
             target_url: Target URL to scan
-            
+
         Returns:
             List of vulnerability findings
         """
         self.findings = []
         self.target_url = target_url.rstrip("/")
-        
+
         logger.info(f"Starting comprehensive web scan: {self.target_url}")
-        
+
         checks = [
             ("check_security_headers", self.check_security_headers),
             ("check_csp", self.check_csp),
@@ -254,7 +257,7 @@ class WebScanner:
             ("ssl_verify", self.ssl_verify),
             ("response_analysis", self.response_analysis),
         ]
-        
+
         SOFT_TIME_LIMIT = 120
 
         class _SoftTimeLimitExceeded(Exception):
@@ -280,11 +283,11 @@ class WebScanner:
             except Exception as e:
                 logger.error(f"{name} failed (non-fatal): {e}", exc_info=True)
                 signal.alarm(0)
-        
+
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
-    
-    def _safe_request(self, method: str, url: str, **kwargs) -> Optional[requests.Response]:
+
+    def _safe_request(self, method: str, url: str, **kwargs) -> requests.Response | None:
         """Make HTTP request with error handling."""
         try:
             kwargs.setdefault("timeout", self.timeout)
@@ -293,13 +296,12 @@ class WebScanner:
             resp = self.session.request(method, url, **kwargs)
             time.sleep(self.rate_limit)
             return resp
-        except (RequestException, Timeout, ConnectionError,
-                urllib3.exceptions.SSLError, socket.timeout) as e:
+        except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
             logger.debug(f"Request failed: {e}")
             return None
-    
+
     def _add_finding(self, finding_type: str, severity: str, endpoint: str,
-                     evidence: Dict, confidence: float = 0.8):
+                     evidence: dict, confidence: float = 0.8):
         """Add a finding to the results with sanitized evidence."""
         # Import sanitization utilities
         try:
@@ -316,20 +318,20 @@ class WebScanner:
             "evidence": sanitized_evidence,
             "confidence": confidence,
         })
-    
+
     def _detect_framework(self, response) -> str:
         """
         Detect web framework from HTTP response headers and content.
-        
+
         Args:
             response: HTTP response object
-            
+
         Returns:
             Framework name string or "unknown"
         """
         if not response:
             return "unknown"
-        
+
         headers = {k.lower(): v for k, v in response.headers.items()}
         body = response.text[:2000].lower() if response.text else ""
 
@@ -346,7 +348,7 @@ class WebScanner:
                 return "PHP"
             if "rails" in powered_by or "ruby" in powered_by:
                 return "Rails"
-        
+
         # Check server header — wrap with str() to handle int values
         server = str(headers.get("server", "")).lower()
         if "nginx" in server:
@@ -355,7 +357,7 @@ class WebScanner:
             return "Apache"
         if "iis" in server or "microsoft-iis" in server:
             return "IIS"
-        
+
         # Check body for framework indicators
         if "laravel" in body or "livewire" in body:
             return "Laravel"
@@ -381,22 +383,22 @@ class WebScanner:
             return "Shopify"
         if "magento" in body:
             return "Magento"
-        
+
         return "unknown"
-    
+
     def check_security_headers(self):
         """Check for missing security headers."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         headers = {k.lower(): v for k, v in resp.headers.items()}
         missing = []
-        
+
         for header in self.SECURITY_HEADERS:
             if header.lower() not in headers:
                 missing.append(header)
-        
+
         if missing:
             self._add_finding(
                 finding_type="MISSING_SECURITY_HEADERS",
@@ -408,13 +410,13 @@ class WebScanner:
                 },
                 confidence=0.95,
             )
-    
+
     def check_csp(self):
         """Analyze Content-Security-Policy for weaknesses."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         csp = resp.headers.get("Content-Security-Policy", "")
         if not csp:
             self._add_finding(
@@ -425,7 +427,7 @@ class WebScanner:
                 confidence=0.95,
             )
             return
-        
+
         # Check for unsafe directives
         unsafe = []
         if "unsafe-inline" in csp:
@@ -434,7 +436,7 @@ class WebScanner:
             unsafe.append("unsafe-eval")
         if "*." in csp or "*:" in csp:
             unsafe.append("wildcard domains")
-        
+
         if unsafe:
             self._add_finding(
                 finding_type="WEAK_CSP",
@@ -446,21 +448,21 @@ class WebScanner:
                 },
                 confidence=0.9,
             )
-    
+
     def check_cookies(self):
         """Check cookie security attributes."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         # Get Set-Cookie header - handle both single and multiple cookies
         cookie_header = resp.headers.get("Set-Cookie")
         if not cookie_header:
             return
-        
+
         # Split multiple cookies (comma-separated in some implementations)
         cookies = cookie_header.split(",") if "," in cookie_header else [cookie_header]
-        
+
         for cookie_str in cookies:
             issues = []
             if "HttpOnly" not in cookie_str:
@@ -469,7 +471,7 @@ class WebScanner:
                 issues.append("Missing Secure")
             if "SameSite" not in cookie_str:
                 issues.append("Missing SameSite")
-            
+
             if issues:
                 cookie_name = cookie_str.split("=")[0] if "=" in cookie_str else "unknown"
                 self._add_finding(
@@ -482,7 +484,7 @@ class WebScanner:
                     },
                     confidence=0.9,
                 )
-    
+
     def check_cors(self):
         """Check for CORS misconfigurations."""
         resp = self._safe_request(
@@ -491,10 +493,10 @@ class WebScanner:
         )
         if not resp:
             return
-        
+
         acao = resp.headers.get("Access-Control-Allow-Origin", "")
         acac = resp.headers.get("Access-Control-Allow-Credentials", "")
-        
+
         if acao == "*":
             self._add_finding(
                 finding_type="WILDCARD_CORS",
@@ -520,7 +522,7 @@ class WebScanner:
                 },
                 confidence=0.9,
             )
-    
+
     def check_sensitive_files(self):
         """Check for exposed sensitive files with improved validation."""
         # File signatures to validate actual content
@@ -542,7 +544,7 @@ class WebScanner:
             ".npmrc": b"registry",
             ".pypirc": b"[distutils]",
         }
-        
+
         # Text that indicates NOT_FOUND / custom 404 (even with HTTP 200)
         # These patterns mean the file doesn't actually exist
         not_found_patterns = [
@@ -551,37 +553,37 @@ class WebScanner:
             "invalid url", "wrong url", "url not found",
             "nothing here", "no such page", "page does not",
         ]
-        
+
         for path in self.SENSITIVE_FILES:
             url = urljoin(self.target_url, path.lstrip("/"))
             resp = self._safe_request("GET", url)
             if not resp or resp.status_code != 200:
                 continue
-            
+
             content = resp.text
-            
+
             # Need substantial content
             if len(content) < 50:
                 continue
-            
+
             # CRITICAL CHECK: Custom 404 that says "not found" (even with HTTP 200)
             content_lower = content.lower()
             is_custom_404 = any(pattern in content_lower for pattern in not_found_patterns)
-            
+
             if is_custom_404:
                 logger.debug(f"Skipping {path} - custom 404 (not actually exposed)")
                 continue
-            
+
             # CRITICAL CHECK: Must not be HTML (SPA catch-all false positive)
             content_first100 = content[:100].lower()
             html_signatures = [b"<!doctype html", b"<html", b"scroll-smooth"]
             is_html_response = any(sig in content_first100.encode() for sig in html_signatures)
-            
+
             if is_html_response:
                 # This is a false positive - the server returns HTML for all paths
                 logger.debug(f"Skipping {path} - returns HTML (not actually exposed)")
                 continue
-            
+
             # Check for file-specific signatures
             expected_signatures = file_signatures.get(path, [])
             if expected_signatures:
@@ -590,7 +592,7 @@ class WebScanner:
             else:
                 # For unknown files, check it's not HTML and has reasonable content
                 has_signature = len(content) > 100
-            
+
             if has_signature:
                 # Calculate confidence based on how specific the match is
                 confidence = 0.95 if expected_signatures else 0.6
@@ -607,33 +609,33 @@ class WebScanner:
                     },
                     confidence=confidence,
                 )
-    
+
     def check_js_secrets(self):
         """Scan JavaScript files for secrets."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         # Find JS file references
         js_urls = re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']', resp.text)
-        
+
         # Also check inline scripts
         inline_scripts = re.findall(r'<script[^>]*>(.*?)</script>', resp.text, re.DOTALL)
-        
+
         # Scan inline scripts
         for script in inline_scripts:
             if len(script) > 50:  # Skip tiny scripts
                 self._scan_content_for_secrets(script, self.target_url + "/inline-script")
-        
+
         # Scan external JS files (limit to first 10)
         for js_url in js_urls[:MAX_PAGES_TO_CRAWL]:
             if not js_url.startswith("http"):
                 js_url = urljoin(self.target_url, js_url)
-            
+
             js_resp = self._safe_request("GET", js_url)
             if js_resp and js_resp.status_code == 200:
                 self._scan_content_for_secrets(js_resp.text, js_url)
-    
+
     def _scan_content_for_secrets(self, content: str, source: str):
         """Scan content for secret patterns."""
         for pattern, secret_type in self.JS_SECRET_PATTERNS:
@@ -646,7 +648,7 @@ class WebScanner:
                         masked.append(m[:4] + "..." + m[-4:])
                     else:
                         masked.append("***")
-                
+
                 self._add_finding(
                     finding_type="EXPOSED_SECRET",
                     severity="CRITICAL",
@@ -658,16 +660,16 @@ class WebScanner:
                     },
                     confidence=0.85,
                 )
-    
+
     def check_open_redirects(self):
         """Check for open redirect parameters."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         # Find URLs with redirect parameters
         url_params = re.findall(r'[?&](\w+)=', resp.text)
-        
+
         for param in self.REDIRECT_PARAMS:
             if param in url_params or param in resp.text.lower():
                 # Test the parameter
@@ -687,7 +689,7 @@ class WebScanner:
                             },
                             confidence=0.8,
                         )
-    
+
     def check_host_header_injection(self):
         """Check for host header injection."""
         for host in self.HOST_INJECTION:
@@ -709,7 +711,7 @@ class WebScanner:
                         confidence=0.75,
                     )
                     break
-                
+
                 # Check Location header
                 location = resp.headers.get("Location", "")
                 if host.lower() in location.lower():
@@ -724,11 +726,11 @@ class WebScanner:
                         confidence=0.8,
                     )
                     break
-    
+
     def check_verb_tampering(self):
         """Check for HTTP verb tampering."""
         methods = ["TRACE", "DELETE", "PUT", "PATCH", "OPTIONS"]
-        
+
         for method in methods:
             resp = self._safe_request(method, self.target_url)
             if resp and resp.status_code not in (405, 404, 403, 501):
@@ -745,7 +747,7 @@ class WebScanner:
                         },
                         confidence=0.8,
                     )
-    
+
     def check_debug_endpoints(self):
         """Check for exposed debug/admin endpoints with improved validation."""
         debug_paths = [
@@ -754,7 +756,7 @@ class WebScanner:
             "/phpinfo.php", "/info.php", "/_profiler",
             "/server-status", "/.env",
         ]
-        
+
         # Content signatures for actual debug pages
         debug_signatures = {
             "/phpinfo.php": [b"php version", b"PHP_VERSION"],
@@ -764,37 +766,37 @@ class WebScanner:
             "/actuator": [b"href", b"env", b"health"],
             "/server-status": [b"Server Status", b"Apache", b"nginx"],
         }
-        
+
         # HTML signatures that indicate SPA catch-all
         html_signatures = [b"<!DOCTYPE html", b"<html", b"<!DOCTYPE", b"scroll-smooth"]
-        
+
         for path in debug_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
             resp = self._safe_request("GET", url)
             if not resp or resp.status_code != 200:
                 continue
-            
+
             content = resp.text
             content_lower = content.lower()
-            
+
             # Must have substantial content
             if len(content) < 100:
                 continue
-            
+
             # CRITICAL CHECK: Must not be HTML (SPA catch-all false positive)
             content_first100 = content[:100].lower().encode()
             is_html_response = any(html_sig in content_first100 for html_sig in html_signatures)
-            
+
             if is_html_response:
                 logger.debug(f"Skipping {path} - returns HTML (not actually exposed)")
                 continue
-            
+
             # Check for actual debug indicators
-            debug_indicators = ["debug", "stack trace", "exception", 
+            debug_indicators = ["debug", "stack trace", "exception",
                               "phpinfo", "profiler", "actuator"]
-            
+
             has_debug_content = any(indicator in content_lower for indicator in debug_indicators)
-            
+
             # Or check specific signatures
             signatures = debug_signatures.get(path, [])
             if signatures:
@@ -802,10 +804,10 @@ class WebScanner:
                 has_signature = any(sig in content_bytes for sig in signatures)
             else:
                 has_signature = has_debug_content
-            
+
             # Also check for HTML forms (potential debug consoles)
             is_console = "function" in content_lower and "eval" in content_lower
-            
+
             if has_debug_content or has_signature or is_console:
                 confidence = 0.9 if (signatures or has_debug_content) else 0.7
                 self._add_finding(
@@ -820,17 +822,17 @@ class WebScanner:
                     },
                     confidence=confidence,
                 )
-    
+
     def check_auth_endpoints(self):
         """Check for authentication endpoints and test default credentials."""
         auth_paths = [
             "/login", "/signin", "/auth", "/admin", "/dashboard",
             "/api/auth/login", "/api/login", "/wp-login.php",
         ]
-        
+
         for path in auth_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
-            
+
             # Check if endpoint exists
             resp = self._safe_request("GET", url)
             if resp and resp.status_code in (200, 302):
@@ -1038,14 +1040,14 @@ class WebScanner:
                     )
 
         logger.info(f"Parameter fuzzing complete: {tested} tests performed")
-    
+
     def check_mass_assignment(self):
         """Check for mass assignment vulnerabilities."""
         api_paths = ["/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts"]
-        
+
         for path in api_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
-            
+
             llm_payloads = []
             if self.llm_payload_generator and self.llm_payload_generator.is_available():
                 llm_payloads = self.llm_payload_generator.generate_sync(
@@ -1053,7 +1055,7 @@ class WebScanner:
                     param_name="json_body",
                     response_snippet="",
                 )
-            
+
             all_payloads = self.MASS_ASSIGN_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
             for payload in all_payloads:
                 resp = self._safe_request(
@@ -1079,27 +1081,27 @@ class WebScanner:
                             )
                     except (json.JSONDecodeError, ValueError):
                         pass
-    
+
     def check_xss(self):
         """Check for reflected XSS with improved validation."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         # Find URL parameters that accept user input
         params = re.findall(r'[?&](\w+)=', resp.text)
         if not params:
             return
-        
+
         # Only test inputs that look like they accept user data
         # Avoid testing navigation params
-        ignore_params = ['redirect', 'next', 'url', 'dest', 'target', 'goto', 
+        ignore_params = ['redirect', 'next', 'url', 'dest', 'target', 'goto',
                         'continue', 'return', 'ref', 'dest_url']
-        
+
         for param in set(params[:5]):
             if param.lower() in ignore_params:
                 continue
-            
+
             # Generate LLM payloads for this parameter context
             llm_payloads = []
             if self.llm_payload_generator and self.llm_payload_generator.is_available():
@@ -1109,23 +1111,23 @@ class WebScanner:
                     response_snippet=resp.text[:500] if resp else "",
                     framework_hints=self._detect_framework(resp),
                 )
-            
+
             # Use static payloads + LLM-generated payloads
             all_payloads = self.XSS_PAYLOADS[:3] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
-            
+
             for payload in all_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
                 test_resp = self._safe_request("GET", test_url)
                 if not test_resp:
                     continue
-                
+
                 # Check if payload is reflected UNENCODED
                 # This matters - <script> vs &lt;script&gt;
                 if payload in test_resp.text:
                     # Only flag HIGH if it's in script context or event handler
                     # Not just reflected in HTML (which browsers escape)
                     is_script_context = "<script>" in test_resp.text.lower() or "<script " in test_resp.text.lower()
-                    
+
                     # Calculate confidence based on context
                     if is_script_context:
                         confidence = 0.85
@@ -1137,7 +1139,7 @@ class WebScanner:
                     else:
                         confidence = 0.5
                         severity = "LOW"
-                    
+
                     self._add_finding(
                         finding_type="REFLECTED_XSS",
                         severity=severity,
@@ -1151,17 +1153,17 @@ class WebScanner:
                         confidence=confidence,
                     )
                     break
-    
+
     def check_ssti(self):
         """Check for Server-Side Template Injection with improved validation."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         params = re.findall(r'[?&](\w+)=', resp.text)
         if not params:
             return
-        
+
         for param in set(params[:3]):
             # Generate LLM payloads for this parameter context
             llm_payloads = []
@@ -1172,7 +1174,7 @@ class WebScanner:
                     response_snippet=resp.text[:500] if resp else "",
                     framework_hints=self._detect_framework(resp),
                 )
-            
+
             # Static + LLM payloads
             test_payloads = ['{{7*7}}', '${7*7}', '<%= 7*7 %>'] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
             for payload in test_payloads:
@@ -1180,11 +1182,11 @@ class WebScanner:
                 test_resp = self._safe_request("GET", test_url)
                 if not test_resp:
                     continue
-                
+
                 # Must see EVALUATION (49), not just reflection
                 # Check for patterns like "49", " 49 ", or numeric 49 in context
                 has_evaluation = " 49 " in test_resp.text or ">49<" in test_resp.text
-                
+
                 # Also verify it's NOT error or part of another word
                 if has_evaluation:
                     # Do a sanity check - ensure it's actual output, not error message
@@ -1202,17 +1204,17 @@ class WebScanner:
                             confidence=0.9,
                         )
                         break
-    
+
     def check_lfi(self):
         """Check for Local File Inclusion."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         params = re.findall(r'[?&](\w+)=', resp.text)
         if not params:
             return
-        
+
         for param in set(params[:3]):
             llm_payloads = []
             if self.llm_payload_generator and self.llm_payload_generator.is_available():
@@ -1222,7 +1224,7 @@ class WebScanner:
                     response_snippet=resp.text[:500] if resp else "",
                     framework_hints=self._detect_framework(resp),
                 )
-            
+
             all_payloads = self.LFI_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
             for payload in all_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
@@ -1240,11 +1242,11 @@ class WebScanner:
                         confidence=0.8,
                     )
                     break
-    
+
     def check_xxe(self):
         """Check for XML External Entity injection."""
         xxe_payload = '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'
-        
+
         resp = self._safe_request(
             "POST", self.target_url,
             data=xxe_payload,
@@ -1261,7 +1263,7 @@ class WebScanner:
                 },
                 confidence=0.8,
             )
-    
+
     def check_graphql_introspection(self):
         """Check for enabled GraphQL introspection."""
         for path in self.GRAPHQL_ENDPOINTS:
@@ -1270,7 +1272,7 @@ class WebScanner:
             resp = self._safe_request("GET", url)
             if not resp or resp.status_code not in (200, 400, 405):
                 continue
-            
+
             # Send introspection query (fixed syntax from user's example)
             introspection_query = {
                 "query": "{__schema{kind,fields{name}}}"
@@ -1297,14 +1299,14 @@ class WebScanner:
                         break
                 except json.JSONDecodeError:
                     pass
-    
+
     def check_jwt_algorithm_confusion(self):
         """Check for JWT algorithm confusion vulnerabilities."""
         jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         jwts = re.findall(jwt_pattern, resp.text)
         # Check JS files for JWTs
         js_urls = re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']', resp.text)
@@ -1314,23 +1316,23 @@ class WebScanner:
             js_resp = self._safe_request("GET", js_url)
             if js_resp and js_resp.status_code == 200:
                 jwts.extend(re.findall(jwt_pattern, js_resp.text))
-        
+
         jwts = list(set(jwts))[:3]  # Deduplicate, limit to 3
         for jwt_token in jwts:
             parts = jwt_token.split(".")
             if len(parts) != 3:
                 continue
             try:
-                header = json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
+                json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
             except Exception:
                 continue
-            
+
             # Test alg:none
             none_header = base64.urlsafe_b64encode(
                 json.dumps({"alg": "none", "typ": "JWT"}).encode()
             ).decode().rstrip("=")
             none_jwt = f"{none_header}.{parts[1]}."
-            
+
             for auth_header in ["Authorization", "X-Access-Token", "Token"]:
                 test_resp = self._safe_request(
                     "GET", self.target_url,
@@ -1350,7 +1352,7 @@ class WebScanner:
                         confidence=0.7,
                     )
                     return
-    
+
     def check_prototype_pollution(self):
         """Check for prototype pollution vulnerabilities."""
         for payload in self.PROTOTYPE_POLLUTION_PAYLOADS:
@@ -1371,19 +1373,19 @@ class WebScanner:
                     confidence=0.6,
                 )
                 break
-    
+
     def check_cache_poisoning(self):
         """Check for cache poisoning vulnerabilities."""
         resp = self._safe_request("GET", self.target_url, headers=self.CACHE_POISONING_HEADERS)
         if not resp:
             return
-        
+
         # Check if response is cacheable
         cache_control = resp.headers.get("Cache-Control", "")
         expires = resp.headers.get("Expires", "")
         if not cache_control and not expires:
             return
-        
+
         if "127.0.0.1" in resp.text:
             self._add_finding(
                 finding_type="CACHE_POISONING",
@@ -1396,7 +1398,7 @@ class WebScanner:
                 },
                 confidence=0.7,
             )
-    
+
     def check_http_request_smuggling(self):
         """Check for HTTP request smuggling (CL.TE and TE.CL)."""
         # CL.TE Test
@@ -1418,7 +1420,7 @@ class WebScanner:
                 },
                 confidence=0.6,
             )
-        
+
         # TE.CL Test
         te_cl_headers = {"Transfer-Encoding": "chunked", "Content-Length": "6"}
         resp = self._safe_request(
@@ -1438,18 +1440,18 @@ class WebScanner:
                 },
                 confidence=0.6,
             )
-    
+
     def check_dom_xss(self):
         """Check for DOM-based XSS."""
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
-        
+
         # Check for DOM sinks
         dom_sinks = ["document.write", "innerHTML", "eval(", "setTimeout(", "setInterval("]
         if not any(sink in resp.text for sink in dom_sinks):
             return
-        
+
         # Test payloads
         llm_payloads = []
         if self.llm_payload_generator and self.llm_payload_generator.is_available():
@@ -1459,7 +1461,7 @@ class WebScanner:
                 response_snippet=resp.text[:500] if resp else "",
                 framework_hints=self._detect_framework(resp),
             )
-        
+
         dom_payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>"] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
         for payload in dom_payloads:
             test_url = f"{self.target_url}?q={payload}"
@@ -1478,7 +1480,7 @@ class WebScanner:
                     confidence=0.7,
                 )
                 break
-    
+
     def check_openapi_discovery(self):
         """Check for exposed OpenAPI/Swagger specifications."""
         for path in self.OPENAPI_PATHS:
@@ -1486,11 +1488,11 @@ class WebScanner:
             resp = self._safe_request("GET", url)
             if not resp or resp.status_code != 200:
                 continue
-            
+
             content_type = resp.headers.get("Content-Type", "")
             if "json" not in content_type:
                 continue
-            
+
             try:
                 spec = resp.json()
                 if "openapi" in spec or "swagger" in spec or "paths" in spec:
@@ -1691,11 +1693,7 @@ class WebScanner:
         for waf_name, signatures in waf_signatures.items():
             for sig_type, sig_value in signatures:
                 sig_value_lower = str(sig_value).lower()
-                if sig_type == "header" and sig_value_lower in headers_str:
-                    detected_wafs.add(waf_name)
-                elif sig_type == "body" and sig_value_lower in body_str:
-                    detected_wafs.add(waf_name)
-                elif sig_type == "status" and waf_response.status_code == sig_value:
+                if sig_type == "header" and sig_value_lower in headers_str or sig_type == "body" and sig_value_lower in body_str or sig_type == "status" and waf_response.status_code == sig_value:
                     detected_wafs.add(waf_name)
 
         if detected_wafs:
@@ -1763,7 +1761,7 @@ class WebScanner:
         for db_type, payload in sqli_payloads:
             test_url = f"{self.target_url}?id={payload}"
             start = time.time()
-            resp = self._safe_request("GET", test_url)
+            self._safe_request("GET", test_url)
             elapsed = time.time() - start
 
             if elapsed >= threshold:
@@ -1786,7 +1784,7 @@ class WebScanner:
         for cmd_type, payload in cmdi_payloads:
             test_url = f"{self.target_url}?input={payload}"
             start = time.time()
-            resp = self._safe_request("GET", test_url)
+            self._safe_request("GET", test_url)
             elapsed = time.time() - start
 
             if elapsed >= threshold:
@@ -1813,7 +1811,7 @@ class WebScanner:
         <foo>&xxe;</foo>"""
 
         start = time.time()
-        resp = self._safe_request(
+        self._safe_request(
             "POST",
             self.target_url,
             data=xxe_payload,
@@ -1848,7 +1846,6 @@ class WebScanner:
         logger.info("Running SSL/TLS verification")
 
         import ssl
-        import socket
 
         parsed = urlparse(self.target_url)
         hostname = parsed.hostname
@@ -1887,7 +1884,6 @@ class WebScanner:
 
             # Check certificate expiry
             if cert:
-                from datetime import datetime
                 not_after = cert.get("notAfter")
                 if not_after:
                     expiry = ssl.cert_time_to_seconds(not_after)
@@ -1962,21 +1958,17 @@ class WebScanner:
                 },
                 confidence=0.8,
             )
-        except socket.error as e:
+        except OSError as e:
             logger.debug(f"SSL verification socket error: {e}")
         except Exception as e:
             logger.debug(f"SSL verification error: {e}")
         finally:
             if ssock:
-                try:
+                with contextlib.suppress(Exception):
                     ssock.close()
-                except Exception:
-                    pass
             if sock:
-                try:
+                with contextlib.suppress(Exception):
                     sock.close()
-                except Exception:
-                    pass
 
     def response_analysis(self):
         """

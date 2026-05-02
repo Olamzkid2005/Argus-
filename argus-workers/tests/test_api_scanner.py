@@ -1,9 +1,11 @@
 """
 Tests for API Security Scanner
 """
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
+
 from tools.api_scanner import APISecurityScanner
 
 

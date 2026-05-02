@@ -3,9 +3,10 @@ Tests for secrets_manager.py
 
 Validates: Vault retrieval, AWS retrieval, caching, environment fallback
 """
-import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from secrets_manager import SecretsManager, get_secrets_manager
 

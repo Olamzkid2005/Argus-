@@ -9,7 +9,6 @@ NOTE: These are heuristic estimates, not certified CVSS scores.
 They should be labeled "Estimated CVSS" in the UI.
 """
 
-from typing import Optional
 
 # CVSS v3.1 Base Score lookup — approximate, for findings without a CVE
 # Based on typical CVSS v3.1 vector strings for each vulnerability type

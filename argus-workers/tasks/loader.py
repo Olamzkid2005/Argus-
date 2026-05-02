@@ -9,8 +9,8 @@ Usage:
     Orchestrator = mod.Orchestrator
 """
 
-import os
 import importlib.util
+import os
 
 _workers_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

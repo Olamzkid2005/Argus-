@@ -7,14 +7,11 @@ finding normalization, and state machine transitions.
 Use unittest.mock to avoid needing real Git or Semgrep binaries.
 """
 
-import json
-import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
-from typing import Dict, List
+import os
 
 # Ensure project root is importable
 import sys
-import os
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -223,9 +220,6 @@ class TestRepoScan:
 
     def test_recon_context_built_from_repo_findings(self):
         """Verify that ReconContext is correctly built from repo scan results."""
-        from orchestrator import Orchestrator
-        from models.recon_context import ReconContext
-        from unittest.mock import patch
 
         findings = [
             {
@@ -258,7 +252,7 @@ class TestRepoScan:
         ]
 
         # Verify the ReconContext-building logic works in isolation
-        vuln_types = list(set(f.get("type", "UNKNOWN") for f in findings))
+        vuln_types = list({f.get("type", "UNKNOWN") for f in findings})
         severity_breakdown = {}
         has_secrets = False
         dep_vulns = 0

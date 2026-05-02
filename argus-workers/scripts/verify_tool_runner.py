@@ -14,14 +14,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
 import os
+import sys
 
 # Allow running from the repo root without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from tools.tool_runner import ToolRunner
 from tools.tool_result import ToolStatus
+from tools.tool_runner import ToolRunner
 
 
 def header(text: str) -> None:
@@ -89,7 +89,8 @@ def main(verbose: bool = False) -> int:
 
     # ── Test 4: real semgrep scan on a tiny PHP snippet ───────────────────────
     header("Test 4 — semgrep finds XSS in a synthetic PHP file")
-    import tempfile, pathlib
+    import pathlib
+    import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         vuln_php = pathlib.Path(tmpdir) / "vuln.php"

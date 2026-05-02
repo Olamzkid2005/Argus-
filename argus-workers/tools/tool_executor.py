@@ -3,27 +3,27 @@ Tool Executor - End-to-end tool execution flow
 Wires together: Tool Runner → Parser → Normalizer → PostgreSQL
 """
 import time
-from typing import List, Dict, Optional
-from database.connection import connect
-from psycopg2.extras import Json
 import uuid
 
-from tools.tool_runner import ToolRunner, SecurityException
-from tools.scope_validator import ScopeValidator, ScopeViolationError
-from parsers.parser import Parser, ParserError
-from parsers.normalizer import FindingNormalizer
+from psycopg2.extras import Json
+
+from database.connection import connect
 from models.finding import VulnerabilityFinding
+from parsers.normalizer import FindingNormalizer
+from parsers.parser import Parser, ParserError
+from tools.scope_validator import ScopeValidator, ScopeViolationError
+from tools.tool_runner import SecurityException, ToolRunner
 
 
 class ToolExecutor:
     """
     Executes tools end-to-end with scope validation, parsing, normalization, and storage
     """
-    
+
     def __init__(self, db_connection_string: str):
         """
         Initialize Tool Executor
-        
+
         Args:
             db_connection_string: PostgreSQL connection string
         """
@@ -31,20 +31,20 @@ class ToolExecutor:
         self.tool_runner = ToolRunner()
         self.parser = Parser()
         self.normalizer = FindingNormalizer()
-    
+
     def execute_tool(
         self,
         tool_name: str,
-        args: List[str],
+        args: list[str],
         engagement_id: str,
-        authorized_scope: Dict,
+        authorized_scope: dict,
         target_url: str,
         timeout: int = 60,
         max_retries: int = 3
-    ) -> Dict:
+    ) -> dict:
         """
         Execute tool with full pipeline
-        
+
         Args:
             tool_name: Name of tool to execute
             args: Tool arguments
@@ -53,12 +53,12 @@ class ToolExecutor:
             target_url: Target URL
             timeout: Execution timeout in seconds
             max_retries: Maximum retry attempts
-            
+
         Returns:
             Dictionary with execution results
         """
         start_time = time.time()
-        
+
         # Validate scope
         scope_validator = ScopeValidator(engagement_id, authorized_scope)
         try:
@@ -70,7 +70,7 @@ class ToolExecutor:
                 "message": str(e),
                 "tool": tool_name,
             }
-        
+
         # Execute tool with retries
         tool_result = self._execute_with_retries(
             tool_name,
@@ -78,7 +78,7 @@ class ToolExecutor:
             timeout,
             max_retries
         )
-        
+
         if not tool_result["success"]:
             return {
                 "success": False,
@@ -87,14 +87,14 @@ class ToolExecutor:
                 "tool": tool_name,
                 "duration_ms": int((time.time() - start_time) * 1000),
             }
-        
+
         # Parse output with retries
         parsed_findings = self._parse_with_retries(
             tool_name,
             tool_result["stdout"],
             max_retries=2
         )
-        
+
         if parsed_findings is None:
             # Parser failed after retries, store raw output
             self._store_raw_output(
@@ -110,63 +110,63 @@ class ToolExecutor:
                 "tool": tool_name,
                 "duration_ms": int((time.time() - start_time) * 1000),
             }
-        
+
         # Normalize findings
         normalized_findings = self.normalizer.normalize_batch(
             parsed_findings,
             tool_name
         )
-        
+
         # Store findings in PostgreSQL
         stored_count = self._store_findings(
             engagement_id,
             normalized_findings
         )
-        
+
         duration_ms = int((time.time() - start_time) * 1000)
-        
+
         return {
             "success": True,
             "tool": tool_name,
             "findings_count": stored_count,
             "duration_ms": duration_ms,
         }
-    
+
     def _execute_with_retries(
         self,
         tool_name: str,
-        args: List[str],
+        args: list[str],
         timeout: int,
         max_retries: int
-    ) -> Dict:
+    ) -> dict:
         """
         Execute tool with exponential backoff retries
-        
+
         Args:
             tool_name: Tool name
             args: Tool arguments
             timeout: Timeout in seconds
             max_retries: Maximum retry attempts
-            
+
         Returns:
             Tool execution result
         """
         attempt = 0
         backoff_seconds = 1
-        
+
         while attempt < max_retries:
             try:
                 result = self.tool_runner.run(tool_name, args, timeout)
-                
+
                 if result["success"]:
                     return result
-                
+
                 # Tool failed, retry
                 attempt += 1
                 if attempt < max_retries:
                     time.sleep(backoff_seconds)
                     backoff_seconds *= 2  # Exponential backoff
-                
+
             except SecurityException as e:
                 # Don't retry security exceptions
                 return {
@@ -185,33 +185,33 @@ class ToolExecutor:
                         "stderr": str(e),
                         "tool": tool_name,
                     }
-        
+
         return {
             "success": False,
             "stderr": f"Tool failed after {max_retries} attempts",
             "tool": tool_name,
         }
-    
+
     def _parse_with_retries(
         self,
         tool_name: str,
         raw_output: str,
         max_retries: int = 2
-    ) -> Optional[List[Dict]]:
+    ) -> list[dict] | None:
         """
         Parse tool output with linear backoff retries
-        
+
         Args:
             tool_name: Tool name
             raw_output: Raw tool output
             max_retries: Maximum retry attempts
-            
+
         Returns:
             List of parsed findings or None if failed
         """
         attempt = 0
         backoff_seconds = 1
-        
+
         while attempt < max_retries:
             try:
                 findings = self.parser.parse(tool_name, raw_output)
@@ -224,36 +224,36 @@ class ToolExecutor:
                 else:
                     print(f"Parser failed after {max_retries} attempts: {e}")
                     return None
-        
+
         return None
-    
+
     def _store_findings(
         self,
         engagement_id: str,
-        findings: List[VulnerabilityFinding]
+        findings: list[VulnerabilityFinding]
     ) -> int:
         """
         Store findings in PostgreSQL
-        
+
         Args:
             engagement_id: Engagement ID
             findings: List of normalized findings
-            
+
         Returns:
             Number of findings stored
         """
         if not findings:
             return 0
-        
+
         conn = connect(self.db_conn_string)
         cursor = conn.cursor()
-        
+
         try:
             stored_count = 0
-            
+
             for finding in findings:
                 finding_id = str(uuid.uuid4())
-                
+
                 cursor.execute(
                     """
                     INSERT INTO findings (
@@ -282,12 +282,12 @@ class ToolExecutor:
                         finding.fp_likelihood,
                     )
                 )
-                
+
                 stored_count += 1
-            
+
             conn.commit()
             return stored_count
-            
+
         except Exception as e:
             conn.rollback()
             print(f"Failed to store findings: {e}")
@@ -295,7 +295,7 @@ class ToolExecutor:
         finally:
             cursor.close()
             conn.close()
-    
+
     def _store_raw_output(
         self,
         engagement_id: str,
@@ -305,7 +305,7 @@ class ToolExecutor:
     ):
         """
         Store raw output when parser fails
-        
+
         Args:
             engagement_id: Engagement ID
             tool_name: Tool name
@@ -314,10 +314,10 @@ class ToolExecutor:
         """
         conn = connect(self.db_conn_string)
         cursor = conn.cursor()
-        
+
         try:
             output_id = str(uuid.uuid4())
-            
+
             cursor.execute(
                 """
                 INSERT INTO raw_outputs (
@@ -328,16 +328,16 @@ class ToolExecutor:
                 """,
                 (output_id, engagement_id, tool_name, raw_output, error_message)
             )
-            
+
             conn.commit()
-            
+
         except Exception as e:
             conn.rollback()
             print(f"Failed to store raw output: {e}")
         finally:
             cursor.close()
             conn.close()
-    
+
     def cleanup(self):
         """Clean up resources"""
         self.tool_runner.cleanup()

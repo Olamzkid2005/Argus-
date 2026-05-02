@@ -18,7 +18,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         result = ctx.orchestrator.run_analysis(ctx.job)
 
         actions = result.get("actions", [])
-        next_state = result.get("next_state", "reporting")
+        result.get("next_state", "reporting")
         if actions:
             ctx.state.transition("recon", "Additional targets discovered")
             app.send_task('tasks.recon.expand_recon',

@@ -1,10 +1,11 @@
 """
 Tests for cache.py (enhanced cache features)
 """
-import pytest
-import json
 import hashlib
-from unittest.mock import patch, MagicMock
+import json
+from unittest.mock import patch
+
+import pytest
 
 from cache import WorkerCache, cache, cached, cached_query
 

@@ -2,14 +2,12 @@
 MCP Protocol Server - Wraps tool execution with discoverable schemas
 Implements Model Context Protocol for standardized tool calling
 """
-import json
-import subprocess
-import os
-import time
 import logging
-from typing import Dict, List, Optional, Any, Callable
+import os
+import subprocess
+import time
 from pathlib import Path
-from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ToolSchema:
     """JSON Schema definition for a tool parameter."""
     def __init__(self, name: str, type: str, description: str = "",
-                 required: bool = False, enum: List[str] = None,
+                 required: bool = False, enum: list[str] = None,
                  default: Any = None, flag: str = None):
         self.name = name
         self.type = type
@@ -34,9 +32,9 @@ class ToolDefinition:
     Mirrors CyberStrikeAI's YAML tool definitions pattern.
     """
     def __init__(self, name: str, command: str, description: str = "",
-                 args: List[str] = None, parameters: List[Dict] = None,
+                 args: list[str] = None, parameters: list[dict] = None,
                  enabled: bool = True, timeout: int = 300,
-                 env: Dict[str, str] = None):
+                 env: dict[str, str] = None):
         self.name = name
         self.command = command
         self.description = description
@@ -45,8 +43,8 @@ class ToolDefinition:
         self.enabled = enabled
         self.timeout = timeout
         self.env = env or {}
-    
-    def to_dict(self) -> Dict:
+
+    def to_dict(self) -> dict:
         """Serialize to MCP tool schema format."""
         return {
             "name": self.name,
@@ -70,15 +68,15 @@ class ToolDefinition:
 class MCPToolResult:
     """Result of an MCP tool execution."""
     def __init__(self, success: bool, output: str = "", error: str = "",
-                 duration_ms: int = 0, tool: str = "", data: Dict = None):
+                 duration_ms: int = 0, tool: str = "", data: dict = None):
         self.success = success
         self.output = output
         self.error = error
         self.duration_ms = duration_ms
         self.tool = tool
         self.data = data or {}
-    
-    def to_dict(self) -> Dict:
+
+    def to_dict(self) -> dict:
         return {
             "content": [{"type": "text", "text": self.output or self.error}],
             "isError": not self.success,
@@ -93,25 +91,25 @@ class MCPToolResult:
 class MCPServer:
     """
     MCP Protocol Server for tool execution.
-    
+
     Supports:
     - tools/list - discover available tools
     - tools/call - execute a tool by name with parameters
     - Tool registration from YAML definitions
     - Execution tracking and statistics
-    
+
     This is the foundation for replacing direct subprocess.run() calls
     with a discoverable, schematized protocol layer.
     """
-    
-    def __init__(self, tools_dir: Optional[str] = None):
-        self._tools: Dict[str, ToolDefinition] = {}
-        self._execution_stats: Dict[str, Dict] = {}
+
+    def __init__(self, tools_dir: str | None = None):
+        self._tools: dict[str, ToolDefinition] = {}
+        self._execution_stats: dict[str, dict] = {}
         self._tools_dir = tools_dir or os.path.join(
             os.path.dirname(__file__), "tools", "definitions"
         )
         self._load_yaml_tools()
-    
+
     def _load_yaml_tools(self):
         """Load tool definitions from YAML files in tools/definitions/."""
         tools_path = Path(self._tools_dir)
@@ -119,7 +117,7 @@ class MCPServer:
             tools_path.mkdir(parents=True, exist_ok=True)
             logger.info("Created tools definitions directory: %s", tools_path)
             return
-        
+
         try:
             import yaml
             for yaml_file in tools_path.glob("*.yaml"):
@@ -142,31 +140,31 @@ class MCPServer:
                     logger.warning("Failed to load tool %s: %s", yaml_file, e)
         except ImportError:
             logger.info("PyYAML not installed, skipping YAML tool loading")
-    
+
     def register_tool(self, tool: ToolDefinition):
         """Register a tool definition."""
         self._tools[tool.name] = tool
         self._execution_stats[tool.name] = {
             "calls": 0, "successes": 0, "failures": 0, "total_duration_ms": 0
         }
-    
-    def get_tools(self) -> List[Dict]:
+
+    def get_tools(self) -> list[dict]:
         """Get all tool definitions (mcp.tools/list equivalent)."""
         return [t.to_dict() for t in self._tools.values() if t.enabled]
-    
-    def get_tool(self, name: str) -> Optional[ToolDefinition]:
+
+    def get_tool(self, name: str) -> ToolDefinition | None:
         """Get a tool definition by name."""
         return self._tools.get(name)
-    
-    def call_tool(self, name: str, arguments: Dict = None, timeout: int = None) -> Dict:
+
+    def call_tool(self, name: str, arguments: dict = None, timeout: int = None) -> dict:
         """
         Execute a tool by name with arguments (mcp.tools/call equivalent).
-        
+
         Args:
             name: Tool name
             arguments: Tool parameters (will be mapped to CLI args based on schema)
             timeout: Execution timeout in seconds
-            
+
         Returns:
             MCP-formatted result dict
         """
@@ -179,11 +177,11 @@ class MCPServer:
             return MCPToolResult(
                 success=False, error=f"Tool disabled: {name}", tool=name
             ).to_dict()
-        
+
         # Build command line from tool definition + arguments
         cmd = [tool.command]
         cmd.extend(tool.args)  # Static args
-        
+
         # Map named arguments to CLI flags
         arguments = arguments or {}
         for param in tool.parameters:
@@ -194,11 +192,11 @@ class MCPServer:
                     cmd.append(str(value))
                 else:
                     cmd.append(str(value))
-        
+
         # Track execution
         start = time.time()
         self._execution_stats[name]["calls"] += 1
-        
+
         try:
             result = subprocess.run(
                 cmd,
@@ -207,14 +205,14 @@ class MCPServer:
                 timeout=timeout or tool.timeout,
             )
             duration_ms = int((time.time() - start) * 1000)
-            
+
             success = result.returncode == 0
             if success:
                 self._execution_stats[name]["successes"] += 1
             else:
                 self._execution_stats[name]["failures"] += 1
             self._execution_stats[name]["total_duration_ms"] += duration_ms
-            
+
             return MCPToolResult(
                 success=success,
                 output=result.stdout,
@@ -222,7 +220,7 @@ class MCPServer:
                 duration_ms=duration_ms,
                 tool=name,
             ).to_dict()
-            
+
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start) * 1000)
             self._execution_stats[name]["failures"] += 1
@@ -242,14 +240,14 @@ class MCPServer:
                 duration_ms=duration_ms,
                 tool=name,
             ).to_dict()
-    
-    def get_stats(self) -> Dict:
+
+    def get_stats(self) -> dict:
         """Get execution statistics for all tools."""
         return dict(self._execution_stats)
 
 
 # Global MCP server instance
-_mcp_server: Optional[MCPServer] = None
+_mcp_server: MCPServer | None = None
 
 
 def get_mcp_server() -> MCPServer:

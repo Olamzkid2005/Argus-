@@ -7,12 +7,11 @@ enabling semantic similarity search across engagements.
 Requires: pgvector extension installed on PostgreSQL
 """
 import logging
-from typing import List, Dict, Optional
 import os
 
 logger = logging.getLogger(__name__)
 
-from database.connection import get_db, db_cursor
+from database.connection import db_cursor, get_db
 
 
 class PGVectorRepository:
@@ -27,7 +26,7 @@ class PGVectorRepository:
     # Similarity threshold for considering findings "similar"
     SIMILARITY_THRESHOLD = 0.85
 
-    def __init__(self, db_connection_string: Optional[str] = None):
+    def __init__(self, db_connection_string: str | None = None):
         """
         Initialize PGVector repository
 
@@ -59,7 +58,7 @@ class PGVectorRepository:
         self,
         finding_id: str,
         engagement_id: str,
-        embedding: List[float],
+        embedding: list[float],
         text_content: str,
     ) -> bool:
         """
@@ -117,7 +116,7 @@ class PGVectorRepository:
         engagement_id: str,
         threshold: float = SIMILARITY_THRESHOLD,
         limit: int = 10,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Find similar findings using vector similarity
 
@@ -204,7 +203,7 @@ class PGVectorRepository:
         engagement_id: str,
         threshold: float = SIMILARITY_THRESHOLD,
         limit: int = 10,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Find similar findings by text content
 
@@ -274,7 +273,7 @@ class PGVectorRepository:
             logger.error(f"Failed to find similar findings: {e}")
             return []
 
-    def _generate_embedding_fallback(self, text: str) -> Optional[List[float]]:
+    def _generate_embedding_fallback(self, text: str) -> list[float] | None:
         """
         Fallback embedding generation using simple hash
 
@@ -306,7 +305,7 @@ class PGVectorRepository:
         engagement_id: str,
         threshold: float,
         limit: int,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Fallback similarity search using keyword matching
         """
@@ -358,7 +357,7 @@ class PGVectorRepository:
             logger.error(f"Fallback search failed: {e}")
             return []
 
-    def get_findings_with_embeddings(self, engagement_id: str) -> List[Dict]:
+    def get_findings_with_embeddings(self, engagement_id: str) -> list[dict]:
         """
         Get all findings in an engagement that have embeddings
 

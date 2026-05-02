@@ -5,10 +5,11 @@ This module configures the Celery application for distributed task execution
 using Redis as the message broker and result backend.
 """
 
+import datetime
 import logging
 import os
 import sys
-import datetime
+
 from celery import Celery
 from dotenv import load_dotenv
 
@@ -200,8 +201,8 @@ class BaseTask(app.Task):
         # Ensure project root is in sys.path (needed for forked/spawned workers on macOS)
         if PROJECT_ROOT not in sys.path:
             sys.path.insert(0, PROJECT_ROOT)
-        from error_classifier import classify_error, log_classified_error
         from dead_letter_queue import get_dlq
+        from error_classifier import classify_error, log_classified_error
         from shutdown_handler import shutdown_handler
 
         classification = classify_error(exc, self.name)
@@ -258,8 +259,8 @@ class BaseTask(app.Task):
         # Ensure project root is in sys.path (needed for forked/spawned workers on macOS)
         if PROJECT_ROOT not in sys.path:
             sys.path.insert(0, PROJECT_ROOT)
-        from shutdown_handler import shutdown_handler
         from health_monitor import get_health_monitor
+        from shutdown_handler import shutdown_handler
 
         task_id = self.request.id if self.request else "unknown"
 
@@ -296,7 +297,7 @@ def ping_task(self):
         "status": "ok",
         "worker": self.request.hostname,
         "pid": os.getpid(),
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
     }
 
 

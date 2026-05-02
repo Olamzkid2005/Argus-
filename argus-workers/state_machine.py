@@ -5,10 +5,11 @@ Uses the shared connection pool from database/connection.py.
 Supports passing an external connection for transaction support.
 """
 import logging
-from typing import Dict, List, Optional
-import psycopg2
-from database.connection import connect, get_db
 import uuid
+
+import psycopg2
+
+from database.connection import connect, get_db
 from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -50,8 +51,8 @@ class EngagementStateMachine:
         "complete": [],
     }
 
-    def __init__(self, engagement_id: str, db_connection_string: Optional[str] = None,
-                 current_state: str = "created", connection: Optional[psycopg2.extensions.connection] = None):
+    def __init__(self, engagement_id: str, db_connection_string: str | None = None,
+                 current_state: str = "created", connection: psycopg2.extensions.connection | None = None):
         """
         Initialize State Machine
 
@@ -86,7 +87,7 @@ class EngagementStateMachine:
             else:
                 get_db().release_connection(conn)
 
-    def transition(self, new_state: str, reason: Optional[str] = None):
+    def transition(self, new_state: str, reason: str | None = None):
         """
         Enforce valid state transitions
 
@@ -180,7 +181,7 @@ class EngagementStateMachine:
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_transition_history(self) -> List[Dict]:
+    def get_transition_history(self) -> list[dict]:
         """
         Get transition history for engagement
 
@@ -219,7 +220,7 @@ class EngagementStateMachine:
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_valid_transitions(self) -> List[str]:
+    def get_valid_transitions(self) -> list[str]:
         """
         Get valid transitions from current state
 
@@ -228,7 +229,7 @@ class EngagementStateMachine:
         """
         return self.TRANSITIONS.get(self.current_state, [])
 
-    def safe_transition(self, new_state: str, reason: Optional[str] = None) -> bool:
+    def safe_transition(self, new_state: str, reason: str | None = None) -> bool:
         """
         Attempt a state transition, but silently skip if the current state
         has no outgoing transitions (e.g. already 'failed' or 'complete').

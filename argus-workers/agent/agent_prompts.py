@@ -2,8 +2,6 @@
 Agent Prompts - LLM system and user prompts for tool selection.
 """
 import json
-from typing import Dict, List
-
 
 TOOL_SELECTION_SYSTEM_PROMPT = '''
 You are an expert penetration tester deciding which security tool to run next.
@@ -62,7 +60,7 @@ Use professional security report language. Be specific about evidence.
 
 def build_tool_selection_prompt(
     recon_context: str,
-    available_tools: List[Dict],
+    available_tools: list[dict],
     tried_tools: set,
     observation_history: str,
 ) -> str:
@@ -98,8 +96,8 @@ Select the single best tool to run next. Return JSON only.
 
 
 def build_synthesis_prompt(
-    scored_findings: List[Dict],
-    attack_paths: List[Dict],
+    scored_findings: list[dict],
+    attack_paths: list[dict],
     recon_summary: str,
 ) -> str:
     """Build the prompt for findings synthesis."""
@@ -121,9 +119,9 @@ Analyze these findings and produce a structured synthesis.
 
 
 def build_report_prompt(
-    synthesis: Dict,
-    scored_findings: List[Dict],
-    engagement: Dict,
+    synthesis: dict,
+    scored_findings: list[dict],
+    engagement: dict,
     recon_summary: str,
 ) -> str:
     """Build the prompt for report generation."""

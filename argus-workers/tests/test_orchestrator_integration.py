@@ -4,11 +4,12 @@ End-to-end Integration Tests for the Argus Orchestrator Architecture
 Tests the MCP protocol server, ReAct agent loop, coordinator agent,
 and orchestrator pipeline with mocked subprocess execution but real import chains.
 """
-import pytest
 import json
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -142,7 +143,7 @@ class TestMCPServer:
 
     def test_mcp_global_server_singleton(self):
         """Test that get_mcp_server returns the same instance."""
-        from mcp_server import get_mcp_server, MCPServer
+        from mcp_server import MCPServer, get_mcp_server
         server1 = get_mcp_server()
         server2 = get_mcp_server()
         assert server1 is server2
@@ -158,7 +159,7 @@ class TestReActAgent:
 
     def test_tool_registry(self):
         """Test ToolRegistry register, list, and call."""
-        from agent_loop import ToolRegistry, AgentResult
+        from agent_loop import AgentResult, ToolRegistry
 
         registry = ToolRegistry()
 
@@ -181,7 +182,7 @@ class TestReActAgent:
 
     def test_agent_loop_terminates_with_plan_none(self):
         """Test that agent loop terminates when plan_next_action returns None."""
-        from agent_loop import ToolRegistry, ReActAgent
+        from agent_loop import ReActAgent, ToolRegistry
         registry = ToolRegistry()
         agent = ReActAgent(registry, max_iterations=5)
         results = agent.run("test task")
@@ -189,7 +190,7 @@ class TestReActAgent:
 
     def test_agent_loop_executes_planned_tool(self):
         """Test that agent executes a tool when plan_next_action returns an action."""
-        from agent_loop import ToolRegistry, ReActAgent, AgentResult, AgentAction
+        from agent_loop import AgentAction, AgentResult, ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
         call_count = [0]
@@ -219,7 +220,7 @@ class TestReActAgent:
 
     def test_agent_loses_on_tool_failure_continues(self):
         """Test that agent continues after a failed tool call."""
-        from agent_loop import ToolRegistry, ReActAgent, AgentResult, AgentAction
+        from agent_loop import AgentAction, ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
 
@@ -246,7 +247,7 @@ class TestReActAgent:
 
     def test_agent_context_building(self):
         """Test that agent builds context from history."""
-        from agent_loop import ToolRegistry, ReActAgent
+        from agent_loop import ReActAgent, ToolRegistry
         registry = ToolRegistry()
         agent = ReActAgent(registry, max_iterations=3)
         agent.add_to_history("user", "hello world")
@@ -274,7 +275,7 @@ class TestReActAgent:
 
     def test_agent_real_plan_with_matching_phase(self):
         """Test that real plan_next_action picks the right tool for a phase."""
-        from agent_loop import ToolRegistry, ReActAgent, AgentResult
+        from agent_loop import AgentResult, ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
         registry.register("nuclei", lambda target="": AgentResult(tool="nuclei", success=True, output="ok"),
@@ -289,7 +290,7 @@ class TestReActAgent:
 
     def test_agent_real_plan_no_matching_tool(self):
         """Test that plan_next_action returns None when no tools match."""
-        from agent_loop import ToolRegistry, ReActAgent
+        from agent_loop import ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
         agent = ReActAgent(registry, max_iterations=3)
@@ -298,7 +299,7 @@ class TestReActAgent:
 
     def test_agent_real_plan_already_tried_tool(self):
         """Test that plan_next_action skips already-tried tools."""
-        from agent_loop import ToolRegistry, ReActAgent, AgentResult
+        from agent_loop import AgentResult, ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
         registry.register("nuclei", lambda target="": AgentResult(tool="nuclei", success=True, output="ok"),
@@ -456,8 +457,8 @@ class TestOrchestratorScanFlow:
     @patch('subprocess.run')
     def test_mcp_tool_execution_via_orchestrator(self, mock_run):
         """Test executing a tool through MCP via orchestrator."""
-        from orchestrator import Orchestrator
         from mcp_server import ToolDefinition, ToolSchema
+        from orchestrator import Orchestrator
 
         mock_run.return_value = MagicMock(
             returncode=0, stdout='{"vulnerabilities": []}', stderr=""
@@ -526,8 +527,8 @@ class TestFullPipelineIntegration:
             returncode=0, stdout=json.dumps({"status": "ok"}), stderr=""
         )
 
-        from orchestrator import Orchestrator
         from mcp_server import ToolDefinition, ToolSchema
+        from orchestrator import Orchestrator
 
         orch = Orchestrator(engagement_id="test-e2e-123")
         assert hasattr(orch, 'mcp_run')
@@ -544,11 +545,11 @@ class TestFullPipelineIntegration:
 
     def test_pipeline_phase_sequence(self):
         """Test that the pipeline phase sequence is valid."""
-        from orchestrator import Orchestrator
         from agent_loop import CoordinatorAgent
+        from orchestrator import Orchestrator
 
         coord = CoordinatorAgent("test-pipeline-123")
-        orch = Orchestrator(engagement_id="test-pipeline-123")
+        Orchestrator(engagement_id="test-pipeline-123")
 
         assert coord.current_phase == "recon"
         for phase in ["scan", "analyze", "report"]:
@@ -564,8 +565,8 @@ class TestFullPipelineIntegration:
             returncode=0, stdout=json.dumps({"ok": True}), stderr=""
         )
 
-        from orchestrator import Orchestrator
         from mcp_server import ToolDefinition, ToolSchema
+        from orchestrator import Orchestrator
 
         orch = Orchestrator(engagement_id="test-compat-123")
 
@@ -604,7 +605,7 @@ class TestCreatePhaseAgent:
 
     def test_create_phase_agent_recon(self):
         """Test creating a recon phase agent."""
-        from agent_loop import create_phase_agent, ReActAgent
+        from agent_loop import ReActAgent, create_phase_agent
         agent = create_phase_agent("recon")
         assert agent is not None
         assert isinstance(agent, ReActAgent)
@@ -617,11 +618,11 @@ class TestCreatePhaseAgent:
 
     def test_create_phase_agent_registers_phase_tools(self):
         """Test that phase agent has correct tool registry."""
-        from agent_loop import create_phase_agent, ReActAgent
+        from agent_loop import ReActAgent, create_phase_agent
 
         agent = create_phase_agent("recon")
         tools = agent.registry.list_tools()
-        expected = ReActAgent.PHASE_TOOLS.get("recon", [])
+        ReActAgent.PHASE_TOOLS.get("recon", [])
         # Without tool_runner, no tools are registered
         assert len(tools) == 0
 
@@ -640,8 +641,9 @@ class TestCreatePhaseAgent:
 
     def test_create_phase_agent_with_tool_runner_registers_tools(self):
         """Test that create_phase_agent with a tool_runner registers tools."""
-        from agent_loop import create_phase_agent, ReActAgent
         from unittest.mock import MagicMock
+
+        from agent_loop import ReActAgent, create_phase_agent
 
         mock_runner = MagicMock()
         mock_runner.run.return_value = {"success": True, "stdout": "{}", "returncode": 0}

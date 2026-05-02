@@ -4,10 +4,11 @@ Tests for tasks/progress_tracker.py
 Validates: Progress tracking lifecycle, Redis integration, error handling
 """
 import json
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from tasks.progress_tracker import ProgressTracker, get_progress_tracker, PROGRESS_TTL
+import pytest
+
+from tasks.progress_tracker import PROGRESS_TTL, ProgressTracker, get_progress_tracker
 
 
 class TestProgressTracker:

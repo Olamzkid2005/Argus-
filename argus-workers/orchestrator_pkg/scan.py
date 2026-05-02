@@ -3,7 +3,6 @@ Scan execution logic extracted from Orchestrator.
 """
 import logging
 import socket
-from typing import Dict, List
 
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
@@ -20,7 +19,7 @@ from .utils import get_nuclei_templates_path
 logger = logging.getLogger(__name__)
 
 
-def execute_scan_tools(orchestrator, targets: List[str], budget: Dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS) -> List[Dict]:
+def execute_scan_tools(orchestrator, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS) -> list[dict]:
     """
     Execute scanning tools against targets.
 
@@ -139,9 +138,8 @@ def execute_scan_tools(orchestrator, targets: List[str], budget: Dict, aggressiv
                 timeout=sqlmap_timeout
             )
             if sqlmap_result.get("success"):
-                import json
                 try:
-                    with open(sqlmap_out, "r") as f:
+                    with open(sqlmap_out) as f:
                         sqlmap_output = f.read()
                     parsed = orchestrator.parser.parse("sqlmap", sqlmap_output)
                 except Exception:
@@ -167,7 +165,7 @@ def execute_scan_tools(orchestrator, targets: List[str], budget: Dict, aggressiv
             )
             if arjun_result.get("success"):
                 try:
-                    with open(arjun_out, "r") as f:
+                    with open(arjun_out) as f:
                         arjun_output = f.read()
                     parsed = orchestrator.parser.parse("arjun", arjun_output)
                 except Exception:
@@ -208,7 +206,7 @@ def execute_scan_tools(orchestrator, targets: List[str], budget: Dict, aggressiv
             )
             if commix_result.get("success"):
                 try:
-                    with open(commix_out, "r") as f:
+                    with open(commix_out) as f:
                         commix_output = f.read()
                     parsed = orchestrator.parser.parse("commix", commix_output)
                 except Exception:
@@ -232,7 +230,7 @@ def execute_scan_tools(orchestrator, targets: List[str], budget: Dict, aggressiv
             )
             if testssl_result.get("success"):
                 try:
-                    with open(testssl_out, "r") as f:
+                    with open(testssl_out) as f:
                         testssl_output = f.read()
                     parsed = orchestrator.parser.parse("testssl", testssl_output)
                 except Exception:

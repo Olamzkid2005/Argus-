@@ -9,7 +9,6 @@ Requirements: 16.1, 16.2, 16.3, 16.4
 import json
 import logging
 import re
-from typing import Dict, List, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ class ContainerSecurityScanner:
     Container security scanner for Docker images, Dockerfiles,
     Kubernetes manifests, and SBOM generation.
     """
-    
+
     # Dockerfile security checks
     DOCKERFILE_CHECKS = [
         {
@@ -60,7 +59,7 @@ class ContainerSecurityScanner:
             "severity": "LOW",
         },
     ]
-    
+
     # Kubernetes security checks
     K8S_CHECKS = [
         {
@@ -113,38 +112,38 @@ class ContainerSecurityScanner:
             "severity": "HIGH",
         },
     ]
-    
+
     def __init__(self):
         """Initialize container security scanner."""
         self.findings = []
-    
-    def scan_dockerfile(self, dockerfile_path: str) -> List[Dict]:
+
+    def scan_dockerfile(self, dockerfile_path: str) -> list[dict]:
         """
         Analyze Dockerfile for security misconfigurations.
-        
+
         Args:
             dockerfile_path: Path to Dockerfile
-            
+
         Returns:
             List of findings
         """
         self.findings = []
         path = Path(dockerfile_path)
-        
+
         if not path.exists():
             return self.findings
-        
+
         content = path.read_text()
         lines = content.split("\n")
-        
+
         has_healthcheck = False
-        
+
         for line_num, line in enumerate(lines, 1):
             stripped = line.strip()
-            
+
             if stripped.upper().startswith("HEALTHCHECK"):
                 has_healthcheck = True
-            
+
             for check in self.DOCKERFILE_CHECKS:
                 if check["pattern"] is None:
                     continue
@@ -161,7 +160,7 @@ class ContainerSecurityScanner:
                         "confidence": 0.90,
                         "tool": "container_scanner",
                     })
-        
+
         # Check for missing HEALTHCHECK
         if not has_healthcheck:
             check = next((c for c in self.DOCKERFILE_CHECKS if c["id"] == "DOCKERFILE_NO_HEALTHCHECK"), None)
@@ -176,39 +175,39 @@ class ContainerSecurityScanner:
                     "confidence": 0.80,
                     "tool": "container_scanner",
                 })
-        
+
         return self.findings
-    
-    def scan_kubernetes_manifest(self, manifest_path: str) -> List[Dict]:
+
+    def scan_kubernetes_manifest(self, manifest_path: str) -> list[dict]:
         """
         Analyze Kubernetes manifest for security misconfigurations.
-        
+
         Args:
             manifest_path: Path to K8s YAML manifest
-            
+
         Returns:
             List of findings
         """
         self.findings = []
         path = Path(manifest_path)
-        
+
         if not path.exists():
             return self.findings
-        
+
         try:
             import yaml
             docs = list(yaml.safe_load_all(path.read_text()))
         except Exception:
             return self.findings
-        
+
         for doc in docs:
             if not doc or not isinstance(doc, dict):
                 continue
-            
+
             kind = doc.get("kind", "")
             if kind not in ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob"]:
                 continue
-            
+
             for check in self.K8S_CHECKS:
                 result = self._check_k8s_path(doc, check["path"], check.get("value"), check.get("exists", True))
                 if result["matched"]:
@@ -224,13 +223,13 @@ class ContainerSecurityScanner:
                         "confidence": 0.90,
                         "tool": "container_scanner",
                     })
-        
+
         return self.findings
-    
-    def _check_k8s_path(self, doc: Dict, path: List[str], expected_value=None, should_exist=True) -> Dict:
+
+    def _check_k8s_path(self, doc: dict, path: list[str], expected_value=None, should_exist=True) -> dict:
         """Check if a path exists in K8s document and matches expected value."""
         current = doc
-        
+
         for i, key in enumerate(path):
             if key == "*":
                 # Handle wildcard for lists
@@ -242,25 +241,25 @@ class ContainerSecurityScanner:
                             return result
                     return {"matched": False}
                 return {"matched": False}
-            
+
             if isinstance(current, dict) and key in current:
                 current = current[key]
             else:
                 return {"matched": not should_exist}
-        
+
         if expected_value is not None:
             return {"matched": current == expected_value, "value": current}
-        
+
         return {"matched": should_exist, "value": current}
-    
-    def generate_sbom(self, image_or_path: str, output_path: Optional[str] = None) -> Dict:
+
+    def generate_sbom(self, image_or_path: str, output_path: str | None = None) -> dict:
         """
         Generate Software Bill of Materials (SBOM) for a container image or filesystem.
-        
+
         Args:
             image_or_path: Container image name or filesystem path
             output_path: Optional path to write SBOM JSON
-            
+
         Returns:
             SBOM dictionary
         """
@@ -270,7 +269,7 @@ class ContainerSecurityScanner:
             "components": [],
             "dependencies": [],
         }
-        
+
         # Try to detect package files and extract dependencies
         path = Path(image_or_path)
         if path.is_dir():
@@ -282,19 +281,19 @@ class ContainerSecurityScanner:
                 "go.mod": self._parse_go_packages,
                 "Cargo.toml": self._parse_rust_packages,
             }
-            
+
             for filename, parser in package_files.items():
                 file_path = path / filename
                 if file_path.exists():
                     components = parser(file_path)
                     sbom["components"].extend(components)
-        
+
         if output_path:
             Path(output_path).write_text(json.dumps(sbom, indent=2))
-        
+
         return sbom
-    
-    def _parse_npm_packages(self, package_json_path: Path) -> List[Dict]:
+
+    def _parse_npm_packages(self, package_json_path: Path) -> list[dict]:
         """Parse npm package.json for dependencies."""
         components = []
         try:
@@ -302,7 +301,7 @@ class ContainerSecurityScanner:
             deps = {}
             deps.update(data.get("dependencies", {}))
             deps.update(data.get("devDependencies", {}))
-            
+
             for name, version in deps.items():
                 components.append({
                     "type": "library",
@@ -313,8 +312,8 @@ class ContainerSecurityScanner:
         except Exception as e:
             logger.warning("Failed to parse npm packages from %s: %s", package_json_path, e)
         return components
-    
-    def _parse_pip_packages(self, requirements_path: Path) -> List[Dict]:
+
+    def _parse_pip_packages(self, requirements_path: Path) -> list[dict]:
         """Parse requirements.txt for Python packages."""
         components = []
         try:
@@ -334,8 +333,8 @@ class ContainerSecurityScanner:
         except Exception as e:
             logger.warning("Failed to parse pip packages from %s: %s", requirements_path, e)
         return components
-    
-    def _parse_pipfile_packages(self, pipfile_path: Path) -> List[Dict]:
+
+    def _parse_pipfile_packages(self, pipfile_path: Path) -> list[dict]:
         """Parse Pipfile for Python packages."""
         components = []
         try:
@@ -353,8 +352,8 @@ class ContainerSecurityScanner:
         except Exception as e:
             logger.warning("Failed to parse Pipfile packages from %s: %s", pipfile_path, e)
         return components
-    
-    def _parse_go_packages(self, go_mod_path: Path) -> List[Dict]:
+
+    def _parse_go_packages(self, go_mod_path: Path) -> list[dict]:
         """Parse go.mod for Go packages."""
         components = []
         try:
@@ -373,8 +372,8 @@ class ContainerSecurityScanner:
         except Exception as e:
             logger.warning("Failed to parse Go modules from %s: %s", go_mod_path, e)
         return components
-    
-    def _parse_rust_packages(self, cargo_toml_path: Path) -> List[Dict]:
+
+    def _parse_rust_packages(self, cargo_toml_path: Path) -> list[dict]:
         """Parse Cargo.toml for Rust packages."""
         components = []
         try:
@@ -391,20 +390,20 @@ class ContainerSecurityScanner:
         except Exception as e:
             logger.warning("Failed to parse Cargo packages from %s: %s", cargo_toml_path, e)
         return components
-    
-    def run_trivy_scan(self, image_or_path: str, tool_runner) -> List[Dict]:
+
+    def run_trivy_scan(self, image_or_path: str, tool_runner) -> list[dict]:
         """
         Run Trivy container/filesystem scan using the provided tool runner.
-        
+
         Args:
             image_or_path: Container image or path to scan
             tool_runner: ToolRunner instance
-            
+
         Returns:
             List of parsed findings
         """
         findings = []
-        
+
         result = tool_runner.run(
             "trivy",
             [
@@ -414,7 +413,7 @@ class ContainerSecurityScanner:
             ],
             timeout=600,
         )
-        
+
         if result.get("success"):
             try:
                 from parsers.parser import TrivyParser
@@ -422,5 +421,5 @@ class ContainerSecurityScanner:
                 findings = parser.parse(result.get("stdout", ""))
             except Exception as e:
                 logger.warning("Failed to parse Trivy scan results: %s", e)
-        
+
         return findings

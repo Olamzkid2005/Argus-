@@ -3,18 +3,24 @@ Celery tasks for reporting phase
 
 Requirements: 20.1, 20.2, 20.3, 23.4, 23.5, 17.1, 17.2, 17.3, 17.4
 """
+
 import json
 import logging
-from datetime import datetime, timedelta, UTC
-from typing import Any, Dict, List, Optional
+import os
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from psycopg2.extras import RealDictCursor
+
 from celery_app import app
 from database.connection import connect
-from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 
-from tasks.base import task_context
 from compliance_reporting import ComplianceReportGenerator
+from tasks.base import task_context
+from tracing import TracingManager
+from utils.validation import validate_uuid
 
 
 @app.task(bind=True, name="tasks.report.generate_report")
@@ -22,8 +28,9 @@ def generate_report(self, engagement_id: str, trace_id: str = None):
     """
     Generate final report for an engagement
     """
-    with task_context(self, engagement_id, "report",
-                      trace_id=trace_id, current_state="reporting") as ctx:
+    with task_context(
+        self, engagement_id, "report", trace_id=trace_id, current_state="reporting"
+    ) as ctx:
         result = ctx.orchestrator.run_reporting(ctx.job)
         ctx.state.transition("complete", "Report generated")
         return result
@@ -71,7 +78,7 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
                         WHEN 'INFO' THEN 5
                     END
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
 
             return [dict(row) for row in cursor.fetchall()]
@@ -165,7 +172,12 @@ def generate_scheduled_reports(self):
                         report["org_id"],
                         report["created_by"],
                         report["id"],
-                        str({"recipients": report["email_recipients"], "report_name": report["name"]}),
+                        str(
+                            {
+                                "recipients": report["email_recipients"],
+                                "report_name": report["name"],
+                            }
+                        ),
                     ),
                 )
 
@@ -181,7 +193,9 @@ def generate_scheduled_reports(self):
         conn.close()
 
 
-def _generate_report_data(org_id: str, engagement_ids: Optional[List[str]], report_type: str, cursor) -> Dict[str, Any]:
+def _generate_report_data(
+    org_id: str, engagement_ids: list[str] | None, report_type: str, cursor
+) -> dict[str, Any]:
     """Generate report data based on type and engagements."""
     engagement_filter = ""
     params = [org_id]
@@ -242,14 +256,19 @@ def _generate_report_data(org_id: str, engagement_ids: Optional[List[str]], repo
     }
 
 
-def _send_report_email(recipients: List[str], report_name: str, report_data: Dict[str, Any]):
+def _send_report_email(
+    recipients: list[str], report_name: str, report_data: dict[str, Any]
+):
     """Send report via email. Placeholder for actual email service integration."""
     # In production, integrate with SendGrid, AWS SES, or Resend
     logger.warning("Email sending not configured — _send_report_email is a placeholder")
-    logger.info("Would send '%s' to %s with %d severity groups, %d engagements",
-                report_name, ', '.join(recipients),
-                len(report_data.get('findings_summary', [])),
-                len(report_data.get('engagements', [])))
+    logger.info(
+        "Would send '%s' to %s with %d severity groups, %d engagements",
+        report_name,
+        ", ".join(recipients),
+        len(report_data.get("findings_summary", [])),
+        len(report_data.get("engagements", [])),
+    )
 
 
 def _calculate_next_run(frequency: str) -> datetime:
@@ -291,7 +310,9 @@ def generate_compliance_report(
         trace_id = tracing_manager.generate_trace_id()
 
     # Execute with trace context
-    with tracing_manager.trace_execution(engagement_id, f"compliance_report_{standard}", trace_id):
+    with tracing_manager.trace_execution(
+        engagement_id, f"compliance_report_{standard}", trace_id
+    ):
         conn = connect(db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -319,7 +340,7 @@ def generate_compliance_report(
                         WHEN 'INFO' THEN 5
                     END
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
 
             findings = [dict(row) for row in cursor.fetchall()]
@@ -341,8 +362,7 @@ def generate_compliance_report(
 
             # Get org_id for the engagement
             cursor.execute(
-                "SELECT org_id FROM engagements WHERE id = %s",
-                (engagement_id,)
+                "SELECT org_id FROM engagements WHERE id = %s", (engagement_id,)
             )
             org_row = cursor.fetchone()
             org_id = org_row["org_id"] if org_row else None
@@ -364,7 +384,7 @@ def generate_compliance_report(
                     json.dumps(json_data),
                     html,
                     "ready",
-                )
+                ),
             )
 
             row = cursor.fetchone()
@@ -421,7 +441,7 @@ def generate_full_report(
                 SELECT id, target_url, scan_type, org_id, created_at, completed_at
                 FROM engagements WHERE id = %s
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
             engagement = cursor.fetchone()
             if not engagement:
@@ -445,7 +465,7 @@ def generate_full_report(
                         WHEN 'INFO' THEN 5
                     END
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
             findings = [dict(row) for row in cursor.fetchall()]
 
@@ -463,7 +483,9 @@ def generate_full_report(
 
             top_categories = [
                 {"name": t, "count": c}
-                for t, c in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+                for t, c in sorted(
+                    type_counts.items(), key=lambda x: x[1], reverse=True
+                )[:10]
             ]
 
             # 5. Calculate scan duration
@@ -578,7 +600,9 @@ def get_compliance_reports(
         trace_id = tracing_manager.generate_trace_id()
 
     # Execute with trace context
-    with tracing_manager.trace_execution(engagement_id, "get_compliance_reports", trace_id):
+    with tracing_manager.trace_execution(
+        engagement_id, "get_compliance_reports", trace_id
+    ):
         conn = connect(db_conn_string)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -596,7 +620,7 @@ def get_compliance_reports(
                 WHERE engagement_id = %s
                 ORDER BY created_at DESC
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
 
             return [dict(row) for row in cursor.fetchall()]

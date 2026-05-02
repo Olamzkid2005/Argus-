@@ -8,12 +8,12 @@ verifier for low-confidence findings.
 Graceful degradation: All methods return None on failure.
 The system works exactly as today when LLM is unavailable.
 """
-import logging
 import json
+import logging
 import re
-from typing import Dict, Optional, Any
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +93,12 @@ If NOT vulnerable:
     def __init__(
         self,
         llm_client: Any,
-        model: Optional[str] = None,
+        model: str | None = None,
         max_retries: int = 2,
     ):
         """
         Initialize LLM Detector.
-        
+
         Args:
             llm_client: LLMClient instance for making LLM calls
             model: Model to use (defaults to LLMClient's model)
@@ -114,12 +114,12 @@ If NOT vulnerable:
         vuln_class: str,
         payload: str,
         response: Any,
-        context: Optional[Dict] = None,
+        context: dict | None = None,
         max_response_chars: int = 3000,
-    ) -> Optional[LLMAnalysisResult]:
+    ) -> LLMAnalysisResult | None:
         """
         Analyze an HTTP response for vulnerability evidence (async).
-        
+
         Args:
             test_url: The URL that was probed
             vuln_class: Vulnerability class being tested (e.g., "XSS", "SQL_INJECTION")
@@ -127,7 +127,7 @@ If NOT vulnerable:
             response: HTTP response object (needs .status_code, .headers, .text attributes)
             context: Optional dict with extra context (param name, etc.)
             max_response_chars: Max chars of response body to analyze
-            
+
         Returns:
             LLMAnalysisResult if analysis succeeds, None on failure or if not vulnerable
         """
@@ -145,7 +145,7 @@ If NOT vulnerable:
 
             # Truncate body
             body_snippet = body[:max_response_chars]
-            
+
             # Filter relevant headers
             header_str = "; ".join(
                 f"{k}: {v}" for k, v in headers.items()
@@ -182,7 +182,7 @@ If NOT vulnerable:
             result = self._parse_response(raw_response)
             if result:
                 result.model = self.model
-                result.timestamp = datetime.now(timezone.utc).isoformat()
+                result.timestamp = datetime.now(UTC).isoformat()
                 return result
 
             return None
@@ -197,9 +197,9 @@ If NOT vulnerable:
         vuln_class: str,
         payload: str,
         response: Any,
-        context: Optional[Dict] = None,
+        context: dict | None = None,
         max_response_chars: int = 3000,
-    ) -> Optional[LLMAnalysisResult]:
+    ) -> LLMAnalysisResult | None:
         """
         Synchronous version of analyze_async.
         Used by scan-phase code that can't use async.
@@ -213,20 +213,20 @@ If NOT vulnerable:
         )
         return None
 
-    def should_skip(self, finding: Dict, response: Any) -> bool:
+    def should_skip(self, finding: dict, response: Any) -> bool:
         """
         Determine if this finding should be skipped for LLM analysis.
-        
+
         Skip if:
         - Confidence is already high (> 0.7, doesn't need review)
         - Confidence is very low (< 0.3, too noisy, likely false positive)
         - No payload or response evidence to analyze
         - Response is binary or empty
-        
+
         Args:
             finding: Finding dictionary
             response: HTTP response object
-            
+
         Returns:
             True if this finding should be skipped
         """
@@ -235,11 +235,11 @@ If NOT vulnerable:
             return True  # Already confident enough
         if confidence < 0.3:
             return True  # Too noisy, skip
-        
+
         evidence = finding.get("evidence", {})
         if not evidence.get("payload") and not evidence.get("response"):
             return True  # Nothing to analyze
-        
+
         if not response:
             return True
         body = getattr(response, 'text', '')
@@ -252,22 +252,19 @@ If NOT vulnerable:
                     body = ''
         if len(body.strip()) < 50:
             return True  # Response too short to analyze
-        
-        # Skip binary-looking responses
-        if body and '\x00' in body[:100]:
-            return True
-        
-        return False
 
-    def _parse_response(self, raw_text: str) -> Optional[LLMAnalysisResult]:
+        # Skip binary-looking responses
+        return bool(body and '\x00' in body[:100])
+
+    def _parse_response(self, raw_text: str) -> LLMAnalysisResult | None:
         """
         Parse LLM response into structured result.
-        
+
         Attempts JSON parsing first, falls back to regex extraction.
-        
+
         Args:
             raw_text: Raw LLM response text
-            
+
         Returns:
             LLMAnalysisResult or None if parsing fails
         """
@@ -277,9 +274,9 @@ If NOT vulnerable:
             json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', raw_text, re.DOTALL)
             if json_match:
                 raw_text = json_match.group(1)
-            
+
             data = json.loads(raw_text.strip())
-            
+
             return LLMAnalysisResult(
                 vulnerable=bool(data.get("vulnerable", False)),
                 confidence=float(data.get("confidence", 0.0)),
@@ -291,7 +288,7 @@ If NOT vulnerable:
             )
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             logger.debug(f"Failed to parse LLM response as JSON: {e}")
-            
+
             # Fallback: try regex extraction
             try:
                 vulnerable = "true" in re.search(r'"vulnerable"\s*:\s*(true|false)', raw_text, re.IGNORECASE).group(1).lower()
@@ -299,7 +296,7 @@ If NOT vulnerable:
                 confidence = float(confidence_match.group(1)) if confidence_match else 0.0
                 evidence_match = re.search(r'"evidence_quote"\s*:\s*"([^"]*)"', raw_text)
                 evidence_quote = evidence_match.group(1) if evidence_match else ""
-                
+
                 return LLMAnalysisResult(
                     vulnerable=vulnerable,
                     confidence=min(1.0, max(0.0, confidence)),

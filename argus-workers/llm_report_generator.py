@@ -6,10 +6,11 @@ and CVSS-prioritized action items.
 """
 import json
 import logging
-from typing import Dict, List, Generator, Any
+from collections.abc import Generator
+from typing import Any
 
-from config.constants import LLM_AGENT_MAX_TOKENS_REPORT
 from agent.agent_prompts import REPORT_SYSTEM_PROMPT, build_report_prompt
+from config.constants import LLM_AGENT_MAX_TOKENS_REPORT
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,11 @@ class LLMReportGenerator:
 
     def generate_report(
         self,
-        synthesis: Dict,
-        scored_findings: List[Dict],
-        engagement: Dict,
+        synthesis: dict,
+        scored_findings: list[dict],
+        engagement: dict,
         recon_context: Any = None,
-    ) -> Dict:
+    ) -> dict:
         recon_summary = ""
         if recon_context is not None:
             recon_summary = (
@@ -47,8 +48,8 @@ class LLMReportGenerator:
         return result
 
     def stream_report(
-        self, synthesis: Dict, scored_findings: List[Dict],
-        engagement: Dict, recon_context: Any = None,
+        self, synthesis: dict, scored_findings: list[dict],
+        engagement: dict, recon_context: Any = None,
     ) -> Generator[str, None, None]:
         recon_summary = ""
         if recon_context is not None:
@@ -61,20 +62,19 @@ class LLMReportGenerator:
         prompt = build_report_prompt(synthesis, scored_findings, engagement, recon_summary)
 
         if hasattr(self._llm._client, "chat_stream"):
-            for chunk in self._llm._client.chat_stream(
+            yield from self._llm._client.chat_stream(
                 messages=[
                     {"role": "system", "content": REPORT_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
                 max_tokens=LLM_AGENT_MAX_TOKENS_REPORT,
-            ):
-                yield chunk
+            )
         else:
             report = self.generate_report(synthesis, scored_findings, engagement, recon_context)
             yield json.dumps(report)
 
-    def _fallback_report(self, engagement: Dict, scored_findings: List[Dict]) -> Dict:
+    def _fallback_report(self, engagement: dict, scored_findings: list[dict]) -> dict:
         severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
         for f in scored_findings:
             sev = (f.get("severity", "") or "").upper()

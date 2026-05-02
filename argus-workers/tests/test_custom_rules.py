@@ -1,12 +1,14 @@
 """
 Tests for Custom Rule Engine
 """
-import pytest
-import tempfile
 import os
+import tempfile
+
+import pytest
+
 from custom_rules.engine import CustomRuleEngine
-from custom_rules.validator import RuleValidator
 from custom_rules.registry import RuleRegistry
+from custom_rules.validator import RuleValidator
 
 
 class TestCustomRuleEngine:

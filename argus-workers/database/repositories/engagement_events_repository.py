@@ -1,9 +1,10 @@
 """
 Engagement events repository for event sourcing operations
 """
-from typing import Dict, List, Optional
 import uuid
-from psycopg2.extras import RealDictCursor, Json
+
+from psycopg2.extras import Json, RealDictCursor
+
 from database.repositories.base import BaseRepository
 
 
@@ -22,8 +23,8 @@ class EngagementEventsRepository(BaseRepository):
         self,
         engagement_id: str,
         event_type: str,
-        event_data: Optional[dict] = None,
-        actor: Optional[str] = None,
+        event_data: dict | None = None,
+        actor: str | None = None,
     ) -> str:
         """
         Record a new engagement event.
@@ -74,9 +75,9 @@ class EngagementEventsRepository(BaseRepository):
     def get_events(
         self,
         engagement_id: str,
-        event_type: Optional[str] = None,
+        event_type: str | None = None,
         limit: int = 100,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Retrieve events for an engagement, optionally filtered by type.
 
@@ -119,7 +120,7 @@ class EngagementEventsRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_event_timeline(self, engagement_id: str) -> List[Dict]:
+    def get_event_timeline(self, engagement_id: str) -> list[dict]:
         """
         Retrieve chronological event timeline for an engagement.
 

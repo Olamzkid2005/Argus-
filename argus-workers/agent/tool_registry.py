@@ -2,9 +2,9 @@
 Tool Registry - Registry of available tools for the agent to use.
 Bridges to the MCP protocol server for tool discovery.
 """
-import time
 import logging
-from typing import Dict, List, Optional, Callable
+import time
+from collections.abc import Callable
 
 from .agent_result import AgentResult
 
@@ -15,10 +15,10 @@ class ToolRegistry:
     """Registry of available tools for the agent to use."""
 
     def __init__(self):
-        self._tools: Dict[str, Callable] = {}
-        self._tool_metadata: Dict[str, Dict] = {}
+        self._tools: dict[str, Callable] = {}
+        self._tool_metadata: dict[str, dict] = {}
 
-    def register(self, name: str, func: Callable, metadata: Dict = None):
+    def register(self, name: str, func: Callable, metadata: dict = None):
         """Register a callable tool function."""
         self._tools[name] = func
         self._tool_metadata[name] = metadata or {
@@ -27,11 +27,11 @@ class ToolRegistry:
             "parameters": [],
         }
 
-    def get_tool(self, name: str) -> Optional[Callable]:
+    def get_tool(self, name: str) -> Callable | None:
         """Get a tool function by name."""
         return self._tools.get(name)
 
-    def list_tools(self) -> List[Dict]:
+    def list_tools(self) -> list[dict]:
         """List all available tools with their metadata."""
         return list(self._tool_metadata.values())
 

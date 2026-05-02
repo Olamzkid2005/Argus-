@@ -1,16 +1,15 @@
 """
 Tests for compliance_reporting.py
 """
-import pytest
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from compliance_reporting import (
     ComplianceMapper,
     ComplianceReportGenerator,
     ComplianceStandard,
-    ComplianceFinding,
-    ComplianceReport,
     generate_compliance_report,
 )
 
@@ -228,7 +227,7 @@ class TestGenerateComplianceReport:
         mock_gen.render_report.return_value = "html"
         mock_gen.render_to_json.return_value = {"data": "test"}
 
-        result = generate_compliance_report("pci_dss", "ENG-001", [])
+        generate_compliance_report("pci_dss", "ENG-001", [])
 
         mock_gen.generate_pci_dss_checklist.assert_called_once()
 
@@ -244,7 +243,7 @@ class TestGenerateComplianceReport:
         mock_gen.render_report.return_value = "html"
         mock_gen.render_to_json.return_value = {"data": "test"}
 
-        result = generate_compliance_report("soc2", "ENG-001", [])
+        generate_compliance_report("soc2", "ENG-001", [])
 
         mock_gen.generate_soc2_template.assert_called_once()
 

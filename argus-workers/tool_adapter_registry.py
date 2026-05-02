@@ -7,11 +7,10 @@ tool output format changes gracefully.
 Requirements: 34.1, 34.2, 34.3, 34.4, 34.5
 """
 
-import logging
-from typing import Dict, Optional, List
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
 import json
+import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -32,34 +31,34 @@ class ToolAdapterMetadata:
     tool_name: str
     schema_version: str
     parser_class: type
-    expected_schema: Dict
+    expected_schema: dict
     description: str
 
 
 class BaseToolAdapter(ABC):
     """Base class for versioned tool adapters."""
-    
+
     @abstractmethod
     def validate_schema(self, raw_output: str) -> bool:
         """
         Validate that tool output matches expected schema.
-        
+
         Args:
             raw_output: Raw tool output
-        
+
         Returns:
             True if schema matches, False otherwise
         """
         pass
-    
+
     @abstractmethod
-    def parse(self, raw_output: str) -> List[Dict]:
+    def parse(self, raw_output: str) -> list[dict]:
         """
         Parse tool output into structured findings.
-        
+
         Args:
             raw_output: Raw tool output
-        
+
         Returns:
             List of parsed findings
         """
@@ -68,17 +67,17 @@ class BaseToolAdapter(ABC):
 
 class NucleiAdapterV1(BaseToolAdapter):
     """Nuclei adapter for schema version 1.x (JSON lines)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         """Validate nuclei JSON lines format."""
         if not raw_output.strip():
             return True  # Empty output is valid
-        
+
         # Check first non-empty line is valid JSON with expected fields
         for line in raw_output.split("\n"):
             if not line.strip():
                 continue
-            
+
             try:
                 data = json.loads(line)
                 # Check for expected fields
@@ -86,10 +85,10 @@ class NucleiAdapterV1(BaseToolAdapter):
                 return all(field in data for field in required_fields)
             except json.JSONDecodeError:
                 return False
-        
+
         return True
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         """Parse nuclei JSON lines output."""
         from parsers.parser import NucleiParser
         parser = NucleiParser()
@@ -98,26 +97,26 @@ class NucleiAdapterV1(BaseToolAdapter):
 
 class HttpxAdapterV1(BaseToolAdapter):
     """Httpx adapter for schema version 1.x (JSON or plain URLs)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         """Validate httpx output format."""
         if not raw_output.strip():
             return True
-        
+
         # Check first line is either JSON or URL
         first_line = raw_output.split("\n")[0].strip()
-        
+
         # Try JSON
         try:
             json.loads(first_line)
             return True
         except json.JSONDecodeError:
             pass
-        
+
         # Try URL
         return first_line.startswith("http://") or first_line.startswith("https://")
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         """Parse httpx output."""
         from parsers.parser import HttpxParser
         parser = HttpxParser()
@@ -126,7 +125,7 @@ class HttpxAdapterV1(BaseToolAdapter):
 
 class KatanaAdapterV1(BaseToolAdapter):
     """Katana adapter for schema version 1.x (JSON lines)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
@@ -140,8 +139,8 @@ class KatanaAdapterV1(BaseToolAdapter):
             except json.JSONDecodeError:
                 pass
         return True
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import KatanaParser
         parser = KatanaParser()
         return parser.parse(raw_output)
@@ -149,14 +148,14 @@ class KatanaAdapterV1(BaseToolAdapter):
 
 class GauAdapterV1(BaseToolAdapter):
     """Gau adapter for schema version 1.x (plain URLs)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
         first_line = raw_output.split("\n")[0].strip()
         return first_line.startswith("http://") or first_line.startswith("https://")
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import GauParser
         parser = GauParser()
         return parser.parse(raw_output)
@@ -164,14 +163,14 @@ class GauAdapterV1(BaseToolAdapter):
 
 class WaybackurlsAdapterV1(BaseToolAdapter):
     """Waybackurls adapter for schema version 1.x (plain URLs)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
         first_line = raw_output.split("\n")[0].strip()
         return first_line.startswith("http://") or first_line.startswith("https://")
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import WaybackurlsParser
         parser = WaybackurlsParser()
         return parser.parse(raw_output)
@@ -179,7 +178,7 @@ class WaybackurlsAdapterV1(BaseToolAdapter):
 
 class ArjunAdapterV1(BaseToolAdapter):
     """Arjun adapter for schema version 1.x (JSON)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
@@ -188,8 +187,8 @@ class ArjunAdapterV1(BaseToolAdapter):
             return isinstance(data, (dict, list))
         except json.JSONDecodeError:
             return False
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import ArjunParser
         parser = ArjunParser()
         return parser.parse(raw_output)
@@ -197,7 +196,7 @@ class ArjunAdapterV1(BaseToolAdapter):
 
 class DalfoxAdapterV1(BaseToolAdapter):
     """Dalfox adapter for schema version 1.x (JSON lines)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
@@ -211,8 +210,8 @@ class DalfoxAdapterV1(BaseToolAdapter):
             except json.JSONDecodeError:
                 pass
         return True
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import DalfoxParser
         parser = DalfoxParser()
         return parser.parse(raw_output)
@@ -220,7 +219,7 @@ class DalfoxAdapterV1(BaseToolAdapter):
 
 class JwtToolAdapterV1(BaseToolAdapter):
     """JWT Tool adapter for schema version 1.x (JSON)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
@@ -229,8 +228,8 @@ class JwtToolAdapterV1(BaseToolAdapter):
             return "vulnerabilities" in data or "token" in data
         except json.JSONDecodeError:
             return False
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import JwtToolParser
         parser = JwtToolParser()
         return parser.parse(raw_output)
@@ -238,12 +237,12 @@ class JwtToolAdapterV1(BaseToolAdapter):
 
 class CommixAdapterV1(BaseToolAdapter):
     """Commix adapter for schema version 1.x (text)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         # Commix outputs text, accept any non-empty
         return bool(raw_output.strip())
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import CommixParser
         parser = CommixParser()
         return parser.parse(raw_output)
@@ -251,7 +250,7 @@ class CommixAdapterV1(BaseToolAdapter):
 
 class SemgrepAdapterV1(BaseToolAdapter):
     """Semgrep adapter for schema version 1.x (JSON)."""
-    
+
     def validate_schema(self, raw_output: str) -> bool:
         if not raw_output.strip():
             return True
@@ -260,8 +259,8 @@ class SemgrepAdapterV1(BaseToolAdapter):
             return "results" in data or isinstance(data, list)
         except json.JSONDecodeError:
             return False
-    
-    def parse(self, raw_output: str) -> List[Dict]:
+
+    def parse(self, raw_output: str) -> list[dict]:
         from parsers.parser import SemgrepParser
         parser = SemgrepParser()
         return parser.parse(raw_output)
@@ -270,16 +269,16 @@ class SemgrepAdapterV1(BaseToolAdapter):
 class ToolAdapterRegistry:
     """
     Registry for tool adapters with versioning support.
-    
+
     Manages multiple versions of tool adapters and selects
     the appropriate one based on tool name and version.
     """
-    
+
     def __init__(self):
         """Initialize registry."""
-        self.adapters: Dict[str, Dict[str, ToolAdapterMetadata]] = {}
+        self.adapters: dict[str, dict[str, ToolAdapterMetadata]] = {}
         self._register_default_adapters()
-    
+
     def _register_default_adapters(self) -> None:
         """Register default tool adapters."""
         # Nuclei v1
@@ -297,7 +296,7 @@ class ToolAdapterRegistry:
             },
             description="Nuclei JSON lines output format"
         )
-        
+
         # Httpx v1
         self.register_adapter(
             tool_name="httpx",
@@ -311,7 +310,7 @@ class ToolAdapterRegistry:
             },
             description="Httpx JSON or plain URL output"
         )
-        
+
         # Katana v1
         self.register_adapter(
             tool_name="katana",
@@ -325,7 +324,7 @@ class ToolAdapterRegistry:
             },
             description="Katana JSON lines output"
         )
-        
+
         # Gau v1
         self.register_adapter(
             tool_name="gau",
@@ -337,7 +336,7 @@ class ToolAdapterRegistry:
             },
             description="Gau plain URL output"
         )
-        
+
         # Waybackurls v1
         self.register_adapter(
             tool_name="waybackurls",
@@ -349,7 +348,7 @@ class ToolAdapterRegistry:
             },
             description="Waybackurls plain URL output"
         )
-        
+
         # Arjun v1
         self.register_adapter(
             tool_name="arjun",
@@ -363,7 +362,7 @@ class ToolAdapterRegistry:
             },
             description="Arjun JSON output"
         )
-        
+
         # Dalfox v1
         self.register_adapter(
             tool_name="dalfox",
@@ -378,7 +377,7 @@ class ToolAdapterRegistry:
             },
             description="Dalfox JSON lines output"
         )
-        
+
         # JWT Tool v1
         self.register_adapter(
             tool_name="jwt_tool",
@@ -393,7 +392,7 @@ class ToolAdapterRegistry:
             },
             description="JWT Tool JSON output"
         )
-        
+
         # Commix v1
         self.register_adapter(
             tool_name="commix",
@@ -404,7 +403,7 @@ class ToolAdapterRegistry:
             },
             description="Commix plain text output"
         )
-        
+
         # Semgrep v1
         self.register_adapter(
             tool_name="semgrep",
@@ -418,18 +417,18 @@ class ToolAdapterRegistry:
             },
             description="Semgrep JSON output"
         )
-    
+
     def register_adapter(
         self,
         tool_name: str,
         schema_version: str,
         adapter_class: type,
-        expected_schema: Dict,
+        expected_schema: dict,
         description: str
     ) -> None:
         """
         Register a tool adapter.
-        
+
         Args:
             tool_name: Name of the tool
             schema_version: Schema version (e.g., "1.x", "2.0")
@@ -439,7 +438,7 @@ class ToolAdapterRegistry:
         """
         if tool_name not in self.adapters:
             self.adapters[tool_name] = {}
-        
+
         metadata = ToolAdapterMetadata(
             tool_name=tool_name,
             schema_version=schema_version,
@@ -447,38 +446,38 @@ class ToolAdapterRegistry:
             expected_schema=expected_schema,
             description=description
         )
-        
+
         self.adapters[tool_name][schema_version] = metadata
-        
+
         logger.info(
             f"Registered adapter: {tool_name} v{schema_version} - {description}"
         )
-    
+
     def get_adapter(
         self,
         tool_name: str,
-        schema_version: Optional[str] = None
+        schema_version: str | None = None
     ) -> BaseToolAdapter:
         """
         Get tool adapter for tool name and version.
-        
+
         Args:
             tool_name: Name of the tool
             schema_version: Schema version (optional, uses latest if not specified)
-        
+
         Returns:
             Tool adapter instance
-        
+
         Raises:
             AdapterNotFound: If no adapter exists for tool/version
         """
         tool_name = tool_name.lower()
-        
+
         if tool_name not in self.adapters:
             raise AdapterNotFound(
                 f"No adapter found for tool: {tool_name}"
             )
-        
+
         # If version not specified, use latest (last registered)
         if schema_version is None:
             versions = list(self.adapters[tool_name].keys())
@@ -487,41 +486,41 @@ class ToolAdapterRegistry:
                     f"No versions registered for tool: {tool_name}"
                 )
             schema_version = versions[-1]
-        
+
         if schema_version not in self.adapters[tool_name]:
             available_versions = list(self.adapters[tool_name].keys())
             raise AdapterNotFound(
                 f"No adapter found for {tool_name} v{schema_version}. "
                 f"Available versions: {available_versions}"
             )
-        
+
         metadata = self.adapters[tool_name][schema_version]
         return metadata.parser_class()
-    
+
     def parse_with_validation(
         self,
         tool_name: str,
         raw_output: str,
-        schema_version: Optional[str] = None
-    ) -> List[Dict]:
+        schema_version: str | None = None
+    ) -> list[dict]:
         """
         Parse tool output with schema validation.
-        
+
         Args:
             tool_name: Name of the tool
             raw_output: Raw tool output
             schema_version: Schema version (optional)
-        
+
         Returns:
             List of parsed findings
-        
+
         Raises:
             AdapterNotFound: If no adapter exists
             SchemaMismatch: If output doesn't match expected schema
         """
         # Get adapter
         adapter = self.get_adapter(tool_name, schema_version)
-        
+
         # Validate schema
         if not adapter.validate_schema(raw_output):
             # Log schema mismatch
@@ -529,12 +528,12 @@ class ToolAdapterRegistry:
                 f"Schema mismatch for {tool_name}: "
                 f"output doesn't match expected schema"
             )
-            
+
             raise SchemaMismatch(
                 f"Tool output for {tool_name} doesn't match expected schema. "
                 f"Tool may have been updated. Please check for new adapter version."
             )
-        
+
         # Parse output
         try:
             findings = adapter.parse(raw_output)
@@ -542,28 +541,28 @@ class ToolAdapterRegistry:
                 f"Successfully parsed {tool_name} output: {len(findings)} findings"
             )
             return findings
-        
+
         except Exception as e:
             logger.error(f"Failed to parse {tool_name} output: {e}")
             raise
-    
-    def list_adapters(self) -> List[Dict]:
+
+    def list_adapters(self) -> list[dict]:
         """
         List all registered adapters.
-        
+
         Returns:
             List of adapter metadata dictionaries
         """
         adapters = []
-        
-        for tool_name, versions in self.adapters.items():
-            for version, metadata in versions.items():
+
+        for _tool_name, versions in self.adapters.items():
+            for _version, metadata in versions.items():
                 adapters.append({
                     "tool_name": metadata.tool_name,
                     "schema_version": metadata.schema_version,
                     "description": metadata.description,
                 })
-        
+
         return adapters
 
 

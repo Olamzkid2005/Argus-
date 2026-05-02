@@ -2,10 +2,9 @@
 Input sanitization utilities for security.
 Sanitizes HTML/JS in evidence before DB storage.
 """
-import re
 import html
-from typing import Any, Dict
-
+import re
+from typing import Any
 
 # Patterns that indicate potentially dangerous content
 DANGEROUS_PATTERNS = [
@@ -27,10 +26,10 @@ DANGEROUS_PATTERNS = [
 def sanitize_string(value: str) -> str:
     """
     Sanitize a string value by escaping HTML entities.
-    
+
     Args:
         value: Input string
-        
+
     Returns:
         Sanitized string with HTML entities escaped
     """
@@ -38,24 +37,24 @@ def sanitize_string(value: str) -> str:
     return html.escape(value)
 
 
-def sanitize_evidence(evidence: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     """
     Sanitize evidence dictionary for safe storage.
-    
+
     Recursively sanitizes all string values in the evidence dict
     to prevent XSS when displayed in the UI.
-    
+
     Args:
         evidence: Evidence dictionary from scanner
-        
+
     Returns:
         Sanitized evidence dictionary
     """
     if not evidence:
         return {}
-    
+
     sanitized = {}
-    
+
     for key, value in evidence.items():
         if isinstance(value, str):
             sanitized[key] = sanitize_string(value)
@@ -69,42 +68,42 @@ def sanitize_evidence(evidence: Dict[str, Any]) -> Dict[str, Any]:
         else:
             # Keep non-string values as-is
             sanitized[key] = value
-    
+
     return sanitized
 
 
 def check_for_dangerous_content(value: str) -> list:
     """
     Check if a string contains potentially dangerous patterns.
-    
+
     Args:
         value: String to check
-        
+
     Returns:
         List of detected dangerous patterns
     """
     detected = []
-    
+
     for pattern, description in DANGEROUS_PATTERNS:
         if re.search(pattern, value, re.IGNORECASE | re.DOTALL):
             detected.append(description)
-    
+
     return detected
 
 
 def strip_dangerous_tags(value: str) -> str:
     """
     Remove dangerous HTML/JS tags from a string.
-    
+
     Args:
         value: Input string
-        
+
     Returns:
         String with dangerous tags stripped
     """
     result = value
-    
+
     for pattern, _ in DANGEROUS_PATTERNS:
         result = re.sub(pattern, '[removed]', result, flags=re.IGNORECASE | re.DOTALL)
-    
+
     return result

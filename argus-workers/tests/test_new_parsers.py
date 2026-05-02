@@ -2,8 +2,8 @@
 Tests for new parsers: GospiderParser and WpscanParser
 """
 import json
-import pytest
-from parsers.parser import GospiderParser, WpscanParser, Parser
+
+from parsers.parser import GospiderParser, Parser, WpscanParser
 
 
 class TestGospiderParser:

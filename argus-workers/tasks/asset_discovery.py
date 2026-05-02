@@ -5,9 +5,9 @@ Requirements: 28.1, 28.2, 28.3, 28.4
 """
 import logging
 import os
+
 from celery_app import app
 from database.connection import connect
-
 from tracing import TracingManager
 
 logger = logging.getLogger(__name__)
@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = None):
     """
     Execute automatic asset discovery for an engagement.
-    
+
     Discovers domains, IPs, endpoints, and classifies assets by type.
-    
+
     Args:
         engagement_id: Engagement ID
         target: Primary target URL/domain
@@ -37,23 +37,23 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
             org_id = str(row[0]) if row else None
     except Exception as e:
         logger.warning("Could not resolve org_id for engagement %s: %s", engagement_id, e)
-    
+
     if not org_id:
         logger.warning("No org_id found for engagement %s, skipping asset discovery", engagement_id)
         return {"status": "skipped", "reason": "no_org_id"}
-    
+
     # Initialize tracing manager
     tracing_manager = TracingManager(db_conn_string)
     if not trace_id:
         trace_id = tracing_manager.generate_trace_id()
-    
+
     with tracing_manager.trace_execution(engagement_id, "asset_discovery", trace_id):
         assets_discovered = []
-        
+
         try:
             conn = connect(db_conn_string)
             cursor = conn.cursor()
-            
+
             # Discover domain asset
             domain = target.replace("https://", "").replace("http://", "").split("/")[0]
             cursor.execute(
@@ -68,7 +68,7 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
             row = cursor.fetchone()
             if row:
                 assets_discovered.append({"id": row[0], "type": "domain", "identifier": domain})
-            
+
             # Discover endpoint asset
             if target.startswith("http"):
                 cursor.execute(
@@ -83,7 +83,7 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
                 row = cursor.fetchone()
                 if row:
                     assets_discovered.append({"id": row[0], "type": "endpoint", "identifier": target})
-            
+
             # Basic classification: mark web assets
             cursor.execute(
                 """
@@ -94,18 +94,18 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
                 """,
                 (engagement_id,)
             )
-            
+
             conn.commit()
             cursor.close()
             conn.close()
-            
+
             return {
                 "status": "completed",
                 "assets_discovered": len(assets_discovered),
                 "assets": assets_discovered,
                 "trace_id": trace_id,
             }
-            
+
         except Exception as e:
             return {
                 "status": "failed",
@@ -118,7 +118,7 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
 def update_asset_risk_scores(self, org_id: str):
     """
     Update risk scores for all assets based on associated findings.
-    
+
     Uses the same severity-weight methodology as the findings page's
     security rating system:
       CRITICAL → weight 10 (CVSS ~9.5)
@@ -126,14 +126,14 @@ def update_asset_risk_scores(self, org_id: str):
       MEDIUM   → weight 2  (CVSS ~5.0)
       LOW      → weight 1  (CVSS ~3.0)
       INFO     → weight 0.25 (CVSS ~0.0)
-    
+
     The asset risk_score is clamped to 0.00–10.00 scale.
-    
+
     Args:
         org_id: Organization ID
     """
     db_conn_string = os.getenv("DATABASE_URL")
-    
+
     # Severity penalty weights — mirrors security-rating.ts
     SEVERITY_WEIGHTS = {
         "CRITICAL": 10.0,
@@ -142,7 +142,7 @@ def update_asset_risk_scores(self, org_id: str):
         "LOW": 1.0,
         "INFO": 0.25,
     }
-    
+
     # Estimate CVSS per severity — mirrors attack_graph._estimate_cvss
     SEVERITY_CVSS = {
         "CRITICAL": 9.5,
@@ -151,11 +151,11 @@ def update_asset_risk_scores(self, org_id: str):
         "LOW": 3.0,
         "INFO": 0.0,
     }
-    
+
     try:
         conn = connect(db_conn_string)
         cursor = conn.cursor()
-        
+
         # Get all assets with their engagement findings by severity
         cursor.execute(
             """
@@ -174,12 +174,12 @@ def update_asset_risk_scores(self, org_id: str):
             """,
             (org_id,)
         )
-        
+
         rows = cursor.fetchall()
         scored_count = 0
         for row in rows:
             asset_id, critical_count, high_count, medium_count, low_count, info_count, max_cvss = row
-            
+
             # Use CVSS score if available, otherwise estimate from highest severity
             if max_cvss and max_cvss > 0:
                 cvss_based = float(max_cvss)
@@ -198,7 +198,7 @@ def update_asset_risk_scores(self, org_id: str):
                     cvss_based = SEVERITY_CVSS["LOW"]
                 else:
                     cvss_based = SEVERITY_CVSS["INFO"]
-            
+
             # Apply severity-weight penalty (same method as security-rating.ts)
             total_weight = (
                 critical_count * SEVERITY_WEIGHTS["CRITICAL"] +
@@ -207,10 +207,10 @@ def update_asset_risk_scores(self, org_id: str):
                 low_count * SEVERITY_WEIGHTS["LOW"] +
                 info_count * SEVERITY_WEIGHTS["INFO"]
             )
-            
+
             # Final score blends CVSS base with volume penalty, clamped to 0–10
             risk_score = round(min(10.0, max(0.0, cvss_based + (total_weight * 0.05))), 2)
-            
+
             risk_level = "LOW"
             if risk_score >= 7.0:
                 risk_level = "CRITICAL"
@@ -218,7 +218,7 @@ def update_asset_risk_scores(self, org_id: str):
                 risk_level = "HIGH"
             elif risk_score >= 2.0:
                 risk_level = "MEDIUM"
-            
+
             cursor.execute(
                 """
                 UPDATE assets
@@ -228,12 +228,12 @@ def update_asset_risk_scores(self, org_id: str):
                 (risk_score, risk_level, asset_id)
             )
             scored_count += 1
-        
+
         conn.commit()
         cursor.close()
         conn.close()
-        
+
         return {"status": "completed", "assets_scored": scored_count}
-        
+
     except Exception as e:
         return {"status": "failed", "error": str(e)}

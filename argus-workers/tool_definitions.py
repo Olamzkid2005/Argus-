@@ -20,8 +20,7 @@ Pattern: Declarative agent registry with derived types and phase maps.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, final
-
+from typing import final
 
 # ── Phase names ──
 
@@ -47,9 +46,9 @@ class ToolParameter:
     name: str
     description: str
     required: bool = False
-    flag: Optional[str] = None
+    flag: str | None = None
     default: object = None
-    enum: Optional[List[str]] = None
+    enum: list[str] | None = None
 
 
 @final
@@ -68,16 +67,16 @@ class ToolDefinition:
     description: str
 
     #: Phases this tool belongs to
-    phases: List[PhaseName] = field(default_factory=list)
+    phases: list[PhaseName] = field(default_factory=list)
 
     #: Binary name on PATH (defaults to `name`)
-    binary: Optional[str] = None
+    binary: str | None = None
 
     #: Default CLI args
-    default_args: List[str] = field(default_factory=list)
+    default_args: list[str] = field(default_factory=list)
 
     #: Parameter schemas
-    parameters: List[ToolParameter] = field(default_factory=list)
+    parameters: list[ToolParameter] = field(default_factory=list)
 
     #: Timeout in seconds
     timeout: int = 300
@@ -89,7 +88,7 @@ class ToolDefinition:
     parallel_safe: bool = True
 
     #: Model tier hint (for LLM-integrated tools)
-    model_tier: Optional[str] = None
+    model_tier: str | None = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -99,7 +98,7 @@ class ToolDefinition:
 #: Tool name constants — derived from the dict keys below.
 #: Using string literals so tools don't need to import this module.
 #: Tools access by name: TOOLS["nuclei"], TOOLS["httpx"], etc.
-TOOLS: Dict[str, ToolDefinition] = {}
+TOOLS: dict[str, ToolDefinition] = {}
 
 def _register(tool: ToolDefinition) -> None:
     """Register a tool definition (internal helper)."""
@@ -501,13 +500,12 @@ _register(ToolDefinition(
 # ═══════════════════════════════════════════════════════════════
 
 # Frozen dict to prevent runtime modification
-import sys as _sys
 
 # Register the definitions module
 TOOLS_DEFINED = list(TOOLS.keys())
 
 
-def get_tools_for_phase(phase: PhaseName) -> List[ToolDefinition]:
+def get_tools_for_phase(phase: PhaseName) -> list[ToolDefinition]:
     """Get all tool definitions for a given phase.
 
     Args:
@@ -522,7 +520,7 @@ def get_tools_for_phase(phase: PhaseName) -> List[ToolDefinition]:
     ]
 
 
-def get_tool(name: str) -> Optional[ToolDefinition]:
+def get_tool(name: str) -> ToolDefinition | None:
     """Get a tool definition by name.
 
     Args:
@@ -534,7 +532,7 @@ def get_tool(name: str) -> Optional[ToolDefinition]:
     return TOOLS.get(name)
 
 
-def get_phase_tool_names(phase: PhaseName) -> List[str]:
+def get_phase_tool_names(phase: PhaseName) -> list[str]:
     """Get tool names for a phase (compatible with ReActAgent.PHASE_TOOLS).
 
     Args:
@@ -548,7 +546,7 @@ def get_phase_tool_names(phase: PhaseName) -> List[str]:
     ]
 
 
-def build_phase_tools_dict() -> Dict[str, List[str]]:
+def build_phase_tools_dict() -> dict[str, list[str]]:
     """Build the PHASE_TOOLS dict expected by ReActAgent.
 
     Returns:
@@ -566,7 +564,8 @@ def build_mcp_tool_definitions() -> list:
     Returns:
         List of ToolDefinition objects compatible with the MCP server.
     """
-    from mcp_server import ToolDefinition as MCPToolDef, ToolSchema
+    from mcp_server import ToolDefinition as MCPToolDef
+    from mcp_server import ToolSchema
 
     mcp_tools = []
     for tool in TOOLS.values():

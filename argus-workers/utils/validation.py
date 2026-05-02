@@ -4,6 +4,7 @@ Input validation utilities for security and data integrity.
 Provides UUID validation to prevent PostgreSQL errors when
 non-UUID values are passed to UUID-typed columns.
 """
+
 import uuid
 
 
@@ -28,4 +29,4 @@ def validate_uuid(value: str, field_name: str = "engagement_id") -> str:
         raise ValueError(
             f"Invalid {field_name}: '{value}' is not a valid UUID. "
             f"Expected format: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
-        )
+        ) from None

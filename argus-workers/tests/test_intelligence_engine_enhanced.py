@@ -2,8 +2,9 @@
 Tests for intelligence engine enhancements
 (CVE enrichment, EPSS scoring, threat feed matching, false positive detection)
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from intelligence_engine import IntelligenceEngine
 

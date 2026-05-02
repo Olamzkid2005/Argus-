@@ -22,8 +22,8 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import Optional, Any
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +71,10 @@ def task_context(
             result = ctx.orchestrator.run_recon(ctx.job)
             ctx.state.transition("scanning", "...")
     """
-    from orchestrator import Orchestrator
-    from tracing import TracingManager
     from distributed_lock import DistributedLock, LockContext
+    from orchestrator import Orchestrator
     from state_machine import EngagementStateMachine
+    from tracing import TracingManager
 
     db_conn_string = os.getenv("DATABASE_URL")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -132,7 +132,7 @@ def task_error_boundary(
     task,
     engagement_id: str,
     phase_name: str,
-    db_conn_string: Optional[str] = None,
+    db_conn_string: str | None = None,
 ):
     """Standardized error boundary for Celery tasks.
 

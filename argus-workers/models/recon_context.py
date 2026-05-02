@@ -4,8 +4,7 @@ ReconContext - Structured summary of reconnaissance findings for LLM consumption
 Distills raw recon findings into a compact dataclass the LLM can reason about
 without being overwhelmed by thousands of raw output lines.
 """
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass
@@ -13,14 +12,14 @@ class ReconContext:
     """Structured recon summary passed to the LLM agent for tool selection."""
 
     target_url: str = ""
-    live_endpoints: List[str] = field(default_factory=list)
-    subdomains: List[str] = field(default_factory=list)
-    open_ports: List[Dict] = field(default_factory=list)
-    tech_stack: List[str] = field(default_factory=list)
-    crawled_paths: List[str] = field(default_factory=list)
-    parameter_bearing_urls: List[str] = field(default_factory=list)
-    auth_endpoints: List[str] = field(default_factory=list)
-    api_endpoints: List[str] = field(default_factory=list)
+    live_endpoints: list[str] = field(default_factory=list)
+    subdomains: list[str] = field(default_factory=list)
+    open_ports: list[dict] = field(default_factory=list)
+    tech_stack: list[str] = field(default_factory=list)
+    crawled_paths: list[str] = field(default_factory=list)
+    parameter_bearing_urls: list[str] = field(default_factory=list)
+    auth_endpoints: list[str] = field(default_factory=list)
+    api_endpoints: list[str] = field(default_factory=list)
     findings_count: int = 0
     has_login_page: bool = False
     has_api: bool = False
@@ -29,11 +28,11 @@ class ReconContext:
     # Repo scan fields
     scan_type: str = "url"  # "url" or "repo"
     repo_url: str = ""
-    languages_detected: List[str] = field(default_factory=list)
-    vulnerability_types: List[str] = field(default_factory=list)
-    severity_breakdown: Dict[str, int] = field(default_factory=dict)
-    critical_files: List[str] = field(default_factory=list)
-    frameworks_detected: List[str] = field(default_factory=list)
+    languages_detected: list[str] = field(default_factory=list)
+    vulnerability_types: list[str] = field(default_factory=list)
+    severity_breakdown: dict[str, int] = field(default_factory=dict)
+    critical_files: list[str] = field(default_factory=list)
+    frameworks_detected: list[str] = field(default_factory=list)
     has_hardcoded_secrets: bool = False
     dependency_vulns_count: int = 0
     repo_clone_success: bool = False
@@ -54,7 +53,7 @@ class ReconContext:
             if self.frameworks_detected:
                 lines.append(f"Frameworks: {', '.join(self.frameworks_detected)}")
             if self.repo_clone_success:
-                lines.append(f"Clone: successful")
+                lines.append("Clone: successful")
             if self.severity_breakdown:
                 parts = [f"{k}: {v}" for k, v in sorted(self.severity_breakdown.items())]
                 lines.append(f"Severity: {' | '.join(parts)}")
@@ -90,7 +89,7 @@ class ReconContext:
             if self.api_endpoints:
                 lines.append(f"API endpoints: {', '.join(self.api_endpoints[:10])}")
             if self.crawled_paths:
-                lines.append(f"Interesting paths (top 10):")
+                lines.append("Interesting paths (top 10):")
                 for path in self.crawled_paths[:10]:
                     lines.append(f"  - {path}")
 
@@ -106,11 +105,11 @@ class ReconContext:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Serialize to dict for Redis storage."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "ReconContext":
+    def from_dict(cls, data: dict) -> "ReconContext":
         """Deserialize from dict (e.g., loaded from Redis)."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})

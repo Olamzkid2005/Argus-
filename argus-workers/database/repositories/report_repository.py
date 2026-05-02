@@ -6,8 +6,6 @@ Provides upsert semantics: one report per engagement.
 """
 import json
 import logging
-from typing import Dict, List, Optional
-from datetime import datetime, timezone
 
 from database.connection import db_cursor
 
@@ -21,17 +19,17 @@ class ReportRepository:
     Stores and retrieves LLM-generated security reports.
     """
 
-    def __init__(self, db_conn: Optional[str] = None):
+    def __init__(self, db_conn: str | None = None):
         import os
         self.db_conn = db_conn or os.getenv("DATABASE_URL")
 
     def upsert_report(
         self,
         engagement_id: str,
-        report_data: Dict,
+        report_data: dict,
         generated_by: str = "llm",
         model_used: str = None,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Insert or update a report for an engagement.
 
@@ -98,7 +96,7 @@ class ReportRepository:
             logger.warning(f"Failed to upsert report: {e}")
             return None
 
-    def get_report(self, engagement_id: str) -> Optional[Dict]:
+    def get_report(self, engagement_id: str) -> dict | None:
         """
         Get the report for an engagement.
 
@@ -126,7 +124,7 @@ class ReportRepository:
                 if not row:
                     return None
                 columns = [desc[0] for desc in cursor.description]
-                d = dict(zip(columns, row))
+                d = dict(zip(columns, row, strict=False))
                 if isinstance(d.get("full_report_json"), str):
                     d["full_report_json"] = json.loads(d["full_report_json"])
                 return d

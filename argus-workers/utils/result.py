@@ -18,7 +18,6 @@ from typing import (
     Union,
     final,
 )
-from types import TracebackType
 
 T = TypeVar("T", covariant=True)
 E = TypeVar("E", covariant=True)

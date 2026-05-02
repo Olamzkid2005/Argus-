@@ -18,34 +18,33 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class Phase:
     """A single phase in the engagement lifecycle."""
-    
+
     #: Canonical ID (used in database, API, state machine)
     id: str
-    
+
     #: Human-readable label (used in frontend)
     display_name: str
-    
+
     #: Display order (for progress bars, timelines)
     order: int
-    
+
     #: Estimated duration in minutes (for frontend estimates)
     estimated_minutes: int = 0
-    
+
     #: Whether this is a terminal state
     is_terminal: bool = False
-    
+
     #: Whether this is an error state
     is_error: bool = False
-    
+
     #: Frontend phase step ID (for useScanEstimates compat)
-    step_id: Optional[str] = None
-    
+    step_id: str | None = None
+
     #: Tool phases from agent_loop.py that map to this state
     tool_phases: tuple[str, ...] = field(default_factory=tuple)
 
@@ -142,12 +141,12 @@ TRANSITIONS: dict[str, list[str]] = {
 _PHASE_MAP: dict[str, Phase] = {p.id: p for p in PHASES}
 
 
-def get_phase(phase_id: str) -> Optional[Phase]:
+def get_phase(phase_id: str) -> Phase | None:
     """Get a phase definition by its canonical ID.
-    
+
     Args:
         phase_id: Phase ID (e.g., "scanning", "recon").
-    
+
     Returns:
         Phase object if found, None otherwise.
     """
@@ -156,11 +155,11 @@ def get_phase(phase_id: str) -> Optional[Phase]:
 
 def is_valid_transition(from_state: str, to_state: str) -> bool:
     """Check if a state transition is valid.
-    
+
     Args:
         from_state: Current state ID.
         to_state: Target state ID.
-    
+
     Returns:
         True if the transition is valid.
     """
@@ -169,12 +168,12 @@ def is_valid_transition(from_state: str, to_state: str) -> bool:
 
 def get_phase_order(phase_id: str) -> int:
     """Get the display order for a phase (for frontend progress bars).
-    
+
     Returns -1 for non-initialized/unknown phases.
-    
+
     Args:
         phase_id: Phase ID.
-    
+
     Returns:
         Numerical order value.
     """
@@ -182,12 +181,12 @@ def get_phase_order(phase_id: str) -> int:
     return phase.order if phase else -1
 
 
-def get_phase_by_step_id(step_id: str) -> Optional[Phase]:
+def get_phase_by_step_id(step_id: str) -> Phase | None:
     """Find a phase by its frontend step_id (for useScanEstimates compat).
-    
+
     Args:
         step_id: Frontend step identifier.
-    
+
     Returns:
         Phase object if found.
     """
@@ -199,10 +198,10 @@ def get_phase_by_step_id(step_id: str) -> Optional[Phase]:
 
 def get_phases_for_tool_phase(tool_phase: str) -> list[Phase]:
     """Get phases that map to a given tool phase from agent_loop.py.
-    
+
     Args:
         tool_phase: Tool phase name (e.g., "scan", "recon").
-    
+
     Returns:
         List of matching Phase objects.
     """
@@ -211,7 +210,7 @@ def get_phases_for_tool_phase(tool_phase: str) -> list[Phase]:
 
 def to_json_serializable() -> list[dict]:
     """Export phases as a JSON-serializable list (for frontend consumption).
-    
+
     Returns:
         List of phase dicts with id, display_name, order, estimated_minutes.
     """
