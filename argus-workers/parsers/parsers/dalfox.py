@@ -10,16 +10,17 @@ class DalfoxParser(BaseParser):
             if not line.strip():
                 continue
             try:
-                data = json.loads(line)
+                obj = json.loads(line)
+                vuln_type = obj.get("type", "")
+                data = obj.get("data", {}) or {}
                 finding = {
                     "type": "XSS",
                     "severity": "HIGH",
-                    "endpoint": data.get("endpoint") or data.get("url", ""),
+                    "endpoint": data.get("url", ""),
                     "evidence": {
                         "param": data.get("param", ""),
                         "payload": data.get("payload", ""),
-                        "type": data.get("type", ""),
-                        "severity": data.get("severity", "HIGH"),
+                        "vuln_type": vuln_type,
                     },
                     "confidence": 0.85,
                     "tool": "dalfox",
