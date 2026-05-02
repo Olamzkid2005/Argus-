@@ -37,6 +37,8 @@ import logging
 import time
 from typing import Any
 
+from tools.models import ToolResult
+
 from error_classifier import (
     ErrorCode,
     tag_error,
@@ -608,7 +610,7 @@ class PipelineExecutor:
     # Internal helpers
     # ═══════════════════════════════════════════════════════════════
 
-    def _run_tool(self, tool_name: str, args: list[str], timeout: int | None = None) -> dict[str, Any]:
+    def _run_tool(self, tool_name: str, args: list[str], timeout: int | None = None) -> ToolResult:
         """Run a tool and return its result."""
         from config.constants import TOOL_TIMEOUT_DEFAULT
         return self.tool_runner.run(
@@ -617,11 +619,11 @@ class PipelineExecutor:
             timeout=timeout or TOOL_TIMEOUT_DEFAULT,
         )
 
-    def _parse_and_normalize(self, result: dict[str, Any], tool: str) -> list[dict[str, Any]]:
+    def _parse_and_normalize(self, result: ToolResult, tool: str) -> list[dict[str, Any]]:
         """Parse and normalize tool output into findings."""
         findings = []
-        if result.get("success"):
-            stdout = result.get("stdout", "")
+        if result.success:
+            stdout = result.stdout
             if stdout:
                 parsed = self.parser.parse(tool, stdout)
                 for p in parsed:

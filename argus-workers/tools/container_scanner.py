@@ -414,11 +414,11 @@ class ContainerSecurityScanner:
             timeout=600,
         )
 
-        if result.get("success"):
+        if result.success:
             try:
                 from parsers.parser import TrivyParser
                 parser = TrivyParser()
-                findings = parser.parse(result.get("stdout", ""))
+                findings = parser.parse(result.stdout)
             except Exception as e:
                 logger.warning("Failed to parse Trivy scan results: %s", e)
 
