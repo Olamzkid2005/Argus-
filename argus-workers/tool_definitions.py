@@ -378,6 +378,19 @@ _register(ToolDefinition(
 ))
 
 _register(ToolDefinition(
+    name="trufflehog",
+    description="High-entropy secret scanner for git history",
+    phases=["repo_scan"],
+    default_args=["git", "--json", "--no-update"],
+    parameters=[
+        ToolParameter("target", "Target path", required=True),
+        ToolParameter("since_commit", "Scan from commit", flag="--since-commit"),
+        ToolParameter("max_depth", "Max commit depth", flag="--max-depth"),
+    ],
+    timeout=600,
+))
+
+_register(ToolDefinition(
     name="trivy",
     description="Container and filesystem vulnerability scanner",
     phases=["repo_scan"],

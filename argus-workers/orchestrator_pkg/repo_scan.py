@@ -6,6 +6,7 @@ import glob
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -325,7 +326,156 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             _emit("gitleaks", f"Secret scan failed: {str(e)}", "failed")
             logger.warning(f"Gitleaks failed: {e}")
 
-        # ── 2. Trivy: dependency vulnerability scanning ──
+        # ── 2. Trufflehog: parallel git history secret scanning ──
+        _emit("trufflehog", "Scanning git history with trufflehog", "started")
+        try:
+            trufflehog_result = orchestrator.tool_runner.run(
+                "trufflehog",
+                [
+                    "git", temp_dir,
+                    "--json",
+                    "--no-update",
+                    "--fail",
+                    "--since-commit", "HEAD~100" if agg == "default" else "",
+                    "--max-depth", "1" if agg == "default" else "5" if agg == "high" else "50",
+                ],
+                timeout=TOOL_TIMEOUT_LONG,
+            )
+            if trufflehog_result.success and trufflehog_result.stdout.strip():
+                try:
+                    count = 0
+                    for line in trufflehog_result.stdout.strip().split("\n"):
+                        if not line.strip():
+                            continue
+                        parsed = json.loads(line)
+                        severity = "CRITICAL" if parsed.get("verified", False) else "HIGH"
+                        finding = {
+                            "type": f"TRUFFLEHOG_{parsed.get('detector_name', 'UNKNOWN').upper().replace(' ', '_')}",
+                            "severity": severity,
+                            "endpoint": f"commit:{parsed.get('commit', '')}:{parsed.get('path', '')}",
+                            "evidence": {
+                                "commit": parsed.get("commit", ""),
+                                "path": parsed.get("path", ""),
+                                "detector": parsed.get("detector_name", ""),
+                                "verified": parsed.get("verified", False),
+                                "redacted": parsed.get("redacted", ""),
+                            },
+                            "confidence": 0.95 if parsed.get("verified", False) else 0.75,
+                            "tool": "trufflehog",
+                        }
+                        normalized = orchestrator._normalize_finding(finding, "trufflehog")
+                        if normalized:
+                            add_finding(normalized)
+                            count += 1
+                    _emit("trufflehog", f"Trufflehog scan complete — found {count} secrets", "completed", items=count)
+                except json.JSONDecodeError:
+                    _emit("trufflehog", "Trufflehog output could not be parsed", "failed")
+            else:
+                _emit("trufflehog", "No trufflehog secrets found", "completed", items=0)
+        except Exception as e:
+            _emit("trufflehog", f"Trufflehog scan failed: {str(e)}", "failed")
+            logger.warning(f"Trufflehog failed: {e}")
+
+        # ── 3. Working tree secret check ──
+        _emit("secret-scan", "Scanning working tree for exposed secrets", "started")
+        try:
+            wt_count = 0
+            seen_wt = set()
+            # Private keys in .pem / .key files
+            for pattern in ("**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx", "**/*.asc"):
+                for fpath in glob.glob(os.path.join(temp_dir, pattern), recursive=True):
+                    rel = os.path.relpath(fpath, temp_dir)
+                    key_id = f"private_key:{rel}"
+                    if key_id in seen_wt:
+                        continue
+                    seen_wt.add(key_id)
+                    try:
+                        with open(fpath, errors="ignore") as fh:
+                            content = fh.read(2000)
+                        if "PRIVATE KEY" in content or "BEGIN RSA" in content or "BEGIN EC" in content or "BEGIN DSA" in content or "BEGIN OPENSSH" in content:
+                            normalized = orchestrator._normalize_finding({
+                                "type": "EXPOSED_PRIVATE_KEY",
+                                "severity": "CRITICAL",
+                                "endpoint": f"file:{rel}",
+                                "evidence": {"file": rel, "content_preview": content[:200]},
+                                "confidence": 0.95,
+                                "tool": "secret-scan",
+                            }, "secret-scan")
+                            if normalized:
+                                add_finding(normalized)
+                                wt_count += 1
+                    except Exception:
+                        pass
+            # .env files with populated values
+            for fpath in glob.glob(os.path.join(temp_dir, ".env*"), recursive=False):
+                rel = os.path.relpath(fpath, temp_dir)
+                key_id = f"env_file:{rel}"
+                if key_id in seen_wt:
+                    continue
+                seen_wt.add(key_id)
+                try:
+                    with open(fpath, errors="ignore") as fh:
+                        content = fh.read(5000)
+                    populated = [l.strip() for l in content.split("\n") if "=" in l and l.strip() and not l.strip().startswith("#")]
+                    if populated:
+                        masked = []
+                        for line in populated[:10]:
+                            key, _, val = line.partition("=")
+                            masked.append(f"{key}=***" if val else line)
+                        normalized = orchestrator._normalize_finding({
+                            "type": "EXPOSED_ENV_FILE",
+                            "severity": "HIGH",
+                            "endpoint": f"file:{rel}",
+                            "evidence": {
+                                "file": rel,
+                                "populated_keys": [l.split("=")[0].strip() for l in populated[:20]],
+                                "lines": masked,
+                                "count": len(populated),
+                            },
+                            "confidence": 0.90,
+                            "tool": "secret-scan",
+                        }, "secret-scan")
+                        if normalized:
+                            add_finding(normalized)
+                            wt_count += 1
+                except Exception:
+                    pass
+            # Config files with password/secret/private_key keys
+            for pattern in ("**/*.yml", "**/*.yaml", "**/*.conf", "**/*.cfg", "**/*.ini", "**/*.toml"):
+                for fpath in glob.glob(os.path.join(temp_dir, pattern), recursive=True):
+                    rel = os.path.relpath(fpath, temp_dir)
+                    key_id = f"config_secret:{rel}"
+                    if key_id in seen_wt:
+                        continue
+                    seen_wt.add(key_id)
+                    try:
+                        with open(fpath, errors="ignore") as fh:
+                            content = fh.read(10000)
+                        secret_keys = re.findall(r'^\s*(password|secret|private_key|api_key|api_secret|auth_token|access_token|db_password|connection_string)\s*[:=]\s*["\']?([^"\'#\s]+)["\']?\s*$', content, re.MULTILINE | re.IGNORECASE)
+                        if secret_keys:
+                            normalized = orchestrator._normalize_finding({
+                                "type": "EXPOSED_CONFIG_SECRET",
+                                "severity": "HIGH",
+                                "endpoint": f"file:{rel}",
+                                "evidence": {
+                                    "file": rel,
+                                    "exposed_keys": [f"{k}=***" for k, v in secret_keys[:15]],
+                                    "count": len(secret_keys),
+                                },
+                                "confidence": 0.85,
+                                "tool": "secret-scan",
+                            }, "secret-scan")
+                            if normalized:
+                                add_finding(normalized)
+                                wt_count += 1
+                    except Exception:
+                        pass
+            _emit("secret-scan", f"Working tree secret scan complete — found {wt_count} issues", "completed", items=wt_count)
+        except Exception as e:
+            _emit("secret-scan", f"Working tree secret scan failed: {str(e)}", "failed")
+            logger.warning(f"Working tree secret scan failed: {e}")
+
+        # ── 4. Trivy: dependency vulnerability scanning ──
         _emit("trivy", "Scanning dependencies for known CVEs", "started")
         try:
             trivy_scanners = "vuln"
