@@ -323,16 +323,31 @@ class Orchestrator:
                             f"CVSS estimation failed (non-fatal): {cvss_err}"
                         )
 
-                saved_id = self.finding_repo.create_finding(
-                    engagement_id=self.engagement_id,
-                    finding_type=finding.get("type", "UNKNOWN"),
-                    severity=finding.get("severity", "INFO"),
-                    endpoint=finding.get("endpoint", ""),
-                    evidence=finding.get("evidence", {}),
-                    confidence=finding.get("confidence", 0.5),
-                    source_tool=finding.get(source_tool_key, "unknown"),
-                    cvss_score=finding.get("cvss_score"),
-                )
+                # Use dedup path for secret findings to prevent unbounded duplication
+                SECRET_TOOLS = {"gitleaks", "trufflehog", "secret-scan"}
+                st = finding.get(source_tool_key, "unknown")
+                if st in SECRET_TOOLS or finding.get("type", "").startswith("COMMITTED_SECRET"):
+                    saved_id = self.finding_repo.upsert_secret_finding(
+                        engagement_id=self.engagement_id,
+                        finding_type=finding.get("type", "UNKNOWN"),
+                        severity=finding.get("severity", "INFO"),
+                        endpoint=finding.get("endpoint", ""),
+                        evidence=finding.get("evidence", {}),
+                        confidence=finding.get("confidence", 0.5),
+                        source_tool=st,
+                        cvss_score=finding.get("cvss_score"),
+                    )
+                else:
+                    saved_id = self.finding_repo.create_finding(
+                        engagement_id=self.engagement_id,
+                        finding_type=finding.get("type", "UNKNOWN"),
+                        severity=finding.get("severity", "INFO"),
+                        endpoint=finding.get("endpoint", ""),
+                        evidence=finding.get("evidence", {}),
+                        confidence=finding.get("confidence", 0.5),
+                        source_tool=st,
+                        cvss_score=finding.get("cvss_score"),
+                    )
 
                 # Fire webhook for CRITICAL/HIGH findings (non-fatal)
                 if saved_id and finding.get("severity", "").upper() in (

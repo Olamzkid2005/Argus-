@@ -99,6 +99,92 @@ class FindingRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
+    def upsert_secret_finding(
+        self,
+        engagement_id: str,
+        finding_type: str,
+        severity: str,
+        endpoint: str,
+        evidence: dict,
+        confidence: float,
+        source_tool: str,
+        cvss_score: float | None = None,
+    ) -> str:
+        """
+        Insert or update a secret finding.
+
+        Deduplicates by (engagement_id, type, endpoint) fingerprint.
+        If the same secret already exists, updates last_seen_at instead of
+        creating a duplicate. Prevents unbounded growth on repeated scans.
+
+        Args:
+            engagement_id: Engagement ID
+            finding_type: Type of finding (COMMITTED_SECRET, EXPOSED_PRIVATE_KEY, etc.)
+            severity: Severity level
+            endpoint: File path + commit hash or file path
+            evidence: Evidence dictionary
+            confidence: Confidence score (0.0-1.0)
+            source_tool: Tool that found the secret
+            cvss_score: Optional CVSS score
+
+        Returns:
+            The ID of the created or updated finding
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                """
+                WITH existing AS (
+                    SELECT id FROM findings
+                    WHERE engagement_id = %s
+                      AND type = %s
+                      AND endpoint = %s
+                      AND source_tool IN ('gitleaks', 'trufflehog', 'secret-scan')
+                )
+                UPDATE findings
+                SET last_seen_at = NOW(),
+                    severity = %s,
+                    confidence = %s,
+                    evidence = %s,
+                    cvss_score = %s
+                WHERE id IN (TABLE existing)
+                RETURNING id
+                """,
+                (engagement_id, finding_type, endpoint, severity, confidence, Json(evidence), cvss_score)
+            )
+            row = cursor.fetchone()
+            if row:
+                finding_id = str(row[0])
+            else:
+                finding_id = str(uuid.uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO findings (
+                        id, engagement_id, type, severity, confidence,
+                        endpoint, evidence, source_tool, cvss_score,
+                        verified, created_at, last_seen_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        FALSE, NOW(), NOW()
+                    )
+                    """,
+                    (
+                        finding_id, engagement_id, finding_type, severity,
+                        confidence, endpoint, Json(evidence), source_tool, cvss_score,
+                    )
+                )
+            conn.commit()
+            return finding_id
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)
+
     def find_high_confidence(
         self,
         engagement_id: str,
