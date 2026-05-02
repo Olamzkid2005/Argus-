@@ -60,11 +60,10 @@ class APISecurityScanner:
     RATE_TEST_CONFIGS = [
         {"requests": 50, "concurrency": 10, "description": "Standard burst test"},
         {"requests": 200, "concurrency": 50, "description": "High load test"},
-        {"requests": 1000, "concurrency": 100, "description": "DDoS simulation"},
     ]
 
     def __init__(
-        self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None
+        self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None
     ):
         """
         Initialize API security scanner.
@@ -73,10 +72,12 @@ class APISecurityScanner:
             timeout: Request timeout in seconds
             rate_limit: Seconds between requests
             llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
+            authorized_scope: Optional URL prefix that defines the authorized testing scope
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
+        self.authorized_scope = authorized_scope
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -434,6 +435,13 @@ class APISecurityScanner:
 
     def test_rate_limiting(self):
         """Test API rate limiting with controlled burst requests."""
+        if self.authorized_scope and not self.target_url.startswith(self.authorized_scope):
+            logger.warning(
+                "Target %s is outside authorized scope %s — skipping rate limit test",
+                self.target_url, self.authorized_scope,
+            )
+            return
+
         test_url = urljoin(self.target_url, "/api/health")
 
         for config in self.RATE_TEST_CONFIGS[:2]:  # Skip DDoS in standard scan
