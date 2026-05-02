@@ -920,3 +920,13 @@ Import trace for requested module:
 2026-05-01T09:29:10.565Z [Argus] [Auth] NextAuth route initialized 
 2026-05-01T09:29:11.825Z [Argus] [API] POST /api/engagement/create -> 200 {"engagementId":"6b494fec-1859-4cb5-be84-b32bee396ca6","scanType":"repo"}
  POST /api/engagement/create 200 in 1349ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts

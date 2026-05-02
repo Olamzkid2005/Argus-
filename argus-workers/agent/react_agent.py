@@ -27,6 +27,7 @@ from config.constants import (
     LLM_AGENT_TIMEOUT_SECONDS,
     LLM_AGENT_ZERO_FINDING_STOP,
 )
+from llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -131,11 +132,10 @@ class ReActAgent:
         context: str,
         tried_tools: set,
         recon_context: Any,
-        llm_client: Any = None,
+        llm_service: Optional[LLMService] = None,
     ) -> Optional[AgentAction]:
-        """Call LLM to decide next tool. Returns _DONE, AgentAction, or None on failure."""
-        client = llm_client or self.llm_client
-        if not client:
+        """Call LLM to decide next tool via LLMService. Returns _DONE, AgentAction, or None on failure."""
+        if not llm_service or not llm_service.is_available():
             return None
 
         user_prompt = build_tool_selection_prompt(
@@ -146,21 +146,17 @@ class ReActAgent:
         )
 
         try:
-            raw = client.chat_sync(
-                [
-                    {"role": "system", "content": TOOL_SELECTION_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=LLM_AGENT_TEMPERATURE,
+            decision = llm_service.chat_json(
+                system_prompt=TOOL_SELECTION_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
                 max_tokens=300,
-                response_format={"type": "json_object"},
-                timeout=LLM_AGENT_TIMEOUT_SECONDS,
+                temperature=LLM_AGENT_TEMPERATURE,
             )
 
-            response_text = raw.text if hasattr(raw, "text") else str(raw)
-            cost_usd = getattr(raw, "cost_usd", 0.0)
+            if decision.get("_fallback"):
+                logger.warning(f"LLM fallback: {decision.get('_reason')}")
+                return None
 
-            decision = json.loads(response_text)
             tool_name = decision.get("tool")
 
             if tool_name == "__done__":
@@ -174,7 +170,7 @@ class ReActAgent:
                 tool=tool_name,
                 arguments=decision.get("arguments", {}),
                 reasoning=decision.get("reasoning", ""),
-                cost_usd=cost_usd,
+                cost_usd=decision.get("cost_usd", 0.0),
             )
 
         except Exception as e:
@@ -240,14 +236,15 @@ class ReActAgent:
         """
         Decide the next action.
 
-        LLM branch: uses LLM to select tools dynamically.
+        LLM branch: uses LLMService to select tools dynamically.
         Fallback: deterministic phase-based iteration (zero regression).
         """
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
 
         if llm_client and hasattr(llm_client, "is_available") and llm_client.is_available() and recon_context:
-            action = self._call_llm_for_action(task, context, tried_tools, recon_context, llm_client=llm_client)
+            llm_service = LLMService(llm_client=llm_client)
+            action = self._call_llm_for_action(task, context, tried_tools, recon_context, llm_service=llm_service)
             if action is _DONE:
                 return None
             if action is not None:
