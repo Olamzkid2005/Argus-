@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { log } from "@/lib/logger";
 import {
   ArrowLeft,
@@ -22,7 +22,11 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Brain,
+  Sparkles,
 } from "lucide-react";
+import { useEngagementEvents } from "@/lib/use-engagement-events";
+import type { AgentDecisionEvent } from "@/lib/websocket-events";
 
 interface Engagement {
   id: string;
@@ -90,6 +94,23 @@ export default function EngagementDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRescanning, setIsRescanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Real-time events for agent reasoning feed
+  const { events } = useEngagementEvents({
+    engagementId,
+    enabled: status === "authenticated" && !!engagementId,
+    pollingInterval: 2000,
+  });
+
+  // Filter and sort agent decisions
+  const agentDecisions = useMemo(
+    () =>
+      (events as AgentDecisionEvent[])
+        .filter((e) => e.type === "agent_decision")
+        .sort((a, b) => b.data.iteration - a.data.iteration)
+        .slice(0, 20),
+    [events],
+  );
 
   useEffect(() => {
     log.pageMount("EngagementDetail");
@@ -484,8 +505,156 @@ export default function EngagementDetailPage() {
               </div>
             )}
           </motion.div>
+
+          {/* Agent Reasoning Feed — shown only in scanning or complete states */}
+          {engagement && ["created", "recon", "scanning", "analyzing", "reporting", "complete"].includes(engagement.status) && (
+            <AgentReasoningFeed
+              decisions={agentDecisions}
+              isActive={engagement.status === "scanning"}
+            />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Agent Reasoning Feed Component ──
+
+function AgentReasoningFeed({
+  decisions,
+  isActive,
+}: {
+  decisions: AgentDecisionEvent[];
+  isActive: boolean;
+}) {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.25 }}
+      className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <Brain size={14} className="text-primary" />
+        <h3 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest font-headline">
+          AI Agent Decisions
+        </h3>
+        {isActive && (
+          <span className="ml-auto flex items-center gap-1.5 text-[9px] font-mono text-primary px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            Active
+          </span>
+        )}
+      </div>
+
+      {decisions.length === 0 && isActive && (
+        <div className="py-8 text-center space-y-3">
+          <div className="flex justify-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-2 h-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-2 h-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+          <p className="text-[11px] font-mono text-on-surface-variant/60 uppercase tracking-widest animate-pulse">
+            Waiting for LLM tool selections...
+          </p>
+        </div>
+      )}
+
+      {decisions.length === 0 && !isActive && (
+        <div className="py-8 text-center">
+          <p className="text-[11px] font-mono text-on-surface-variant/40 uppercase tracking-widest">
+            No agent decisions recorded
+          </p>
+          {!isActive && (
+            <p className="text-[9px] font-mono text-on-surface-variant/30 mt-2">
+              Agent mode may have been disabled for this engagement
+            </p>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence>
+        <div className="space-y-2">
+          {decisions.map((event, idx) => {
+            const isExpanded = expandedIdx === idx;
+            const reasoningPreview = event.data.reasoning
+              ? event.data.reasoning.length > 150
+                ? event.data.reasoning.slice(0, 150) + "..."
+                : event.data.reasoning
+              : "No reasoning provided";
+
+            return (
+              <motion.div
+                key={`${event.data.iteration}-${event.data.tool}`}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                className={`flex gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                  event.data.was_fallback
+                    ? "border-outline-variant/30 bg-surface-container/50 hover:bg-surface-container"
+                    : "border-primary/20 bg-primary/5 hover:bg-primary/10"
+                }`}
+                onClick={() => setExpandedIdx(isExpanded ? null : idx)}
+              >
+                {/* Iteration circle */}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold font-mono ${
+                  event.data.was_fallback
+                    ? "bg-outline-variant/20 text-on-surface-variant"
+                    : "bg-primary/20 text-primary"
+                }`}>
+                  {event.data.iteration + 1}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-mono font-bold text-on-surface">
+                      {event.data.tool}
+                    </span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full border ${
+                      event.data.was_fallback
+                        ? "bg-outline-variant/20 text-on-surface-variant border-outline-variant/30"
+                        : "bg-primary/15 text-primary border-primary/30"
+                    }`}>
+                      {event.data.was_fallback ? "DETERMINISTIC" : "LLM"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    {isExpanded ? event.data.reasoning : reasoningPreview}
+                  </p>
+                  {event.data.reasoning && event.data.reasoning.length > 150 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedIdx(isExpanded ? null : idx);
+                      }}
+                      className="text-[9px] font-mono text-primary hover:text-primary/80 mt-1 transition-colors"
+                    >
+                      {isExpanded ? "Show less" : "Show more"}
+                    </button>
+                  )}
+                  {/* Timestamp */}
+                  <div className="text-[9px] font-mono text-on-surface-variant/40 mt-1">
+                    {(() => {
+                      const ts = new Date(event.timestamp).getTime();
+                      const now = Date.now();
+                      const diffSec = Math.floor((now - ts) / 1000);
+                      if (diffSec < 5) return "just now";
+                      if (diffSec < 60) return `${diffSec}s ago`;
+                      const diffMin = Math.floor(diffSec / 60);
+                      if (diffMin < 60) return `${diffMin}m ago`;
+                      return new Date(event.timestamp).toLocaleTimeString();
+                    })()}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </AnimatePresence>
+    </motion.div>
   );
 }

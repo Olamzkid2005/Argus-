@@ -183,6 +183,27 @@ export default function SettingsPage() {
   const [isAddingWebhook, setIsAddingWebhook] = useState(false);
   const [webhookEvents, setWebhookEvents] = useState<string[]>(["scan.completed", "finding.critical"]);
 
+  // Scheduled scans
+  const [scheduledScans, setScheduledScans] = useState<{ id: string; target_url: string; scan_type: string; aggressiveness: string; agent_mode: boolean; cron_expression: string; next_run_at: string | null; last_run_at: string | null; enabled: boolean; created_at: string }[]>([]);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [newScheduleTarget, setNewScheduleTarget] = useState("");
+  const [newScheduleFreq, setNewScheduleFreq] = useState<"daily" | "weekly" | "monthly">("weekly");
+  const [newScheduleAggro, setNewScheduleAggro] = useState("default");
+  const [newScheduleAgentMode, setNewScheduleAgentMode] = useState(true);
+  const [isAddingSchedule, setIsAddingSchedule] = useState(false);
+
+  const FREQ_CRON_MAP: Record<string, string> = {
+    daily: "0 2 * * *",
+    weekly: "0 2 * * 1",
+    monthly: "0 2 1 * *",
+  };
+
+  const FREQ_LABELS: Record<string, string> = {
+    daily: "Daily (2am)",
+    weekly: "Weekly (Monday 2am)",
+    monthly: "Monthly (1st at 2am)",
+  };
+
   // Track Chrome tab memory usage (estimated from JS heap)
   const JS_HEAP_MULTIPLIER = 2.5; // Rough estimate: JS heap is ~40% of total tab memory
 
@@ -241,6 +262,12 @@ export default function SettingsPage() {
       if (whRes.ok) {
         const whData = await whRes.json();
         setWebhooks(whData.webhooks || []);
+      }
+      // Load scheduled scans
+      const schedRes = await fetch("/api/reports/scheduled");
+      if (schedRes.ok) {
+        const schedData = await schedRes.json();
+        setScheduledScans(schedData.schedules || schedData.scheduled || []);
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -948,6 +975,186 @@ export default function SettingsPage() {
                 </button>
               )}
             </div>
+          </motion.div>
+
+          {/* Scheduled Scans */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.23 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                <Target className="h-5 w-5 text-cyan-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  Scheduled Scans
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">Recurring automated security scans</p>
+              </div>
+            </div>
+
+            {/* Existing schedules */}
+            <div className="space-y-2 mb-4">
+              {scheduledScans.length === 0 && (
+                <p className="text-[11px] text-on-surface-variant/60 italic py-2">
+                  No scheduled scans configured yet.
+                </p>
+              )}
+              {scheduledScans.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between p-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-on-surface truncate">{s.target_url}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-mono text-on-surface-variant px-1.5 py-0.5 bg-surface-container-high dark:bg-surface-container rounded">
+                        {FREQ_LABELS[s.cron_expression === "0 2 * * *" ? "daily" : s.cron_expression === "0 2 * * 1" ? "weekly" : "monthly"] || s.cron_expression}
+                      </span>
+                      <span className="text-[9px] font-mono text-on-surface-variant">{s.scan_type}</span>
+                      {s.last_run_at && (
+                        <span className="text-[9px] font-mono text-on-surface-variant/50">
+                          Last: {new Date(s.last_run_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/reports/scheduled`, {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: s.id }),
+                        });
+                        if (res.ok) {
+                          setScheduledScans((prev) => prev.filter((x) => x.id !== s.id));
+                        }
+                      } catch {}
+                    }}
+                    className="p-2 text-on-surface-variant hover:text-error transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add form */}
+            {showScheduleForm && (
+              <div className="space-y-3 p-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg mb-3">
+                <input
+                  type="url"
+                  value={newScheduleTarget}
+                  onChange={(e) => setNewScheduleTarget(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 text-xs bg-surface dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-on-surface placeholder:text-on-surface-variant/30 focus:border-primary/50 focus:outline-none"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {["daily", "weekly", "monthly"].map((freq) => (
+                    <button
+                      key={freq}
+                      onClick={() => setNewScheduleFreq(freq as typeof newScheduleFreq)}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
+                        newScheduleFreq === freq
+                          ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/30"
+                          : "bg-surface dark:bg-surface-container text-on-surface-variant border-outline-variant dark:border-outline/30"
+                      }`}
+                    >
+                      {FREQ_LABELS[freq]}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-3 items-center">
+                  <div>
+                    <label className="text-[9px] font-mono text-on-surface-variant block mb-1">Aggressiveness</label>
+                    <select
+                      value={newScheduleAggro}
+                      onChange={(e) => setNewScheduleAggro(e.target.value)}
+                      className="px-2 py-1.5 text-[10px] bg-surface dark:bg-surface-container border border-outline-variant dark:border-outline/30 rounded-lg text-on-surface"
+                    >
+                      <option value="default">Default</option>
+                      <option value="high">High</option>
+                      <option value="extreme">Extreme</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 pt-4">
+                    <input
+                      type="checkbox"
+                      id="sched-agent-mode"
+                      checked={newScheduleAgentMode}
+                      onChange={(e) => setNewScheduleAgentMode(e.target.checked)}
+                      className="rounded border-outline-variant"
+                    />
+                    <label htmlFor="sched-agent-mode" className="text-[10px] text-on-surface-variant">Agent Mode</label>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!newScheduleTarget.trim()) return;
+                      setIsAddingSchedule(true);
+                      try {
+                        const res = await fetch("/api/reports/scheduled", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            target_url: newScheduleTarget,
+                            scan_type: "url",
+                            aggressiveness: newScheduleAggro,
+                            agent_mode: newScheduleAgentMode,
+                            cron_expression: FREQ_CRON_MAP[newScheduleFreq],
+                          }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setScheduledScans((prev) => [...prev, {
+                            id: data.id || data.schedule_id,
+                            target_url: newScheduleTarget,
+                            scan_type: "url",
+                            aggressiveness: newScheduleAggro,
+                            agent_mode: newScheduleAgentMode,
+                            cron_expression: FREQ_CRON_MAP[newScheduleFreq],
+                            next_run_at: null,
+                            last_run_at: null,
+                            enabled: true,
+                            created_at: new Date().toISOString(),
+                          }]);
+                          setNewScheduleTarget("");
+                          setShowScheduleForm(false);
+                        }
+                      } finally {
+                        setIsAddingSchedule(false);
+                      }
+                    }}
+                    disabled={isAddingSchedule || !newScheduleTarget.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-cyan-500 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-cyan-600 transition-all disabled:opacity-50"
+                  >
+                    {isAddingSchedule ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                    Add Schedule
+                  </button>
+                  <button
+                    onClick={() => { setShowScheduleForm(false); setNewScheduleTarget(""); }}
+                    className="px-4 py-2 text-[10px] font-bold text-on-surface-variant border border-outline-variant rounded-lg hover:bg-surface-container transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!showScheduleForm && (
+              <button
+                onClick={() => setShowScheduleForm(true)}
+                className="flex items-center gap-1.5 px-4 py-2 border border-dashed border-outline-variant text-on-surface-variant text-[10px] font-bold uppercase tracking-widest rounded-lg hover:border-cyan-500/30 hover:text-cyan-500 transition-all w-full justify-center"
+              >
+                <Plus size={12} />
+                Add Scheduled Scan
+              </button>
+            )}
           </motion.div>
 
           {/* System Health - Chrome Tab Memory */}

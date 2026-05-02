@@ -12,6 +12,7 @@ export type WebSocketEventType =
   | "job_started"
   | "job_completed"
   | "scanner_activity"
+  | "agent_decision"
   | "error";
 
 export interface WebSocketEvent {
@@ -90,6 +91,19 @@ export interface JobCompletedEvent {
     status: "success" | "failed";
     findings_count: number;
     duration_ms: number;
+  };
+}
+
+export interface AgentDecisionEvent {
+  type: "agent_decision";
+  engagement_id: string;
+  timestamp: string;
+  data: {
+    iteration: number;
+    tool: string;
+    reasoning: string;
+    was_fallback: boolean;
+    cost_usd?: number;
   };
 }
 

@@ -2,7 +2,7 @@
  * React Hook for Real-Time Engagement Events
  *
  * Provides a unified interface for receiving real-time updates
- * via polling (fallback) or WebSocket connection.
+ * via SSE (primary) with polling as fallback.
  * Events are persisted to sessionStorage so they survive page navigation.
  *
  * Requirements: 31.5
@@ -16,7 +16,7 @@ import { WebSocketEvent } from "./websocket-events";
 
 export interface UseEngagementEventsOptions {
   engagementId: string;
-  pollingInterval?: number; // milliseconds, default 2000
+  pollingInterval?: number; // milliseconds, default 2000 (used only in fallback)
   enabled?: boolean;
   onEvent?: (event: WebSocketEvent) => void;
   onError?: (error: Error) => void;
@@ -71,8 +71,8 @@ function saveStoredState(id: string, state: string) {
 /**
  * Hook for subscribing to real-time engagement events
  *
- * Uses polling as the primary mechanism with WebSocket support
- * available when configured.
+ * Uses SSE (Server-Sent Events) as the primary transport with
+ * automatic fallback to polling if SSE fails or is unavailable.
  */
 export function useEngagementEvents(
   options: UseEngagementEventsOptions,
@@ -94,13 +94,18 @@ export function useEngagementEvents(
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  // SSE refs
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const useSseRef = useRef(true); // Toggle to fallback
+
+  // Polling refs
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const lastTimestampRef = useRef<string | null>(null);
+
   const mountedRef = useRef(true);
   const prevIdRef = useRef(engagementId);
 
-  // Use refs for callbacks to avoid cascading re-creation of fetchEvents
-  // when the consumer passes inline functions that change on every render.
+  // Use refs for callbacks to avoid cascading re-creation
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
   const onErrorRef = useRef(onError);
@@ -113,6 +118,7 @@ export function useEngagementEvents(
       setEvents(loadStoredEvents(engagementId));
       setCurrentState(loadStoredState(engagementId));
       lastTimestampRef.current = null;
+      useSseRef.current = true; // Reset SSE attempt on new engagement
     }
   }, [engagementId]);
 
@@ -128,19 +134,103 @@ export function useEngagementEvents(
     }
   }, [engagementId, currentState]);
 
+  // ── SSE connection ──
+  const startSse = useCallback(() => {
+    if (!mountedRef.current || !enabled) return;
+
+    try {
+      const source = new EventSource(`/api/stream/${engagementId}`);
+
+      source.onopen = () => {
+        if (mountedRef.current) {
+          setIsConnected(true);
+          setError(null);
+          log.wsConnect(engagementId);
+        }
+      };
+
+      source.onmessage = (e: MessageEvent) => {
+        if (!mountedRef.current) return;
+
+        try {
+          const raw: Record<string, unknown> = JSON.parse(e.data);
+
+          // Skip internal/control events
+          if (raw.type === "__connected__" || raw.type === "__heartbeat__") return;
+
+          const event = raw as unknown as WebSocketEvent;
+
+          setEvents((prev) => {
+            const next = [event as WebSocketEvent, ...prev].slice(0, 100);
+            saveStoredEvents(engagementId, next);
+            return next;
+          });
+
+          if (event.type === "state_transition" && event.data?.to_state) {
+            setCurrentState(event.data.to_state as string);
+            saveStoredState(engagementId, event.data.to_state as string);
+          }
+
+          onEventRef.current?.(event as WebSocketEvent);
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      source.onerror = () => {
+        if (!mountedRef.current) return;
+
+        // SSE connection failed — fall back to polling
+        log.wsError("SSE connection failed, falling back to polling", {
+          engagementId,
+        });
+        source.close();
+        eventSourceRef.current = null;
+        useSseRef.current = false;
+        setIsConnected(false);
+        startPollingFallback();
+      };
+
+      eventSourceRef.current = source;
+
+      // Handle abort (e.g., React strict mode double-mount)
+      _registerCleanup(() => {
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+          eventSourceRef.current = null;
+        }
+      });
+    } catch (err) {
+      // EventSource constructor threw — fall back to polling
+      log.wsError("SSE init failed, falling back to polling", {
+        error: String(err),
+        engagementId,
+      });
+      useSseRef.current = false;
+      startPollingFallback();
+    }
+  }, [engagementId, enabled]);
+
   // Track consecutive errors for backoff
   const consecutiveErrorsRef = useRef(0);
-  const maxErrorsBeforeStop = 5; // Stop polling after this many consecutive errors
+  const maxErrorsBeforeStop = 5;
+  let _cleanupFns: Array<() => void> = [];
 
-  // Fetch events via polling
+  function _registerCleanup(fn: () => void) {
+    _cleanupFns.push(fn);
+  }
+
+  // ── Polling fallback ──
   const fetchEvents = useCallback(async () => {
     if (!mountedRef.current || !enabled) return;
 
-    // Stop polling after too many consecutive errors (engagement likely deleted/forbidden)
     if (consecutiveErrorsRef.current >= maxErrorsBeforeStop) {
       if (consecutiveErrorsRef.current === maxErrorsBeforeStop) {
-        log.wsEvent("polling-stopped", { engagementId, reason: `${maxErrorsBeforeStop} consecutive failures` });
-        consecutiveErrorsRef.current = maxErrorsBeforeStop + 1; // Log only once
+        log.wsEvent("polling-stopped", {
+          engagementId,
+          reason: `${maxErrorsBeforeStop} consecutive failures`,
+        });
+        consecutiveErrorsRef.current = maxErrorsBeforeStop + 1;
       }
       return;
     }
@@ -156,10 +246,12 @@ export function useEngagementEvents(
       );
 
       if (!response.ok) {
-        // For 4xx errors (Forbidden/Unauthorized/Not Found), stop polling faster
         if (response.status >= 400 && response.status < 500) {
-          consecutiveErrorsRef.current = maxErrorsBeforeStop; // Stop immediately
-          log.wsEvent("polling-access-denied", { engagementId, status: response.status });
+          consecutiveErrorsRef.current = maxErrorsBeforeStop;
+          log.wsEvent("polling-access-denied", {
+            engagementId,
+            status: response.status,
+          });
           setError(new Error(`Access denied: ${response.status}`));
           setIsConnected(false);
           onErrorRef.current?.(new Error(`Failed to fetch events: ${response.status}`));
@@ -171,20 +263,16 @@ export function useEngagementEvents(
       const data = await response.json();
 
       if (mountedRef.current) {
-        // Reset error count on success
         consecutiveErrorsRef.current = 0;
         setIsConnected(true);
         setError(null);
 
-        // Update current state
         if (data.current_state) {
           setCurrentState(data.current_state);
         }
 
-        // Add new events
         if (data.events && data.events.length > 0) {
           setEvents((prev) => {
-            // Deduplicate events
             const existingIds = new Set(
               prev.map((e) => `${e.type}-${e.timestamp}`),
             );
@@ -192,16 +280,14 @@ export function useEngagementEvents(
               (e: WebSocketEvent) =>
                 !existingIds.has(`${e.type}-${e.timestamp}`),
             );
-            return [...newEvents, ...prev].slice(0, 100); // Keep last 100 events
+            return [...newEvents, ...prev].slice(0, 100);
           });
 
-          // Update last timestamp
           const latestEvent = data.events[0];
           if (latestEvent) {
             lastTimestampRef.current = latestEvent.timestamp;
           }
 
-          // Call onEvent callback for each new event
           if (onEventRef.current) {
             data.events.forEach((event: WebSocketEvent) => {
               onEventRef.current!(event);
@@ -213,16 +299,18 @@ export function useEngagementEvents(
       if (mountedRef.current) {
         consecutiveErrorsRef.current += 1;
         const error = err instanceof Error ? err : new Error(String(err));
-        
-        // Only log every few errors to avoid flooding
+
         if (consecutiveErrorsRef.current <= 3 || consecutiveErrorsRef.current % 5 === 0) {
-          log.wsError("Engagement events fetch failed", { error: error.message, engagementId, attempt: consecutiveErrorsRef.current });
+          log.wsError("Engagement events fetch failed", {
+            error: error.message,
+            engagementId,
+            attempt: consecutiveErrorsRef.current,
+          });
         }
-        
+
         setError(error);
         setIsConnected(false);
-        
-        // Only call onError for the first error (avoids spam)
+
         if (consecutiveErrorsRef.current === 1) {
           onErrorRef.current?.(error);
         }
@@ -230,19 +318,15 @@ export function useEngagementEvents(
     }
   }, [engagementId, enabled]);
 
-  // Start polling
-  const startPolling = useCallback(() => {
+  const startPollingFallback = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
     }
     consecutiveErrorsRef.current = 0;
-    // Initial fetch
     fetchEvents();
-    // Set up polling interval
     pollingRef.current = setInterval(fetchEvents, pollingInterval);
   }, [fetchEvents, pollingInterval]);
 
-  // Stop polling
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -251,13 +335,58 @@ export function useEngagementEvents(
     }
   }, [engagementId]);
 
+  // ── Start connection ──
+  useEffect(() => {
+    if (enabled) {
+      if (useSseRef.current) {
+        startSse();
+      } else {
+        startPollingFallback();
+      }
+    }
+
+    return () => {
+      // Cleanup SSE
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      stopPolling();
+      _cleanupFns = [];
+    };
+  }, [enabled, startSse, startPollingFallback, stopPolling]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      stopPolling();
+    };
+  }, [stopPolling]);
+
   // Reconnect
   const reconnect = useCallback(() => {
     log.wsEvent("reconnect", { engagementId });
     setError(null);
     lastTimestampRef.current = null;
-    startPolling();
-  }, [startPolling, engagementId]);
+    useSseRef.current = true; // Try SSE again
+
+    // Close existing connections
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    stopPolling();
+
+    // Restart with SSE
+    startSse();
+  }, [engagementId, startSse, stopPolling]);
 
   // Clear events
   const clearEvents = useCallback(() => {
@@ -271,29 +400,6 @@ export function useEngagementEvents(
       // ignore
     }
   }, [engagementId]);
-
-  // Start/stop polling based on enabled state
-  useEffect(() => {
-    if (enabled) {
-      startPolling();
-    } else {
-      stopPolling();
-    }
-
-    return () => {
-      stopPolling();
-    };
-  }, [enabled, startPolling, stopPolling]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    mountedRef.current = true;
-
-    return () => {
-      mountedRef.current = false;
-      stopPolling();
-    };
-  }, [stopPolling]);
 
   return {
     events,
