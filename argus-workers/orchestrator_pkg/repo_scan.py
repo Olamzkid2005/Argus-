@@ -407,7 +407,162 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("bandit", f"Bandit scan failed: {str(e)}", "failed")
                 logger.warning(f"Bandit failed: {e}")
 
-        # ── 4. Snyk: dependency vulnerability scanning ──
+        # ── 4. Brakeman: Ruby on Rails security scanning ──
+        if "ruby" in detected_langs:
+            _emit("brakeman", "Running Brakeman Rails security scanner", "started")
+            try:
+                brakeman_result = orchestrator.tool_runner.run(
+                    "brakeman",
+                    [
+                        temp_dir,
+                        "--format", "json",
+                        "--confidence-level", "2",
+                        "--separate-models",
+                        "--skip-files", "vendor/.*,node_modules/.*,db/.*,test/.*,spec/.*",
+                    ],
+                    timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
+                )
+                if brakeman_result.success and brakeman_result.stdout.strip():
+                    try:
+                        brakeman_data = json.loads(brakeman_result.stdout)
+                        warnings = brakeman_data.get("warnings", [])
+                        count = 0
+                        for w in warnings:
+                            confidence = w.get("confidence", "Medium")
+                            sev_map = {"High": "HIGH", "Medium": "MEDIUM", "Low": "LOW", "Weak": "LOW"}
+                            finding = {
+                                "type": f"BRAKEMAN_{w.get('warning_type', 'UNKNOWN').upper().replace(' ', '_')}",
+                                "severity": sev_map.get(confidence, "MEDIUM"),
+                                "endpoint": f"file:{w.get('file', '')}:{w.get('line', 0)}",
+                                "evidence": {
+                                    "file": w.get("file", ""),
+                                    "line": w.get("line", 0),
+                                    "code": w.get("code", ""),
+                                    "message": w.get("message", ""),
+                                    "warning_type": w.get("warning_type", ""),
+                                    "confidence": confidence,
+                                },
+                                "confidence": 0.85,
+                                "tool": "brakeman",
+                            }
+                            normalized = orchestrator._normalize_finding(finding, "brakeman")
+                            if normalized:
+                                add_finding(normalized)
+                                count += 1
+                        _emit("brakeman", f"Brakeman scan complete — found {count} warnings", "completed", items=count)
+                    except json.JSONDecodeError:
+                        _emit("brakeman", "Brakeman output could not be parsed", "failed")
+                else:
+                    _emit("brakeman", "No Brakeman warnings found", "completed", items=0)
+            except Exception as e:
+                _emit("brakeman", f"Brakeman scan failed: {str(e)}", "failed")
+                logger.warning(f"Brakeman failed: {e}")
+
+        # ── 5. Gosec: Go security scanning ──
+        if "go" in detected_langs:
+            _emit("gosec", "Running Gosec Go security scanner", "started")
+            try:
+                gosec_result = orchestrator.tool_runner.run(
+                    "gosec",
+                    [
+                        "-fmt=json",
+                        "-quiet",
+                        "-exclude-dir=node_modules",
+                        "-exclude-dir=vendor",
+                        "-exclude-dir=.git",
+                        temp_dir,
+                    ],
+                    timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
+                )
+                if gosec_result.success and gosec_result.stdout.strip():
+                    try:
+                        gosec_data = json.loads(gosec_result.stdout)
+                        issues = gosec_data.get("Issues", [])
+                        count = 0
+                        for issue in issues:
+                            severity = issue.get("severity", "MEDIUM").upper()
+                            finding = {
+                                "type": f"GOSEC_{issue.get('rule_id', 'UNKNOWN')}",
+                                "severity": severity if severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW"] else "MEDIUM",
+                                "endpoint": f"file:{issue.get('file', '')}:{issue.get('line', 0)}",
+                                "evidence": {
+                                    "file": issue.get("file", ""),
+                                    "line": issue.get("line", 0),
+                                    "code": issue.get("code", ""),
+                                    "details": issue.get("details", ""),
+                                    "rule_id": issue.get("rule_id", ""),
+                                    "cwe": issue.get("cwe", {}).get("id", "") if isinstance(issue.get("cwe"), dict) else "",
+                                },
+                                "confidence": 0.85,
+                                "tool": "gosec",
+                            }
+                            normalized = orchestrator._normalize_finding(finding, "gosec")
+                            if normalized:
+                                add_finding(normalized)
+                                count += 1
+                        _emit("gosec", f"Gosec scan complete — found {count} issues", "completed", items=count)
+                    except json.JSONDecodeError:
+                        _emit("gosec", "Gosec output could not be parsed", "failed")
+                else:
+                    _emit("gosec", "No Gosec issues found", "completed", items=0)
+            except Exception as e:
+                _emit("gosec", f"Gosec scan failed: {str(e)}", "failed")
+                logger.warning(f"Gosec failed: {e}")
+
+        # ── 6. ESLint: JavaScript/TypeScript security scanning ──
+        if "javascript" in detected_langs:
+            _emit("eslint", "Running ESLint security scanner", "started")
+            try:
+                eslint_result = orchestrator.tool_runner.run(
+                    "eslint",
+                    [
+                        temp_dir,
+                        "--ext", ".js,.jsx,.ts,.tsx",
+                        "--format", "json",
+                        "--no-eslintrc",
+                        "--rule", "{'security/detect-object-injection': 'warn', 'security/detect-non-literal-fs-filename': 'warn', 'security/detect-possible-timing-attacks': 'warn', 'security/detect-eval-with-expression': 'error', 'security/detect-no-csrf-before-method-override': 'warn', 'security/detect-buffer-noassert': 'error', 'security/detect-child-process': 'warn', 'security/detect-disable-mustache-escape': 'error', 'security/detect-new-buffer': 'warn', 'security/detect-unsafe-regex': 'error', 'security/detect-bidi-characters': 'warn', 'security/detect-non-literal-require': 'warn', 'security/detect-pseudoRandomBytes': 'warn'}",
+                    ],
+                    timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
+                )
+                if eslint_result.success and eslint_result.stdout.strip():
+                    try:
+                        eslint_data = json.loads(eslint_result.stdout)
+                        count = 0
+                        for file_result in eslint_data:
+                            file_path = file_result.get("filePath", "")
+                            for msg in file_result.get("messages", []):
+                                rule_id = msg.get("ruleId", "")
+                                if not rule_id or not rule_id.startswith("security/"):
+                                    continue
+                                severity_map = {1: "LOW", 2: "MEDIUM"}
+                                finding = {
+                                    "type": f"ESLINT_{rule_id.replace('/', '_').upper()}",
+                                    "severity": severity_map.get(msg.get("severity", 1), "LOW"),
+                                    "endpoint": f"file:{file_path}:{msg.get('line', 0)}",
+                                    "evidence": {
+                                        "file": file_path,
+                                        "line": msg.get("line", 0),
+                                        "column": msg.get("column", 0),
+                                        "message": msg.get("message", ""),
+                                        "rule_id": rule_id,
+                                    },
+                                    "confidence": 0.85,
+                                    "tool": "eslint",
+                                }
+                                normalized = orchestrator._normalize_finding(finding, "eslint")
+                                if normalized:
+                                    add_finding(normalized)
+                                    count += 1
+                        _emit("eslint", f"ESLint security scan complete — found {count} issues", "completed", items=count)
+                    except json.JSONDecodeError:
+                        _emit("eslint", "ESLint output could not be parsed", "failed")
+                else:
+                    _emit("eslint", "No ESLint security issues found", "completed", items=0)
+            except Exception as e:
+                _emit("eslint", f"ESLint scan failed: {str(e)}", "failed")
+                logger.warning(f"ESLint failed: {e}")
+
+        # ── 7. Snyk: dependency vulnerability scanning ──
         _emit("snyk", "Running Snyk dependency vulnerability scan", "started")
         try:
             snyk_result = orchestrator.tool_runner.run(

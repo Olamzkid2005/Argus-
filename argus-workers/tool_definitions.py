@@ -403,6 +403,41 @@ _register(ToolDefinition(
     timeout=300,
 ))
 
+_register(ToolDefinition(
+    name="brakeman",
+    description="Ruby on Rails security scanner",
+    phases=["repo_scan"],
+    default_args=["--format", "json"],
+    parameters=[
+        ToolParameter("target", "Target path", required=True),
+        ToolParameter("confidence", "Confidence level", flag="--confidence-level", default="2"),
+    ],
+    timeout=600,
+))
+
+_register(ToolDefinition(
+    name="gosec",
+    description="Go security code scanner",
+    phases=["repo_scan"],
+    default_args=["-fmt=json", "-quiet"],
+    parameters=[
+        ToolParameter("target", "Target path", required=True),
+    ],
+    timeout=600,
+))
+
+_register(ToolDefinition(
+    name="eslint",
+    description="JavaScript/TypeScript linter with security plugins",
+    phases=["repo_scan"],
+    default_args=["--format", "json"],
+    parameters=[
+        ToolParameter("target", "Target path", required=True),
+        ToolParameter("ext", "File extensions", flag="--ext", default=".js,.jsx,.ts,.tsx"),
+    ],
+    timeout=600,
+))
+
 
 # ── Specialized tools ──
 
