@@ -102,7 +102,7 @@ def run_check(target_url: str, session, findings: list) -> list[dict]:
     return findings
 
 
-class UsslCheck:
+class SslCheck:
     def __init__(self):
         self.name = "ssl"
 

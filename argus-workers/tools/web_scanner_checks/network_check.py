@@ -92,7 +92,7 @@ def _check_http_request_smuggling(target_url, session, findings):
         }, 0.6))
 
 
-class UnetworkCheck:
+class NetworkCheck:
     def __init__(self):
         self.name = "network"
 

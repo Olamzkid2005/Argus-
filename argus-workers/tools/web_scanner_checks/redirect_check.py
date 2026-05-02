@@ -43,7 +43,7 @@ def run_check(target_url: str, session, findings: list) -> list[dict]:
     return findings
 
 
-class UredirectCheck:
+class RedirectCheck:
     def __init__(self):
         self.name = "redirect"
 

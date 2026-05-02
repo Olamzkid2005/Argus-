@@ -57,7 +57,7 @@ def run_check(target_url: str, session, findings: list) -> list[dict]:
     return findings
 
 
-class UauthCheck:
+class AuthCheck:
     def __init__(self):
         self.name = "auth"
 

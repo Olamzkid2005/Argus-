@@ -161,7 +161,7 @@ def _check_verb_tampering(target_url, session, findings):
                 }, 0.8))
 
 
-class UdetectionCheck:
+class DetectionCheck:
     def __init__(self):
         self.name = "detection"
 

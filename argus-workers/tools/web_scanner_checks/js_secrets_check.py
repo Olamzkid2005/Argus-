@@ -67,7 +67,7 @@ def _scan_content_for_secrets(content: str, source: str, findings: list):
             }, 0.85))
 
 
-class UjsUsecretsCheck:
+class JsSecretsCheck:
     def __init__(self):
         self.name = "js_secrets"
 

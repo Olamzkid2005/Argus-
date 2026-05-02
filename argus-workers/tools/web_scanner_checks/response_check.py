@@ -291,7 +291,7 @@ def _differential_analysis(target_url, session, findings):
             logger.debug(f"Differential test failed: {test['name']}")
 
 
-class UresponseCheck:
+class ResponseCheck:
     def __init__(self):
         self.name = "response"
 

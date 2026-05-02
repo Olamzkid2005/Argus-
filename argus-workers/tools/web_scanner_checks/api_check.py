@@ -130,7 +130,7 @@ def _check_jwt_algorithm_confusion(target_url, session, findings):
                 return
 
 
-class UapiCheck:
+class ApiCheck:
     def __init__(self):
         self.name = "api"
 

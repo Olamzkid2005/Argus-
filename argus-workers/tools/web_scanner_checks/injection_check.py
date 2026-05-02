@@ -150,7 +150,7 @@ def _check_xxe(target_url, session, findings):
         }, 0.8))
 
 
-class UinjectionCheck:
+class InjectionCheck:
     def __init__(self):
         self.name = "injection"
 

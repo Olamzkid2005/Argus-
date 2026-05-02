@@ -50,7 +50,7 @@ def run_check(target_url: str, session, findings: list) -> list[dict]:
     return findings
 
 
-class UgraphqlCheck:
+class GraphqlCheck:
     def __init__(self):
         self.name = "graphql"
 

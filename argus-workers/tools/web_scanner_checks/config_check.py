@@ -114,7 +114,7 @@ def _check_cors(target_url, session, findings):
         }, 0.9))
 
 
-class UconfigCheck:
+class ConfigCheck:
     def __init__(self):
         self.name = "config"
 
