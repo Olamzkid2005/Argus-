@@ -2,7 +2,7 @@
  * Contract tests for API ↔ Workers job messages
  * Validates that API routes send job messages matching the expected schema
  */
-import { JobMessage } from '@/lib/redis';
+import type { JobMessage } from '@/lib/job-types';
 
 // JSON Schema for JobMessage
 const jobMessageSchema = {

@@ -8,6 +8,7 @@ and the Celery worker.
 
 Usage: cat task.json | python dispatch_task.py
 """
+
 import json
 import logging
 import os
@@ -21,13 +22,16 @@ if PROJECT_ROOT not in sys.path:
 from dotenv import load_dotenv
 
 from celery_app import app
+from job_schema import TASK_NAME_MAP, JobMessage
 
 load_dotenv()
 
 # Ensure DATABASE_URL is available for tasks
 if not os.getenv("DATABASE_URL"):
     # Try to read from the platform .env.local
-    platform_env = os.path.join(os.path.dirname(PROJECT_ROOT), "argus-platform", ".env.local")
+    platform_env = os.path.join(
+        os.path.dirname(PROJECT_ROOT), "argus-platform", ".env.local"
+    )
     if os.path.exists(platform_env):
         with open(platform_env) as f:
             for line in f:
@@ -45,21 +49,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Map job types to Celery task names
-TASK_NAME_MAP = {
-    "recon": "tasks.recon.run_recon",
-    "scan": "tasks.scan.run_scan",
-    "analyze": "tasks.analyze.run_analysis",
-    "report": "tasks.report.generate_report",
-    "repo_scan": "tasks.repo_scan.run_repo_scan",
-    "compliance_report": "tasks.report.generate_compliance_report",
-    "full_report": "tasks.report.generate_full_report",
-    "asset_discovery": "tasks.asset_discovery.run_asset_discovery",
-    "asset_risk_scoring": "tasks.asset_discovery.update_asset_risk_scores",
-}
-
-
-def dispatch_task(job_type: str, args: list, task_id: str = None) -> dict:
+def dispatch_task(task_name: str, args: list, task_id: str = None) -> dict:
     """
     Dispatch a task to Celery using the send_task API.
 
@@ -71,10 +61,6 @@ def dispatch_task(job_type: str, args: list, task_id: str = None) -> dict:
     Returns:
         Dictionary with task ID and status
     """
-    task_name = TASK_NAME_MAP.get(job_type)
-    if not task_name:
-        raise ValueError(f"Unknown job type: {job_type}")
-
     logger.info(f"Dispatching task {task_name} with args {args}")
 
     # Ensure the correct Python path is used by setting environment
@@ -105,82 +91,23 @@ def dispatch_task(job_type: str, args: list, task_id: str = None) -> dict:
 def main():
     """Read JSON from stdin and dispatch the task."""
     try:
-        # Read JSON from stdin
         input_data = sys.stdin.read()
         if not input_data:
             logger.error("No input data received")
             sys.exit(1)
 
-        job = json.loads(input_data)
+        data = json.loads(input_data)
+        job = JobMessage.from_dict(data)
 
-        job_type = job.get("type")
-        if not job_type:
+        if not job.type:
             logger.error("Job missing 'type' field")
             sys.exit(1)
 
-        # Build positional args based on job type
-        args = []
-        if job_type == "recon":
-            args = [
-                job["engagement_id"],
-                job["target"],
-                job["budget"],
-                job.get("trace_id"),
-            ]
-        elif job_type == "scan":
-            args = [
-                job["engagement_id"],
-                [job["target"]],
-                job["budget"],
-                job.get("trace_id"),
-            ]
-        elif job_type == "analyze":
-            args = [
-                job["engagement_id"],
-                job["budget"],
-                job.get("trace_id"),
-            ]
-        elif job_type == "report":
-            args = [
-                job["engagement_id"],
-                job.get("trace_id"),
-            ]
-        elif job_type == "repo_scan":
-            args = [
-                job["engagement_id"],
-                job.get("repo_url") or job.get("target"),
-                job["budget"],
-                job.get("trace_id"),
-            ]
-        elif job_type == "compliance_report":
-            args = [
-                job["engagement_id"],
-                job.get("standard", "owasp_top10"),
-                job.get("trace_id"),
-            ]
-        elif job_type == "full_report":
-            args = [
-                job["engagement_id"],
-                job.get("report_id"),
-                job.get("trace_id"),
-            ]
-        elif job_type == "asset_discovery":
-            args = [
-                job["engagement_id"],
-                job.get("target"),
-                job.get("org_id"),
-                job.get("trace_id"),
-            ]
-        elif job_type == "asset_risk_scoring":
-            args = [
-                job.get("org_id"),
-            ]
-        else:
-            raise ValueError(f"Unknown job type: {job_type}")
+        task_name = TASK_NAME_MAP[job.type]
+        args = job.to_celery_args()
 
-        result = dispatch_task(job_type, args)
+        result = dispatch_task(task_name, args)
 
-        # Output result as JSON
         print(json.dumps(result))
 
     except Exception as e:

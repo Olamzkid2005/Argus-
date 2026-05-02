@@ -18,6 +18,14 @@ from tracing import ExecutionSpan, StructuredLogger
 # easier to navigate and test in isolation.
 from parsers.parsers.base import BaseParser, ParserError, _safe_get
 
+# Backward-compat re-exports — import what's been extracted so far
+try:
+    from parsers.parsers import FfufParser, GauParser, HttpxParser
+    from parsers.parsers import KatanaParser, NucleiParser, SqlmapParser
+    from parsers.parsers import WaybackurlsParser
+except ImportError:
+    pass  # Some parsers not yet extracted; they default to BaseParser
+
 logger = logging.getLogger(__name__)
 
 

@@ -5,51 +5,11 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 
+import type { JobMessage } from "./job-types";
+
 // Redis client for job queue (singleton via globalThis to survive hot reloads)
 const globalForRedis = globalThis as unknown as { __redis?: Redis };
 const redis = globalForRedis.__redis ?? (globalForRedis.__redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379"));
-
-// Map job types to Celery task names
-const TASK_NAME_MAP: Record<string, string> = {
-  recon: "tasks.recon.run_recon",
-  scan: "tasks.scan.run_scan",
-  analyze: "tasks.analyze.run_analysis",
-  report: "tasks.report.generate_report",
-  repo_scan: "tasks.repo_scan.run_repo_scan",
-  compliance_report: "tasks.report.generate_compliance_report",
-  full_report: "tasks.report.generate_full_report",
-  asset_discovery: "tasks.asset_discovery.run_asset_discovery",
-  asset_risk_scoring: "tasks.asset_discovery.update_asset_risk_scores",
-};
-
-// Map job types to positional arg order (matching Celery task signatures)
-// recon: (engagement_id, target, budget, trace_id)
-// scan: (engagement_id, targets, budget, trace_id)
-// analyze: (engagement_id, budget, trace_id)
-// report: (engagement_id, trace_id)
-// repo_scan: (engagement_id, repo_url, budget, trace_id)
-// compliance_report: (engagement_id, standard, trace_id)
-// full_report: (engagement_id, report_id, trace_id)
-// asset_discovery: (engagement_id, target, org_id, trace_id)
-// asset_risk_scoring: (org_id)
-
-export interface JobMessage {
-  type: "recon" | "scan" | "analyze" | "report" | "repo_scan" | "compliance_report" | "full_report" | "asset_discovery" | "asset_risk_scoring";
-  engagement_id: string;
-  target: string;
-  repo_url?: string;
-  standard?: string;
-  report_id?: string;
-  org_id?: string;
-  budget: {
-    max_cycles: number;
-    max_depth: number;
-  };
-  aggressiveness?: string;
-  agent_mode?: boolean;
-  trace_id: string;
-  created_at: string;
-}
 
 /**
  * Generate idempotency key for a job
@@ -134,43 +94,6 @@ export async function checkIdempotency(
   // Use provided key or generate one
   const key = idempotencyKey || generateAPIIdempotencyKey(userId, endpoint, body);
   return await getAPIIdempotencyResult(key);
-}
-
-/**
- * Build positional args for a Celery task based on job type
- */
-function buildTaskArgs(job: JobMessage): unknown[] {
-  switch (job.type) {
-    case "recon":
-      return [job.engagement_id, job.target, job.budget, job.trace_id];
-    case "scan":
-      return [job.engagement_id, [job.target], job.budget, job.trace_id];
-    case "analyze":
-      return [job.engagement_id, job.budget, job.trace_id];
-    case "report":
-      return [job.engagement_id, job.trace_id];
-    case "repo_scan":
-      return [
-        job.engagement_id,
-        job.repo_url || job.target,
-        job.budget,
-        job.trace_id,
-      ];
-    case "compliance_report":
-      return [
-        job.engagement_id,
-        job.standard || "owasp_top10",
-        job.trace_id,
-      ];
-    case "full_report":
-      return [job.engagement_id, job.report_id, job.trace_id];
-    case "asset_discovery":
-      return [job.engagement_id, job.target, job.org_id, job.trace_id];
-    case "asset_risk_scoring":
-      return [job.org_id];
-    default:
-      return [job.engagement_id, job.target, job.budget, job.trace_id];
-  }
 }
 
 /**

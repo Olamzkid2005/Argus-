@@ -1150,3 +1150,33 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts

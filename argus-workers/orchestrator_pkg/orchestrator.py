@@ -40,9 +40,9 @@ from tracing import (
 )
 from websocket_events import get_websocket_publisher
 
-from .recon import execute_recon_tools
+from pipeline_router import execute_recon_pipeline
 from .repo_scan import execute_repo_scan
-from .scan import execute_scan_tools
+from pipeline_router import execute_scan_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +250,7 @@ class Orchestrator:
         )
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
-        findings, recon_context = execute_recon_tools(
+        findings, recon_context = execute_recon_pipeline(
             self, target, job.get("budget", {}), aggressiveness
         )
 
@@ -449,7 +449,7 @@ class Orchestrator:
 
             except Exception as e:
                 logger.warning(f"Agent scan failed for {target}: {e}. Falling back.")
-                fallback = execute_scan_tools(self, [target], {}, aggressiveness)
+                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness)
                 all_findings.extend(fallback)
 
         return all_findings
@@ -511,7 +511,7 @@ class Orchestrator:
             else:
                 mode += " (LLM unavailable)"
             logger.info(f"Running {mode} scan")
-            findings = execute_scan_tools(
+            findings = execute_scan_pipeline(
                 self, targets, job.get("budget", {}), scan_aggressiveness
             )
 
