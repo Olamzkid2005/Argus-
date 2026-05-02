@@ -4,11 +4,12 @@ AI-powered cybersecurity operations center with autonomous vulnerability scannin
 
 ## Architecture
 
-- **Frontend:** Next.js 14 (TypeScript) with App Router
-- **Workers:** Python 3.11+ with Celery
+- **Frontend:** Next.js 14 (TypeScript) with App Router, SSE real-time streaming
+- **Workers:** Python 3.11+ with Celery (worker + Beat scheduler)
 - **Database:** PostgreSQL 15 with pgvector
-- **Queue:** Redis
+- **Queue:** Redis (broker, caching, pub/sub, DLQ)
 - **AI:** OpenRouter API (Multi-provider: Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity)
+- **Tooling:** 25+ integrated security tools (Nuclei, httpx, sqlmap, ffuf, subfinder, etc.)
 
 ## Project Structure
 
@@ -16,16 +17,24 @@ AI-powered cybersecurity operations center with autonomous vulnerability scannin
 Argus-/
 ├── argus-platform/          # Next.js frontend and API
 │   ├── src/app/            # App Router pages and API routes
-│   ├── db/                 # Database schema and scripts
+│   ├── src/lib/            # Shared utilities (Redis, SSE, auth, events)
+│   ├── db/                 # Database schema and migrations
 │   └── package.json
 │
 ├── argus-workers/          # Python worker system
-│   ├── celery_app.py      # Celery configuration
-│   ├── tasks/             # Celery task definitions
-│   ├── tools/             # Security tool wrappers
-│   ├── parsers/           # Tool output parsers
+│   ├── celery_app.py      # Celery configuration + Beat schedule
+│   ├── tasks/             # Celery task definitions (recon, scan, analyze, report, scheduled, replay)
+│   ├── tools/             # Security tool wrappers + ToolRunner, ToolExecutor, circuit breaker
+│   ├── parsers/           # Tool output parsers (27 parsers, auto-discovered)
+│   ├── orchestrator_pkg/  # Orchestrator execution logic (recon, scan, analysis)
+│   ├── agent/             # LLM ReAct agent for autonomous tool selection
 │   ├── models/            # Pydantic data models
-│   └── database/          # Database access layer
+│   ├── database/          # Database access layer (repositories)
+│   ├── config/            # Shared configuration (Redis, constants)
+│   └── job_schema.py      # Shared job message contract (mirrored in TypeScript)
+│
+├── start-argus.sh          # Start all services (Next.js + Celery worker + Beat)
+├── stop-argus.sh           # Stop all services cleanly
 │
 ├── docs/                   # Documentation
 │   ├── setup-progress.md  # Setup progress tracker
@@ -145,7 +154,14 @@ source venv/bin/activate
 celery -A celery_app worker --loglevel=info --concurrency=4
 ```
 
-**Terminal 3 - Flower (Optional - Worker Monitoring):**
+**Terminal 3 - Celery Beat (for scheduled scans):**
+```bash
+cd argus-workers
+source venv/bin/activate
+celery -A celery_app beat --loglevel=info
+```
+
+**Terminal 4 - Flower (Optional - Worker Monitoring):**
 ```bash
 cd argus-workers
 source venv/bin/activate
@@ -246,24 +262,31 @@ Argus is an AI-powered penetration testing platform that automates security asse
 - Vector embeddings (pgvector) for AI features
 
 **Queue (Redis)**
-- Task queue for Celery
-- Caching layer
+- Task queue for Celery with priority support
+- Caching layer (tool results, session data)
 - Rate limiting storage
-- Real-time event pub/sub
+- Real-time event pub/sub (SSE streaming)
+- Dead Letter Queue for failed task replay
 
 ## Features
 
 ### Core Capabilities
-- ✅ Real-time engagement monitoring with WebSocket connections
+- ✅ Real-time engagement monitoring with SSE streaming + polling fallback
+- ✅ LLM ReAct agent for autonomous tool selection and execution
 - ✅ Vulnerability scanning with configurable aggressiveness (Default, High, Extreme)
 - ✅ AI-powered vulnerability explanations and attack chain analysis
 - ✅ Asset inventory management with risk scoring
 - ✅ Custom detection rule engine with YAML-based rules
+- ✅ Scheduled scans (daily/weekly/monthly recurring engagements via Celery Beat)
 - ✅ Scheduled report generation with email delivery
 - ✅ Team collaboration with assignments, comments, and approvals
-- ✅ Activity feed and notification system
+- ✅ Activity feed, agent reasoning feed, and notification system
 - ✅ Comprehensive analytics with trend visualization
 - ✅ Multi-provider AI model selection (Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity)
+- ✅ Webhook dispatch on critical/high severity findings
+- ✅ CVSS v3.1 score auto-calculation for findings without CVE
+- ✅ Repo scan integration (git clone + Semgrep/Gitleaks/Bandit + dependency audit)
+- ✅ Dead letter queue with task replay for failed jobs
 
 ### Pages & Modules
 - **Dashboard**: Real-time intelligence hub with engagement monitoring, threat feed, execution timeline, and scanner activities
@@ -395,8 +418,22 @@ Argus is an AI-powered penetration testing platform that automates security asse
 - `DELETE /api/assets/[id]` - Delete asset
 
 ### Real-Time Updates
-- `GET /api/ws/engagement/[id]` - WebSocket connection for live updates
+- `GET /api/stream/[id]` - SSE (Server-Sent Events) stream for live updates
 - `GET /api/ws/engagement/[id]/poll` - Long-polling fallback
+
+### Scheduled Scans
+- `GET /api/reports/scheduled` - List scheduled scan configurations
+- `POST /api/reports/scheduled` - Create a new scheduled scan
+- `DELETE /api/reports/scheduled` - Remove a scheduled scan
+
+### Scheduled Reports (Legacy)
+- `GET /api/analytics/reports` - List scheduled reports
+- `POST /api/analytics/reports/schedule` - Schedule a report
+
+### Webhooks
+- `GET /api/webhooks` - List configured webhooks
+- `POST /api/webhooks` - Create a new webhook
+- `DELETE /api/webhooks` - Remove a webhook
 
 ### Tools & Performance
 - `GET /api/tools/performance` - Get tool performance metrics
@@ -423,21 +460,26 @@ Argus is an AI-powered penetration testing platform that automates security asse
 
 ### Workers
 - Python 3.11+
-- Celery (distributed task queue)
+- Celery (distributed task queue) + Celery Beat (scheduled tasks)
 - SQLAlchemy (database ORM)
 - Pydantic (data validation)
+- httpx (async HTTP client for AI/LLM calls)
 
-### Security Tools
-- Nuclei (vulnerability scanner)
-- httpx (HTTP probing)
-- subfinder (subdomain discovery)
-- ffuf (web fuzzer)
-- sqlmap (SQL injection testing)
+### Security Tools (25+)
+- **Vulnerability Scanning:** Nuclei, Nikto, Dalfox (XSS), SQLmap
+- **Reconnaissance:** httpx, Katana, FFUF, Amass, Subfinder, AlterX, Naabu, GAU, Waybackurls, Gospider
+- **Technology Detection:** WhatWeb, TestSSL
+- **Web Testing:** Arjun (params), JWT_Tool, Commix (command injection)
+- **Code Scanning:** Semgrep, Bandit, Gitleaks, ESLint, Gosec
+- **Dependency Auditing:** npm audit, pip-audit, govulncheck, Trivy, Snyk, Grype
 
 ### AI/LLM
 - OpenRouter API (multi-provider gateway)
 - Supported providers: Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity
-- Custom intelligence engine for vulnerability analysis
+- LLM ReAct agent for autonomous tool selection and execution
+- Intelligence engine for confidence scoring, false-positive detection, threat intel enrichment
+- AI explainer for grouped finding explanations (strictly constrained — no decision-making)
+- CVSS v3.1 auto-calculation for findings without CVE
 
 ## Configuration
 
@@ -520,7 +562,7 @@ npm run test:watch         # Watch mode
 npm run test:coverage      # Coverage report
 ```
 
-### Backend/Worker Tests
+### Backend/Worker Tests (600+ tests)
 ```bash
 cd argus-workers
 source venv/bin/activate
@@ -621,6 +663,26 @@ rm -rf logs/*
 - [Improvement Recommendations](docs/IMPROVEMENTS.md) - Comprehensive improvement roadmap
 - [Pentest Agents Integration](docs/PENTEST-AGENTS-INTEGRATION.md) - Pentest agents integration guide
 - [Architecture](FINAL-ARCHITECTURE.md) - Complete system architecture
+
+## Architecture Improvements
+
+The codebase has undergone significant architectural deepening to improve testability, maintainability, and developer experience:
+
+### Dependency Injection & Module Boundaries
+- **ToolContext**: Extracted functions in `recon.py` and `scan.py` no longer access the full Orchestrator object (10+ internals). Instead, they receive a `ToolContext` dataclass with only the dependencies they need.
+- **ToolResult type**: `ToolRunner.run()` returns a typed `ToolResult` dataclass instead of an implicit `dict` — no more `.get("stdout", "")` patterns.
+- **Pipeline router**: Single entry point (`pipeline_router.py`) routes to the appropriate pipeline with a `FORCE_PIPELINE_EXECUTOR` flag, eliminating duplicate execution paths.
+
+### Schema Formalization
+- **Job contract**: `job_schema.py` (Python) and `job-types.ts` (TypeScript) define the shared `JobMessage` contract — `TASK_NAME_MAP`, `build_task_args()`, and `JobMessage` dataclass. No more manually syncing TypeScript and Python.
+- **Shared Redis config**: `config/redis.py` is the single source of truth for `REDIS_URL`, eliminating a duplicate-env-var bug.
+
+### Circular Dependency Resolution
+- **celery_app ↔ dead_letter_queue**: `replay_task()` was moved out of `DeadLetterQueue` into a Celery task (`tasks/replay.py`), breaking the circular import. `DLQ` is now purely a Redis data manager with no Celery depedency.
+
+### Monolith Extraction
+- **Parser extraction**: 27 inline parser classes extracted from `parsers/parser.py` (1700→186 lines) into `parsers/parsers/*.py` with auto-discovery. Adding a new parser = creating a single file.
+- **WebScanner**: 12 check module stubs created in `web_scanner_checks/` with auto-discovery, ready for gradual migration from the 2115-line monolith.
 
 ## Contributing
 
