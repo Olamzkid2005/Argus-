@@ -302,6 +302,7 @@ def execute_scan_tools(
                 rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
                 llm_payload_generator=ctx.llm_payload_generator,
                 session=authenticated_session,
+                tech_stack=tech_stack,
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
             web_findings = web_scanner.scan(target)

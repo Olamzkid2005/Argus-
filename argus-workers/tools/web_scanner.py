@@ -189,7 +189,8 @@ class WebScanner:
     }
 
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
-                 llm_payload_generator=None, session: requests.Session | None = None):
+                 llm_payload_generator=None, session: requests.Session | None = None,
+                 tech_stack: list[str] | None = None):
         """
         Initialize web scanner.
 
@@ -198,10 +199,12 @@ class WebScanner:
             rate_limit: Seconds between requests
             llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
             session: Optional pre-authenticated requests.Session
+            tech_stack: Detected technology stack from recon (e.g. ["WordPress", "PHP", "jQuery"])
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
+        self.tech_stack = tech_stack or []
         self.session = session or requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -386,6 +389,24 @@ class WebScanner:
             return "Magento"
 
         return "unknown"
+
+    def _tech_hints(self, resp) -> str:
+        """
+        Combined technology hints from runtime detection + recon tech_stack.
+
+        Args:
+            resp: HTTP response object for runtime framework detection
+
+        Returns:
+            Comma-separated technology hints string (e.g. "WordPress, PHP, jQuery")
+        """
+        hints = self._detect_framework(resp)
+        if self.tech_stack:
+            extra = ", ".join(self.tech_stack[:8])
+            if hints != "unknown":
+                return f"{hints}, {extra}"
+            return extra
+        return hints
 
     def check_security_headers(self):
         """Check for missing security headers."""
@@ -1055,6 +1076,7 @@ class WebScanner:
                     vuln_class="MASS_ASSIGNMENT",
                     param_name="json_body",
                     response_snippet="",
+                    framework_hints=self._tech_hints(resp) if resp else ", ".join(self.tech_stack),
                 )
 
             all_payloads = self.MASS_ASSIGN_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
@@ -1110,7 +1132,7 @@ class WebScanner:
                     vuln_class="XSS",
                     param_name=param,
                     response_snippet=resp.text[:500] if resp else "",
-                    framework_hints=self._detect_framework(resp),
+                    framework_hints=self._tech_hints(resp),
                 )
 
             # Use static payloads + LLM-generated payloads
@@ -1173,7 +1195,7 @@ class WebScanner:
                     vuln_class="SSTI",
                     param_name=param,
                     response_snippet=resp.text[:500] if resp else "",
-                    framework_hints=self._detect_framework(resp),
+                    framework_hints=self._tech_hints(resp),
                 )
 
             # Static + LLM payloads
@@ -1223,7 +1245,7 @@ class WebScanner:
                     vuln_class="LFI",
                     param_name=param,
                     response_snippet=resp.text[:500] if resp else "",
-                    framework_hints=self._detect_framework(resp),
+                    framework_hints=self._tech_hints(resp),
                 )
 
             all_payloads = self.LFI_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
@@ -1460,7 +1482,7 @@ class WebScanner:
                 vuln_class="DOM_XSS",
                 param_name="q",
                 response_snippet=resp.text[:500] if resp else "",
-                framework_hints=self._detect_framework(resp),
+                framework_hints=self._tech_hints(resp),
             )
 
         dom_payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>"] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]

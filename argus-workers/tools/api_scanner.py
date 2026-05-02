@@ -64,7 +64,7 @@ class APISecurityScanner:
 
     def __init__(
         self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None,
-        session: requests.Session | None = None,
+        session: requests.Session | None = None, tech_stack: list[str] | None = None,
     ):
         """
         Initialize API security scanner.
@@ -75,11 +75,13 @@ class APISecurityScanner:
             llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
             authorized_scope: Optional URL prefix that defines the authorized testing scope
             session: Optional pre-authenticated requests.Session
+            tech_stack: Detected technology stack from recon
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
         self.authorized_scope = authorized_scope
+        self.tech_stack = tech_stack or []
         self.session = session or requests.Session()
         self.session.headers.update(
             {
@@ -352,10 +354,12 @@ class APISecurityScanner:
                     self.llm_payload_generator
                     and self.llm_payload_generator.is_available()
                 ):
+                    tech_hints = ", ".join(self.tech_stack[:8]) if self.tech_stack else "unknown"
                     llm_payloads = self.llm_payload_generator.generate_sync(
                         vuln_class="JWT_WEAKNESS",
                         param_name="jwt",
                         response_snippet=json.dumps({"alg": alg}) if alg else "",
+                        framework_hints=tech_hints,
                     )
                     # LLM might return JWT-related manipulation payloads
                     # Try to use them as alternative Authorization headers
