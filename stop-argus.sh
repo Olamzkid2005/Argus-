@@ -46,11 +46,25 @@ if [ -f logs/celery.pid ]; then
     rm -f logs/celery.pid
 fi
 
+# Stop Celery Beat (PID file or pkill)
+if [ -f logs/celery_beat.pid ]; then
+    BEAT_PID=$(cat logs/celery_beat.pid)
+    echo -e "${YELLOW}Stopping Celery Beat (PID: $BEAT_PID)...${NC}"
+    if kill -0 $BEAT_PID 2>/dev/null; then
+        kill $BEAT_PID 2>/dev/null || true
+        sleep 1
+        kill -9 $BEAT_PID 2>/dev/null || true
+        echo -e "${GREEN}✓ Celery Beat stopped${NC}"
+    fi
+    rm -f logs/celery_beat.pid
+fi
+
 # Kill any remaining node/celery processes (fallback)
 echo -e "${YELLOW}Final cleanup...${NC}"
 pkill -f "next dev" 2>/dev/null || true
 pkill -f "next-server" 2>/dev/null || true  
 pkill -f "celery.*worker" 2>/dev/null || true
+pkill -f "celery.*beat" 2>/dev/null || true
 pkill -f "python.*celery" 2>/dev/null || true
 echo -e "${GREEN}✓ Cleanup complete${NC}"
 

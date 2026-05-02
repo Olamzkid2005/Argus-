@@ -289,6 +289,20 @@ fi
 log_ok "Celery workers started (PID: $CELERY_PID)"
 log_info "Logs: logs/celery.log"
 
+# ── Start Celery Beat (for scheduled engagements) ──
+export PYTHONPATH="$PWD/argus-workers:$PYTHONPATH"
+celery -A celery_app beat --loglevel=info --pidfile=/tmp/celerybeat.pid > logs/celery_beat.log 2>&1 &
+BEAT_PID=$!
+echo "$BEAT_PID" > logs/celery_beat.pid
+
+sleep 2
+if kill -0 $BEAT_PID 2>/dev/null; then
+    log_ok "Celery Beat started (PID: $BEAT_PID)"
+    log_info "Logs: logs/celery_beat.log"
+else
+    log_warn "Celery Beat failed to start. Check logs/celery_beat.log"
+fi
+
 # Quick Celery health check — see if it connected to Redis
 sleep 2
 if grep -q "Connected to redis" logs/celery.log 2>/dev/null; then
@@ -342,6 +356,7 @@ fi
 
 echo "$NEXTJS_PID" > logs/nextjs.pid
 echo "$CELERY_PID" > logs/celery.pid
+echo "$BEAT_PID" > logs/celery_beat.pid
 
 # ── Done ──
 
