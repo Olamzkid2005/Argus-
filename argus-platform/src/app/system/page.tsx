@@ -494,7 +494,10 @@ export default function SystemHealthPage() {
                           fontSize: 11,
                           borderRadius: "8px",
                         }}
-                        formatter={(value: number) => [`$${value.toFixed(4)}`, "Cost"]}
+                        formatter={
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          ((value: any) => [`$${Number(value ?? 0).toFixed(4)}`, "Cost"]) as any
+                        }
                       />
                     </PieChart>
                   </ResponsiveContainer>

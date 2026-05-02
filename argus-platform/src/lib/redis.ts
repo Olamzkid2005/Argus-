@@ -46,6 +46,7 @@ export interface JobMessage {
     max_depth: number;
   };
   aggressiveness?: string;
+  agent_mode?: boolean;
   trace_id: string;
   created_at: string;
 }

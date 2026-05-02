@@ -405,7 +405,7 @@ export default function FindingDetailPage() {
                 )}
 
                 {/* Matched pattern */}
-                {evidence.matchedPattern && (
+                {!!evidence.matchedPattern && (
                   <div className="text-xs text-on-surface-variant font-mono p-3 bg-surface-container-high rounded-lg border border-outline/10">
                     <span className="font-bold uppercase tracking-wider text-[10px]">Matched Pattern: </span>
                     {String(evidence.matchedPattern)}

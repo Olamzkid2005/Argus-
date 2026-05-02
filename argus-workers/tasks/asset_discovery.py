@@ -3,6 +3,7 @@ Celery task for automatic asset discovery and classification
 
 Requirements: 28.1, 28.2, 28.3, 28.4
 """
+
 import logging
 import os
 
@@ -14,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="tasks.asset_discovery.run_asset_discovery")
-def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = None):
+def run_asset_discovery(
+    self, engagement_id: str, target: str, trace_id: str = None, org_id: str = None
+):
     """
     Execute automatic asset discovery for an engagement.
 
@@ -31,15 +34,22 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
     org_id = None
     try:
         from database.connection import db_cursor
+
         with db_cursor() as cursor:
-            cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+            cursor.execute(
+                "SELECT org_id FROM engagements WHERE id = %s", (engagement_id,)
+            )
             row = cursor.fetchone()
             org_id = str(row[0]) if row else None
     except Exception as e:
-        logger.warning("Could not resolve org_id for engagement %s: %s", engagement_id, e)
+        logger.warning(
+            "Could not resolve org_id for engagement %s: %s", engagement_id, e
+        )
 
     if not org_id:
-        logger.warning("No org_id found for engagement %s, skipping asset discovery", engagement_id)
+        logger.warning(
+            "No org_id found for engagement %s, skipping asset discovery", engagement_id
+        )
         return {"status": "skipped", "reason": "no_org_id"}
 
     # Initialize tracing manager
@@ -63,11 +73,13 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
                 ON CONFLICT DO NOTHING
                 RETURNING id
                 """,
-                (org_id, engagement_id, "domain", domain, domain, "{}", "active")
+                (org_id, engagement_id, "domain", domain, domain, "{}", "active"),
             )
             row = cursor.fetchone()
             if row:
-                assets_discovered.append({"id": row[0], "type": "domain", "identifier": domain})
+                assets_discovered.append(
+                    {"id": row[0], "type": "domain", "identifier": domain}
+                )
 
             # Discover endpoint asset
             if target.startswith("http"):
@@ -78,11 +90,13 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
                     ON CONFLICT DO NOTHING
                     RETURNING id
                     """,
-                    (org_id, engagement_id, "endpoint", target, target, "{}", "active")
+                    (org_id, engagement_id, "endpoint", target, target, "{}", "active"),
                 )
                 row = cursor.fetchone()
                 if row:
-                    assets_discovered.append({"id": row[0], "type": "endpoint", "identifier": target})
+                    assets_discovered.append(
+                        {"id": row[0], "type": "endpoint", "identifier": target}
+                    )
 
             # Basic classification: mark web assets
             cursor.execute(
@@ -92,7 +106,7 @@ def run_asset_discovery(self, engagement_id: str, target: str, trace_id: str = N
                     last_scanned_at = NOW()
                 WHERE engagement_id = %s
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
 
             conn.commit()
@@ -172,13 +186,21 @@ def update_asset_risk_scores(self, org_id: str):
             WHERE a.org_id = %s
             GROUP BY a.id
             """,
-            (org_id,)
+            (org_id,),
         )
 
         rows = cursor.fetchall()
         scored_count = 0
         for row in rows:
-            asset_id, critical_count, high_count, medium_count, low_count, info_count, max_cvss = row
+            (
+                asset_id,
+                critical_count,
+                high_count,
+                medium_count,
+                low_count,
+                info_count,
+                max_cvss,
+            ) = row
 
             # Use CVSS score if available, otherwise estimate from highest severity
             if max_cvss and max_cvss > 0:
@@ -201,15 +223,17 @@ def update_asset_risk_scores(self, org_id: str):
 
             # Apply severity-weight penalty (same method as security-rating.ts)
             total_weight = (
-                critical_count * SEVERITY_WEIGHTS["CRITICAL"] +
-                high_count * SEVERITY_WEIGHTS["HIGH"] +
-                medium_count * SEVERITY_WEIGHTS["MEDIUM"] +
-                low_count * SEVERITY_WEIGHTS["LOW"] +
-                info_count * SEVERITY_WEIGHTS["INFO"]
+                critical_count * SEVERITY_WEIGHTS["CRITICAL"]
+                + high_count * SEVERITY_WEIGHTS["HIGH"]
+                + medium_count * SEVERITY_WEIGHTS["MEDIUM"]
+                + low_count * SEVERITY_WEIGHTS["LOW"]
+                + info_count * SEVERITY_WEIGHTS["INFO"]
             )
 
             # Final score blends CVSS base with volume penalty, clamped to 0–10
-            risk_score = round(min(10.0, max(0.0, cvss_based + (total_weight * 0.05))), 2)
+            risk_score = round(
+                min(10.0, max(0.0, cvss_based + (total_weight * 0.05))), 2
+            )
 
             risk_level = "LOW"
             if risk_score >= 7.0:
@@ -225,7 +249,7 @@ def update_asset_risk_scores(self, org_id: str):
                 SET risk_score = %s, risk_level = %s, updated_at = NOW()
                 WHERE id = %s
                 """,
-                (risk_score, risk_level, asset_id)
+                (risk_score, risk_level, asset_id),
             )
             scored_count += 1
 

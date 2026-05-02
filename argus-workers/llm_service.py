@@ -10,6 +10,7 @@ Replaces scattered LLM call logic in:
 - llm_synthesizer.py (synthesize)
 - llm_report_generator.py (generate_report)
 """
+
 import json
 import logging
 from dataclasses import dataclass
@@ -40,6 +41,7 @@ class CostTracker:
 @dataclass
 class LLMServiceConfig:
     """Configuration for LLMService."""
+
     temperature: float = LLM_AGENT_TEMPERATURE
     timeout: int = LLM_AGENT_TIMEOUT_SECONDS
     max_cost_usd: float = 0.25
@@ -62,6 +64,10 @@ class LLMService:
         self._client = llm_client
         self._config = config or LLMServiceConfig()
         self._cost_tracker = CostTracker(max_cost_usd=self._config.max_cost_usd)
+
+    def is_available(self) -> bool:
+        """Check if the underlying LLM client is available for use."""
+        return self._client is not None and self._client.is_available()
 
     def chat_json(
         self,
@@ -96,7 +102,9 @@ class LLMService:
             self._cost_tracker.add(cost)
 
             if self._cost_tracker.exceeded():
-                logger.warning(f"Cost cap reached (${self._cost_tracker.total:.4f}), using fallback")
+                logger.warning(
+                    f"Cost cap reached (${self._cost_tracker.total:.4f}), using fallback"
+                )
                 return self._fallback("Cost cap exceeded")
 
             return json.loads(response_text)
