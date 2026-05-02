@@ -61,6 +61,7 @@ class JobMessage:
     budget: dict | None = None
     aggressiveness: str | None = None
     agent_mode: bool | None = None
+    auth_config: dict | None = None
     trace_id: str = ""
     created_at: str = ""
 
@@ -77,4 +78,5 @@ class JobMessage:
             self.budget or {},
             self.trace_id,
             standard=self.standard,
+            auth_config=self.auth_config,
         )

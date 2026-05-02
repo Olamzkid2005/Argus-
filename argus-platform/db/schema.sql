@@ -44,6 +44,7 @@ CREATE TABLE engagements (
     rate_limit_config JSONB, -- {requestsPerSecond, concurrentRequests, respectRobotsTxt, adaptiveSlowdown}
     scan_type VARCHAR(50) NOT NULL DEFAULT 'url', -- 'url' for web app scan, 'repo' for repository scan
     scan_aggressiveness VARCHAR(20) NOT NULL DEFAULT 'default', -- default, high, extreme
+    auth_config JSONB DEFAULT '{}'::jsonb, -- {type: "form"|"bearer"|"cookie"|"api_key", username, password, token, cookie, login_url}
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP WITH TIME ZONE,
