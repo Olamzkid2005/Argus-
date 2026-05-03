@@ -1,10 +1,10 @@
  
  -------------- celery@MacBook-Air v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-01 10:12:26
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-03 07:42:53
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x10a3c9400
+- ** ---------- .> app:         argus_workers:0x111f092b0
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -28,9 +28,11 @@
   . tasks.maintenance.cleanup_failed_engagements
   . tasks.maintenance.cleanup_old_results
   . tasks.maintenance.refresh_views
+  . tasks.maintenance.update_nuclei_templates
   . tasks.maintenance.worker_health_check
   . tasks.recon.expand_recon
   . tasks.recon.run_recon
+  . tasks.replay.replay_dlq_task
   . tasks.repo_scan.expand_repo_scan
   . tasks.repo_scan.run_repo_scan
   . tasks.report.generate_compliance_report
@@ -42,356 +44,160 @@
   . tasks.scan.auth_focused_scan
   . tasks.scan.deep_scan
   . tasks.scan.run_scan
+  . tasks.scheduled.run_due_scans
   . tasks.security.run_self_scan
 
-[2026-05-01 10:12:27,230: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-05-01 10:12:27,247: INFO/MainProcess] mingle: searching for neighbors
-[2026-05-01 10:12:28,453: INFO/MainProcess] mingle: all alone
-[2026-05-01 10:12:28,602: INFO/MainProcess] celery@MacBook-Air ready.
-[2026-05-01 10:12:30,060: INFO/MainProcess] Task tasks.health.ping[52fc13b7-14d9-4ec7-9b9b-d98590f111db] received
-[2026-05-01 10:12:31,289: INFO/ForkPoolWorker-2] Task 52fc13b7-14d9-4ec7-9b9b-d98590f111db succeeded
-[2026-05-01 10:12:31,290: INFO/ForkPoolWorker-2] Task tasks.health.ping[52fc13b7-14d9-4ec7-9b9b-d98590f111db] succeeded in 0.3565787929983344s: {'status': 'ok', 'worker': 'celery@MacBook-Air', 'pid': 99479, 'timestamp': '2026-05-01T09:12:31.173290+00:00'}
-[2026-05-01 10:20:20,238: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[24b0e7d7-13c3-450e-919c-89043ae5f986] received
-[2026-05-01 10:20:21,051: WARNING/ForkPoolWorker-2] [f3b91e7a] job_started: Job started: repo_scan
-[2026-05-01 10:20:21,456: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:20:21,673: INFO/ForkPoolWorker-2] LLM payload generator initialized
-[2026-05-01 10:20:21,697: INFO/ForkPoolWorker-2] Loaded tool definition: alterx
-[2026-05-01 10:20:21,705: INFO/ForkPoolWorker-2] Loaded tool definition: arjun
-[2026-05-01 10:20:21,712: INFO/ForkPoolWorker-2] Loaded tool definition: katana
-[2026-05-01 10:20:21,717: INFO/ForkPoolWorker-2] Loaded tool definition: semgrep
-[2026-05-01 10:20:21,723: INFO/ForkPoolWorker-2] Loaded tool definition: trivy
-[2026-05-01 10:20:21,729: INFO/ForkPoolWorker-2] Loaded tool definition: sqlmap
-[2026-05-01 10:20:21,741: INFO/ForkPoolWorker-2] Loaded tool definition: amass
-[2026-05-01 10:20:21,748: INFO/ForkPoolWorker-2] Loaded tool definition: ffuf
-[2026-05-01 10:20:21,752: INFO/ForkPoolWorker-2] Loaded tool definition: gau
-[2026-05-01 10:20:21,759: INFO/ForkPoolWorker-2] Loaded tool definition: nuclei
-[2026-05-01 10:20:21,780: INFO/ForkPoolWorker-2] Loaded tool definition: waybackurls
-[2026-05-01 10:20:21,783: INFO/ForkPoolWorker-2] Loaded tool definition: testssl
-[2026-05-01 10:20:22,077: INFO/ForkPoolWorker-2] Loaded tool definition: gospider
-[2026-05-01 10:20:22,085: INFO/ForkPoolWorker-2] Loaded tool definition: naabu
-[2026-05-01 10:20:22,089: INFO/ForkPoolWorker-2] Loaded tool definition: bandit
-[2026-05-01 10:20:22,099: INFO/ForkPoolWorker-2] Loaded tool definition: gitleaks
-[2026-05-01 10:20:22,105: INFO/ForkPoolWorker-2] Loaded tool definition: jwt_tool
-[2026-05-01 10:20:22,112: INFO/ForkPoolWorker-2] Loaded tool definition: nmap
-[2026-05-01 10:20:22,117: INFO/ForkPoolWorker-2] Loaded tool definition: pip-audit
-[2026-05-01 10:20:22,126: INFO/ForkPoolWorker-2] Loaded tool definition: subfinder
-[2026-05-01 10:20:22,151: INFO/ForkPoolWorker-2] Loaded tool definition: wpscan
-[2026-05-01 10:20:22,333: INFO/ForkPoolWorker-2] Loaded tool definition: commix
-[2026-05-01 10:20:22,588: INFO/ForkPoolWorker-2] Loaded tool definition: nikto
-[2026-05-01 10:20:22,593: INFO/ForkPoolWorker-2] Loaded tool definition: dalfox
-[2026-05-01 10:20:22,601: INFO/ForkPoolWorker-2] Loaded tool definition: whatweb
-[2026-05-01 10:20:22,605: INFO/ForkPoolWorker-2] Loaded tool definition: httpx
-[2026-05-01 10:20:23,520: WARNING/ForkPoolWorker-2] [f3b91e7a] job_started: Job started: repo_scan
-[2026-05-01 10:20:44,684: WARNING/ForkPoolWorker-2] Failed to clone repo https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792: Cloning into '/var/folders/18/77k50l4d5d96qqly44kyw41w0000gn/T/argus_repo_scan_b8cslg4a'...
-warning: redirecting to https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/
-fatal: https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/info/refs not valid: is this a git repository?
-
-[2026-05-01 10:20:44,824: WARNING/ForkPoolWorker-2] Repo scan failed: REPO_CLONE_FAILED:https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792:Cloning into '/var/folders/18/77k50l4d5d96qqly44kyw41w0000gn/T/argus_repo_scan_b8cslg4a'...
-warning: redirecting to https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/
-fatal: https://github.com/Neivoc/NovaPay-VulnBank-API?_t=1777627217792/info/refs not valid: is this a git repository?
-
-[2026-05-01 10:20:44,865: INFO/ForkPoolWorker-2] Repository scan completed with no findings for https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792
-[2026-05-01 10:20:44,870: INFO/ForkPoolWorker-2] SBOM generation skipped for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf: no dependency data available (result keys: ['phase', 'status', 'findings_count', 'next_state', 'trace_id', 'sbom_paths'])
-[2026-05-01 10:20:44,892: INFO/MainProcess] Task tasks.scan.run_scan[8db6b36c-d658-48a7-8a76-826d2d670782] received
-[2026-05-01 10:20:44,935: INFO/ForkPoolWorker-2] Task 24b0e7d7-13c3-450e-919c-89043ae5f986 succeeded
-[2026-05-01 10:20:44,935: INFO/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[24b0e7d7-13c3-450e-919c-89043ae5f986] succeeded in 24.632823285995983s: {'phase': 'repo_scan', 'status': 'completed', 'findings_count': 0, 'next_state': 'scanning', 'trace_id': 'f3b91e7a-08da-4fb0-b853-6a2efa64ede1', 'sbom_paths': {}}
-[2026-05-01 10:20:45,175: WARNING/ForkPoolWorker-4] [f3b91e7a] job_started: Job started: scan
-[2026-05-01 10:20:45,211: INFO/ForkPoolWorker-4] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:20:45,217: INFO/ForkPoolWorker-4] LLM payload generator initialized
-[2026-05-01 10:20:45,221: INFO/ForkPoolWorker-4] Loaded tool definition: alterx
-[2026-05-01 10:20:45,223: INFO/ForkPoolWorker-4] Loaded tool definition: arjun
-[2026-05-01 10:20:45,225: INFO/ForkPoolWorker-4] Loaded tool definition: katana
-[2026-05-01 10:20:45,227: INFO/ForkPoolWorker-4] Loaded tool definition: semgrep
-[2026-05-01 10:20:45,229: INFO/ForkPoolWorker-4] Loaded tool definition: trivy
-[2026-05-01 10:20:45,232: INFO/ForkPoolWorker-4] Loaded tool definition: sqlmap
-[2026-05-01 10:20:45,234: INFO/ForkPoolWorker-4] Loaded tool definition: amass
-[2026-05-01 10:20:45,237: INFO/ForkPoolWorker-4] Loaded tool definition: ffuf
-[2026-05-01 10:20:45,239: INFO/ForkPoolWorker-4] Loaded tool definition: gau
-[2026-05-01 10:20:45,241: INFO/ForkPoolWorker-4] Loaded tool definition: nuclei
-[2026-05-01 10:20:45,242: INFO/ForkPoolWorker-4] Loaded tool definition: waybackurls
-[2026-05-01 10:20:45,244: INFO/ForkPoolWorker-4] Loaded tool definition: testssl
-[2026-05-01 10:20:45,247: INFO/ForkPoolWorker-4] Loaded tool definition: gospider
-[2026-05-01 10:20:45,250: INFO/ForkPoolWorker-4] Loaded tool definition: naabu
-[2026-05-01 10:20:45,251: INFO/ForkPoolWorker-4] Loaded tool definition: bandit
-[2026-05-01 10:20:45,256: INFO/ForkPoolWorker-4] Loaded tool definition: gitleaks
-[2026-05-01 10:20:45,258: INFO/ForkPoolWorker-4] Loaded tool definition: jwt_tool
-[2026-05-01 10:20:45,261: INFO/ForkPoolWorker-4] Loaded tool definition: nmap
-[2026-05-01 10:20:45,263: INFO/ForkPoolWorker-4] Loaded tool definition: pip-audit
-[2026-05-01 10:20:45,265: INFO/ForkPoolWorker-4] Loaded tool definition: subfinder
-[2026-05-01 10:20:45,273: INFO/ForkPoolWorker-4] Loaded tool definition: wpscan
-[2026-05-01 10:20:45,274: INFO/ForkPoolWorker-4] Loaded tool definition: commix
-[2026-05-01 10:20:45,284: INFO/ForkPoolWorker-4] Loaded tool definition: nikto
-[2026-05-01 10:20:45,287: INFO/ForkPoolWorker-4] Loaded tool definition: dalfox
-[2026-05-01 10:20:45,289: INFO/ForkPoolWorker-4] Loaded tool definition: whatweb
-[2026-05-01 10:20:45,291: INFO/ForkPoolWorker-4] Loaded tool definition: httpx
-[2026-05-01 10:20:45,347: WARNING/ForkPoolWorker-4] [f3b91e7a] job_started: Job started: scan
-[2026-05-01 10:20:45,421: INFO/ForkPoolWorker-4] Loaded 2 custom rule(s) for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf
-[2026-05-01 10:20:45,426: INFO/ForkPoolWorker-4] Running deterministic (no recon context) scan
-[2026-05-01 10:20:45,432: INFO/ForkPoolWorker-4] Using local nuclei templates from /Users/mac/Documents/Argus-/argus-workers/tool_assets/nuclei-templates
-[2026-05-01 10:25:45,905: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: nuclei
-[2026-05-01 10:25:45,968: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 300473ms
-[2026-05-01 10:25:45,969: WARNING/ForkPoolWorker-4] NUCLEI RESULT for https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792: success=False, returncode=-1, stdout_len=0, stderr=Tool execution timed out after 300 seconds
-[2026-05-01 10:25:46,271: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: dalfox
-[2026-05-01 10:25:46,290: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 301ms
-[2026-05-01 10:25:46,311: WARNING/ForkPoolWorker-4] [f3b91e7a] parser_completed: Parser completed: dalfox
-[2026-05-01 10:25:46,335: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN parsing: 21ms
-[2026-05-01 10:25:49,656: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: sqlmap
-[2026-05-01 10:25:49,672: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 3320ms
-[2026-05-01 10:26:11,018: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: arjun
-[2026-05-01 10:26:11,033: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 21345ms
-[2026-05-01 10:26:11,119: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: jwt_tool
-[2026-05-01 10:26:11,133: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 85ms
-[2026-05-01 10:26:11,221: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: commix
-[2026-05-01 10:26:11,237: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 88ms
-[2026-05-01 10:26:11,279: WARNING/ForkPoolWorker-4] [f3b91e7a] tool_executed: Tool executed: testssl
-[2026-05-01 10:26:11,292: WARNING/ForkPoolWorker-4] [f3b91e7a] SPAN tool_execution: 41ms
-[2026-05-01 10:26:11,294: INFO/ForkPoolWorker-4] Starting comprehensive web scan: https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792
-[2026-05-01 10:26:24,059: INFO/ForkPoolWorker-4] Running parameter discovery
-[2026-05-01 10:26:30,421: INFO/ForkPoolWorker-4] Running parameter fuzzing
-[2026-05-01 10:28:30,424: WARNING/ForkPoolWorker-4] parameter_fuzzing exceeded 120s soft time limit
-[2026-05-01 10:29:11,675: INFO/MainProcess] Task tasks.repo_scan.run_repo_scan[aaba1dff-e71a-4480-82b7-81a0e30d9f06] received
-[2026-05-01 10:29:12,027: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: repo_scan
-[2026-05-01 10:29:12,102: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:29:12,106: INFO/ForkPoolWorker-2] LLM payload generator initialized
-[2026-05-01 10:29:12,169: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: repo_scan
-[2026-05-01 10:29:45,948: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: gitleaks
-[2026-05-01 10:29:45,962: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 241ms
-[2026-05-01 10:29:46,023: WARNING/ForkPoolWorker-2] [a700ce14] parser_completed: Parser completed: gitleaks
-[2026-05-01 10:29:46,038: WARNING/ForkPoolWorker-2] [a700ce14] SPAN parsing: 60ms
-[2026-05-01 10:29:47,210: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: trivy
-[2026-05-01 10:29:47,224: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 1140ms
-[2026-05-01 10:29:47,241: WARNING/ForkPoolWorker-2] [a700ce14] parser_completed: Parser completed: trivy
-[2026-05-01 10:29:47,257: WARNING/ForkPoolWorker-2] [a700ce14] SPAN parsing: 16ms
-[2026-05-01 10:29:47,952: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: bandit
-[2026-05-01 10:29:47,967: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 614ms
-[2026-05-01 10:29:48,091: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: snyk
-[2026-05-01 10:29:48,148: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 87ms
-[2026-05-01 10:29:59,261: WARNING/ForkPoolWorker-2] [a700ce14] tool_executed: Tool executed: semgrep
-[2026-05-01 10:29:59,315: WARNING/ForkPoolWorker-2] [a700ce14] SPAN tool_execution: 9543ms
-[2026-05-01 10:29:59,375: WARNING/ForkPoolWorker-2] [a700ce14] parser_completed: Parser completed: semgrep
-[2026-05-01 10:29:59,392: WARNING/ForkPoolWorker-2] [a700ce14] SPAN parsing: 60ms
-[2026-05-01 10:30:00,114: INFO/ForkPoolWorker-2] Saved repo recon context for 6b494fec-1859-4cb5-be84-b32bee396ca6: 0 languages, 3 vuln types
-[2026-05-01 10:30:00,116: INFO/ForkPoolWorker-2] SBOM generation skipped for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6: no dependency data available (result keys: ['phase', 'status', 'findings_count', 'next_state', 'trace_id', 'sbom_paths'])
-[2026-05-01 10:30:00,121: INFO/MainProcess] Task tasks.scan.run_scan[e13cf12d-0c19-44e6-876c-a19586e530b5] received
-[2026-05-01 10:30:00,122: INFO/ForkPoolWorker-2] Task aaba1dff-e71a-4480-82b7-81a0e30d9f06 succeeded
-[2026-05-01 10:30:00,123: INFO/ForkPoolWorker-2] Task tasks.repo_scan.run_repo_scan[aaba1dff-e71a-4480-82b7-81a0e30d9f06] succeeded in 48.43898715398973s: {'phase': 'repo_scan', 'status': 'completed', 'findings_count': 26, 'next_state': 'scanning', 'trace_id': 'a700ce14-6cea-4e38-a236-bcaa74cb8159', 'sbom_paths': {}}
-[2026-05-01 10:30:00,441: WARNING/ForkPoolWorker-1] [a700ce14] job_started: Job started: scan
-[2026-05-01 10:30:00,470: INFO/ForkPoolWorker-1] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:30:00,475: INFO/ForkPoolWorker-1] LLM payload generator initialized
-[2026-05-01 10:30:00,480: INFO/ForkPoolWorker-1] Loaded tool definition: alterx
-[2026-05-01 10:30:00,483: INFO/ForkPoolWorker-1] Loaded tool definition: arjun
-[2026-05-01 10:30:00,486: INFO/ForkPoolWorker-1] Loaded tool definition: katana
-[2026-05-01 10:30:00,489: INFO/ForkPoolWorker-1] Loaded tool definition: semgrep
-[2026-05-01 10:30:00,492: INFO/ForkPoolWorker-1] Loaded tool definition: trivy
-[2026-05-01 10:30:00,496: INFO/ForkPoolWorker-1] Loaded tool definition: sqlmap
-[2026-05-01 10:30:00,500: INFO/ForkPoolWorker-1] Loaded tool definition: amass
-[2026-05-01 10:30:00,503: INFO/ForkPoolWorker-1] Loaded tool definition: ffuf
-[2026-05-01 10:30:00,505: INFO/ForkPoolWorker-1] Loaded tool definition: gau
-[2026-05-01 10:30:00,509: INFO/ForkPoolWorker-1] Loaded tool definition: nuclei
-[2026-05-01 10:30:00,511: INFO/ForkPoolWorker-1] Loaded tool definition: waybackurls
-[2026-05-01 10:30:00,514: INFO/ForkPoolWorker-1] Loaded tool definition: testssl
-[2026-05-01 10:30:00,517: INFO/ForkPoolWorker-1] Loaded tool definition: gospider
-[2026-05-01 10:30:00,520: INFO/ForkPoolWorker-1] Loaded tool definition: naabu
-[2026-05-01 10:30:00,522: INFO/ForkPoolWorker-1] Loaded tool definition: bandit
-[2026-05-01 10:30:00,525: INFO/ForkPoolWorker-1] Loaded tool definition: gitleaks
-[2026-05-01 10:30:00,527: INFO/ForkPoolWorker-1] Loaded tool definition: jwt_tool
-[2026-05-01 10:30:00,530: INFO/ForkPoolWorker-1] Loaded tool definition: nmap
-[2026-05-01 10:30:00,531: INFO/ForkPoolWorker-1] Loaded tool definition: pip-audit
-[2026-05-01 10:30:00,535: INFO/ForkPoolWorker-1] Loaded tool definition: subfinder
-[2026-05-01 10:30:00,538: INFO/ForkPoolWorker-1] Loaded tool definition: wpscan
-[2026-05-01 10:30:00,540: INFO/ForkPoolWorker-1] Loaded tool definition: commix
-[2026-05-01 10:30:00,543: INFO/ForkPoolWorker-1] Loaded tool definition: nikto
-[2026-05-01 10:30:00,545: INFO/ForkPoolWorker-1] Loaded tool definition: dalfox
-[2026-05-01 10:30:00,548: INFO/ForkPoolWorker-1] Loaded tool definition: whatweb
-[2026-05-01 10:30:00,551: INFO/ForkPoolWorker-1] Loaded tool definition: httpx
-[2026-05-01 10:30:00,645: WARNING/ForkPoolWorker-1] [a700ce14] job_started: Job started: scan
-[2026-05-01 10:30:00,698: INFO/ForkPoolWorker-1] Loaded 2 custom rule(s) for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6
-[2026-05-01 10:30:01,394: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:01,824: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:02,566: INFO/ForkPoolWorker-1] Agent iteration 0: calling pip_audit (cost: $0.000201)
-[2026-05-01 10:30:02,654: WARNING/ForkPoolWorker-1] [a700ce14] tool_executed: Tool executed: pip_audit
-[2026-05-01 10:30:02,669: WARNING/ForkPoolWorker-1] [a700ce14] SPAN tool_execution: 88ms
-[2026-05-01 10:30:02,690: INFO/ForkPoolWorker-1] Database pool initialized (min=2, max=20, pgbouncer_mode=session)
-[2026-05-01 10:30:02,692: WARNING/ForkPoolWorker-1] Failed to log agent decision: relation "agent_decisions" does not exist
-LINE 2:                     INSERT INTO agent_decisions
-                                        ^
-
-[2026-05-01 10:30:03,885: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:04,460: INFO/ForkPoolWorker-1] Agent iteration 1: calling ffuf (cost: $0.000202)
-[2026-05-01 10:30:04,639: WARNING/ForkPoolWorker-1] [a700ce14] tool_executed: Tool executed: ffuf
-[2026-05-01 10:30:04,652: WARNING/ForkPoolWorker-1] [a700ce14] SPAN tool_execution: 178ms
-[2026-05-01 10:30:04,652: INFO/ForkPoolWorker-1] Two consecutive tools found nothing – stopping agent early
-[2026-05-01 10:30:04,677: WARNING/ForkPoolWorker-1] [a700ce14] parser_completed: Parser completed: pip_audit
-[2026-05-01 10:30:04,695: WARNING/ForkPoolWorker-1] [a700ce14] SPAN parsing: 24ms
-[2026-05-01 10:30:04,714: WARNING/ForkPoolWorker-1] [a700ce14] parser_completed: Parser completed: ffuf
-[2026-05-01 10:30:04,732: WARNING/ForkPoolWorker-1] [a700ce14] SPAN parsing: 21ms
-[2026-05-01 10:30:04,755: INFO/ForkPoolWorker-1] Enqueued LLM review for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6
-[2026-05-01 10:30:04,760: INFO/MainProcess] Task tasks.llm_review.run_llm_review[2160a6b2-dcd3-42e4-ab0c-5fecd44eb118] received
-[2026-05-01 10:30:04,779: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:30:04,806: INFO/ForkPoolWorker-2] No candidate findings for LLM review (engagement 6b494fec-1859-4cb5-be84-b32bee396ca6)
-[2026-05-01 10:30:04,808: INFO/ForkPoolWorker-2] Task 2160a6b2-dcd3-42e4-ab0c-5fecd44eb118 succeeded
-[2026-05-01 10:30:04,808: INFO/ForkPoolWorker-2] Task tasks.llm_review.run_llm_review[2160a6b2-dcd3-42e4-ab0c-5fecd44eb118] succeeded in 0.043383823009207845s: {'status': 'completed', 'analyzed': 0, 'total': 0}
-[2026-05-01 10:30:04,838: INFO/MainProcess] Task tasks.analyze.run_analysis[54a141e5-5773-45ca-966f-11481b171fff] received
-[2026-05-01 10:30:04,838: INFO/ForkPoolWorker-1] Task e13cf12d-0c19-44e6-876c-a19586e530b5 succeeded
-[2026-05-01 10:30:04,838: INFO/ForkPoolWorker-1] Task tasks.scan.run_scan[e13cf12d-0c19-44e6-876c-a19586e530b5] succeeded in 4.557314953010064s: {'phase': 'scan', 'status': 'completed', 'findings_count': 0, 'next_state': 'analyzing', 'trace_id': 'a700ce14-6cea-4e38-a236-bcaa74cb8159', 'analysis_task_id': '54a141e5-5773-45ca-966f-11481b171fff'}
-[2026-05-01 10:30:04,905: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: analyze
-[2026-05-01 10:30:04,916: INFO/ForkPoolWorker-2] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:30:04,920: INFO/ForkPoolWorker-2] LLM payload generator initialized
-[2026-05-01 10:30:04,938: WARNING/ForkPoolWorker-2] [a700ce14] job_started: Job started: analyze
-[2026-05-01 10:30:05,158: WARNING/ForkPoolWorker-2] [a700ce14] intelligence_decision: Intelligence decision: 2 actions generated
-[2026-05-01 10:30:05,184: WARNING/ForkPoolWorker-2] [a700ce14] SPAN intelligence_evaluation: 59ms
-[2026-05-01 10:30:07,345: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:10,354: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:15,872: INFO/MainProcess] Task tasks.recon.expand_recon[f7a16d6b-5c6c-436b-a0a8-114f8287b255] received
-[2026-05-01 10:30:15,873: INFO/ForkPoolWorker-2] Task 54a141e5-5773-45ca-966f-11481b171fff succeeded
-[2026-05-01 10:30:15,873: INFO/ForkPoolWorker-2] Task tasks.analyze.run_analysis[54a141e5-5773-45ca-966f-11481b171fff] succeeded in 11.031256307993317s: {'phase': 'analyze', 'status': 'completed', 'actions': [{'type': 'deep_scan', 'targets': [...], 'reason': 'high_value_targets_identified', 'description': 'High-value targets with potential vulnerabilities identified. Performing deep scan.'}, {'type': 'auth_focused_scan', 'endpoints': [...], 'budget': {...}, 'reason': 'weak_auth_signals', 'description': 'Weak authentication signals detected. Focusing on authentication mechanisms.'}], 'scored_findings': [{'id': '0c083b8e-e1a5-4041-bc00-1cb2ad269aec', 'engagement_id': '6b494fec-1859-4cb5-be84-b32bee396ca6', 'type': 'CODE_VULNERABILITY', 'severity': 'HIGH', 'confidence': 0.35, 'endpoint': 'file:/var/folders/18/77k50l4d5d96qqly44kyw41w0000gn/T/argus_repo_scan_fhl65itd/app/schemas.py:121', 'evidence': {...}, 'source_tool': 'unknown', 'repro_steps': None, 'cvss_score': None, 'owasp_category': None, 'cwe_id': None, 'evidence_strength': None, 'tool_agreement_level': 'single_tool', 'fp_likelihood': None, 'verified': False, 'created_at': datetime.datetime(2026, 5, 1,..., ...}]}
-[2026-05-01 10:30:15,876: WARNING/ForkPoolWorker-1] expand_recon called with empty/invalid targets for engagement 6b494fec-1859-4cb5-be84-b32bee396ca6, skipping
-[2026-05-01 10:30:15,879: INFO/ForkPoolWorker-1] Task f7a16d6b-5c6c-436b-a0a8-114f8287b255 succeeded
-[2026-05-01 10:30:15,880: INFO/ForkPoolWorker-1] Task tasks.recon.expand_recon[f7a16d6b-5c6c-436b-a0a8-114f8287b255] succeeded in 0.004787579993717372s: {'phase': 'recon_expand', 'status': 'skipped', 'reason': 'no_valid_targets'}
-[2026-05-01 10:30:16,799: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:22,738: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:29,531: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:36,778: INFO/ForkPoolWorker-4] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:30:44,919: WARNING/MainProcess] Soft time limit (600s) exceeded for tasks.scan.run_scan[8db6b36c-d658-48a7-8a76-826d2d670782]
-[2026-05-01 10:30:44,924: ERROR/ForkPoolWorker-4] check_lfi failed (non-fatal): SoftTimeLimitExceeded()
-Traceback (most recent call last):
-  File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 273, in scan
-    method()
-    ~~~~~~^^
-  File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 1208, in check_lfi
-    resp = self._safe_request("GET", self.target_url)
-  File "/Users/mac/Documents/Argus-/argus-workers/tools/web_scanner.py", line 293, in _safe_request
-    resp = self.session.request(method, url, **kwargs)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 592, in request
-    resp = self.send(prep, **send_kwargs)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 727, in send
-    history = [resp for resp in gen]
-                                ^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 266, in resolve_redirects
-    resp = self.send(
-        req,
-    ...<6 lines>...
-        **adapter_kwargs,
-    )
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/sessions.py", line 706, in send
-    r = adapter.send(request, **kwargs)
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/requests/adapters.py", line 645, in send
-    resp = conn.urlopen(
-        method=request.method,
-    ...<9 lines>...
-        chunked=chunked,
-    )
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 534, in _make_request
-    response = conn.getresponse()
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/urllib3/connection.py", line 571, in getresponse
-    httplib_response = super().getresponse()
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/client.py", line 1450, in getresponse
-    response.begin()
-    ~~~~~~~~~~~~~~^^
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/client.py", line 336, in begin
-    version, status, reason = self._read_status()
-                              ~~~~~~~~~~~~~~~~~^^
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/client.py", line 297, in _read_status
-    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
-               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 725, in readinto
-    return self._sock.recv_into(b)
-           ~~~~~~~~~~~~~~~~~~~~^^^
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ssl.py", line 1304, in recv_into
-    return self.read(nbytes, buffer)
-           ~~~~~~~~~^^^^^^^^^^^^^^^^
-  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ssl.py", line 1138, in read
-    return self._sslobj.read(len, buffer)
-           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/billiard/pool.py", line 228, in soft_timeout_sighandler
-    raise SoftTimeLimitExceeded()
-billiard.exceptions.SoftTimeLimitExceeded: SoftTimeLimitExceeded()
-[2026-05-01 10:31:17,512: INFO/ForkPoolWorker-4] Running differential analysis
-[2026-05-01 10:31:21,993: INFO/ForkPoolWorker-4] Running WAF detection
-[2026-05-01 10:31:27,060: INFO/ForkPoolWorker-4] Running time-based vulnerability detection
-[2026-05-01 10:31:40,711: INFO/ForkPoolWorker-4] Running SSL/TLS verification
-[2026-05-01 10:31:41,114: INFO/ForkPoolWorker-4] Running response analysis
-[2026-05-01 10:31:42,262: INFO/ForkPoolWorker-4] Scan complete: 32 findings
-[2026-05-01 10:31:43,150: INFO/ForkPoolWorker-4] Enqueued LLM review for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf
-[2026-05-01 10:31:43,151: INFO/MainProcess] Task tasks.llm_review.run_llm_review[dff30ad2-74dd-47c0-ba71-7a8a46e8633a] received
-[2026-05-01 10:31:43,178: INFO/MainProcess] Task tasks.analyze.run_analysis[92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c] received
-[2026-05-01 10:31:43,179: INFO/ForkPoolWorker-4] Task 8db6b36c-d658-48a7-8a76-826d2d670782 succeeded
-[2026-05-01 10:31:43,180: INFO/ForkPoolWorker-4] Task tasks.scan.run_scan[8db6b36c-d658-48a7-8a76-826d2d670782] succeeded in 658.26712261801s: {'phase': 'scan', 'status': 'completed', 'findings_count': 32, 'next_state': 'analyzing', 'trace_id': 'f3b91e7a-08da-4fb0-b853-6a2efa64ede1', 'analysis_task_id': '92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c'}
-[2026-05-01 10:31:43,182: INFO/ForkPoolWorker-2] LLM review: 17 candidate findings for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf
-[2026-05-01 10:31:43,240: WARNING/ForkPoolWorker-1] [f3b91e7a] job_started: Job started: analyze
-[2026-05-01 10:31:43,250: INFO/ForkPoolWorker-1] Loaded API key from Redis (key: settings:davidolamijulo2005@gmail.com:openrouter_api_key)
-[2026-05-01 10:31:43,254: INFO/ForkPoolWorker-1] LLM payload generator initialized
-[2026-05-01 10:31:43,272: WARNING/ForkPoolWorker-1] [f3b91e7a] job_started: Job started: analyze
-[2026-05-01 10:31:43,389: WARNING/ForkPoolWorker-1] [f3b91e7a] intelligence_decision: Intelligence decision: 2 actions generated
-[2026-05-01 10:31:43,408: WARNING/ForkPoolWorker-1] [f3b91e7a] SPAN intelligence_evaluation: 60ms
-[2026-05-01 10:31:46,011: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:31:46,619: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:31:47,170: INFO/ForkPoolWorker-1] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:04,690: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:05,369: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:32:08,039: INFO/MainProcess] Task tasks.recon.expand_recon[e282013e-c5e1-471c-abeb-d61f8465d1e3] received
-[2026-05-01 10:32:08,043: WARNING/ForkPoolWorker-4] expand_recon called with empty/invalid targets for engagement f661d8e9-6b03-4bda-adb7-6761eeff2adf, skipping
-[2026-05-01 10:32:08,043: INFO/ForkPoolWorker-1] Task 92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c succeeded
-[2026-05-01 10:32:08,043: INFO/ForkPoolWorker-1] Task tasks.analyze.run_analysis[92ea407b-a421-4cfa-bb5a-c9e1a4b4c83c] succeeded in 24.861570607987233s: {'phase': 'analyze', 'status': 'completed', 'actions': [{'type': 'deep_scan', 'targets': [...], 'reason': 'high_value_targets_identified', 'description': 'High-value targets with potential vulnerabilities identified. Performing deep scan.'}, {'type': 'auth_focused_scan', 'endpoints': [...], 'budget': {...}, 'reason': 'weak_auth_signals', 'description': 'Weak authentication signals detected. Focusing on authentication mechanisms.'}], 'scored_findings': [{'id': 'ba4d38e7-b76c-4387-8f60-c9f01b590f6d', 'engagement_id': 'f661d8e9-6b03-4bda-adb7-6761eeff2adf', 'type': 'INTERNAL_IP_DISCLOSURE', 'severity': 'LOW', 'confidence': 0.35, 'endpoint': 'https://github.com/Neivoc/NovaPay-VulnBank-API.git?_t=1777627217792', 'evidence': {...}, 'source_tool': 'web_scanner', 'repro_steps': None, 'cvss_score': None, 'owasp_category': None, 'cwe_id': None, 'evidence_strength': None, 'tool_agreement_level': 'single_tool', 'fp_likelihood': None, 'verified': False, 'created_at': datetime.datetime(2026, 5, 1, 10, 31, 43, 112863,..., 'e...', ...}]}
-[2026-05-01 10:32:08,044: INFO/ForkPoolWorker-4] Task e282013e-c5e1-471c-abeb-d61f8465d1e3 succeeded
-[2026-05-01 10:32:08,044: INFO/ForkPoolWorker-4] Task tasks.recon.expand_recon[e282013e-c5e1-471c-abeb-d61f8465d1e3] succeeded in 0.003093903011176735s: {'phase': 'recon_expand', 'status': 'skipped', 'reason': 'no_valid_targets'}
-[2026-05-01 10:32:09,130: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:09,968: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:32:12,908: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:13,402: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:32:31,453: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:32,090: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:32:34,578: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:36,489: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:32:54,351: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:32:55,142: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:33:13,295: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:33:13,702: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:33:27,680: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:33:28,361: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:33:31,312: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:33:32,051: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:33:35,666: INFO/ForkPoolWorker-2] HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
-[2026-05-01 10:33:36,994: WARNING/ForkPoolWorker-2] Failed to store LLM evidence: column "updated_at" of relation "findings" does not exist
-LINE 5:                     updated_at = NOW()
-                            ^
-
-[2026-05-01 10:33:54,689: INFO/ForkPoolWorker-2] LLM review complete: 11 analyzed, 0 confirmed, all processed
-[2026-05-01 10:33:54,692: INFO/ForkPoolWorker-2] Task dff30ad2-74dd-47c0-ba71-7a8a46e8633a succeeded
-[2026-05-01 10:33:54,692: INFO/ForkPoolWorker-2] Task tasks.llm_review.run_llm_review[dff30ad2-74dd-47c0-ba71-7a8a46e8633a] succeeded in 131.47272526301094s: {'status': 'completed', 'analyzed': 11, 'confirmed': 0, 'total_candidates': 17, 'budget_exhausted': False}
+[2026-05-03 07:42:54,065: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-05-03 07:42:54,084: INFO/MainProcess] mingle: searching for neighbors
+[2026-05-03 07:42:55,135: INFO/MainProcess] mingle: all alone
+[2026-05-03 07:42:55,310: INFO/MainProcess] celery@MacBook-Air ready.
+[2026-05-03 07:42:56,437: INFO/MainProcess] Task tasks.maintenance.worker_health_check[2d33e61b-9337-4b82-9cf0-d5ef10444453] received
+[2026-05-03 07:42:56,583: INFO/ForkPoolWorker-2] Task 2d33e61b-9337-4b82-9cf0-d5ef10444453 succeeded
+[2026-05-03 07:42:56,584: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[2d33e61b-9337-4b82-9cf0-d5ef10444453] succeeded in 0.14187275903532282s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:42:58,789: INFO/MainProcess] Task tasks.health.ping[bbfc0af5-e464-4381-bc80-bdd64a346358] received
+[2026-05-03 07:42:59,724: INFO/ForkPoolWorker-2] Task bbfc0af5-e464-4381-bc80-bdd64a346358 succeeded
+[2026-05-03 07:42:59,724: INFO/ForkPoolWorker-2] Task tasks.health.ping[bbfc0af5-e464-4381-bc80-bdd64a346358] succeeded in 0.004681356018409133s: {'status': 'ok', 'worker': 'celery@MacBook-Air', 'pid': 63739, 'timestamp': '2026-05-03T06:42:59.723008+00:00'}
+[2026-05-03 07:43:56,349: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7028d13f-5fc7-4d7b-a1b4-65c64c100c11] received
+[2026-05-03 07:43:56,364: INFO/ForkPoolWorker-2] Task 7028d13f-5fc7-4d7b-a1b4-65c64c100c11 succeeded
+[2026-05-03 07:43:56,365: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[7028d13f-5fc7-4d7b-a1b4-65c64c100c11] succeeded in 0.013928738015238196s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:44:56,370: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c8d9e066-342f-48cd-9dd0-62ae123e15f6] received
+[2026-05-03 07:44:56,390: INFO/ForkPoolWorker-2] Task c8d9e066-342f-48cd-9dd0-62ae123e15f6 succeeded
+[2026-05-03 07:44:56,392: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[c8d9e066-342f-48cd-9dd0-62ae123e15f6] succeeded in 0.012832965003326535s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:45:23,379: INFO/MainProcess] Task tasks.maintenance.refresh_views[ba03e189-604c-4fef-b7cf-cc36a1b68129] received
+[2026-05-03 07:45:23,383: INFO/MainProcess] Task tasks.scheduled.run_due_scans[6dde5297-58ed-4b8d-babf-d929f3c4106d] received
+[2026-05-03 07:45:23,646: INFO/ForkPoolWorker-4] Spawned 0 scheduled engagement(s)
+[2026-05-03 07:45:23,648: INFO/ForkPoolWorker-4] Task 6dde5297-58ed-4b8d-babf-d929f3c4106d succeeded
+[2026-05-03 07:45:23,649: INFO/ForkPoolWorker-4] Task tasks.scheduled.run_due_scans[6dde5297-58ed-4b8d-babf-d929f3c4106d] succeeded in 0.2554204079788178s: {'status': 'completed', 'spawned': 0}
+[2026-05-03 07:45:23,664: INFO/ForkPoolWorker-2] Task ba03e189-604c-4fef-b7cf-cc36a1b68129 succeeded
+[2026-05-03 07:45:23,665: INFO/ForkPoolWorker-2] Task tasks.maintenance.refresh_views[ba03e189-604c-4fef-b7cf-cc36a1b68129] succeeded in 0.28323916101362556s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-03 07:45:56,349: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3337e455-c6b7-4ead-b7af-1b616a78d8ad] received
+[2026-05-03 07:45:56,356: INFO/ForkPoolWorker-2] Task 3337e455-c6b7-4ead-b7af-1b616a78d8ad succeeded
+[2026-05-03 07:45:56,356: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[3337e455-c6b7-4ead-b7af-1b616a78d8ad] succeeded in 0.005435297964140773s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:46:56,383: INFO/MainProcess] Task tasks.maintenance.worker_health_check[611e6cce-980e-4b17-81b3-3fe5435afb8d] received
+[2026-05-03 07:46:56,393: INFO/ForkPoolWorker-2] Task 611e6cce-980e-4b17-81b3-3fe5435afb8d succeeded
+[2026-05-03 07:46:56,393: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[611e6cce-980e-4b17-81b3-3fe5435afb8d] succeeded in 0.006584468006622046s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:47:56,383: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9e12f862-94d5-4c06-9896-9c32785b4ce3] received
+[2026-05-03 07:47:56,393: INFO/ForkPoolWorker-2] Task 9e12f862-94d5-4c06-9896-9c32785b4ce3 succeeded
+[2026-05-03 07:47:56,393: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[9e12f862-94d5-4c06-9896-9c32785b4ce3] succeeded in 0.006168180960230529s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:48:56,553: INFO/MainProcess] Task tasks.maintenance.worker_health_check[04e48e74-441c-469c-9531-c53876b13e51] received
+[2026-05-03 07:48:56,562: INFO/ForkPoolWorker-2] Task 04e48e74-441c-469c-9531-c53876b13e51 succeeded
+[2026-05-03 07:48:56,563: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[04e48e74-441c-469c-9531-c53876b13e51] succeeded in 0.005682763003278524s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:49:56,552: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ffc10454-c566-4e0e-ab57-98e07ad60a0b] received
+[2026-05-03 07:49:56,561: INFO/ForkPoolWorker-2] Task ffc10454-c566-4e0e-ab57-98e07ad60a0b succeeded
+[2026-05-03 07:49:56,561: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[ffc10454-c566-4e0e-ab57-98e07ad60a0b] succeeded in 0.0043768640025518835s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:50:23,379: INFO/MainProcess] Task tasks.maintenance.refresh_views[528800b5-5821-41f3-b18f-f242f6987340] received
+[2026-05-03 07:50:23,383: INFO/MainProcess] Task tasks.scheduled.run_due_scans[2123ac70-a313-4c2c-b159-cd23833178b9] received
+[2026-05-03 07:50:23,515: INFO/ForkPoolWorker-4] Spawned 0 scheduled engagement(s)
+[2026-05-03 07:50:23,519: INFO/ForkPoolWorker-4] Task 2123ac70-a313-4c2c-b159-cd23833178b9 succeeded
+[2026-05-03 07:50:23,520: INFO/ForkPoolWorker-4] Task tasks.scheduled.run_due_scans[2123ac70-a313-4c2c-b159-cd23833178b9] succeeded in 0.12935532699339092s: {'status': 'completed', 'spawned': 0}
+[2026-05-03 07:50:23,559: INFO/ForkPoolWorker-2] Task 528800b5-5821-41f3-b18f-f242f6987340 succeeded
+[2026-05-03 07:50:23,559: INFO/ForkPoolWorker-2] Task tasks.maintenance.refresh_views[528800b5-5821-41f3-b18f-f242f6987340] succeeded in 0.17794497398426756s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-03 07:50:56,551: INFO/MainProcess] Task tasks.maintenance.worker_health_check[031087e6-5e35-48e0-9d77-cadff4e0c0c6] received
+[2026-05-03 07:50:56,565: INFO/ForkPoolWorker-2] Task 031087e6-5e35-48e0-9d77-cadff4e0c0c6 succeeded
+[2026-05-03 07:50:56,565: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[031087e6-5e35-48e0-9d77-cadff4e0c0c6] succeeded in 0.011543823988176882s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:51:56,552: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7a401ee0-254b-439d-beb9-e01637a4c4b5] received
+[2026-05-03 07:51:56,558: INFO/ForkPoolWorker-2] Task 7a401ee0-254b-439d-beb9-e01637a4c4b5 succeeded
+[2026-05-03 07:51:56,559: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[7a401ee0-254b-439d-beb9-e01637a4c4b5] succeeded in 0.004591264005284756s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:52:56,610: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4aabbe43-4e5f-4bfc-ae9d-b1606f04a38c] received
+[2026-05-03 07:52:56,641: INFO/ForkPoolWorker-2] Task 4aabbe43-4e5f-4bfc-ae9d-b1606f04a38c succeeded
+[2026-05-03 07:52:56,642: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[4aabbe43-4e5f-4bfc-ae9d-b1606f04a38c] succeeded in 0.013588354049716145s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:53:56,552: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f9008928-956a-4f90-8279-1b565ac4ccca] received
+[2026-05-03 07:53:56,562: INFO/ForkPoolWorker-2] Task f9008928-956a-4f90-8279-1b565ac4ccca succeeded
+[2026-05-03 07:53:56,562: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[f9008928-956a-4f90-8279-1b565ac4ccca] succeeded in 0.006716888980008662s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:54:56,901: INFO/MainProcess] Task tasks.maintenance.worker_health_check[cdf720e2-c32a-4d0e-92da-02a087c297db] received
+[2026-05-03 07:54:56,914: INFO/ForkPoolWorker-2] Task cdf720e2-c32a-4d0e-92da-02a087c297db succeeded
+[2026-05-03 07:54:56,914: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[cdf720e2-c32a-4d0e-92da-02a087c297db] succeeded in 0.01022723998175934s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:55:23,385: INFO/MainProcess] Task tasks.maintenance.refresh_views[96ab0c79-49ba-45ec-8d31-448a76b2ecd6] received
+[2026-05-03 07:55:23,388: INFO/MainProcess] Task tasks.scheduled.run_due_scans[d8c285fb-4b45-4054-9298-9fd3a403605f] received
+[2026-05-03 07:55:23,576: INFO/ForkPoolWorker-4] Spawned 0 scheduled engagement(s)
+[2026-05-03 07:55:23,579: INFO/ForkPoolWorker-4] Task d8c285fb-4b45-4054-9298-9fd3a403605f succeeded
+[2026-05-03 07:55:23,579: INFO/ForkPoolWorker-4] Task tasks.scheduled.run_due_scans[d8c285fb-4b45-4054-9298-9fd3a403605f] succeeded in 0.18883258796995506s: {'status': 'completed', 'spawned': 0}
+[2026-05-03 07:55:23,581: INFO/ForkPoolWorker-2] Task 96ab0c79-49ba-45ec-8d31-448a76b2ecd6 succeeded
+[2026-05-03 07:55:23,581: INFO/ForkPoolWorker-2] Task tasks.maintenance.refresh_views[96ab0c79-49ba-45ec-8d31-448a76b2ecd6] succeeded in 0.19340881501557305s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-03 07:56:13,204: INFO/MainProcess] Task tasks.maintenance.worker_health_check[19c61e06-d871-4924-ba32-07a03f49e913] received
+[2026-05-03 07:56:13,216: INFO/ForkPoolWorker-2] Task 19c61e06-d871-4924-ba32-07a03f49e913 succeeded
+[2026-05-03 07:56:13,216: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[19c61e06-d871-4924-ba32-07a03f49e913] succeeded in 0.006618843006435782s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:57:13,204: INFO/MainProcess] Task tasks.maintenance.worker_health_check[bd8e1726-ba1e-4a11-951f-a822044af8a2] received
+[2026-05-03 07:57:13,213: INFO/ForkPoolWorker-2] Task bd8e1726-ba1e-4a11-951f-a822044af8a2 succeeded
+[2026-05-03 07:57:13,213: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[bd8e1726-ba1e-4a11-951f-a822044af8a2] succeeded in 0.006344774039462209s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:58:13,205: INFO/MainProcess] Task tasks.maintenance.worker_health_check[57339dca-3036-4b86-90fd-acf65a4e7f45] received
+[2026-05-03 07:58:13,215: INFO/ForkPoolWorker-2] Task 57339dca-3036-4b86-90fd-acf65a4e7f45 succeeded
+[2026-05-03 07:58:13,216: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[57339dca-3036-4b86-90fd-acf65a4e7f45] succeeded in 0.006801091018132865s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 07:59:13,204: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4aded231-9d16-4ff0-a312-5e2d4c2db87c] received
+[2026-05-03 07:59:13,214: INFO/ForkPoolWorker-2] Task 4aded231-9d16-4ff0-a312-5e2d4c2db87c succeeded
+[2026-05-03 07:59:13,215: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[4aded231-9d16-4ff0-a312-5e2d4c2db87c] succeeded in 0.007426673022564501s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:00:13,431: INFO/MainProcess] Task tasks.maintenance.worker_health_check[645c266b-9064-430a-854b-2dfe1e8dd423] received
+[2026-05-03 08:00:13,446: INFO/ForkPoolWorker-2] Task 645c266b-9064-430a-854b-2dfe1e8dd423 succeeded
+[2026-05-03 08:00:13,447: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[645c266b-9064-430a-854b-2dfe1e8dd423] succeeded in 0.012445602042134851s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:00:23,379: INFO/MainProcess] Task tasks.maintenance.refresh_views[50824e71-d473-472e-8eef-de7fc4801bd0] received
+[2026-05-03 08:00:23,393: INFO/MainProcess] Task tasks.scheduled.run_due_scans[eef31020-d5b4-44e9-979c-3e8bc0ff5402] received
+[2026-05-03 08:00:23,636: INFO/ForkPoolWorker-4] Spawned 0 scheduled engagement(s)
+[2026-05-03 08:00:23,643: INFO/ForkPoolWorker-2] Task 50824e71-d473-472e-8eef-de7fc4801bd0 succeeded
+[2026-05-03 08:00:23,643: INFO/ForkPoolWorker-4] Task eef31020-d5b4-44e9-979c-3e8bc0ff5402 succeeded
+[2026-05-03 08:00:23,644: INFO/ForkPoolWorker-2] Task tasks.maintenance.refresh_views[50824e71-d473-472e-8eef-de7fc4801bd0] succeeded in 0.25967973400838673s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-03 08:00:23,644: INFO/ForkPoolWorker-4] Task tasks.scheduled.run_due_scans[eef31020-d5b4-44e9-979c-3e8bc0ff5402] succeeded in 0.24720461096148938s: {'status': 'completed', 'spawned': 0}
+[2026-05-03 08:01:13,444: INFO/MainProcess] Task tasks.maintenance.worker_health_check[a7fdac3f-607f-4dab-9625-6c5bb3b9f292] received
+[2026-05-03 08:01:13,454: INFO/ForkPoolWorker-2] Task a7fdac3f-607f-4dab-9625-6c5bb3b9f292 succeeded
+[2026-05-03 08:01:13,454: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[a7fdac3f-607f-4dab-9625-6c5bb3b9f292] succeeded in 0.006063000997528434s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:02:13,441: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b993b4ec-d533-436b-875e-2004e31b4698] received
+[2026-05-03 08:02:13,460: INFO/ForkPoolWorker-2] Task b993b4ec-d533-436b-875e-2004e31b4698 succeeded
+[2026-05-03 08:02:13,461: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[b993b4ec-d533-436b-875e-2004e31b4698] succeeded in 0.016359958972316235s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:03:13,443: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f5f78472-fa67-4ab4-b8e5-ef804f79e6ff] received
+[2026-05-03 08:03:13,454: INFO/ForkPoolWorker-2] Task f5f78472-fa67-4ab4-b8e5-ef804f79e6ff succeeded
+[2026-05-03 08:03:13,457: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[f5f78472-fa67-4ab4-b8e5-ef804f79e6ff] succeeded in 0.00899911398300901s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:04:13,447: INFO/MainProcess] Task tasks.maintenance.worker_health_check[41194f03-b391-45f9-a83e-f4c1f357df77] received
+[2026-05-03 08:04:13,468: INFO/ForkPoolWorker-2] Task 41194f03-b391-45f9-a83e-f4c1f357df77 succeeded
+[2026-05-03 08:04:13,470: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[41194f03-b391-45f9-a83e-f4c1f357df77] succeeded in 0.014928626012988389s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:05:13,444: INFO/MainProcess] Task tasks.maintenance.worker_health_check[74f4f527-f995-46fe-9399-286ee764af1a] received
+[2026-05-03 08:05:13,461: INFO/ForkPoolWorker-2] Task 74f4f527-f995-46fe-9399-286ee764af1a succeeded
+[2026-05-03 08:05:13,462: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[74f4f527-f995-46fe-9399-286ee764af1a] succeeded in 0.014054383966140449s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:05:23,379: INFO/MainProcess] Task tasks.maintenance.refresh_views[cff6cbcc-c78f-4fb9-9fc8-2fd7d62a716c] received
+[2026-05-03 08:05:23,388: INFO/MainProcess] Task tasks.scheduled.run_due_scans[7f6559e6-7ea4-4c70-ad9f-a1932357a644] received
+[2026-05-03 08:05:23,602: INFO/ForkPoolWorker-4] Spawned 0 scheduled engagement(s)
+[2026-05-03 08:05:23,605: INFO/ForkPoolWorker-4] Task 7f6559e6-7ea4-4c70-ad9f-a1932357a644 succeeded
+[2026-05-03 08:05:23,606: INFO/ForkPoolWorker-4] Task tasks.scheduled.run_due_scans[7f6559e6-7ea4-4c70-ad9f-a1932357a644] succeeded in 0.21186392399249598s: {'status': 'completed', 'spawned': 0}
+[2026-05-03 08:05:23,733: INFO/ForkPoolWorker-2] Task cff6cbcc-c78f-4fb9-9fc8-2fd7d62a716c succeeded
+[2026-05-03 08:05:23,734: INFO/ForkPoolWorker-2] Task tasks.maintenance.refresh_views[cff6cbcc-c78f-4fb9-9fc8-2fd7d62a716c] succeeded in 0.3517611459828913s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-03 08:06:13,457: INFO/MainProcess] Task tasks.maintenance.worker_health_check[01aaff59-2855-49f4-a7f7-452cf933f221] received
+[2026-05-03 08:06:13,478: INFO/ForkPoolWorker-2] Task 01aaff59-2855-49f4-a7f7-452cf933f221 succeeded
+[2026-05-03 08:06:13,479: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[01aaff59-2855-49f4-a7f7-452cf933f221] succeeded in 0.011508857016451657s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:07:13,554: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c655f986-3f46-4c29-a561-5cf039db19ae] received
+[2026-05-03 08:07:14,140: INFO/ForkPoolWorker-2] Task c655f986-3f46-4c29-a561-5cf039db19ae succeeded
+[2026-05-03 08:07:14,141: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[c655f986-3f46-4c29-a561-5cf039db19ae] succeeded in 0.5819280910072848s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:08:13,444: INFO/MainProcess] Task tasks.maintenance.worker_health_check[cc94b699-5753-4841-8cd1-74fb4da90ac6] received
+[2026-05-03 08:08:13,454: INFO/ForkPoolWorker-2] Task cc94b699-5753-4841-8cd1-74fb4da90ac6 succeeded
+[2026-05-03 08:08:13,455: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[cc94b699-5753-4841-8cd1-74fb4da90ac6] succeeded in 0.0067064479808323085s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:09:13,445: INFO/MainProcess] Task tasks.maintenance.worker_health_check[88b18d7e-ea3a-43fa-81aa-85943db510f6] received
+[2026-05-03 08:09:13,454: INFO/ForkPoolWorker-2] Task 88b18d7e-ea3a-43fa-81aa-85943db510f6 succeeded
+[2026-05-03 08:09:13,454: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[88b18d7e-ea3a-43fa-81aa-85943db510f6] succeeded in 0.0063521870179101825s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:10:13,444: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5b9724f7-7358-4137-a182-d8f281e73660] received
+[2026-05-03 08:10:13,456: INFO/ForkPoolWorker-2] Task 5b9724f7-7358-4137-a182-d8f281e73660 succeeded
+[2026-05-03 08:10:13,456: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[5b9724f7-7358-4137-a182-d8f281e73660] succeeded in 0.00926075002644211s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-03 08:10:23,381: INFO/MainProcess] Task tasks.maintenance.refresh_views[5dbafc4c-535b-4318-989b-51909b716884] received
+[2026-05-03 08:10:23,396: INFO/MainProcess] Task tasks.scheduled.run_due_scans[113ca195-0793-43f5-8468-1e9b81a0a0ea] received
+[2026-05-03 08:10:23,811: INFO/ForkPoolWorker-4] Spawned 0 scheduled engagement(s)
+[2026-05-03 08:10:23,817: INFO/ForkPoolWorker-4] Task 113ca195-0793-43f5-8468-1e9b81a0a0ea succeeded
+[2026-05-03 08:10:23,818: INFO/ForkPoolWorker-4] Task tasks.scheduled.run_due_scans[113ca195-0793-43f5-8468-1e9b81a0a0ea] succeeded in 0.4090329160098918s: {'status': 'completed', 'spawned': 0}
+[2026-05-03 08:10:23,821: INFO/ForkPoolWorker-2] Task 5dbafc4c-535b-4318-989b-51909b716884 succeeded
+[2026-05-03 08:10:23,821: INFO/ForkPoolWorker-2] Task tasks.maintenance.refresh_views[5dbafc4c-535b-4318-989b-51909b716884] succeeded in 0.4282659720047377s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-03 08:11:13,481: INFO/MainProcess] Task tasks.maintenance.worker_health_check[391db63b-86b6-4382-a752-5b83f816f61b] received
+[2026-05-03 08:11:13,532: INFO/ForkPoolWorker-2] Task 391db63b-86b6-4382-a752-5b83f816f61b succeeded
+[2026-05-03 08:11:13,533: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[391db63b-86b6-4382-a752-5b83f816f61b] succeeded in 0.038127854000777006s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}

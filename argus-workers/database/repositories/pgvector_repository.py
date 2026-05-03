@@ -92,8 +92,7 @@ class PGVectorRepository:
                 cursor.execute(
                     """
                     UPDATE findings
-                    SET embedding = %s::vector,
-                        updated_at = NOW()
+                    SET embedding = %s::vector
                     WHERE id = %s AND engagement_id = %s
                     """,
                     (embedding_array, finding_id, engagement_id)
