@@ -277,7 +277,7 @@ class Orchestrator:
             "status": "completed",
             "findings_count": findings_count,
             "next_state": "scanning",
-            "recon_context": recon_context,
+            "recon_context": recon_context.to_dict() if hasattr(recon_context, "to_dict") else recon_context,
             "trace_id": get_trace_id(),
         }
 
@@ -628,6 +628,14 @@ class Orchestrator:
             findings = self.run_scan_with_agent(
                 targets, recon_context, scan_aggressiveness, auth_config=auth_config
             )
+            # Safety net: always run deterministic scan tools after agent
+            # so nuclei, web_scanner, dalfox, sqlmap etc. are never skipped
+            logger.info("Agent scan complete — running deterministic safety net")
+            tech_stack = recon_context.tech_stack if recon_context else None
+            deterministic_findings = execute_scan_pipeline(
+                self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack
+            )
+            findings.extend(deterministic_findings)
         else:
             mode = "deterministic"
             if not recon_context:
