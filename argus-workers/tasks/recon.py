@@ -48,6 +48,20 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                       job_extra={"target": valid_targets[0], "targets": valid_targets, "budget": budget},
                       trace_id=trace_id, current_state="recon") as ctx:
         result = ctx.orchestrator.run_recon(ctx.job)
+
+        # Save updated recon context to Redis so scan can read it
+        if result.get("recon_context"):
+            try:
+                from tasks.utils import save_recon_context
+                ctx_data = result["recon_context"]
+                if isinstance(ctx_data, dict):
+                    from models.recon_context import ReconContext
+                    ctx_data = ReconContext.from_dict(ctx_data)
+                save_recon_context(engagement_id, ctx_data)
+                logger.info("Saved expanded recon context for %s", engagement_id)
+            except Exception as e:
+                logger.warning("Failed to save expanded recon context: %s", e)
+
         ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
         app.send_task('tasks.scan.run_scan', args=[engagement_id, valid_targets, budget, ctx.trace_id])
         return result

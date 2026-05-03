@@ -215,7 +215,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="nmap",
     description="Network port scanner",
-    phases=["recon"],
+    phases=[],  # Disabled: no nmap parser exists. Use naabu for port scanning.
     default_args=["-oX", "-"],
     parameters=[
         ToolParameter("target", "Target host", required=True),
@@ -227,7 +227,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="gospider",
     description="Web spider for endpoint discovery",
-    phases=["recon"],
+    phases=[],  # Disabled: no gospider parser exists. Katana covers web crawling.
     default_args=["-q", "-j"],
     parameters=[
         ToolParameter("target", "Target URL", flag="-s", required=True),
