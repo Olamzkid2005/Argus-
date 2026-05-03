@@ -111,6 +111,8 @@ class ReActAgent:
 
     def set_tool_runner(self, tool_runner):
         """Register all tools from a ToolRunner instance."""
+        from tool_definitions import TOOLS
+
         self._ensure_phase_tools()
         phase_tools = self.PHASE_TOOLS.get(self._phase, [])
         for tool_name in phase_tools:
@@ -127,13 +129,18 @@ class ReActAgent:
                 return run_tool
 
             if self.registry.get_tool(tool_name) is None:
+                tool_def = TOOLS.get(tool_name)
                 self.registry.register(
                     tool_name,
                     make_runner(tool_name),
                     {
                         "name": tool_name,
-                        "description": f"Run {tool_name}",
-                        "parameters": [],
+                        "description": tool_def.description if tool_def else f"Run {tool_name}",
+                        "parameters": [
+                            {"name": p.name, "type": p.type, "required": p.required,
+                             "description": p.description}
+                            for p in (tool_def.parameters if tool_def else [])
+                        ],
                     },
                 )
 
@@ -365,10 +372,12 @@ class ReActAgent:
             results.append(result)
 
             # Risk 6: auto-stop on low finding yield
-            new_findings_count = (
-                len(result.findings) if hasattr(result, "findings") else 0
+            output_was_empty = (
+                not result.success or
+                not result.output or
+                len(result.output.strip()) < 50  # less than 50 chars = truly empty
             )
-            if new_findings_count == 0:
+            if output_was_empty:
                 zero_finding_consecutive += 1
             else:
                 zero_finding_consecutive = 0
@@ -379,10 +388,17 @@ class ReActAgent:
                 )
                 break
 
+            # Build meaningful observation summary with actual output
+            output = result.output or ""
+            output_lines = [l for l in output.split("\n") if l.strip()]
+            summary_lines = output_lines[:5]
+            summary = "\n".join(summary_lines) if summary_lines else "no output"
+
             self.add_to_history(
                 "observation",
                 f"Tool {action.tool} {'succeeded' if result.success else 'failed'}"
-                + (f" — {result.error[:100]}" if not result.success else ""),
+                + (f" — {result.error[:100]}" if not result.success else "")
+                + f" — output ({len(output_lines)} lines):\n{summary}"
             )
 
             # Log decision to repository if available

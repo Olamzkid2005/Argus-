@@ -72,4 +72,4 @@ LLM_AGENT_COST_PER_1K_OUTPUT = 0.000600    # gpt-4o-mini output cost
 # ── Mitigations: Timeout & Retry ────────────────────────────────────────
 LLM_AGENT_TIMEOUT_SECONDS = int(os.getenv("LLM_AGENT_TIMEOUT_SECONDS", "30"))
 LLM_AGENT_MAX_RETRIES = int(os.getenv("LLM_AGENT_MAX_RETRIES", "2"))
-LLM_AGENT_ZERO_FINDING_STOP = int(os.getenv("LLM_AGENT_ZERO_FINDING_STOP", "2"))
+LLM_AGENT_ZERO_FINDING_STOP = int(os.getenv("LLM_AGENT_ZERO_FINDING_STOP", "4"))
