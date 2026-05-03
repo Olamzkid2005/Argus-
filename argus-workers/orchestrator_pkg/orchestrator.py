@@ -306,6 +306,38 @@ class Orchestrator:
         if not self.finding_repo or not findings:
             return
 
+        # --- Normalize heterogeneous inputs to plain dicts ---
+        # findings may arrive as: dict, AgentResult, StepResult, or normalized finding dict.
+        # Anything that is not a dict is coerced here so the rest of the method never
+        # calls .get() on a dataclass object.
+        normalized_inputs: list[dict] = []
+        for item in findings:
+            if isinstance(item, dict):
+                normalized_inputs.append(item)
+                continue
+            # AgentResult: has .tool, .output, .success — no findings inside
+            if hasattr(item, "tool") and hasattr(item, "output"):
+                logger.warning(
+                    f"_save_findings received unparsed tool result for tool "
+                    f"'{getattr(item, 'tool', 'unknown')}' — parse tool output before "
+                    f"calling _save_findings. Skipping this result."
+                )
+                continue
+            # StepResult: has .findings list attribute
+            if hasattr(item, "findings") and isinstance(item.findings, list):
+                for f in item.findings:
+                    if isinstance(f, dict):
+                        normalized_inputs.append(f)
+                continue
+            # Unknown type — try to coerce to dict
+            try:
+                normalized_inputs.append(vars(item))
+            except Exception:
+                logger.warning(f"_save_findings: cannot coerce {type(item)} to dict, skipping")
+        findings = normalized_inputs
+        if not findings:
+            return
+
         # Normalize tool key: findings may have "tool" or "source_tool"
         _tool_key = source_tool_key
 
@@ -525,7 +557,6 @@ class Orchestrator:
                     decision_repo=decision_repo,
                 )
 
-                # Step 21: Wrap registry.call with scope validation
                 if authorized_scope:
                     scope_validator = ScopeValidator(
                         self.engagement_id, authorized_scope
@@ -609,7 +640,6 @@ class Orchestrator:
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
 
-        # Step 10: Dispatch to LLM agent if available, else deterministic
         recon_context = load_recon_context(self.engagement_id)
         agent_mode_enabled = job.get("agent_mode", True)
 
@@ -628,8 +658,6 @@ class Orchestrator:
             findings = self.run_scan_with_agent(
                 targets, recon_context, scan_aggressiveness, auth_config=auth_config
             )
-            # Safety net: always run deterministic scan tools after agent
-            # so nuclei, web_scanner, dalfox, sqlmap etc. are never skipped
             logger.info("Agent scan complete — running deterministic safety net")
             tech_stack = recon_context.tech_stack if recon_context else None
             deterministic_findings = execute_scan_pipeline(
@@ -650,7 +678,6 @@ class Orchestrator:
                 self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack
             )
 
-        # Browser-based SPA scan (complementary to requests-based scanning)
         try:
             from tools.browser_scanner import scan as run_browser_scan
             tech = recon_context.tech_stack if recon_context else (tech_stack or [])
@@ -752,7 +779,6 @@ class Orchestrator:
 
         evaluation = engine.evaluate(snapshot)
 
-        # Step 14: LLM synthesis pass on top of rule-based evaluation
         synthesis = {}
         if self.llm_client and self.llm_client.is_available():
             try:
@@ -816,7 +842,6 @@ class Orchestrator:
 
         self.logger.log_job_started(job_type="report", engagement_id=self.engagement_id)
 
-        # LLM report generation (if available)
         report_data = {}
         if self.llm_client and self.llm_client.is_available():
             try:
@@ -936,7 +961,6 @@ class Orchestrator:
         if findings_count == 0:
             logger.info(f"Repository scan completed with no findings for {repo_url}")
 
-        # Build recon context from repo findings for LLM agent
         if findings_count > 0:
             try:
                 vuln_types = list({f.get("type", "UNKNOWN") for f in findings})
@@ -960,7 +984,6 @@ class Orchestrator:
                     if f.get("type") == "DEPENDENCY_VULNERABILITY":
                         dep_vulns += 1
 
-                # Detect languages from findings
                 lang_extensions = {
                     ".py": "Python",
                     ".js": "JavaScript",
@@ -980,7 +1003,6 @@ class Orchestrator:
                     if ext in lang_extensions:
                         detected_langs.add(lang_extensions[ext])
 
-                # Detect frameworks from findings content
                 frameworks = []
                 for f in findings:
                     fp = (f.get("file_path") or f.get("endpoint", "")).lower()

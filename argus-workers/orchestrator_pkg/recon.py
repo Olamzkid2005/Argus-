@@ -91,7 +91,7 @@ def execute_recon_tools(
     try:
         emit_tool_start(ctx.engagement_id, "httpx", ["-u", target, "-json", "-silent"])
         httpx_result = ctx.tool_runner.run(
-            "httpx", ["-u", target, "-json", "-silent"], timeout=TOOL_TIMEOUT_SHORT
+            "httpx", ["-u", target, "-json", "-silent"], timeout=30
         )
         parsed_count = 0
         if httpx_result.success:
@@ -123,7 +123,7 @@ def execute_recon_tools(
         katana_result = ctx.tool_runner.run(
             "katana",
             ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
-            timeout=TOOL_TIMEOUT_DEFAULT if agg == "extreme" else 120,
+            timeout=90,
         )
         parsed_count = 0
         if katana_result.success:
@@ -161,7 +161,7 @@ def execute_recon_tools(
         ffuf_result = ctx.tool_runner.run(
             "ffuf",
             ffuf_cmd,
-            timeout=TOOL_TIMEOUT_LONG if agg == "extreme" else TOOL_TIMEOUT_DEFAULT,
+            timeout=60,
         )
         parsed_count = 0
         if ffuf_result.success:
@@ -190,7 +190,7 @@ def execute_recon_tools(
     try:
         amass_cmd = amass_mode + [target_domain, "-json"]
         amass_timeout = (
-            TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
+            120 if agg == "default" else 180 if agg == "high" else 240
         )
         emit_tool_start(ctx.engagement_id, "amass", amass_cmd)
         amass_result = ctx.tool_runner.run("amass", amass_cmd, timeout=amass_timeout)
@@ -223,7 +223,7 @@ def execute_recon_tools(
             ctx.engagement_id, "subfinder", ["-d", target_domain, "-silent"]
         )
         subfinder_result = ctx.tool_runner.run(
-            "subfinder", ["-d", target_domain, "-silent"], timeout=TOOL_TIMEOUT_SHORT
+            "subfinder", ["-d", target_domain, "-silent"], timeout=30
         )
         parsed_count = 0
         if subfinder_result.success:
@@ -248,7 +248,7 @@ def execute_recon_tools(
     try:
         emit_tool_start(ctx.engagement_id, "alterx", ["-d", target_domain, "-silent"])
         alterx_result = ctx.tool_runner.run(
-            "alterx", ["-d", target_domain, "-silent"], timeout=120
+            "alterx", ["-d", target_domain, "-silent"], timeout=30
         )
         parsed_count = 0
         if alterx_result.success:
@@ -284,7 +284,7 @@ def execute_recon_tools(
         else:
             naabu_cmd.extend(["-top-ports", naabu_port_val])
         naabu_timeout = (
-            120 if agg == "default" else TOOL_TIMEOUT_LONG if agg == "high" else 900
+            60 if agg == "default" else 90 if agg == "high" else 120
         )
         emit_tool_start(ctx.engagement_id, "naabu", naabu_cmd)
         naabu_result = ctx.tool_runner.run("naabu", naabu_cmd, timeout=naabu_timeout)
@@ -311,7 +311,7 @@ def execute_recon_tools(
     try:
         emit_tool_start(ctx.engagement_id, "whatweb", ["--format=json", target])
         whatweb_result = ctx.tool_runner.run(
-            "whatweb", ["--format=json", target], timeout=120
+            "whatweb", ["--format=json", target], timeout=30
         )
         parsed_count = 0
         if whatweb_result.success:
@@ -338,7 +338,7 @@ def execute_recon_tools(
     try:
         emit_tool_start(ctx.engagement_id, "nikto", ["-h", target, "-Format", "csv"])
         nikto_result = ctx.tool_runner.run(
-            "nikto", ["-h", target, "-Format", "csv"], timeout=TOOL_TIMEOUT_LONG
+            "nikto", ["-h", target, "-Format", "csv"], timeout=90
         )
         parsed_count = 0
         if nikto_result.success:
@@ -358,7 +358,7 @@ def execute_recon_tools(
     try:
         emit_tool_start(ctx.engagement_id, "gau", [target, "--json"])
         gau_result = ctx.tool_runner.run(
-            "gau", [target, "--json"], timeout=TOOL_TIMEOUT_DEFAULT
+            "gau", [target, "--json"], timeout=60
         )
         parsed_count = 0
         if gau_result.success:
@@ -377,7 +377,7 @@ def execute_recon_tools(
     _emit("waybackurls", "Retrieving historical URLs from Wayback Machine", "started")
     try:
         emit_tool_start(ctx.engagement_id, "waybackurls", [target])
-        wayback_result = ctx.tool_runner.run("waybackurls", [target], timeout=120)
+        wayback_result = ctx.tool_runner.run("waybackurls", [target], timeout=45)
         parsed_count = 0
         if wayback_result.success:
             parsed = ctx.parser.parse("waybackurls", wayback_result.stdout)
