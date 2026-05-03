@@ -11,7 +11,12 @@ from tasks.base import task_context
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="tasks.recon.run_recon")
+@app.task(
+    bind=True,
+    name="tasks.recon.run_recon",
+    soft_time_limit=900,   # 15 minutes for long-running recon tools
+    time_limit=1200,        # 20 minutes hard limit
+)
 def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None, agent_mode: bool = True):
     """
     Execute reconnaissance phase for an engagement
