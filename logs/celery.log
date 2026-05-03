@@ -1,10 +1,10 @@
  
  -------------- celery@MacBook-Air.local v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-03 14:35:10
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-03 20:42:14
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x10a1b52b0
+- ** ---------- .> app:         argus_workers:0x1047e12b0
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 4 (prefork)
@@ -47,11 +47,7 @@
   . tasks.scheduled.run_due_scans
   . tasks.security.run_self_scan
 
-[2026-05-03 14:35:11,883: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-05-03 14:35:11,902: INFO/MainProcess] mingle: searching for neighbors
-[2026-05-03 14:35:12,923: INFO/MainProcess] mingle: all alone
-[2026-05-03 14:35:13,124: INFO/MainProcess] celery@MacBook-Air.local ready.
-
-worker: Warm shutdown (MainProcess)
-
-worker: Warm shutdown (MainProcess)
+[2026-05-03 20:42:15,230: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-05-03 20:42:15,272: INFO/MainProcess] mingle: searching for neighbors
+[2026-05-03 20:42:16,291: INFO/MainProcess] mingle: all alone
+[2026-05-03 20:42:16,403: INFO/MainProcess] celery@MacBook-Air.local ready.
