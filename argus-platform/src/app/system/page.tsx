@@ -84,31 +84,31 @@ function CircuitBreakerCard({ breaker, index }: { breaker: CircuitBreaker; index
       whileHover={{ y: -2, transition: { duration: 0.25 } }}
       className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6 transition-all duration-300 hover:shadow-glow hover:border-primary/30"
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center`}>
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0`}>
             <Zap size={16} className={cfg.text} />
           </div>
-          <span className="text-sm font-bold text-on-surface dark:text-[#F0F0F5] uppercase tracking-wider font-headline">
+          <span className="text-sm font-bold text-on-surface dark:text-[#F0F0F5] uppercase truncate font-headline">
             {breaker.tool}
           </span>
         </div>
-        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border shrink-0 ${cfg.bg} ${cfg.text} ${cfg.border}`}>
           {cfg.label}
         </span>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3">
-          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">
+        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 min-w-0">
+          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] mb-1">
             Failures
           </div>
           <div className="text-xl font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">
             <AnimatedCounter value={breaker.failure_count} />
           </div>
         </div>
-        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3">
-          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">
+        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 min-w-0">
+          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] mb-1">
             Cooldown
           </div>
           <div className="text-xl font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">
@@ -161,23 +161,23 @@ function ToolHealthCard({ tool }: { tool: ToolHealthData }) {
           {cfg.label}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-on-surface-variant">
-        <div>
-          <span className="block uppercase tracking-wider opacity-60">Success Rate</span>
+      <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-on-surface-variant">
+        <div className="min-w-0">
+          <span className="block truncate opacity-60">Success Rate</span>
           <span className="text-sm font-bold text-on-surface">{ratePct}%</span>
         </div>
-        <div>
-          <span className="block uppercase tracking-wider opacity-60">Runs (24h)</span>
+        <div className="min-w-0">
+          <span className="block truncate opacity-60">Runs 24h</span>
           <span className="text-sm font-bold text-on-surface">{tool.total_runs_24h}</span>
         </div>
-        <div>
-          <span className="block uppercase tracking-wider opacity-60">Avg Duration</span>
+        <div className="min-w-0">
+          <span className="block truncate opacity-60">Avg Duration</span>
           <span className={`text-sm font-bold ${tool.avg_duration_seconds > 30 ? "text-yellow-500" : "text-on-surface"}`}>
             {tool.avg_duration_seconds.toFixed(1)}s
           </span>
         </div>
-        <div>
-          <span className="block uppercase tracking-wider opacity-60">Consec Fails</span>
+        <div className="min-w-0">
+          <span className="block truncate opacity-60">Consec Fails</span>
           <span className={`text-sm font-bold ${tool.consecutive_failures >= 3 ? "text-error" : "text-on-surface"}`}>
             {tool.consecutive_failures}
           </span>
