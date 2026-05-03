@@ -7,7 +7,7 @@
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 3.6s
+ ✓ Ready in 15.2s
  ○ Compiling /src/middleware ...
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
@@ -29,64 +29,13 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- GET / 200 in 19660ms
 <w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (153kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
-2026-05-03T06:43:39.045Z [Argus] [API] GET /api/auth/session {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+The user aborted a request.
 
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T06:43:39.859Z [Argus] [API] POST /api/engagement/create {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+Retrying 1/3...
+The user aborted a request.
 
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+Retrying 1/3...
+The user aborted a request.
 
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T06:43:44.057Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T06:43:44.226Z [Argus] [API] POST /api/engagement/create 
-(node:63678) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
-(Use `node --trace-deprecation ...` to show where the warning was created)
- POST /api/engagement/create 200 in 4411ms
-2026-05-03T06:43:45.294Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 6239ms
+Retrying 2/3...

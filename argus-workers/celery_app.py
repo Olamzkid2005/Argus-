@@ -111,7 +111,7 @@ app.conf.update(
     task_track_started=True,  # Track when tasks start
     # Task Time Limits
     task_soft_time_limit=300,  # 5 minutes soft limit
-    task_time_limit=600,  # 10 minutes hard limit
+    task_time_limit=600,  # 10 minutes hard limit (global default)
     # Task Retry Configuration
     task_autoretry_for=(ConnectionError, TimeoutError, OSError),
     task_retry_kwargs={"max_retries": 3},
