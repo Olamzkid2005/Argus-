@@ -358,17 +358,30 @@ class Orchestrator:
             if api_key:
                 try:
                     import httpx
+                    # Try OpenRouter endpoint first (works with sk-or- keys)
+                    if api_key.startswith("sk-or-"):
+                        resp = httpx.post(
+                            "https://openrouter.ai/api/v1/embeddings",
+                            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                            json={"model": "text-embedding-3-small", "input": text},
+                            timeout=15,
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            return data["data"][0]["embedding"]
+                    # Fall back to OpenAI endpoint
                     resp = httpx.post(
                         "https://api.openai.com/v1/embeddings",
                         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                         json={"model": "text-embedding-3-small", "input": text},
-                        timeout=15,
+                        timeout=10,
                     )
                     if resp.status_code == 200:
                         data = resp.json()
                         return data["data"][0]["embedding"]
                 except Exception as e:
-                    logger.debug(f"OpenAI embedding API failed (non-fatal): {e}")
+                    logger.debug(f"Embedding API failed (non-fatal): {e}")
+            # Silent fallback to hash-based embedding (no API call)
             from database.repositories.pgvector_repository import PGVectorRepository
             return PGVectorRepository()._generate_embedding_fallback(text)
 
