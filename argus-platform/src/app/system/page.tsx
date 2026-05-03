@@ -84,7 +84,7 @@ function CircuitBreakerCard({ breaker, index }: { breaker: CircuitBreaker; index
       whileHover={{ y: -2, transition: { duration: 0.25 } }}
       className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6 transition-all duration-300 hover:shadow-glow hover:border-primary/30"
     >
-      <div className="flex items-start justify-between mb-4 gap-2">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-nowrap">
         <div className="flex items-center gap-2 min-w-0">
           <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0`}>
             <Zap size={16} className={cfg.text} />
@@ -93,22 +93,22 @@ function CircuitBreakerCard({ breaker, index }: { breaker: CircuitBreaker; index
             {breaker.tool}
           </span>
         </div>
-        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border shrink-0 ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap ${cfg.bg} ${cfg.text} ${cfg.border}`}>
           {cfg.label}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 min-w-0">
-          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] mb-1">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg px-3 py-2.5 min-w-0">
+          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] mb-0.5">
             Failures
           </div>
           <div className="text-xl font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">
             <AnimatedCounter value={breaker.failure_count} />
           </div>
         </div>
-        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 min-w-0">
-          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] mb-1">
+        <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg px-3 py-2.5 min-w-0">
+          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] mb-0.5">
             Cooldown
           </div>
           <div className="text-xl font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">
