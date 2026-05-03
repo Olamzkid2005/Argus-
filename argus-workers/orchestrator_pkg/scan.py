@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 def execute_scan_tools(
     ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS,
     auth_config: dict | None = None, tech_stack: list[str] | None = None,
+    skip_tools: set | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools against targets.
@@ -46,6 +47,7 @@ def execute_scan_tools(
 
     all_findings = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
+    _skip = set(skip_tools or [])
 
     for target in targets:
         # Skip None/empty targets
@@ -95,6 +97,7 @@ def execute_scan_tools(
                     "Nuclei templates not found. Scan will use default template download."
                 )
 
+            if "nuclei" in _skip: raise Exception("__skip__")
             nuclei_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 nuclei_cmd.extend(["-severity", "low,medium,high,critical"])
@@ -124,11 +127,15 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"nuclei failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping nuclei (already ran via agent)")
+            else:
+                logger.warning(f"nuclei failed for {target}: {e}")
 
         # Execute dalfox for XSS
         try:
             dalfox_cmd = ["url", target, "--json"]
+            if "dalfox" in _skip: raise Exception("__skip__")
             dalfox_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 dalfox_cmd.append("-b")
@@ -147,12 +154,16 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"dalfox failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping dalfox (already ran via agent)")
+            else:
+                logger.warning(f"dalfox failed for {target}: {e}")
 
         # Execute sqlmap for SQL injection
         try:
             sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
             sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
+            if "sqlmap" in _skip: raise Exception("__skip__")
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
@@ -177,11 +188,15 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"sqlmap failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping sqlmap (already ran via agent)")
+            else:
+                logger.warning(f"sqlmap failed for {target}: {e}")
 
         # Execute arjun for parameter discovery
         try:
             arjun_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "arjun.json")
+            if "arjun" in _skip: raise Exception("__skip__")
             arjun_threads = (
                 "20" if agg == "default" else "50" if agg == "high" else "100"
             )
@@ -211,10 +226,14 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"arjun failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping arjun (already ran via agent)")
+            else:
+                logger.warning(f"arjun failed for {target}: {e}")
 
         # Execute jwt_tool for JWT vulnerability testing
         try:
+            if "jwt_tool" in _skip: raise Exception("__skip__")
             emit_tool_start(ctx.engagement_id, "jwt_tool", ["-u", target, "-C", "-d"])
             jwt_result = ctx.tool_runner.run(
                 "jwt_tool", ["-u", target, "-C", "-d"], timeout=120
@@ -226,10 +245,14 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"jwt_tool failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping jwt_tool (already ran via agent)")
+            else:
+                logger.warning(f"jwt_tool failed for {target}: {e}")
 
         # Execute commix for command injection testing
         try:
+            if "commix" in _skip: raise Exception("__skip__")
             commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
             emit_tool_start(
                 ctx.engagement_id,
@@ -254,10 +277,14 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"commix failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping commix (already ran via agent)")
+            else:
+                logger.warning(f"commix failed for {target}: {e}")
 
         # Execute testssl for TLS vulnerability scanning
         try:
+            if "testssl" in _skip: raise Exception("__skip__")
             testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
             emit_tool_start(
                 ctx.engagement_id,
@@ -282,7 +309,10 @@ def execute_scan_tools(
                     if normalized:
                         all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"testssl failed for {target}: {e}")
+            if "__skip__" in str(e):
+                logger.info(f"Skipping testssl (already ran via agent)")
+            else:
+                logger.warning(f"testssl failed for {target}: {e}")
 
         # Authenticate session if auth_config is provided
         authenticated_session = None

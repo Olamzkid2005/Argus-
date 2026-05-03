@@ -61,27 +61,15 @@ class Orchestrator:
     """
 
     def __init__(self, engagement_id: str, trace_id: str = None):
-        """
-        Initialize Orchestrator
-
-        Args:
-            engagement_id: Engagement ID
-            trace_id: Optional trace_id for distributed tracing
-        """
         self.engagement_id = engagement_id
         self.start_time = None
         self.trace_id = trace_id
 
-        # Initialize tracing components
         db_conn = os.getenv("DATABASE_URL")
         self.tracing_manager = TracingManager(db_conn)
         self.logger = StructuredLogger(db_conn)
         self.span_recorder = ExecutionSpan(db_conn)
-
-        # Initialize WebSocket event publisher
         self.ws_publisher = get_websocket_publisher()
-
-        # Initialize execution components
         self.tool_runner = ToolRunner(
             connection_string=db_conn, engagement_id=self.engagement_id
         )
@@ -90,7 +78,6 @@ class Orchestrator:
         self.finding_repo = FindingRepository(db_conn) if db_conn else None
         self.engagement_repo = EngagementRepository(db_conn) if db_conn else None
 
-        # Initialize LLM components (with graceful degradation)
         self.llm_client = None
         self.llm_payload_generator = None
         try:
@@ -112,97 +99,59 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"LLM components not available (graceful degradation): {e}")
 
-        # Initialize MCP protocol server
         self.mcp = get_mcp_server()
-
-        # Initialize streaming
         self.stream = get_stream_manager()
-
-        # Register tools with MCP server
         self._register_mcp_tools()
+        self._last_agent_tried_tools = set()
 
     def _register_mcp_tools(self):
-        """Register all available tools with the MCP protocol server."""
         from tool_definitions import build_mcp_tool_definitions
-
         for tool in build_mcp_tool_definitions():
             self.mcp.register_tool(tool)
 
     def mcp_run(self, tool: str, arguments: dict = None) -> dict:
-        """
-        Execute a tool through the MCP protocol server with streaming.
-        """
         emit_tool_start(self.engagement_id, tool, list((arguments or {}).keys()))
         result = self.mcp.call_tool(tool, arguments)
         success = not result.get("isError", False)
         emit_tool_complete(
-            self.engagement_id,
-            tool,
-            success,
+            self.engagement_id, tool, success,
             result.get("meta", {}).get("duration_ms", 0),
         )
         return result
 
     def _load_custom_rules(self, engagement_id: str) -> list[dict]:
-        """Fetch active custom rules for the engagement's organization."""
         db_conn = os.getenv("DATABASE_URL")
         if not db_conn:
             return []
-
         try:
             conn = connect(db_conn)
             cursor = conn.cursor()
-
-            cursor.execute(
-                "SELECT org_id FROM engagements WHERE id = %s", (engagement_id,)
-            )
+            cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
             row = cursor.fetchone()
             if not row:
-                cursor.close()
-                conn.close()
-                return []
-
+                cursor.close(); conn.close(); return []
             org_id = row[0]
-
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT id, name, description, severity, category, rule_yaml, tags
-                FROM custom_rules
-                WHERE org_id = %s AND status = 'active'
+                FROM custom_rules WHERE org_id = %s AND status = 'active'
                 ORDER BY created_at DESC
-                """,
-                (org_id,),
-            )
-
+            """, (org_id,))
             columns = [desc[0] for desc in cursor.description]
-            rules = []
-            for row in cursor.fetchall():
-                rule = dict(zip(columns, row, strict=False))
-                rules.append(rule)
-
-            cursor.close()
-            conn.close()
+            rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+            cursor.close(); conn.close()
             return rules
         except Exception as e:
             logger.warning(f"Failed to load custom rules: {e}")
             return []
 
     def run(self, job: dict) -> dict:
-        """Execute job workflow."""
         if self.start_time is None:
             self.start_time = time.time()
-
         self._check_timeout()
-
         job_type = job.get("type")
-
         with self.span_recorder.span(ExecutionSpan.SPAN_ORCHESTRATOR_STEP):
-            self.logger.log(
-                "orchestrator_step",
-                f"Routing job: {job_type}",
-                {"job_type": job_type, "engagement_id": self.engagement_id},
-            )
-
+            self.logger.log("orchestrator_step", f"Routing job: {job_type}",
+                            {"job_type": job_type, "engagement_id": self.engagement_id})
             if job_type == "recon":
                 return self.run_recon(job)
             elif job_type == "scan":
@@ -217,55 +166,32 @@ class Orchestrator:
                 raise ValueError(f"Unknown job type: {job_type}")
 
     def run_recon(self, job: dict) -> dict:
-        """Execute reconnaissance phase."""
         self._check_timeout()
-
         target = job.get("target")
         if not target:
             targets_list = job.get("targets", [])
             target = targets_list[0] if targets_list else None
-
         if not target:
-            logger.warning(
-                f"run_recon called with no target for engagement {self.engagement_id}, skipping"
-            )
-            return {
-                "phase": "recon",
-                "status": "skipped",
-                "findings_count": 0,
-                "next_state": "scanning",
-                "trace_id": get_trace_id(),
-            }
+            logger.warning(f"run_recon called with no target for engagement {self.engagement_id}, skipping")
+            return {"phase": "recon", "status": "skipped", "findings_count": 0,
+                    "next_state": "scanning", "trace_id": get_trace_id()}
 
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="recon", target=target
-        )
-
-        self.logger.log_job_started(
-            job_type="recon", engagement_id=self.engagement_id, target=target
-        )
-
+        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="recon", target=target)
+        self.logger.log_job_started(job_type="recon", engagement_id=self.engagement_id, target=target)
         emit_thinking(self.engagement_id, f"Starting reconnaissance against {target}")
-        emit_state_change(
-            self.engagement_id, "created", "recon", "Starting reconnaissance"
-        )
+        emit_state_change(self.engagement_id, "created", "recon", "Starting reconnaissance")
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
-        findings, recon_context = execute_recon_pipeline(
-            self, target, job.get("budget", {}), aggressiveness
-        )
+        findings, recon_context = execute_recon_pipeline(self, target, job.get("budget", {}), aggressiveness)
 
         findings_count = len(findings)
         self._save_findings(findings, "tool")
 
         self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id,
-            from_state=self._get_scan_state(),
-            to_state="scanning",
-            reason="Reconnaissance completed — auto-advancing to scan",
+            engagement_id=self.engagement_id, from_state=self._get_scan_state(),
+            to_state="scanning", reason="Reconnaissance completed — auto-advancing to scan",
         )
 
-        # Save recon context to Redis for cross-task access (Step 9)
         if recon_context:
             try:
                 save_recon_context(self.engagement_id, recon_context)
@@ -273,23 +199,18 @@ class Orchestrator:
                 logger.warning(f"Failed to save recon context to Redis: {e}")
 
         return {
-            "phase": "recon",
-            "status": "completed",
-            "findings_count": findings_count,
+            "phase": "recon", "status": "completed", "findings_count": findings_count,
             "next_state": "scanning",
             "recon_context": recon_context.to_dict() if hasattr(recon_context, "to_dict") else recon_context,
             "trace_id": get_trace_id(),
         }
 
     def _normalize_finding(self, raw_finding: dict, tool: str) -> dict | None:
-        """Normalize a raw finding to VulnerabilityFinding schema."""
         try:
             finding = self.normalizer.normalize(raw_finding, tool)
             return {
                 "type": finding.type,
-                "severity": finding.severity.value
-                if hasattr(finding.severity, "value")
-                else finding.severity,
+                "severity": finding.severity.value if hasattr(finding.severity, "value") else finding.severity,
                 "endpoint": finding.endpoint,
                 "evidence": finding.evidence,
                 "confidence": finding.confidence,
@@ -299,37 +220,25 @@ class Orchestrator:
             logger.warning(f"Failed to normalize finding: {e}")
             return None
 
-    def _save_findings(
-        self, findings: list[dict], source_tool_key: str = "source_tool"
-    ):
-        """Save findings to the database."""
+    def _save_findings(self, findings: list[dict], source_tool_key: str = "source_tool"):
         if not self.finding_repo or not findings:
             return
 
-        # --- Normalize heterogeneous inputs to plain dicts ---
-        # findings may arrive as: dict, AgentResult, StepResult, or normalized finding dict.
-        # Anything that is not a dict is coerced here so the rest of the method never
-        # calls .get() on a dataclass object.
+        # Normalize heterogeneous inputs to plain dicts
         normalized_inputs: list[dict] = []
         for item in findings:
             if isinstance(item, dict):
                 normalized_inputs.append(item)
                 continue
-            # AgentResult: has .tool, .output, .success — no findings inside
             if hasattr(item, "tool") and hasattr(item, "output"):
-                logger.warning(
-                    f"_save_findings received unparsed tool result for tool "
-                    f"'{getattr(item, 'tool', 'unknown')}' — parse tool output before "
-                    f"calling _save_findings. Skipping this result."
-                )
+                logger.warning(f"_save_findings received unparsed tool result for tool "
+                               f"'{getattr(item, 'tool', 'unknown')}' — skipping.")
                 continue
-            # StepResult: has .findings list attribute
             if hasattr(item, "findings") and isinstance(item.findings, list):
                 for f in item.findings:
                     if isinstance(f, dict):
                         normalized_inputs.append(f)
                 continue
-            # Unknown type — try to coerce to dict
             try:
                 normalized_inputs.append(vars(item))
             except Exception:
@@ -338,10 +247,6 @@ class Orchestrator:
         if not findings:
             return
 
-        # Normalize tool key: findings may have "tool" or "source_tool"
-        _tool_key = source_tool_key
-
-        # Lazy import pgvector / embedding utilities
         _pgvector = None
         _llm_client = None
 
@@ -358,30 +263,17 @@ class Orchestrator:
             if api_key:
                 try:
                     import httpx
-                    # Try OpenRouter endpoint first (works with sk-or- keys)
-                    if api_key.startswith("sk-or-"):
-                        resp = httpx.post(
-                            "https://openrouter.ai/api/v1/embeddings",
-                            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                            json={"model": "text-embedding-3-small", "input": text},
-                            timeout=15,
-                        )
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            return data["data"][0]["embedding"]
-                    # Fall back to OpenAI endpoint
                     resp = httpx.post(
                         "https://api.openai.com/v1/embeddings",
                         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                         json={"model": "text-embedding-3-small", "input": text},
-                        timeout=10,
+                        timeout=15,
                     )
                     if resp.status_code == 200:
                         data = resp.json()
                         return data["data"][0]["embedding"]
                 except Exception as e:
-                    logger.debug(f"Embedding API failed (non-fatal): {e}")
-            # Silent fallback to hash-based embedding (no API call)
+                    logger.debug(f"OpenAI embedding API failed (non-fatal): {e}")
             from database.repositories.pgvector_repository import PGVectorRepository
             return PGVectorRepository()._generate_embedding_fallback(text)
 
@@ -399,19 +291,14 @@ class Orchestrator:
                 from database.connection import db_cursor
                 emb_str = "[" + ",".join(map(str, embedding)) + "]"
                 with db_cursor() as cursor:
-                    cursor.execute(
-                        """
+                    cursor.execute("""
                         SELECT f.id, f.type, f.severity, f.endpoint,
                                1 - (f.embedding <=> %s::vector) AS similarity
                         FROM findings f
-                        WHERE f.engagement_id = %s
-                          AND f.embedding IS NOT NULL
+                        WHERE f.engagement_id = %s AND f.embedding IS NOT NULL
                           AND (f.embedding <=> %s::vector) <= (1 - %s)
-                        ORDER BY f.embedding <=> %s::vector
-                        LIMIT 1
-                        """,
-                        (emb_str, self.engagement_id, emb_str, threshold, emb_str)
-                    )
+                        ORDER BY f.embedding <=> %s::vector LIMIT 1
+                    """, (emb_str, self.engagement_id, emb_str, threshold, emb_str))
                     row = cursor.fetchone()
                     if row and float(row[4]) >= threshold:
                         return {"id": str(row[0]), "similarity": float(row[4])}
@@ -421,24 +308,17 @@ class Orchestrator:
 
         try:
             for finding in findings:
-                # Auto-calculate CVSS score if not provided (non-fatal)
                 if not finding.get("cvss_score"):
                     try:
                         from cvss_calculator import estimate_cvss
-
                         finding["cvss_score"] = estimate_cvss(
                             finding_type=finding.get("type", ""),
                             severity=finding.get("severity", "MEDIUM"),
-                            evidence_strength=finding.get(
-                                "evidence_strength", "moderate"
-                            ),
+                            evidence_strength=finding.get("evidence_strength", "moderate"),
                         )
                     except Exception as cvss_err:
-                        logger.warning(
-                            f"CVSS estimation failed (non-fatal): {cvss_err}"
-                        )
+                        logger.warning(f"CVSS estimation failed (non-fatal): {cvss_err}")
 
-                # Use dedup path for secret findings to prevent unbounded duplication
                 SECRET_TOOLS = {"gitleaks", "trufflehog", "secret-scan"}
                 st = finding.get("tool") or finding.get("source_tool") or "unknown"
                 if st in SECRET_TOOLS or finding.get("type", "").startswith("COMMITTED_SECRET"):
@@ -453,7 +333,6 @@ class Orchestrator:
                         cvss_score=finding.get("cvss_score"),
                     )
                 else:
-                    # Check for duplicate via pgvector similarity
                     dedup_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
                     similar = _find_existing_similar(dedup_text)
                     if similar:
@@ -462,7 +341,8 @@ class Orchestrator:
                             with db_cursor() as cursor:
                                 cursor.execute(
                                     "UPDATE findings SET last_seen_at = NOW(), severity = %s, confidence = %s, evidence = %s WHERE id = %s",
-                                    (finding.get("severity", "INFO"), finding.get("confidence", 0.5), json.dumps(finding.get("evidence", {})), similar["id"]),
+                                    (finding.get("severity", "INFO"), finding.get("confidence", 0.5),
+                                     json.dumps(finding.get("evidence", {})), similar["id"]),
                                 )
                             saved_id = similar["id"]
                             logger.debug(f"Updated existing finding {similar['id']} (similarity={similar['similarity']:.3f})")
@@ -489,7 +369,6 @@ class Orchestrator:
                             cvss_score=finding.get("cvss_score"),
                         )
 
-                # Store embedding for future dedup (only for new-ish findings with text content)
                 if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint"):
                     try:
                         emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
@@ -501,59 +380,24 @@ class Orchestrator:
                     except Exception as e:
                         logger.debug(f"Embedding storage failed (non-fatal): {e}")
 
-                # Fire webhook for CRITICAL/HIGH findings (non-fatal)
-                if saved_id and finding.get("severity", "").upper() in (
-                    "CRITICAL",
-                    "HIGH",
-                ):
+                if saved_id and finding.get("severity", "").upper() in ("CRITICAL", "HIGH"):
                     try:
                         from post_finding_hooks import fire_finding_webhooks
-
-                        fire_finding_webhooks(
-                            {
-                                "id": saved_id,
-                                "engagement_id": self.engagement_id,
-                                "type": finding.get("type"),
-                                "severity": finding.get("severity"),
-                                "endpoint": finding.get("endpoint"),
-                                "source_tool": st,
-                                "confidence": finding.get("confidence", 0),
-                            }
-                        )
+                        fire_finding_webhooks({
+                            "id": saved_id, "engagement_id": self.engagement_id,
+                            "type": finding.get("type"), "severity": finding.get("severity"),
+                            "endpoint": finding.get("endpoint"), "source_tool": st,
+                            "confidence": finding.get("confidence", 0),
+                        })
                     except Exception as hook_err:
-                        logger.warning(
-                            f"Webhook dispatch failed (non-fatal): {hook_err}"
-                        )
+                        logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
         except Exception as e:
             logger.error(f"Failed to save findings: {e}")
 
-    def run_scan_with_agent(
-        self,
-        targets: list[str],
-        recon_context: "ReconContext",
-        aggressiveness: str = DEFAULT_AGGRESSIVENESS,
-        authorized_scope: dict = None,
-        auth_config: dict | None = None,
-    ) -> list[dict]:
-        """
-        Run the scan phase using the LLM ReAct agent.
-
-        Falls back to execute_scan_tools() if agent raises.
-
-        Args:
-            targets: List of target URLs
-            recon_context: ReconContext from recon phase
-            aggressiveness: Scan aggressiveness level
-            authorized_scope: Optional authorized scope for validation
-            auth_config: Optional authentication configuration for scanning
-
-        Returns:
-            List of findings
-        """
+    def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
+                            authorized_scope=None, auth_config=None):
         from agent import AgentResult, create_phase_agent
-        from database.repositories.agent_decision_repository import (
-            AgentDecisionRepository,
-        )
+        from database.repositories.agent_decision_repository import AgentDecisionRepository
         from tools.scope_validator import ScopeValidator, ScopeViolationError
 
         db_conn = os.getenv("DATABASE_URL")
@@ -563,49 +407,35 @@ class Orchestrator:
         for target in targets:
             try:
                 agent = create_phase_agent(
-                    phase="scan",
-                    tool_runner=self.tool_runner,
-                    engagement_id=self.engagement_id,
-                    llm_client=self.llm_client,
+                    phase="scan", tool_runner=self.tool_runner,
+                    engagement_id=self.engagement_id, llm_client=self.llm_client,
                     decision_repo=decision_repo,
                 )
-
                 if authorized_scope:
-                    scope_validator = ScopeValidator(
-                        self.engagement_id, authorized_scope
-                    )
+                    scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
                     original_call = agent.registry.call
-
                     def scoped_call(name, **kwargs):
-                        target = kwargs.get("target", "")
-                        if target:
+                        tgt = kwargs.get("target", "")
+                        if tgt:
                             try:
-                                scope_validator.validate_target(target)
+                                scope_validator.validate_target(tgt)
                             except ScopeViolationError as e:
                                 logger.warning(f"Scope violation blocked: {e}")
-                                emit_thinking(
-                                    self.engagement_id,
-                                    f"Blocked: {target} is out of scope",
-                                )
-                                return AgentResult(
-                                    tool=name,
-                                    success=False,
-                                    error=f"Scope violation: {str(e)}",
-                                )
+                                emit_thinking(self.engagement_id, f"Blocked: {tgt} is out of scope")
+                                return AgentResult(tool=name, success=False, error=f"Scope violation: {e}")
                         return original_call(name, **kwargs)
-
                     agent.registry.call = scoped_call
 
-                emit_thinking(
-                    self.engagement_id,
-                    f"LLM agent selecting scan tools for {target}...",
-                )
-
+                emit_thinking(self.engagement_id, f"LLM agent selecting scan tools for {target}...")
                 results = agent.run(
                     task=f"scan: {target}",
                     initial_context={"recon_context": recon_context, "target": target},
                     recon_context=recon_context,
                 )
+
+                agent_ran_tools = {r.tool for r in results if r.success}
+                logger.info(f"Agent ran tools: {agent_ran_tools}")
+                self._last_agent_tried_tools.update(agent_ran_tools)
 
                 for r in results:
                     if r.success and r.output:
@@ -614,82 +444,55 @@ class Orchestrator:
                             norm = self._normalize_finding(p, r.tool)
                             if norm:
                                 all_findings.append(norm)
-
             except Exception as e:
                 logger.warning(f"Agent scan failed for {target}: {e}. Falling back.")
-                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config, recon_context.tech_stack if recon_context else None)
+                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config,
+                                                  recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
 
         return all_findings
 
     def run_scan(self, job: dict) -> dict:
-        """Execute scanning phase."""
         self._check_timeout()
-
         targets = job.get("targets", [])
-
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="scan", target=str(targets)
-        )
-
-        self.logger.log_job_started(
-            job_type="scan", engagement_id=self.engagement_id, target=str(targets)
-        )
+        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="scan", target=str(targets))
+        self.logger.log_job_started(job_type="scan", engagement_id=self.engagement_id, target=str(targets))
 
         custom_rules = self._load_custom_rules(self.engagement_id)
         if custom_rules:
             for rule in custom_rules:
                 self.ws_publisher.publish_scanner_activity(
-                    engagement_id=self.engagement_id,
-                    tool_name="Custom Rules Engine",
-                    activity="custom rule loaded",
-                    status="completed",
-                    target=str(targets),
+                    engagement_id=self.engagement_id, tool_name="Custom Rules Engine",
+                    activity="custom rule loaded", status="completed", target=str(targets),
                     details=f"{rule.get('name', 'unknown')} ({rule.get('severity', 'unknown')}) — {rule.get('description', '')[:120]}",
                 )
-            logger.info(
-                f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}"
-            )
+            logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
-
         recon_context = load_recon_context(self.engagement_id)
         agent_mode_enabled = job.get("agent_mode", True)
-
         auth_config = job.get("auth_config", {})
 
-        if (
-            agent_mode_enabled
-            and recon_context is not None
-            and self.llm_client is not None
-            and self.llm_client.is_available()
-        ):
-            emit_thinking(
-                self.engagement_id,
-                "LLM agent mode active — analyzing recon results and selecting scan tools...",
-            )
-            findings = self.run_scan_with_agent(
-                targets, recon_context, scan_aggressiveness, auth_config=auth_config
-            )
-            logger.info("Agent scan complete — running deterministic safety net")
+        if (agent_mode_enabled and recon_context is not None and
+            self.llm_client is not None and self.llm_client.is_available()):
+            emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
+            findings = self.run_scan_with_agent(targets, recon_context, scan_aggressiveness, auth_config=auth_config)
+            agent_tried = getattr(self, "_last_agent_tried_tools", set())
+            logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
             tech_stack = recon_context.tech_stack if recon_context else None
             deterministic_findings = execute_scan_pipeline(
-                self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack
+                self, targets, job.get("budget", {}), scan_aggressiveness,
+                auth_config, tech_stack, skip_tools=agent_tried,
             )
             findings.extend(deterministic_findings)
         else:
             mode = "deterministic"
-            if not recon_context:
-                mode += " (no recon context)"
-            elif not agent_mode_enabled:
-                mode += " (agent mode disabled)"
-            else:
-                mode += " (LLM unavailable)"
+            if not recon_context: mode += " (no recon context)"
+            elif not agent_mode_enabled: mode += " (agent mode disabled)"
+            else: mode += " (LLM unavailable)"
             logger.info(f"Running {mode} scan")
             tech_stack = recon_context.tech_stack if recon_context else None
-            findings = execute_scan_pipeline(
-                self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack
-            )
+            findings = execute_scan_pipeline(self, targets, job.get("budget", {}), scan_aggressiveness, auth_config, tech_stack)
 
         try:
             from tools.browser_scanner import scan as run_browser_scan
@@ -712,84 +515,46 @@ class Orchestrator:
         self._save_findings(findings)
 
         from llm_client import load_llm_setting
-
         llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
         if llm_review_enabled and self.llm_client and self.llm_client.is_available():
             try:
                 from tasks.llm_review import run_llm_review
-
-                run_llm_review.delay(
-                    engagement_id=self.engagement_id,
-                    budget=job.get("budget", {}),
-                    trace_id=get_trace_id(),
-                )
+                run_llm_review.delay(engagement_id=self.engagement_id, budget=job.get("budget", {}), trace_id=get_trace_id())
                 logger.info(f"Enqueued LLM review for engagement {self.engagement_id}")
             except Exception as e:
                 logger.warning(f"Failed to enqueue LLM review (non-fatal): {e}")
 
         self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id,
-            from_state="scanning",
-            to_state="analyzing",
-            reason="Scanning completed",
+            engagement_id=self.engagement_id, from_state="scanning", to_state="analyzing", reason="Scanning completed",
         )
-
-        return {
-            "phase": "scan",
-            "status": "completed",
-            "findings_count": findings_count,
-            "next_state": "analyzing",
-            "trace_id": get_trace_id(),
-        }
+        return {"phase": "scan", "status": "completed", "findings_count": findings_count,
+                "next_state": "analyzing", "trace_id": get_trace_id()}
 
     def run_analysis(self, job: dict) -> dict:
-        """Execute analysis phase."""
         self._check_timeout()
-
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="analyze"
-        )
-
-        self.logger.log_job_started(
-            job_type="analyze", engagement_id=self.engagement_id
-        )
-
+        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="analyze")
+        self.logger.log_job_started(job_type="analyze", engagement_id=self.engagement_id)
         findings = []
         if self.finding_repo:
             try:
-                raw_findings = self.finding_repo.get_findings_by_engagement(
-                    self.engagement_id
-                )
-                findings = [
-                    f.to_dict()
-                    if hasattr(f, "to_dict")
-                    else dict(f)
-                    if isinstance(f, dict)
-                    else f
-                    for f in raw_findings
-                ]
+                raw_findings = self.finding_repo.get_findings_by_engagement(self.engagement_id)
+                findings = [f.to_dict() if hasattr(f, "to_dict") else dict(f) if isinstance(f, dict) else f for f in raw_findings]
             except Exception as e:
                 logger.warning(f"Failed to load findings: {e}")
 
         from intelligence_engine import IntelligenceEngine
         from loop_budget_manager import LoopBudgetManager
         from snapshot_manager import SnapshotManager
-
         db_conn = os.getenv("DATABASE_URL")
         if not db_conn:
-            raise OSError(
-                "DATABASE_URL is not set — cannot create snapshot for analysis"
-            )
+            raise OSError("DATABASE_URL is not set — cannot create snapshot for analysis")
         snapshot_mgr = SnapshotManager(db_conn)
         snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
-
         budget_config = job.get("budget", {})
         budget_mgr = LoopBudgetManager(self.engagement_id, budget_config)
-
         engine = IntelligenceEngine(db_conn)
         snapshot["findings"] = findings
         snapshot["loop_budget"] = budget_mgr.to_dict()
-
         evaluation = engine.evaluate(snapshot)
 
         synthesis = {}
@@ -797,7 +562,6 @@ class Orchestrator:
             try:
                 from llm_service import LLMService
                 from llm_synthesizer import LLMSynthesizer
-
                 llm_svc = LLMService(self.llm_client)
                 recon_ctx = load_recon_context(self.engagement_id)
                 synthesizer = LLMSynthesizer(llm_svc)
@@ -806,16 +570,12 @@ class Orchestrator:
                     attack_paths=snapshot.get("attack_graph", {}).get("paths", []),
                     recon_context=recon_ctx,
                 )
-                emit_thinking(
-                    self.engagement_id,
-                    f"LLM analysis: {synthesis.get('risk_level', 'unknown')} risk — "
-                    f"{synthesis.get('executive_summary', '')[:100]}...",
-                )
+                emit_thinking(self.engagement_id, f"LLM analysis: {synthesis.get('risk_level', 'unknown')} risk — "
+                              f"{synthesis.get('executive_summary', '')[:100]}...")
             except Exception as e:
                 logger.warning(f"LLM synthesis failed (non-fatal): {e}")
 
         actions = evaluation.get("actions", [])
-
         next_state = "reporting"
         for action in actions:
             can_continue, reason = budget_mgr.can_continue(action)
@@ -826,60 +586,34 @@ class Orchestrator:
                 logger.info(f"Budget exhausted: {reason}")
 
         self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id,
-            from_state="analyzing",
-            to_state=next_state,
-            reason="Analysis completed"
-            if next_state == "reporting"
-            else "Additional targets discovered",
+            engagement_id=self.engagement_id, from_state="analyzing", to_state=next_state,
+            reason="Analysis completed" if next_state == "reporting" else "Additional targets discovered",
         )
-
-        return {
-            "phase": "analyze",
-            "status": "completed",
-            "actions": actions,
-            "scored_findings": evaluation.get("scored_findings", []),
-            "reasoning": evaluation.get("reasoning", ""),
-            "synthesis": synthesis,
-            "next_state": next_state,
-            "trace_id": get_trace_id(),
-        }
+        return {"phase": "analyze", "status": "completed", "actions": actions,
+                "scored_findings": evaluation.get("scored_findings", []),
+                "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
+                "next_state": next_state, "trace_id": get_trace_id()}
 
     def run_reporting(self, job: dict) -> dict:
-        """Execute reporting phase."""
         self._check_timeout()
-
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="report"
-        )
-
+        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="report")
         self.logger.log_job_started(job_type="report", engagement_id=self.engagement_id)
-
         report_data = {}
         if self.llm_client and self.llm_client.is_available():
             try:
                 from database.repositories.report_repository import ReportRepository
                 from llm_report_generator import LLMReportGenerator
                 from llm_service import LLMService
-
                 recon_ctx = load_recon_context(self.engagement_id)
                 scored_findings = job.get("scored_findings", [])
                 synthesis = job.get("synthesis", {})
-
                 llm_svc = LLMService(self.llm_client)
                 generator = LLMReportGenerator(llm_svc)
-                engagement_info = {
-                    "target_url": job.get("target", ""),
-                    "scan_type": job.get("type", ""),
-                }
-
+                engagement_info = {"target_url": job.get("target", ""), "scan_type": job.get("type", "")}
                 report_data = generator.generate_report(
-                    synthesis=synthesis,
-                    scored_findings=scored_findings,
-                    engagement=engagement_info,
-                    recon_context=recon_ctx,
+                    synthesis=synthesis, scored_findings=scored_findings,
+                    engagement=engagement_info, recon_context=recon_ctx,
                 )
-
                 repo = ReportRepository()
                 sbom_json = None
                 try:
@@ -888,88 +622,47 @@ class Orchestrator:
                     fr = FindingRepository()
                     all_findings = fr.get_findings_by_engagement(self.engagement_id)
                     sbom_json = generate_sbom_from_findings(
-                        engagement_id=self.engagement_id,
-                        findings=all_findings,
-                        target_url=job.get("target", ""),
-                        repo_url=job.get("repo_url", ""),
+                        engagement_id=self.engagement_id, findings=all_findings,
+                        target_url=job.get("target", ""), repo_url=job.get("repo_url", ""),
                     )
                 except Exception as e:
                     logger.warning(f"SBOM generation failed (non-fatal): {e}")
-
-                repo.upsert_report(
-                    engagement_id=self.engagement_id,
-                    report_data=report_data,
-                    model_used=LLM_AGENT_MODEL,
-                    sbom_json=sbom_json,
-                )
-
+                repo.upsert_report(engagement_id=self.engagement_id, report_data=report_data,
+                                   model_used=LLM_AGENT_MODEL, sbom_json=sbom_json)
                 emit_thinking(self.engagement_id, "LLM report generated successfully")
-
             except Exception as e:
                 logger.warning(f"LLM report generation failed (non-fatal): {e}")
 
         self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id,
-            from_state="reporting",
-            to_state="complete",
+            engagement_id=self.engagement_id, from_state="reporting", to_state="complete",
             reason="Reporting completed",
         )
-
-        return {
-            "phase": "report",
-            "status": "completed",
-            "next_state": "complete",
-            "report": report_data,
-            "trace_id": get_trace_id(),
-        }
+        return {"phase": "report", "status": "completed", "next_state": "complete",
+                "report": report_data, "trace_id": get_trace_id()}
 
     def run_repo_scan(self, job: dict) -> dict:
-        """Execute repository scanning phase."""
         self._check_timeout()
-
         repo_url = job.get("repo_url")
-
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="repo_scan", target=repo_url
-        )
-
-        self.logger.log_job_started(
-            job_type="repo_scan", engagement_id=self.engagement_id, target=repo_url
-        )
-
+        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="repo_scan", target=repo_url)
+        self.logger.log_job_started(job_type="repo_scan", engagement_id=self.engagement_id, target=repo_url)
         repo_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         custom_rules_path = job.get("custom_rules_path")
         try:
-            findings = execute_repo_scan(
-                self,
-                repo_url,
-                job.get("budget", {}),
-                repo_aggressiveness,
-                custom_rules_path,
-            )
+            findings = execute_repo_scan(self, repo_url, job.get("budget", {}), repo_aggressiveness, custom_rules_path)
         except RuntimeError as e:
             err_str = str(e)
             if err_str.startswith("REPO_CLONE_FAILED:"):
                 _, failed_url, reason = err_str.split(":", 2)
                 logger.error(f"Repository clone failed for {failed_url}: {reason}")
                 self.ws_publisher.publish_state_transition(
-                    engagement_id=self.engagement_id,
-                    from_state="recon",
-                    to_state="failed",
+                    engagement_id=self.engagement_id, from_state="recon", to_state="failed",
                     reason=f"Repository clone failed: {reason[:200]}",
                 )
-                return {
-                    "phase": "repo_scan",
-                    "status": "failed",
-                    "findings_count": 0,
-                    "next_state": "failed",
-                    "trace_id": get_trace_id(),
-                }
+                return {"phase": "repo_scan", "status": "failed", "findings_count": 0, "next_state": "failed", "trace_id": get_trace_id()}
             raise
 
         findings_count = len(findings)
         self._save_findings(findings, source_tool_key="tool")
-
         next_state = "scanning"
         if findings_count == 0:
             logger.info(f"Repository scan completed with no findings for {repo_url}")
@@ -988,120 +681,70 @@ class Orchestrator:
                         fp = f.get("file_path") or f.get("endpoint", "")
                         if fp and fp not in critical_files:
                             critical_files.append(fp)
-                    if f.get("type") in (
-                        "EXPOSED_SECRET",
-                        "COMMITTED_SECRET",
-                        "HARDCODED_SECRET",
-                    ):
+                    if f.get("type") in ("EXPOSED_SECRET", "COMMITTED_SECRET", "HARDCODED_SECRET"):
                         has_secrets = True
                     if f.get("type") == "DEPENDENCY_VULNERABILITY":
                         dep_vulns += 1
-
-                lang_extensions = {
-                    ".py": "Python",
-                    ".js": "JavaScript",
-                    ".ts": "TypeScript",
-                    ".java": "Java",
-                    ".go": "Go",
-                    ".rb": "Ruby",
-                    ".php": "PHP",
-                    ".rs": "Rust",
-                    ".cs": "C#",
-                    ".swift": "Swift",
-                }
+                lang_extensions = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".java": "Java",
+                                   ".go": "Go", ".rb": "Ruby", ".php": "PHP", ".rs": "Rust", ".cs": "C#", ".swift": "Swift"}
                 detected_langs = set()
                 for f in findings:
                     fp = f.get("file_path") or f.get("endpoint", "")
                     ext = os.path.splitext(fp)[1]
                     if ext in lang_extensions:
                         detected_langs.add(lang_extensions[ext])
-
                 frameworks = []
                 for f in findings:
                     fp = (f.get("file_path") or f.get("endpoint", "")).lower()
-                    if "flask" in fp or "django" in fp:
-                        frameworks.append("Django")
-                    elif "express" in fp or "nestjs" in fp:
-                        frameworks.append("Express")
-                    elif "spring" in fp:
-                        frameworks.append("Spring")
-                    elif "laravel" in fp:
-                        frameworks.append("Laravel")
-                    elif "rails" in fp:
-                        frameworks.append("Rails")
-                    elif "fastapi" in fp:
-                        frameworks.append("FastAPI")
-
+                    if "flask" in fp or "django" in fp: frameworks.append("Django")
+                    elif "express" in fp or "nestjs" in fp: frameworks.append("Express")
+                    elif "spring" in fp: frameworks.append("Spring")
+                    elif "laravel" in fp: frameworks.append("Laravel")
+                    elif "rails" in fp: frameworks.append("Rails")
+                    elif "fastapi" in fp: frameworks.append("FastAPI")
                 ctx = ReconContext(
-                    target_url=repo_url,
-                    scan_type="repo",
-                    repo_url=repo_url,
-                    findings_count=findings_count,
-                    repo_clone_success=True,
-                    languages_detected=sorted(detected_langs),
-                    vulnerability_types=sorted(set(vuln_types)),
-                    severity_breakdown=severity_breakdown,
-                    critical_files=critical_files[:20],
-                    frameworks_detected=list(set(frameworks)),
-                    has_hardcoded_secrets=has_secrets,
+                    target_url=repo_url, scan_type="repo", repo_url=repo_url,
+                    findings_count=findings_count, repo_clone_success=True,
+                    languages_detected=sorted(detected_langs), vulnerability_types=sorted(set(vuln_types)),
+                    severity_breakdown=severity_breakdown, critical_files=critical_files[:20],
+                    frameworks_detected=list(set(frameworks)), has_hardcoded_secrets=has_secrets,
                     dependency_vulns_count=dep_vulns,
                 )
                 save_recon_context(self.engagement_id, ctx)
-                logger.info(
-                    f"Saved repo recon context for {self.engagement_id}: {len(detected_langs)} languages, {len(vuln_types)} vuln types"
-                )
+                logger.info(f"Saved repo recon context for {self.engagement_id}: {len(detected_langs)} languages, {len(vuln_types)} vuln types")
             except Exception as e:
                 logger.warning(f"Failed to build repo recon context (non-fatal): {e}")
 
         self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id,
-            from_state="created",
-            to_state=next_state,
+            engagement_id=self.engagement_id, from_state="created", to_state=next_state,
             reason="Repository scan completed — auto-advancing to web scan",
         )
-
-        return {
-            "phase": "repo_scan",
-            "status": "completed",
-            "findings_count": findings_count,
-            "next_state": next_state,
-            "trace_id": get_trace_id(),
-        }
+        return {"phase": "repo_scan", "status": "completed", "findings_count": findings_count,
+                "next_state": next_state, "trace_id": get_trace_id()}
 
     def _check_timeout(self):
-        """Check if hard timeout has been exceeded."""
         if self.start_time is None:
             return
-
         elapsed = time.time() - self.start_time
-
         if elapsed > HARD_TIMEOUT_SECONDS:
             self._log_timeout_event(elapsed)
-
             raise EngagementTimeoutError(
                 f"Engagement {self.engagement_id} exceeded hard timeout "
                 f"of {HARD_TIMEOUT_SECONDS} seconds (elapsed: {elapsed:.2f}s)"
             )
 
     def _get_scan_state(self) -> str:
-        """Return the current engagement state for state transitions."""
         return "recon"
 
     def _log_timeout_event(self, elapsed_seconds: float):
-        """Log timeout event to execution logs."""
-        logger.warning(
-            f"Engagement {self.engagement_id} exceeded hard timeout. "
-            f"Elapsed: {elapsed_seconds:.2f}s, Limit: {HARD_TIMEOUT_SECONDS}s"
-        )
+        logger.warning(f"Engagement {self.engagement_id} exceeded hard timeout. "
+                       f"Elapsed: {elapsed_seconds:.2f}s, Limit: {HARD_TIMEOUT_SECONDS}s")
 
     def get_elapsed_time(self) -> float:
-        """Get elapsed time since start."""
         if self.start_time is None:
             return 0.0
-
         return time.time() - self.start_time
 
     def get_remaining_time(self) -> float:
-        """Get remaining time before timeout."""
         elapsed = self.get_elapsed_time()
         return max(0.0, HARD_TIMEOUT_SECONDS - elapsed)

@@ -7,7 +7,7 @@ from celery_app import app
 from tasks.base import task_context
 
 
-@app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=600, time_limit=1200)
+@app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=2400, time_limit=3600)
 def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None, agent_mode: bool = True):
     """
     Execute scanning phase for an engagement
@@ -58,4 +58,3 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
                       job_extra={"endpoints": endpoints, "budget": budget},
                       trace_id=trace_id) as ctx:
         return ctx.orchestrator.run_scan(ctx.job)
-
