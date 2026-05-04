@@ -9,8 +9,8 @@ TOOL_TIMEOUT_SHORT = 60              # 1 minute for quick tools
 TOOL_TIMEOUT_LONG = 300              # 5 minutes for heavy tools
 
 # Rate limiting
-RATE_LIMIT_DELAY_MS = 100            # 100ms between requests
-MAX_CONCURRENT_REQUESTS = 5          # Max parallel requests
+RATE_LIMIT_DELAY_MS = int(os.getenv("ARGUS_RATE_LIMIT_DELAY_MS", "20"))
+MAX_CONCURRENT_REQUESTS = int(os.getenv("ARGUS_MAX_CONCURRENT", "20"))
 
 # Content limits
 MAX_CONTENT_LENGTH = 1000            # Max chars to store in evidence
