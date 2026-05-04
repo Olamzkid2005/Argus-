@@ -1,53 +1,30 @@
 import json
-
+import logging
 from parsers.parsers.base import BaseParser
+from parsers.schemas.nuclei_schema import validate_nuclei_finding
+
+logger = logging.getLogger(__name__)
 
 
 class NucleiParser(BaseParser):
-    """Parser for nuclei JSON output"""
+    """Parser for nuclei JSONL output with schema validation."""
 
     def parse(self, raw_output: str) -> list[dict]:
-        """
-        Parse nuclei JSON lines output
-
-        Args:
-            raw_output: Nuclei output (JSON lines format)
-
-        Returns:
-            List of findings
-        """
         findings = []
-
         for line in raw_output.split("\n"):
             if not line.strip():
                 continue
-
             try:
                 data = json.loads(line)
-
-                # Extract finding information
-                finding = {
-                    "type": data.get("info", {}).get("name", "UNKNOWN"),
-                    "severity": data.get("info", {}).get("severity", "INFO").upper(),
-                    "endpoint": data.get("matched-at", ""),
-                    "evidence": {
-                        "template_id": data.get("template-id"),
-                        "matcher_name": data.get("matcher-name"),
-                        "extracted_results": data.get("extracted-results", []),
-                        "curl_command": data.get("curl-command"),
-                    },
-                    "confidence": 0.8,  # Default confidence for nuclei
-                    "tool": "nuclei",
-                }
-
-                findings.append(finding)
-
+                validated = validate_nuclei_finding(data)
+                if validated:
+                    findings.append(validated)
+                else:
+                    logger.debug(f"Skipping invalid nuclei finding: {data.get('template-id', 'unknown')}")
             except json.JSONDecodeError:
-                # Skip lines that aren't valid JSON
+                logger.debug("Skipping non-JSON nuclei output line")
                 continue
             except Exception as e:
-                # Log error but continue processing
-                print(f"Error parsing nuclei line: {e}")
+                logger.warning(f"Error parsing nuclei line: {e}")
                 continue
-
         return findings
