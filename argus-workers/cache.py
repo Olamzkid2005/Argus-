@@ -83,18 +83,23 @@ class WorkerCache:
             return False
 
     def clear_pattern(self, pattern: str) -> int:
-        """Clear all keys matching pattern"""
+        """Clear all keys matching pattern using SCAN to avoid blocking Redis"""
         if not _redis_available:
             return 0
 
         try:
-            keys = _redis_client.keys(pattern)
-            if keys:
-                return _redis_client.delete(*keys)
+            deleted = 0
+            cursor = 0
+            while True:
+                cursor, keys = _redis_client.scan(cursor, match=pattern, count=100)
+                if keys:
+                    deleted += _redis_client.delete(*keys)
+                if cursor == 0:
+                    break
+            return deleted
         except Exception as e:
             logger.error(f"Cache clear error: {e}")
-
-        return 0
+            return 0
 
     def get_query_result(
         self,
