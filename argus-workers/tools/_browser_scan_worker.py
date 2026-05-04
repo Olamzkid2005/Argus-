@@ -14,6 +14,8 @@ import re
 import sys
 from urllib.parse import urljoin
 
+logger = logging.getLogger(__name__)
+
 SPA_FRAMEWORKS = {"react", "vue", "angular", "next.js", "nuxt", "svelte", "ember", "backbone"}
 CLIENT_ROUTE_PATTERNS = [
     r'["\']/([a-zA-Z0-9_\-/]+)["\']',
@@ -37,7 +39,7 @@ def _detect_spa_framework(page):
             if page.evaluate(js):
                 found.append(name)
         except Exception:
-            pass
+            logger.warning("Check evaluation failed", exc_info=True)
     return found
 
 
@@ -60,7 +62,7 @@ def _extract_client_routes(page):
                 if route and len(route) > 1:
                     routes.add(route)
     except Exception:
-        pass
+        logger.warning("Route extraction failed", exc_info=True)
     return sorted(routes)[:50]
 
 
@@ -78,6 +80,7 @@ def _collect_visible_links(page, base_url):
         }""", base_url)
         return urls[:20]
     except Exception:
+        logger.warning("Link collection failed", exc_info=True)
         return []
 
 
@@ -100,6 +103,7 @@ def _test_dom_xss(page, url, findings):
             }));
         }""")
     except Exception:
+        logger.warning("Form extraction failed", exc_info=True)
         forms = []
 
     for form in forms:
@@ -134,6 +138,7 @@ def _test_dom_xss(page, url, findings):
                             })
                             break
                     except Exception:
+                        logger.warning("Payload test failed", exc_info=True)
                         continue
 
 
@@ -145,6 +150,7 @@ def _scan_js_for_secrets(page, findings):
                 .filter(s => s);
         }""")
     except Exception:
+        logger.warning("JS secret scan failed", exc_info=True)
         scripts = []
 
     secret_patterns = [
@@ -180,6 +186,7 @@ def _scan_js_for_secrets(page, findings):
                         "tool": "browser_scanner",
                     })
         except Exception:
+            logger.warning("Script fetch failed", exc_info=True)
             continue
 
 
@@ -243,15 +250,15 @@ def main():
                         continue
                     _test_dom_xss(page, link, findings)
                 except Exception:
-                    pass
+                    logger.warning("DOM XSS test failed", exc_info=True)
 
             _scan_js_for_secrets(page, findings)
             browser.close()
 
     except ImportError:
-        pass
+        logger.warning("Playwright not available, skipping", exc_info=True)
     except Exception:
-        pass
+        logger.warning("Browser scan failed", exc_info=True)
 
     print(json.dumps(findings))
 

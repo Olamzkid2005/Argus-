@@ -109,6 +109,7 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
         conn.close()
         return row[0] if row else "created"
     except Exception:
+        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
         return "created"
 
 
