@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
+import { requireEngagementAccess } from "@/lib/authorization";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob } from "@/lib/redis";
 import { pool } from "@/lib/db";
@@ -20,6 +21,7 @@ export async function POST(
   log.api('POST', '/api/engagement/[id]/rescan', { engagementId });
   try {
     const session = await requireAuth();
+    await requireEngagementAccess(session, engagementId);
     const client = await pool.connect();
 
     let targetUrl: string = '';
