@@ -19,7 +19,7 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "argus_pentest")
 DB_USER = os.getenv("DB_USER", "argus_user")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "argus_dev_password_change_in_production")
+DB_PASSWORD = os.environ["DB_PASSWORD"]  # Will raise KeyError if unset
 
 # Connection pool - lazy initialization
 _connection_pool: pool.ThreadedConnectionPool | None = None
