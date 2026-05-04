@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "@/lib/db";
+import { redis } from "@/lib/redis";
+
+const RATE_LIMIT_WINDOW = 3600; // 1 hour
+const MAX_SIGNUPS_PER_EMAIL = 5; // 5 attempts per hour per email
+const MAX_SIGNUPS_PER_IP = 10; // 10 attempts per hour per IP
+
+async function checkRateLimit(identifier: string, maxRequests: number): Promise<boolean> {
+  const key = `ratelimit:signup:${identifier}`;
+  const current = await redis.incr(key);
+  if (current === 1) {
+    await redis.expire(key, RATE_LIMIT_WINDOW);
+  }
+  return current <= maxRequests;
+}
 
 // Validation functions
 function isValidEmail(email: string): boolean {
@@ -55,6 +69,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, passwordConfirm, orgName } = body;
 
+    const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+
+    const ipAllowed = await checkRateLimit(ip, MAX_SIGNUPS_PER_IP);
+    if (!ipAllowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 },
+      );
+    }
+
     // Validate required fields
     if (!email || !password || !passwordConfirm || !orgName) {
       return NextResponse.json(
@@ -107,6 +131,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Account creation failed. Please try again." },
         { status: 409 },
+      );
+    }
+
+    // Rate limiting by email
+    const emailAllowed = await checkRateLimit(email.toLowerCase().trim(), MAX_SIGNUPS_PER_EMAIL);
+    if (!emailAllowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 },
       );
     }
 
