@@ -76,7 +76,7 @@ CREATE OR REPLACE FUNCTION generate_embedding(text_content text)
 RETURNS vector(1536) AS $$
 DECLARE
     api_key TEXT;
-    embedding векtor(1536);
+    embedding vector(1536);
 BEGIN
     api_key := current_setting('app.openai_api_key', true);
 
