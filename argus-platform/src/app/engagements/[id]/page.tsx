@@ -119,7 +119,7 @@ export default function EngagementDetailPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") signIn();
-  }, [status, router]);
+  }, [status, router, signIn]);
 
   const fetchEngagement = useCallback(async () => {
     try {

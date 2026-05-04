@@ -67,7 +67,7 @@ export default function ReportsPage() {
     if (status === "unauthenticated") {
       signIn();
     }
-  }, [status, router]);
+  }, [status, router, signIn]);
 
   useEffect(() => {
     if (status !== "authenticated") return;

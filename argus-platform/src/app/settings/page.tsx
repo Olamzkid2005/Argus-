@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
@@ -209,8 +209,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const updateMemory = () => {
-      // @ts-ignore - performance.memory is Chrome-only
-      const memory = performance.memory;
+      const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
       if (memory) {
         const jsHeapUsed = memory.usedJSHeapSize;
         const jsHeapLimit = memory.jsHeapSizeLimit;
@@ -237,17 +236,7 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-      return;
-    }
-    if (status === "authenticated") {
-      loadSettings();
-    }
-  }, [status, router]);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       const response = await fetch("/api/settings");
       const data = await response.json();
@@ -274,7 +263,17 @@ export default function SettingsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/auth/signin");
+      return;
+    }
+    if (status === "authenticated") {
+      loadSettings();
+    }
+  }, [status, router, loadSettings]);
 
   const handleSave = async () => {
     setIsSaving(true);

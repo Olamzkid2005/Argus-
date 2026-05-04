@@ -182,7 +182,7 @@ export default function EngagementsPage() {
     } else if (status === "unauthenticated") {
       setSettingsLoading(false);
     }
-  }, [status]);
+  }, [status, signIn]);
 
   // Fetch live engagements
   useEffect(() => {

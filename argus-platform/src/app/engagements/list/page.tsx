@@ -72,7 +72,7 @@ export default function EngagementsListPage() {
     if (status === "unauthenticated") {
       signIn();
     }
-  }, [status]);
+  }, [status, signIn]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -94,8 +94,7 @@ export default function EngagementsListPage() {
     };
 
     fetchEngagements();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, page]);
+  }, [status, page, showToast]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this engagement and all its findings?")) return;
