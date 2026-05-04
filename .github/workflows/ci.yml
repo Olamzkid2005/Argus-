@@ -29,10 +29,10 @@ jobs:
         run: npm run lint --if-present
 
       - name: Type check
-        run: npx tsc --noEmit || true
+        run: npx tsc --noEmit
 
       - name: Unit tests
-        run: npm test -- --passWithNoTests --ci --coverage --coverageReporters=text-summary || true
+        run: npm test -- --passWithNoTests --ci --coverage --coverageReporters=text-summary
 
       - name: Build
         run: npm run build
@@ -59,10 +59,10 @@ jobs:
           pip install ruff pytest pytest-cov
 
       - name: Lint with ruff
-        run: ruff check . --exit-non-zero-on-fix || true
+        run: ruff check . --exit-non-zero-on-fix
 
       - name: Run tests
-        run: pytest tests/ --tb=short -q --cov=. --cov-report=term-missing || true
+        run: pytest tests/ --tb=short -q --cov=. --cov-report=term-missing
 
   security:
     name: Security Scan
@@ -74,7 +74,6 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
