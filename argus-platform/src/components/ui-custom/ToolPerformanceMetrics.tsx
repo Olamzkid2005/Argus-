@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -44,7 +44,7 @@ function MetricCard({ label, value, icon: Icon, color }: { label: string; value:
   );
 }
 
-export default function ToolPerformanceMetrics({ metrics, days = 7 }: ToolPerformanceMetricsProps) {
+const ToolPerformanceMetrics = React.memo(function ToolPerformanceMetrics({ metrics, days = 7 }: ToolPerformanceMetricsProps) {
   const chartData = useMemo(() => {
     return metrics.map((m) => ({
       name: m.tool_name,
@@ -187,4 +187,6 @@ export default function ToolPerformanceMetrics({ metrics, days = 7 }: ToolPerfor
       </div>
     </div>
   );
-}
+});
+
+export default ToolPerformanceMetrics;

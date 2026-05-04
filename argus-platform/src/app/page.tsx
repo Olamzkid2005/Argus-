@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { log } from "@/lib/logger";
@@ -26,8 +26,10 @@ import {
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { motion, useScroll, useTransform } from "framer-motion";
-import SurveillanceEye from "@/components/effects/SurveillanceEye";
+import dynamic from "next/dynamic";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
+
+const SurveillanceEye = dynamic(() => import("@/components/effects/SurveillanceEye"), { ssr: false });
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 
 // ── Animation Variants ──
@@ -416,7 +418,9 @@ function LandingContent({ session }: { session: any }) {
             className="hidden lg:block relative h-[500px] xl:h-[600px] group"
           >
             <div className="absolute inset-0 z-0">
-              <SurveillanceEye />
+              <Suspense fallback={<div className="w-full h-full bg-surface-container rounded-3xl animate-pulse" />}>
+                <SurveillanceEye />
+              </Suspense>
             </div>
             <div className="absolute inset-0 border border-outline/20 rounded-3xl pointer-events-none group-hover:border-primary/20 transition-colors duration-700" />
             <div className="absolute top-6 right-6 flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface/80 backdrop-blur-sm border border-outline/20">

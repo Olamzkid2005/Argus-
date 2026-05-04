@@ -191,7 +191,7 @@ function Eye({ target }: { target: React.RefObject<THREE.Vector3 | null> }) {
   );
 }
 
-export default function SurveillanceEye() {
+const SurveillanceEye = React.memo(function SurveillanceEye() {
   const target = useRef(new THREE.Vector3(0, 0, 0));
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -214,4 +214,6 @@ export default function SurveillanceEye() {
       </Canvas>
     </div>
   );
-}
+});
+
+export default SurveillanceEye;

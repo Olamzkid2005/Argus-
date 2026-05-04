@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 interface TimelineEvent {
@@ -26,7 +26,7 @@ const STATUS_CONFIG = {
   pending: { color: "var(--text-secondary)", icon: Clock },
 };
 
-export default function ExecutionTimeline({ events, engagementStart, engagementEnd }: ExecutionTimelineProps) {
+const ExecutionTimeline = React.memo(function ExecutionTimeline({ events, engagementStart, engagementEnd }: ExecutionTimelineProps) {
   const { totalDuration, bars } = useMemo(() => {
     const start = new Date(engagementStart).getTime();
     const end = engagementEnd ? new Date(engagementEnd).getTime() : Date.now();
@@ -125,4 +125,6 @@ export default function ExecutionTimeline({ events, engagementStart, engagementE
       </div>
     </div>
   );
-}
+});
+
+export default ExecutionTimeline;

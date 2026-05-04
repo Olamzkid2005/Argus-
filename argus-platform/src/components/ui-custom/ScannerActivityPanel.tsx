@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Terminal, CheckCircle2, XCircle, Loader2, Activity } from "lucide-react";
 import { ScannerActivity } from "@/lib/use-scanner-activities";
 
@@ -37,7 +37,7 @@ function StatusIcon({ status }: { status: string }) {
   return <Activity size={12} className="text-text-secondary shrink-0" />;
 }
 
-export default function ScannerActivityPanel({
+const ScannerActivityPanel = React.memo(function ScannerActivityPanel({
   activities,
   isLoading = false,
 }: ScannerActivityPanelProps) {
@@ -110,4 +110,6 @@ export default function ScannerActivityPanel({
       })}
     </div>
   );
-}
+});
+
+export default ScannerActivityPanel;

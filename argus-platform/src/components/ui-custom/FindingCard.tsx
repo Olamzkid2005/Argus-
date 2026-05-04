@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Target,
@@ -45,7 +45,7 @@ function relativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-export function FindingCard({ finding }: { finding: Finding }) {
+export const FindingCard = React.memo(function FindingCard({ finding }: { finding: Finding }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -206,4 +206,4 @@ export function FindingCard({ finding }: { finding: Finding }) {
       </AnimatePresence>
     </motion.div>
   );
-}
+});

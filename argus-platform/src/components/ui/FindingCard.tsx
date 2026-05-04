@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Trash2,
   Copy,
@@ -39,7 +39,7 @@ const severityColors = {
   INFO: "bg-gray-500/20 text-gray-400 border-gray-500/50",
 };
 
-export function FindingCard({ finding, onDelete, onVerify }: FindingCardProps) {
+export const FindingCard = React.memo(function FindingCard({ finding, onDelete, onVerify }: FindingCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -168,4 +168,4 @@ export function FindingCard({ finding, onDelete, onVerify }: FindingCardProps) {
       )}
     </div>
   );
-}
+});
