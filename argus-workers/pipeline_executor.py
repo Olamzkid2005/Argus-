@@ -33,10 +33,12 @@ Plus: Shannon's Result<T,E> type for explicit error propagation.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import time
 from typing import Any
 
+from feature_flags import is_enabled
 from tools.models import ToolResult
 
 from error_classifier import (
@@ -46,6 +48,9 @@ from error_classifier import (
 
 logger = logging.getLogger(__name__)
 
+# Tools that can run in parallel (longest-running, independent)
+PARALLEL_RECON_TOOLS = {"httpx", "katana", "amass", "subfinder"}
+PARALLEL_SCAN_TOOLS = {"nuclei", "dalfox"}
 
 # ── Step result ──
 
@@ -144,39 +149,29 @@ class PipelineExecutor:
         results: list[StepResult] = []
         target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
         agg = aggressiveness or "default"
-
-        # ── Step 1: httpx — live endpoint discovery ──
-        results.append(self._exec_httpx(target, engagement_id, target_domain))
-
-        # ── Step 2: katana — web crawling ──
         katana_depth = {"default": "3", "high": "5", "extreme": "7"}.get(agg, "3")
-        results.append(self._exec_katana(target, engagement_id, target_domain, katana_depth))
 
-        # ── Step 3: ffuf — directory fuzzing ──
+        # ── Parallel tools (httpx, katana, amass, subfinder) ──
+        if is_enabled("PARALLEL_EXECUTION"):
+            results.extend(self._execute_tools_parallel([
+                ("httpx", lambda: self._exec_httpx(target, engagement_id, target_domain)),
+                ("katana", lambda: self._exec_katana(target, engagement_id, target_domain, katana_depth)),
+                ("amass", lambda: self._exec_amass(target_domain, engagement_id, agg)),
+                ("subfinder", lambda: self._exec_subfinder(target_domain, engagement_id, agg)),
+            ]))
+        else:
+            results.append(self._exec_httpx(target, engagement_id, target_domain))
+            results.append(self._exec_katana(target, engagement_id, target_domain, katana_depth))
+            results.append(self._exec_amass(target_domain, engagement_id, agg))
+            results.append(self._exec_subfinder(target_domain, engagement_id, agg))
+
+        # ── Sequential tools ──
         results.append(self._exec_ffuf(target, engagement_id, target_domain, agg))
-
-        # ── Step 4: amass — subdomain enumeration ──
-        results.append(self._exec_amass(target_domain, engagement_id, agg))
-
-        # ── Step 4b: subfinder — passive subdomain enumeration ──
-        results.append(self._exec_subfinder(target_domain, engagement_id, agg))
-
-        # ── Step 4c: alterx — subdomain permutation generation ──
         results.append(self._exec_alterx(target_domain, engagement_id, agg))
-
-        # ── Step 5: naabu — port scanning ──
         results.append(self._exec_naabu(target_domain, engagement_id, agg))
-
-        # ── Step 6: whatweb — technology fingerprinting ──
         results.append(self._exec_whatweb(target, engagement_id, target_domain))
-
-        # ── Step 7: nikto — web server scanning ──
         results.append(self._exec_nikto(target, engagement_id, target_domain))
-
-        # ── Step 8: gau — passive URL discovery ──
         results.append(self._exec_gau(target, engagement_id, target_domain))
-
-        # ── Step 9: waybackurls — historical URLs ──
         results.append(self._exec_waybackurls(target, engagement_id, target_domain))
 
         return results
@@ -209,25 +204,21 @@ class PipelineExecutor:
         results: list[StepResult] = []
         agg = aggressiveness or "default"
 
-        # ── Step 1: nuclei — vulnerability scanning ──
-        results.append(self._exec_nuclei(target, engagement_id, agg))
+        # ── Parallel tools (nuclei, dalfox) ──
+        if is_enabled("PARALLEL_EXECUTION"):
+            results.extend(self._execute_tools_parallel([
+                ("nuclei", lambda: self._exec_nuclei(target, engagement_id, agg)),
+                ("dalfox", lambda: self._exec_dalfox(target, engagement_id, agg)),
+            ]))
+        else:
+            results.append(self._exec_nuclei(target, engagement_id, agg))
+            results.append(self._exec_dalfox(target, engagement_id, agg))
 
-        # ── Step 2: dalfox — XSS scanning ──
-        results.append(self._exec_dalfox(target, engagement_id, agg))
-
-        # ── Step 3: sqlmap — SQL injection ──
+        # ── Sequential tools ──
         results.append(self._exec_sqlmap(target, engagement_id, agg))
-
-        # ── Step 4: arjun — parameter discovery ──
         results.append(self._exec_arjun(target, engagement_id, agg))
-
-        # ── Step 5: jwt_tool — JWT testing ──
         results.append(self._exec_jwt_tool(target, engagement_id))
-
-        # ── Step 6: commix — command injection ──
         results.append(self._exec_commix(target, engagement_id, agg))
-
-        # ── Step 7: testssl — TLS/SSL testing ──
         results.append(self._exec_testssl(target, engagement_id, agg))
 
         return results
@@ -609,6 +600,32 @@ class PipelineExecutor:
     # ═══════════════════════════════════════════════════════════════
     # Internal helpers
     # ═══════════════════════════════════════════════════════════════
+
+    def _execute_tools_parallel(self, tools: list[tuple[str, callable]]) -> list[StepResult]:
+        """Run independent _exec_* methods concurrently using ThreadPoolExecutor.
+
+        Falls back to sequential execution when PARALLEL_EXECUTION feature flag is disabled.
+
+        Args:
+            tools: List of (name, zero-arg-callable) tuples, each wrapping an _exec_* call
+                   with captured arguments.
+
+        Returns:
+            List of StepResult objects (one per tool)
+        """
+        if not is_enabled("PARALLEL_EXECUTION"):
+            return [fn() for _, fn in tools]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            future_map = {executor.submit(fn): name for name, fn in tools}
+            results = []
+            for future in concurrent.futures.as_completed(future_map, timeout=600):
+                name = future_map[future]
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    logger.error(f"Parallel tool {name} failed: {e}")
+        return results
 
     def _run_tool(self, tool_name: str, args: list[str], timeout: int | None = None) -> ToolResult:
         """Run a tool and return its result."""
