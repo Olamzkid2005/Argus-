@@ -71,6 +71,8 @@ class FindingRepository(BaseRepository):
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
                 )
+                ON CONFLICT (engagement_id, endpoint, type, source_tool) DO NOTHING
+                RETURNING id
                 """,
                 (
                     finding_id,
@@ -89,6 +91,18 @@ class FindingRepository(BaseRepository):
                     fp_likelihood,
                 )
             )
+            row = cursor.fetchone()
+            if row:
+                finding_id = str(row[0])
+            else:
+                cursor.execute(
+                    """
+                    SELECT id FROM findings
+                    WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s
+                    """,
+                    (engagement_id, endpoint, finding_type, source_tool)
+                )
+                finding_id = str(cursor.fetchone()[0])
             conn.commit()
             return finding_id
         except Exception as e:
