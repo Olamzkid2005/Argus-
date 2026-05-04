@@ -10,6 +10,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Generator
+from functools import lru_cache
 
 from tracing import ExecutionSpan, StructuredLogger
 
@@ -35,6 +36,12 @@ class Parser:
     Falling back to BaseParser for tools without a dedicated parser.
     """
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _build_parsers() -> dict:
+        from parsers.parsers import _parser_registry
+        return {tool_name: parser_cls() for tool_name, parser_cls in _parser_registry.items()}
+
     def __init__(self, connection_string: str = None):
         """
         Initialize Parser with optional database connection for tracing.
@@ -42,12 +49,7 @@ class Parser:
         Args:
             connection_string: Database connection string
         """
-        from parsers.parsers import _parser_registry
-
-        self._parser_registry = _parser_registry
-        self.parsers = {}
-        for tool_name, parser_cls in _parser_registry.items():
-            self.parsers[tool_name] = parser_cls()
+        self.parsers = self._build_parsers()
 
         # Initialize tracing
         self.connection_string = connection_string or os.getenv("DATABASE_URL")

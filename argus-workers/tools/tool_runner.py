@@ -15,6 +15,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from cache import cache
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from tools.circuit_breaker import (
     CircuitOpenError,
@@ -187,8 +188,10 @@ class ToolRunner:
             "commix",
         }
 
+        go_bin = os.path.expanduser("~/go/bin")
+
         env = {
-            "PATH": f"{venv_bin}:/Users/mac/go/bin:/usr/local/bin:/usr/bin:/bin",
+            "PATH": f"{venv_bin}:{go_bin}:/usr/local/bin:/usr/bin:/bin",
             # Pass through HOME so tools (gitleaks, nmap, git, nuclei) can find
             # ~/.config/ and other user-level configuration. Do NOT override it.
             "HOME": os.environ.get("HOME", "/root"),
@@ -283,6 +286,12 @@ class ToolRunner:
             SecurityException: If dangerous payload detected
             subprocess.TimeoutExpired: If execution times out
         """
+        # Cache check
+        cache_key = f"tool_result:{tool}:{hash(tuple(args))}"
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return ToolResult(**cached_result)
+
         # Safety check
         if self.is_dangerous(tool, args):
             raise SecurityException(
@@ -356,7 +365,7 @@ class ToolRunner:
                 except Exception as log_err:
                     logger.warning("Failed to log tool execution: %s", log_err)
 
-                return ToolResult(
+                tool_result = ToolResult(
                     stdout=result.stdout,
                     stderr=result.stderr,
                     returncode=result.returncode,
@@ -367,6 +376,9 @@ class ToolRunner:
                     error=None,
                     trace_id=get_trace_id(),
                 )
+
+                cache.set(cache_key, tool_result.as_dict(), ttl=300)
+                return tool_result
 
             except subprocess.TimeoutExpired:
                 duration_ms = int((time.time() - start_time) * 1000)
