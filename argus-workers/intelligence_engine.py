@@ -4,6 +4,7 @@ Analyzes findings and generates recommended actions
 
 Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2, 18.1, 18.2, 18.3, 18.4
 """
+import asyncio
 import json
 import logging
 import os
@@ -440,7 +441,7 @@ class IntelligenceEngine:
             if cve_ids:
                 threat_intel["cve_ids"] = cve_ids
                 # Fetch CVE details from NVD
-                threat_intel["cve_details"] = self._fetch_nvd_cve_data(cve_ids)
+                threat_intel["cve_details"] = asyncio.run(self._fetch_nvd_cve_data_async(cve_ids))
 
             # Get EPSS scores for exploitability prediction
             if cve_ids:
@@ -537,6 +538,65 @@ class IntelligenceEngine:
         except Exception as e:
             logger.warning(f"NVD API client failed: {e}")
 
+        return results
+
+    async def _fetch_nvd_cve_data_async(self, cve_ids: list[str]) -> dict[str, dict]:
+        """Fetch NVD data for multiple CVEs concurrently using async HTTP.
+
+        Args:
+            cve_ids: List of CVE IDs
+
+        Returns:
+            Dictionary mapping CVE ID to details
+        """
+        results = {}
+        if not cve_ids:
+            return results
+        try:
+            sem = asyncio.Semaphore(5)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                async def fetch_one(cve_id: str) -> tuple[str, dict | None]:
+                    async with sem:
+                        try:
+                            response = await client.get(
+                                f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
+                                headers={"User-Agent": "Argus-Platform/1.0"}
+                            )
+                            if response.status_code == 200:
+                                data = response.json()
+                                vulnerabilities = data.get("vulnerabilities", [])
+
+                                if vulnerabilities:
+                                    vuln = vulnerabilities[0].get("cve", {})
+                                    metrics = vuln.get("metrics", {})
+                                    cvss_data = None
+
+                                    if "cvssMetricV31" in metrics:
+                                        cvss_data = metrics["cvssMetricV31"][0].get("cvssData", {})
+                                    elif "cvssMetricV30" in metrics:
+                                        cvss_data = metrics["cvssMetricV30"][0].get("cvssData", {})
+                                    elif "cvssMetricV2" in metrics:
+                                        cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
+
+                                    return cve_id, {
+                                        "description": vuln.get("descriptions", [{}])[0].get("value", ""),
+                                        "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
+                                        "severity": cvss_data.get("baseSeverity") if cvss_data else None,
+                                        "published": vuln.get("published", ""),
+                                        "last_modified": vuln.get("lastModified", ""),
+                                        "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
+                                    }
+                            return cve_id, None
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
+                            return cve_id, None
+
+                tasks = [fetch_one(cve_id) for cve_id in cve_ids]
+                for cve_id, data in await asyncio.gather(*tasks):
+                    if data:
+                        results[cve_id] = data
+        except Exception as e:
+            logger.warning(f"NVD async client failed: {e}")
         return results
 
     def _fetch_epss_scores(self, cve_ids: list[str]) -> dict[str, float]:
