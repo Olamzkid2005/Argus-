@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { log } from "@/lib/logger";
+import { validateWebhookUrl } from "@/lib/url-validator";
 
 export async function POST(req: NextRequest) {
   log.api('POST', '/api/webhooks');
@@ -24,6 +25,15 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json(
         { error: "Invalid webhook_url" },
+        { status: 400 },
+      );
+    }
+
+    // Block SSRF: reject URLs that resolve to private/internal IPs
+    const validation = await validateWebhookUrl(webhook_url);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error },
         { status: 400 },
       );
     }
