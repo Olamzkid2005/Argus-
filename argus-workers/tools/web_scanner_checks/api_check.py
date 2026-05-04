@@ -1,7 +1,6 @@
 """
 API security checks: mass assignment, OpenAPI discovery, JWT algorithm confusion.
 """
-import base64
 import json
 import logging
 import re
@@ -9,7 +8,7 @@ from urllib.parse import urljoin
 
 from config.constants import LLM_MAX_GENERATED_PAYLOADS, RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
 
-from ._helpers import make_finding, safe_request
+from ._helpers import make_finding, safe_request, test_jwt_alg_none
 
 logger = logging.getLogger(__name__)
 
@@ -101,28 +100,19 @@ def _check_jwt_algorithm_confusion(target_url, session, findings):
 
     jwts = list(set(jwts))[:3]
     for jwt_token in jwts:
-        parts = jwt_token.split(".")
-        if len(parts) != 3:
-            continue
-        try:
-            json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
-        except Exception:
-            continue
-        none_header = base64.urlsafe_b64encode(
-            json.dumps({"alg": "none", "typ": "JWT"}).encode()
-        ).decode().rstrip("=")
-        none_jwt = f"{none_header}.{parts[1]}."
-        for auth_header in ["Authorization", "X-Access-Token", "Token"]:
-            test_resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,
-                                     headers={auth_header: f"Bearer {none_jwt}"})
-            if test_resp and test_resp.status_code == 200:
-                findings.append(make_finding("JWT_ALGORITHM_CONFUSION", "HIGH", target_url, {
-                    "original_jwt": jwt_token[:20] + "...",
-                    "test_algorithm": "none",
-                    "auth_header": auth_header,
-                    "message": "Server accepted JWT with alg:none",
-                }, 0.7))
-                return
+        finding = test_jwt_alg_none(
+            jwt_token=jwt_token,
+            target_url=target_url,
+            request_func=lambda url, headers: safe_request(
+                "GET", url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT, headers=headers
+            ),
+        )
+        if finding:
+            findings.append(make_finding(
+                finding["type"], finding["severity"], finding["endpoint"],
+                finding["evidence"], finding["confidence"],
+            ))
+            return
 
 
 class ApiCheck:

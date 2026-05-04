@@ -43,6 +43,7 @@ from config.constants import (
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,
 )
+from tools.web_scanner_checks._helpers import test_jwt_alg_none
 
 
 class WebScanner:
@@ -1342,39 +1343,20 @@ class WebScanner:
 
         jwts = list(set(jwts))[:3]  # Deduplicate, limit to 3
         for jwt_token in jwts:
-            parts = jwt_token.split(".")
-            if len(parts) != 3:
-                continue
-            try:
-                json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
-            except Exception:
-                continue
-
-            # Test alg:none
-            none_header = base64.urlsafe_b64encode(
-                json.dumps({"alg": "none", "typ": "JWT"}).encode()
-            ).decode().rstrip("=")
-            none_jwt = f"{none_header}.{parts[1]}."
-
-            for auth_header in ["Authorization", "X-Access-Token", "Token"]:
-                test_resp = self._safe_request(
-                    "GET", self.target_url,
-                    headers={auth_header: f"Bearer {none_jwt}"}
+            finding = test_jwt_alg_none(
+                jwt_token=jwt_token,
+                target_url=self.target_url,
+                request_func=lambda url, headers: self._safe_request("GET", url, headers=headers),
+            )
+            if finding:
+                self._add_finding(
+                    finding_type=finding["type"],
+                    severity=finding["severity"],
+                    endpoint=finding["endpoint"],
+                    evidence=finding["evidence"],
+                    confidence=finding["confidence"],
                 )
-                if test_resp and test_resp.status_code == 200:
-                    self._add_finding(
-                        finding_type="JWT_ALGORITHM_CONFUSION",
-                        severity="HIGH",
-                        endpoint=self.target_url,
-                        evidence={
-                            "original_jwt": jwt_token[:20] + "...",
-                            "test_algorithm": "none",
-                            "auth_header": auth_header,
-                            "message": "Server accepted JWT with alg:none",
-                        },
-                        confidence=0.7,
-                    )
-                    return
+                return
 
     def check_prototype_pollution(self):
         """Check for prototype pollution vulnerabilities."""
