@@ -106,10 +106,6 @@ export async function GET(req: NextRequest) {
 
       const result = await client.query(query, params);
 
-      // #region debug log
-      fetch('http://127.0.0.1:65177/ingest/dfb540',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'dfb540',location:'engagements/route.ts:107',message:'Fetched engagements from DB',data:{count:result.rows.length,total,engagementIds:result.rows.map((r:any)=>r.id)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       const response = NextResponse.json({
         engagements: result.rows,
         meta: {
