@@ -106,12 +106,14 @@ class EngagementRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def find_active_by_org(self, org_id: str) -> list[dict]:
+    def find_active_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
         Find active engagements for an organization
 
         Args:
             org_id: Organization ID
+            limit: Maximum number of records
+            offset: Number of records to skip
 
         Returns:
             List of active engagement dictionaries
@@ -136,8 +138,9 @@ class EngagementRepository(BaseRepository):
                 ) f ON e.id = f.engagement_id
                 WHERE e.org_id = %s AND e.status NOT IN ('complete', 'failed')
                 ORDER BY e.created_at DESC
+                LIMIT %s OFFSET %s
                 """,
-                (org_id,)
+                (org_id, limit, offset)
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -159,12 +162,14 @@ class EngagementRepository(BaseRepository):
         """
         return self.update_by_id(engagement_id, {"status": status})
 
-    def find_by_status(self, status: str) -> list[dict]:
+    def find_by_status(self, status: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
         Find engagements by status
 
         Args:
             status: Status to filter by
+            limit: Maximum number of records
+            offset: Number of records to skip
 
         Returns:
             List of engagement dictionaries
@@ -178,8 +183,9 @@ class EngagementRepository(BaseRepository):
                 SELECT * FROM engagements
                 WHERE status = %s
                 ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
                 """,
-                (status,)
+                (status, limit, offset)
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]

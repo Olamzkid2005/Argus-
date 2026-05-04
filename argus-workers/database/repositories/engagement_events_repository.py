@@ -120,12 +120,14 @@ class EngagementEventsRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_event_timeline(self, engagement_id: str) -> list[dict]:
+    def get_event_timeline(self, engagement_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
         Retrieve chronological event timeline for an engagement.
 
         Args:
             engagement_id: Engagement ID
+            limit: Maximum number of records
+            offset: Number of records to skip
 
         Returns:
             List of event dictionaries ordered oldest to newest
@@ -139,8 +141,9 @@ class EngagementEventsRepository(BaseRepository):
                 SELECT * FROM engagement_events
                 WHERE engagement_id = %s
                 ORDER BY created_at ASC
+                LIMIT %s OFFSET %s
                 """,
-                (engagement_id,),
+                (engagement_id, limit, offset),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
