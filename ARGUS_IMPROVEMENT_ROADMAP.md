@@ -478,11 +478,13 @@ Converted `React.lazy` to `next/dynamic` with `ssr: false` + Suspense fallbacks.
 > **Goal**: Expand platform coverage with port scanning, WebSocket security testing, API security testing, and an analyst feedback loop that improves accuracy over time.
 > **Risk**: Medium. New features may interact with existing scan pipeline. | **PRs**: 4-6 PRs, feature-flagged.
 
-### 5.1 P4-N1: Port Scanner Integration
+### ✅ 5.1 P4-N1: Port Scanner Integration — DONE
+
+**File**: `tools/port_scanner.py`
 
 **Problem**: The platform scans web targets but has no native port scanning. Service discovery is limited to what naabu/httpx discover during recon. Users must run nmap manually.
 
-**Fix**: Create `tools/port_scanner.py` that wraps naabu (fast SYN scan) + nmap (service detection) via subprocess — no Docker required:
+**Fix**: Created `tools/port_scanner.py` that wraps naabu (fast SYN scan) + nmap (service detection) via subprocess — no Docker required:
 
 ```python
 class PortScanner:
@@ -513,7 +515,9 @@ class PortScanner:
 
 **Merge criteria**: Unit tests with mocked naabu/nmap output. Integration test confirms ports are discovered and mapped to templates.
 
-### 5.2 P4-N2: WebSocket Security Scanner
+### ✅ 5.2 P4-N2: WebSocket Security Scanner — DONE
+
+**File**: `tools/websocket_scanner.py`
 
 **Problem**: WebSocket endpoints are a blind spot. The platform tests REST APIs but not WebSocket connections for security issues.
 
@@ -540,7 +544,9 @@ class WebSocketScanner:
 
 **Gated behind**: `ARGUS_FF_WS_SCANNER=false`
 
-### 5.3 P4-N3: API Security Testing (BOLA, Auth Bypass)
+### ✅ 5.3 P4-N3: API Security Testing (BOLA, Auth Bypass) — DONE
+
+**File**: `tools/api_security_scanner.py`
 
 **Problem**: REST APIs are tested with generic web checks but specific API vulnerabilities (BOLA, mass assignment, rate limiting) are not covered.
 
@@ -571,7 +577,9 @@ class APISecurityScanner:
 
 **Gated behind**: `ARGUS_FF_API_SCANNER=false`
 
-### 5.4 P4-N4: Analyst Feedback Learning Loop
+### ✅ 5.4 P4-N4: Analyst Feedback Learning Loop — DONE
+
+**File**: `models/feedback.py` + `database/migrations/016_add_finding_feedback.sql`
 
 **Problem**: Confidence scoring and severity adjustment are static. The platform never learns from analyst corrections.
 
@@ -615,16 +623,16 @@ class FeedbackLearningLoop:
 > **Goal**: Remove dead code, fix CI pipeline, add tests that prove the improvements work.
 > **Risk**: Low. Mostly deletion and test additions. | **PRs**: 4-5 PRs.
 
-### 6.1 Remove Dead Code
+### ✅ 6.1 Remove Dead Code — DONE
 
-| ID | File | Action |
-|----|------|--------|
-| S1 | `pipeline_router.py` | Remove or replace with pass-through (parallel executor is now the only path) |
-| BEC-21 | `tools/_browser_scan_worker.py` | Remove (superseded by `tools/browser_scanner.py`) |
-| BEC-22 | `feature_flags.py` method `_load_flag_from_db()` | Implement or remove the dead method |
-| S2 | `orchestrator.py` (top-level, 501 lines) | If it's a thin re-export wrapper, remove it and point imports to `orchestrator_pkg/` directly |
+| ID | File | Action | Status |
+|----|------|--------|--------|
+| S1 | `pipeline_router.py` | Still actively used by orchestrator — left as-is | ⏳ Active |
+| BEC-21 | `tools/_browser_scan_worker.py` | Removed (superseded, zero imports) | ✅ Removed |
+| BEC-22 | `feature_flags.py` method `_load_flag_from_db()` | Implemented with proper DB query | ✅ Done |
+| S2 | `orchestrator.py` (top-level, 501 lines) | Thin re-export, still imported by 6+ files — left as-is | ⏳ Active |
 
-### 6.2 Fix CI Pipeline
+### ✅ 6.2 Fix CI Pipeline — DONE
 
 **File**: `.github/workflows/ci.yml`
 
@@ -637,9 +645,9 @@ class FeedbackLearningLoop:
 
 **Merge criteria**: A failing lint or test causes CI to fail.
 
-### 6.3 Add Integration Tests for Critical Paths
+### ✅ 6.3 Add Integration Tests for Critical Paths — DONE
 
-**Problem**: 39 test files exist but many test isolated components, not the critical data paths.
+**Files**: `tests/test_finding_dedup.py`, `tests/test_parallel_executor.py`, `tests/test_error_logging.py` (13 tests total)
 
 **Add tests for**:
 1. Finding deduplication (the upsert path from Phase 3.5)
@@ -647,29 +655,29 @@ class FeedbackLearningLoop:
 3. Parallel executor fallback (feature flag off → sequential behavior unchanged)
 4. Error handling — silent exception swallowing is now logged (verify with mock assertions)
 
-### 6.4 BEC-12: Deduplicate JWT Logic (MEDIUM)
+### ✅ 6.4 BEC-12: Deduplicate JWT Logic (MEDIUM) — DONE
 
-**Files**: `tools/web_scanner.py` (lines 1326-1377) and `tools/web_scanner_checks/api_check.py` (lines 103-125)
+**Files**: `tools/web_scanner_checks/_helpers.py`, `tools/web_scanner.py`, `tools/web_scanner_checks/api_check.py`
 
-**Problem**: JWT `alg:none` attack testing logic is copy-pasted in two places.
+**Problem**: JWT `alg:none` attack testing logic was copy-pasted in two places.
 
-**Fix**: Extract into `tools/web_scanner_checks/_helpers.py` and import from both.
+**Fix**: Extracted into `tools/web_scanner_checks/_helpers.py` and imported from both.
 
-### 6.5 BEC-13: Consolidate Event Publishing (MEDIUM)
+### ✅ 6.5 BEC-13: Consolidate Event Publishing (MEDIUM) — DONE
 
-**Files**: `streaming.py` (StreamManager), `websocket_events.py` (WebSocketEventPublisher), direct `emit_*` calls
+**Files**: `events/event_bus.py`, `events/__init__.py`
 
 **Problem**: Three overlapping event systems.
 
-**Fix**: Create `events/event_bus.py` as a unified facade. Route all event publishing through it. Keep the underlying implementations (don't rewrite them) but enforce a single entry point.
+**Fix**: Created `events/event_bus.py` as a unified facade. Routes all event publishing through it while keeping the underlying implementations intact.
 
-### 6.6 BEC-01: Fix Cyrillic Character in Migration (HIGH)
+### ✅ 6.6 BEC-01: Fix Cyrillic Character in Migration (HIGH) — DONE
 
 **File**: `database/migrations/005_add_pgvector.sql` (line 79)
 
 **Problem**: `embedding вектор(1536)` instead of `embedding vector(1536)`.
 
-**Fix**: Simple character replacement. **This will break deployment** if ever applied fresh — it's a critical fix regardless of its trivial nature.
+**Fix**: Replaced Cyrillic characters with Latin. Verified no non-ASCII chars remain.
 
 ---
 
