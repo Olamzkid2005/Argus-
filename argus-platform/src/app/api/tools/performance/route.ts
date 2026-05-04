@@ -159,7 +159,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(
-      { error: "Failed to fetch tool performance statistics", details: err.message },
+      { error: "Failed to fetch tool performance statistics" },
       { status: 500 },
     );
   }

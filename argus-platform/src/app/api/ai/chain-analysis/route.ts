@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     console.error("Chain Analysis error:", error);
     const err = error as Error;
     return NextResponse.json(
-      { error: "Failed to generate chain analysis", details: err.message },
+      { error: "Failed to generate chain analysis" },
       { status: 500 }
     );
   } finally {

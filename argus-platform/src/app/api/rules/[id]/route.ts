@@ -53,7 +53,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json(
-      { error: "Failed to delete rule", details: err.message },
+      { error: "Failed to delete rule" },
       { status: 500 }
     );
   }
@@ -151,7 +151,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json(
-      { error: "Failed to update rule", details: err.message },
+      { error: "Failed to update rule" },
       { status: 500 }
     );
   }

@@ -84,7 +84,7 @@ export async function DELETE(
   } catch (error) {
     log.error("Delete engagement outer error:", error);
     return NextResponse.json(
-      { error: "Failed to delete engagement", details: error instanceof Error ? error.message : String(error) },
+      { error: "Failed to delete engagement" },
       { status: 500 },
     );
   }

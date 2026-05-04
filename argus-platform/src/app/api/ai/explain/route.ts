@@ -157,8 +157,8 @@ export async function POST(request: NextRequest) {
         explanations[finding.id] = explanation;
       } catch (err) {
         const error = err as Error;
-        errors[finding.id] = error.message;
-        explanations[finding.id] = `Error: ${error.message}`;
+        errors[finding.id] = "An internal error occurred";
+        explanations[finding.id] = "Error generating explanation";
       }
     }
 
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     console.error("AI Explain error:", error);
     const err = error as Error;
     return NextResponse.json(
-      { error: "Failed to generate explanations", details: err.message },
+      { error: "Failed to generate explanations" },
       { status: 500 }
     );
   } finally {

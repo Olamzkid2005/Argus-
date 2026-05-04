@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     console.error("AI Rule Generator error:", error);
     const err = error as Error;
     return NextResponse.json(
-      { error: "Failed to generate rule", details: err.message },
+      { error: "Failed to generate rule" },
       { status: 500 }
     );
   } finally {

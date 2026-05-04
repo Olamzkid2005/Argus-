@@ -73,7 +73,7 @@ export async function GET(
     }
 
     if (err.message.startsWith("Forbidden")) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     return NextResponse.json(

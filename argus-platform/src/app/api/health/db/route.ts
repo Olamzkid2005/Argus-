@@ -55,7 +55,7 @@ export async function GET() {
     return NextResponse.json(
       {
         status: "unhealthy",
-        error: error instanceof Error ? error.message : "Database check failed",
+        error: "Database health check failed",
       },
       { status: 503 }
     );

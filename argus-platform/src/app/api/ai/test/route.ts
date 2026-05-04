@@ -78,12 +78,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
       return NextResponse.json(
         {
           ok: false,
           error: `OpenRouter error (${response.status})`,
-          details: errorText,
           model,
         },
         { status: 502 }
@@ -105,7 +103,6 @@ export async function POST(request: NextRequest) {
       {
         ok: false,
         error: "Failed to test AI connection",
-        details: err.message,
       },
       { status: 500 }
     );

@@ -55,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_user_settings_email ON user_settings(user_email);
   } catch (error) {
     console.error("Migration error:", error);
     return NextResponse.json({ 
-      error: error instanceof Error ? error.message : "Migration failed" 
+      error: "Migration failed" 
     }, { status: 500 });
   }
 }

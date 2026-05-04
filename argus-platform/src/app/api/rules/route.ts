@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json(
-      { error: "Failed to fetch rules", details: err.message },
+      { error: "Failed to fetch rules" },
       { status: 500 }
     );
   }
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json(
-      { error: "Failed to create rule", details: err.message },
+      { error: "Failed to create rule" },
       { status: 500 }
     );
   }
