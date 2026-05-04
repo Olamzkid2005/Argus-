@@ -261,6 +261,8 @@ class ToolHealthTracker:
 
     def get_tool_health(self) -> list[ToolHealth]:
         """Query tool_metrics for the last 24 hours and return per-tool health."""
+        conn = None
+        cursor = None
         try:
             import psycopg2
             conn = psycopg2.connect(self._db_conn)
@@ -289,8 +291,6 @@ class ToolHealthTracker:
                 ORDER BY tool_name, created_at DESC
             """, (cutoff,))
             all_metrics = cursor.fetchall()
-            cursor.close()
-            conn.close()
 
             # Compute consecutive failures per tool
             cons_failures: dict[str, int] = {}
@@ -318,21 +318,16 @@ class ToolHealthTracker:
                 else:
                     status = "healthy"
 
-                results.append(ToolHealth(
-                    tool_name=tool_name,
-                    success_rate_24h=float(success_rate),
-                    avg_duration_seconds=float(avg_duration_sec) if avg_duration_sec else 0.0,
-                    total_runs_24h=int(total_runs),
-                    last_success_at=last_success_at.isoformat() if last_success_at else None,
-                    consecutive_failures=consecutive,
-                    status=status,
-                ))
-
+                results.append(ToolHealth(name=tool_name, status=status, success_rate=success_rate, avg_duration_sec=avg_duration_sec, consecutive_failures=consecutive))
             return results
-
         except Exception as e:
             logger.warning(f"Tool health query failed: {e}")
             return []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
 
 _tool_health_tracker: ToolHealthTracker | None = None

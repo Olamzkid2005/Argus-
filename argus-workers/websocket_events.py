@@ -488,6 +488,8 @@ class WebSocketEventPublisher:
         db_url = os.getenv("DATABASE_URL")
         if not db_url:
             return
+        conn = None
+        cursor = None
         try:
             from database.connection import connect
             conn = connect(db_url)
@@ -501,12 +503,15 @@ class WebSocketEventPublisher:
                 (engagement_id, tool_name, activity, status, target, details, items_found, duration_ms),
             )
             conn.commit()
-            cursor.close()
-            conn.close()
         except Exception as e:
             # Non-critical: don't let DB write failure break the scan
             import logging
             logging.getLogger(__name__).warning(f"Failed to persist scanner activity: {e}")
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def publish_error(
         self,
