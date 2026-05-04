@@ -1065,6 +1065,7 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={() => setShowCompletionBanner(false)}
+                aria-label="Dismiss completion banner"
                 className="p-1 hover:bg-green-500/10 rounded-lg transition-all"
               >
                 <XCircle size={16} className="text-on-surface-variant" />
@@ -1211,10 +1212,10 @@ export default function DashboardPage() {
                     Delete
                   </button>
                 )}
-                <button onClick={reconnect} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
+                <button onClick={reconnect} aria-label="Reconnect" className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] transition-all duration-300 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24]">
                   <Loader2 size={16} />
                 </button>
-                <button onClick={clearEvents} className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-lg hover:bg-error/5">
+                <button onClick={clearEvents} aria-label="Clear events" className="p-2 text-on-surface-variant dark:text-[#8A8A9E] hover:text-error transition-all duration-300 rounded-lg hover:bg-error/5">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -1330,6 +1331,7 @@ export default function DashboardPage() {
                                       handleStop(eng.id);
                                     }}
                                     disabled={isStopping}
+                                    aria-label="Stop scan"
                                     className="p-1.5 hover:bg-error/10 rounded text-error transition-all duration-300"
                                     title="Stop scan"
                                   >
@@ -1344,6 +1346,7 @@ export default function DashboardPage() {
                                       e.stopPropagation();
                                       connectEngagement(eng.id);
                                     }}
+                                    aria-label="Monitor"
                                     className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
                                     title="Monitor"
                                   >
@@ -1388,6 +1391,7 @@ export default function DashboardPage() {
                                       handleRescan(eng.id);
                                     }}
                                     disabled={rescannings.has(eng.id)}
+                                    aria-label="Rescan"
                                     className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
                                     title="Rescan"
                                   >
@@ -1406,6 +1410,7 @@ export default function DashboardPage() {
                                       handleDelete(eng.id);
                                     }}
                                     disabled={isDeleting}
+                                    aria-label="Delete"
                                     className="p-1.5 hover:bg-red-500/10 rounded text-red-400 transition-all duration-300"
                                     title="Delete"
                                   >
@@ -1420,6 +1425,7 @@ export default function DashboardPage() {
                                       e.stopPropagation();
                                       router.push(`/dashboard?engagement=${eng.id}`);
                                     }}
+                                    aria-label="View"
                                     className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
                                     title="View"
                                   >
