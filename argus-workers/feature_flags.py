@@ -103,7 +103,7 @@ class FeatureFlags:
         # 2. Check database
         if self.db:
             try:
-                db_value = self._get_from_db(flag_name)
+                db_value = self._load_flag_from_db(flag_name)
                 if db_value is not None:
                     self._cache[flag_name] = (db_value, FlagSource.DB)
                     logger.debug(f"Feature flag {flag_name}={db_value} from db")
@@ -130,11 +130,20 @@ class FeatureFlags:
             except ValueError:
                 return value
 
-    def _get_from_db(self, flag_name: str) -> Any | None:
-        """Get flag value from database."""
-        # This would query a feature_flags table
-        # For now, return None to use default
-        return None
+    def _load_flag_from_db(self, flag_name: str) -> bool | None:
+        """Load flag value from database. Returns None if not found."""
+        try:
+            from database.connection import get_db
+            db = get_db()
+            with db.cursor() as cursor:
+                cursor.execute(
+                    "SELECT enabled FROM feature_flags WHERE flag_name = %s",
+                    (flag_name,)
+                )
+                row = cursor.fetchone()
+                return row[0] if row else None
+        except Exception:
+            return None
 
     def clear_cache(self):
         """Clear the flag cache to force re-read."""
