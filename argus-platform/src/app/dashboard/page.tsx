@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo, useCallback, Suspense, lazy } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
@@ -13,129 +14,33 @@ import {
   ShieldAlert,
   Globe,
   Clock,
-  Zap,
-  ChevronRight,
-  Radio,
-  Target,
   Database,
   Trash2,
   CheckCircle2,
-  XCircle,
   Loader2,
-  Terminal,
-  GitBranch,
-  BarChart3,
   StopCircle,
-  Eye,
-  History,
+  GitBranch,
 } from "lucide-react";
 import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 import { AIStatusBadge } from "@/components/ui-custom/AIStatus";
 import ScannerActivityPanel from "@/components/ui-custom/ScannerActivityPanel";
 import { useScannerActivities } from "@/lib/use-scanner-activities";
-import { useScanEstimates } from "@/hooks/useScanEstimates";
+
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import { WebSocketEvent } from "@/lib/websocket-events";
 
-import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
+import CompletionBanner from "./components/CompletionBanner";
+import StatsWidgetBar from "./components/StatsWidgetBar";
+import FindingsPanel from "./components/FindingsPanel";
+import ActiveEngagementPanel from "./components/ActiveEngagementPanel";
+import ToolPerformanceSection from "./components/ToolPerformanceSection";
 
-// Lazy load heavy visualization components
-const AttackPathGraph = lazy(() => import("@/components/ui-custom/AttackPathGraph"));
-const ExecutionTimeline = lazy(() => import("@/components/ui-custom/ExecutionTimeline"));
-const ToolPerformanceMetrics = lazy(() => import("@/components/ui-custom/ToolPerformanceMetrics"));
+// Dynamic imports for heavy visualization components
+const AttackPathGraph = dynamic(() => import("@/components/ui-custom/AttackPathGraph"), { ssr: false });
+const ExecutionTimeline = dynamic(() => import("@/components/ui-custom/ExecutionTimeline"), { ssr: false });
+
 
 // ── Components ──
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  index,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-  index: number;
-}) {
-  const numericValue = typeof value === "number" ? value : parseInt(String(value), 10);
-  const isNumeric = !isNaN(numericValue);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.1 }}
-      whileHover={{ y: -2, transition: { duration: 0.25 } }}
-      className="relative bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-5 overflow-hidden transition-all duration-300 hover:shadow-glow hover:border-primary/30 group"
-      style={{ borderLeftWidth: 4, borderLeftColor: color }}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-lg bg-surface-container dark:bg-[#1A1A24] flex items-center justify-center transition-colors duration-300">
-          {/* @ts-ignore */}
-          <Icon size={20} style={{ color }} />
-        </div>
-        <Zap size={14} className="text-on-surface-variant dark:text-[#8A8A9E] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      </div>
-      <div className="text-3xl font-headline font-bold text-on-surface dark:text-[#F0F0F5] tracking-tight">
-        {isNumeric ? <AnimatedCounter value={numericValue} /> : value}
-      </div>
-      <div className="text-xs font-body text-on-surface-variant dark:text-[#8A8A9E] mt-1 tracking-wide uppercase">{label}</div>
-    </motion.div>
-  );
-}
-
-function ThreatFeedRow({ event }: { event: WebSocketEvent }) {
-  const [hovered, setHovered] = useState(false);
-
-  const getSeverityColor = (severity: string): string => {
-    switch (String(severity).toUpperCase()) {
-      case "CRITICAL": return "#BA1A1A";
-      case "HIGH": return "#FF8800";
-      case "MEDIUM": return "#6720FF";
-      case "LOW": return "#10B981";
-      default: return "#7A7489";
-    }
-  };
-
-  const severity = (event.data.severity as string) || "Info";
-  const color = getSeverityColor(severity);
-
-  return (
-    <div
-      className="flex items-center gap-4 px-5 py-3 border-b border-outline-variant dark:border-[#ffffff08] last:border-b-0 group cursor-pointer hover:bg-surface-container dark:hover:bg-[#1A1A24] transition-all duration-300"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="w-2 h-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-body text-on-surface dark:text-[#F0F0F5] flex items-center gap-2">
-          <Radio size={12} className="text-on-surface-variant dark:text-[#8A8A9E]" />
-          {event.data.finding_type as string || event.type}
-        </div>
-        <div className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono mt-0.5 truncate uppercase">
-          {event.data.endpoint as string || "System intelligence"}
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <span
-          className="text-[11px] font-mono px-2 py-0.5 border rounded-md transition-all duration-300"
-          style={{
-            color,
-            borderColor: hovered ? color : "var(--outline-variant)",
-            backgroundColor: hovered ? `${color}10` : "transparent",
-          }}
-        >
-          {severity}
-        </span>
-        <span className="text-[11px] text-on-surface-variant dark:text-[#8A8A9E] font-mono w-14 text-right">
-          {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 function TimelineRow({ event }: { event: WebSocketEvent }) {
   const statusColor: Record<string, string> = {
@@ -157,186 +62,6 @@ function TimelineRow({ event }: { event: WebSocketEvent }) {
           {event.data.message as string || ((event.data.from_state as string) + " → " + (event.data.to_state as string)) || ""}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ScanStepTimeline({
-  currentState,
-  activities,
-  engagementStart,
-}: {
-  currentState: string;
-  activities: any[];
-  engagementStart?: string;
-}) {
-  const {
-    phaseEstimates,
-    getPhaseStatus,
-    getPhaseElapsed,
-    getPhaseRemaining,
-    getPhaseProgress,
-    getPhaseCompletionTime,
-    phaseHistory,
-    formatDuration,
-  } = useScanEstimates(currentState, {}, engagementStart);
-
-  const steps = phaseEstimates;
-
-  const completedCount = steps.filter((s) => getPhaseStatus(s.id) === "completed").length;
-  const inProgressCount = steps.filter((s) => getPhaseStatus(s.id) === "in_progress").length;
-  const progress = steps.length > 0 ? ((completedCount + inProgressCount * 0.5) / steps.length) * 100 : 0;
-
-  const activeActivity = activities.find((a) => a.status === "started" || a.status === "in_progress");
-
-  const getStepIcon = (status: string) => {
-    if (status === "completed") {
-      return <CheckCircle2 size={14} className="text-primary shrink-0" />;
-    }
-    if (status === "in_progress") {
-      return <Loader2 size={14} className="text-primary animate-spin shrink-0" />;
-    }
-    return <Clock size={14} className="text-on-surface-variant dark:text-[#8A8A9E] shrink-0" />;
-  };
-
-  return (
-    <div className="space-y-5">
-      {/* Overall progress */}
-      <div className="h-2 w-full bg-surface-container dark:bg-[#1A1A24] rounded-full overflow-hidden">
-        <motion.div
-          className="h-full bg-primary rounded-full"
-          initial={{ width: 0 }}
-          animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-        />
-      </div>
-
-      {/* Steps */}
-      <div className="space-y-4">
-        {steps.map((step, i) => {
-          const status = getPhaseStatus(step.id);
-          const completionTime = getPhaseCompletionTime(step.id);
-          const phaseElapsed = getPhaseElapsed(step.id);
-          const phaseRemaining = getPhaseRemaining(step.id);
-          const phaseProgress = getPhaseProgress(step.id);
-
-          return (
-            <div key={step.id} className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 shrink-0 ${
-                    status === "completed"
-                      ? "bg-primary text-on-primary"
-                      : status === "in_progress"
-                      ? "bg-primary/10 text-primary border border-primary"
-                      : "bg-surface-container dark:bg-[#1A1A24] text-on-surface-variant dark:text-[#8A8A9E]"
-                  }`}
-                >
-                  {status === "completed" ? <CheckCircle2 size={14} /> : i + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-sm font-body transition-colors duration-300 ${
-                        status === "completed"
-                          ? "text-on-surface dark:text-[#F0F0F5]"
-                          : status === "in_progress"
-                          ? "text-primary font-medium"
-                          : "text-on-surface-variant dark:text-[#8A8A9E]"
-                      }`}
-                    >
-                      {step.label}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {status === "in_progress" && phaseRemaining > 0 && (
-                        <span className="text-[10px] font-mono text-primary">
-                          {formatDuration(phaseRemaining)} remaining
-                        </span>
-                      )}
-                      {status === "completed" && completionTime && (
-                        <span className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E]">
-                          {completionTime.toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      )}
-                      {getStepIcon(status)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Phase progress bar and details */}
-              <div className="pl-10">
-                <div className="h-1 w-full bg-surface-container dark:bg-[#1A1A24] rounded-full overflow-hidden mb-1">
-                  <motion.div
-                    className="h-full bg-primary rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${phaseProgress}%` }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-on-surface-variant dark:text-[#8A8A9E] font-mono">
-                  <span>
-                    {status === "completed"
-                      ? `Completed in ${formatDuration(phaseElapsed)}`
-                      : status === "in_progress"
-                      ? `${phaseProgress}% • ${formatDuration(phaseElapsed)} elapsed`
-                      : `Estimated ~${step.estimatedMinutes} min`}
-                  </span>
-                  <span>
-                    {status === "pending" ? `~${step.estimatedMinutes} min` : `${phaseProgress}%`}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Phase History */}
-      {phaseHistory.length > 0 && (
-        <div className="pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
-          <div className="flex items-center gap-1.5 mb-2">
-            <History size={12} className="text-on-surface-variant dark:text-[#8A8A9E]" />
-            <span className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider">
-              Phase History
-            </span>
-          </div>
-          <div className="space-y-1.5">
-            {phaseHistory.map((phase) => (
-              <div key={phase.id} className="flex items-center gap-2 text-[11px]">
-                <CheckCircle2 size={12} className="text-primary shrink-0" />
-                <span className="text-on-surface dark:text-[#F0F0F5] font-body">{phase.label}</span>
-                <span className="text-on-surface-variant dark:text-[#8A8A9E] font-mono ml-auto">
-                  completed at{" "}
-                  {phase.completionTime?.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Current Operation */}
-      {activeActivity && (
-        <div className="pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
-          <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1.5">
-            Current Operation
-          </div>
-          <div className="flex items-center gap-2">
-            <Loader2 size={12} className="text-primary animate-spin shrink-0" />
-            <span className="text-xs font-body text-on-surface dark:text-[#F0F0F5] truncate">
-              {activeActivity.tool_name}: {activeActivity.activity}
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -599,7 +324,8 @@ export default function DashboardPage() {
       setShowCompletionBanner(true);
       showToast("success", `Scan completed! Found ${findingsLengthRef.current} findings.`);
       // Auto-hide banner after 15 seconds
-      setTimeout(() => setShowCompletionBanner(false), 15000);
+      const bannerTimer = setTimeout(() => setShowCompletionBanner(false), 15000);
+      return () => clearTimeout(bannerTimer);
     }
     prevStateRef.current = currentState;
   }, [currentState]);
@@ -1033,46 +759,13 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* ── Scan Completion Banner ── */}
-        <AnimatePresence>
-          {showCompletionBanner && currentState === "complete" && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-              className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-center gap-4"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-              >
-                <CheckCircle2 size={24} className="text-green-500" />
-              </motion.div>
-              <div className="flex-1">
-                <h3 className="text-sm font-bold text-green-500 uppercase tracking-wide">
-                  Scan Complete!
-                </h3>
-                  <p className="text-xs text-on-surface-variant mt-0.5">
-                    Found {completionCount} findings •{" "}
-                    <button
-                    onClick={() => router.push(`/engagements/${engagementId}/report`)}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    View Full Report →
-                  </button>
-                </p>
-              </div>
-              <button
-                onClick={() => setShowCompletionBanner(false)}
-                aria-label="Dismiss completion banner"
-                className="p-1 hover:bg-green-500/10 rounded-lg transition-all"
-              >
-                <XCircle size={16} className="text-on-surface-variant" />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <CompletionBanner
+          show={showCompletionBanner}
+          currentState={currentState}
+          completionCount={completionCount}
+          engagementId={engagementId}
+          onDismiss={() => setShowCompletionBanner(false)}
+        />
 
         {/* ── Engagement Connection Bar ── */}
         <motion.div
@@ -1224,389 +917,37 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {/* ── Stats Grid ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          {stats.map((s, i) => (
-            <StatCard key={s.label} {...s} index={i} />
-          ))}
-        </div>
+        <StatsWidgetBar stats={stats} />
 
         {/* ── Bento Grid ── */}
         <div className="grid grid-cols-12 gap-6 mb-8">
           {/* Network Intelligence Feed */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="col-span-12 lg:col-span-8 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
-              <div className="flex items-center gap-2">
-                <Radio size={16} className="text-primary" />
-                <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">
-                  Network Intelligence Feed
-                </h2>
-                {scanStartTime && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-md">
-                    Active Scan Only
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => router.push(`/findings?engagement=${engagementId}`)}
-                className="flex items-center gap-1 text-[11px] text-on-surface-variant dark:text-[#8A8A9E] hover:text-primary transition-all duration-300"
-              >
-                Deep View <ChevronRight size={12} />
-              </button>
-            </div>
-            <div className="max-h-[600px] overflow-y-auto">
-              <AnimatePresence mode="wait">
-                {!isConnected ? (
-                  <motion.div
-                    key="overview"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.3 }}
-                    className="p-5"
-                  >
-                    {/* System Overview */}
-                    <div className="grid grid-cols-3 gap-3 mb-5">
-                    <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
-                      <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Total Findings</div>
-                      <div className="text-xl font-headline font-semibold text-primary">{dbStats?.totalFindings ?? 0}</div>
-                    </div>
-                    <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
-                      <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Critical</div>
-                      <div className="text-xl font-headline font-semibold text-error">{dbStats?.criticalCount ?? 0}</div>
-                    </div>
-                    <div className="bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg p-3 transition-all duration-300">
-                      <div className="text-[10px] font-mono text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-wider mb-1">Verified</div>
-                      <div className="text-xl font-headline font-semibold text-green-500">{dbStats?.verifiedCount ?? 0}</div>
-                    </div>
-                  </div>
-
-                  {/* Recent Engagements */}
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-widest font-body">Recent Engagements</h3>
-                      <button
-                        onClick={() => router.push("/engagements")}
-                        className="text-[10px] text-primary hover:underline transition-all duration-300"
-                      >
-                        View All
-                      </button>
-                    </div>
-                    {recentEngagements.filter((eng) => eng.status !== "complete" && !["complete", "failed"].includes(eng.status)).length === 0 && recentEngagements.filter((eng) => ["complete", "failed"].includes(eng.status)).length === 0 ? (
-                      <div className="text-center py-6 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 text-xs font-mono uppercase">
-                        No engagements yet
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {/* Active engagements with progress */}
-                        {recentEngagements.filter((eng) => !["complete", "failed"].includes(eng.status)).slice(0, 5).map((eng) => {
-                          const progress = getScanProgress(eng.status);
-                          const isStopping = stoppingId === eng.id;
-                          return (
-                            <div
-                              key={eng.id}
-                              className="px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:bg-surface-container-high dark:hover:bg-[#1A1A24] transition-all duration-300"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                    eng.status === 'complete' ? 'bg-green-500' :
-                                    eng.status === 'failed' ? 'bg-error' :
-                                    eng.status === 'scanning' || eng.status === 'recon' ? 'bg-primary animate-pulse' :
-                                    'bg-amber-400'
-                                  }`} />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono truncate">{eng.target_url}</div>
-                                    <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] uppercase">{eng.status.replace(/_/g, " ")} • {progress}%</div>
-                                  </div>
-                                </div>
-                                <div className="flex gap-1 ml-2">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStop(eng.id);
-                                    }}
-                                    disabled={isStopping}
-                                    aria-label="Stop scan"
-                                    className="p-1.5 hover:bg-error/10 rounded text-error transition-all duration-300"
-                                    title="Stop scan"
-                                  >
-                                    {isStopping ? (
-                                      <Loader2 size={14} className="animate-spin" />
-                                    ) : (
-                                      <StopCircle size={14} />
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      connectEngagement(eng.id);
-                                    }}
-                                    aria-label="Monitor"
-                                    className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
-                                    title="Monitor"
-                                  >
-                                    <Eye size={14} />
-                                  </button>
-                                </div>
-                              </div>
-                              {/* Progress bar */}
-                              <div className="h-1 w-full bg-surface-container-high dark:bg-[#1A1A24] rounded-full overflow-hidden">
-                                <motion.div
-                                  className="h-full bg-primary rounded-full"
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${progress}%` }}
-                                  transition={{ duration: 0.6, ease: "easeOut" }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {/* Completed/Failed engagements with delete */}
-                        {recentEngagements.filter((eng) => ["complete", "failed"].includes(eng.status)).slice(0, 3).map((eng) => {
-                          const isDeleting = deletingId === eng.id;
-                          return (
-                            <div
-                              key={eng.id}
-                              className="px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:bg-surface-container-high dark:hover:bg-[#1A1A24] transition-all duration-300"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                    eng.status === 'complete' ? 'bg-green-500' : 'bg-error'
-                                  }`} />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-xs text-on-surface dark:text-[#F0F0F5] font-mono truncate">{eng.target_url}</div>
-                                    <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] uppercase">{eng.status.replace(/_/g, " ")}</div>
-                                  </div>
-                                </div>
-                                <div className="flex gap-1 ml-2">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRescan(eng.id);
-                                    }}
-                                    disabled={rescannings.has(eng.id)}
-                                    aria-label="Rescan"
-                                    className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
-                                    title="Rescan"
-                                  >
-                                    {rescannings.has(eng.id) ? (
-                                      <Loader2 size={14} className="animate-spin" />
-                                    ) : (
-                                      <Loader2 size={14} />
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      console.log("[DEBUG] Delete button clicked for:", eng.id);
-                                      handleDelete(eng.id);
-                                    }}
-                                    disabled={isDeleting}
-                                    aria-label="Delete"
-                                    className="p-1.5 hover:bg-red-500/10 rounded text-red-400 transition-all duration-300"
-                                    title="Delete"
-                                  >
-                                    {isDeleting ? (
-                                      <Loader2 size={14} className="animate-spin" />
-                                    ) : (
-                                      <Trash2 size={14} />
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      router.push(`/dashboard?engagement=${eng.id}`);
-                                    }}
-                                    aria-label="View"
-                                    className="p-1.5 hover:bg-primary/10 rounded text-primary transition-all duration-300"
-                                    title="View"
-                                  >
-                                    <Eye size={14} />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => router.push("/engagements")}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all duration-300 shadow-glow rounded-lg"
-                    >
-                      <Target size={14} />
-                      New Engagement
-                    </button>
-                    <button
-                      onClick={() => router.push("/findings")}
-                      data-tour="findings"
-                      className="flex items-center gap-2 px-4 py-2 border border-outline-variant dark:border-[#ffffff10] text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5] hover:border-primary/30 transition-all duration-300 text-xs uppercase font-bold tracking-widest rounded-lg"
-                    >
-                      <ShieldAlert size={14} />
-                      View Findings
-                    </button>
-                  </div>
-                </motion.div>
-              ) : findings.length === 0 ? (
-                <motion.div
-                  key="scanning"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.3 }}
-                  className="p-5"
-                >
-                  {/* Live scan status */}
-                  <div className="flex items-center gap-3 mb-4 pb-4 border-b border-outline-variant dark:border-[#ffffff08]">
-                    <div className="relative w-8 h-8 flex items-center justify-center">
-                      <div className="absolute inset-0 border border-primary/30 rounded-full animate-spin [animation-duration:3s]" />
-                      <Activity className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-on-surface dark:text-[#F0F0F5] uppercase tracking-widest font-body">Active Scan In Progress</p>
-                      <p className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] font-mono mt-0.5">
-                        {scannerActivities.length > 0
-                          ? `${scannerActivities.filter((a) => a.status === "completed").length} / ${scannerActivities.length} operations complete`
-                          : "Initializing scanner toolkit..."}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Scanner steps */}
-                  <div className="space-y-1">
-                    {scannerActivities.length === 0 ? (
-                      <div className="flex items-center gap-3 px-3 py-2 text-on-surface-variant/40 dark:text-[#8A8A9E]/40">
-                        {currentState === "scanning" || currentState === "recon" ? (
-                          <>
-                            <Loader2 size={12} className="animate-spin" />
-                            <span className="text-[11px] font-mono">Initializing scanner toolkit...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Activity size={12} />
-                            <span className="text-[11px] font-mono">Scanner activity not recorded for this engagement</span>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      scannerActivities.slice(0, 12).map((activity) => {
-                        const isDone = activity.status === "completed";
-                        const isFailed = activity.status === "failed";
-                        return (
-                          <div
-                            key={activity.id}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300 ${
-                              isDone ? "opacity-60 border-transparent" : isFailed ? "opacity-80 border-transparent" : "bg-primary/5 border-primary/10"
-                            }`}
-                          >
-                            {isDone ? (
-                              <CheckCircle2 size={12} className="text-green-500 shrink-0" />
-                            ) : isFailed ? (
-                              <XCircle size={12} className="text-error shrink-0" />
-                            ) : (
-                              <Loader2 size={12} className="text-primary animate-spin shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold font-mono uppercase text-on-surface-variant dark:text-[#8A8A9E]">
-                                  {activity.tool_name}
-                                </span>
-                                {activity.items_found !== null && activity.items_found !== undefined && (
-                                  <span className="text-[10px] font-mono text-primary">
-                                    {activity.items_found} found
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-on-surface dark:text-[#F0F0F5] truncate">{activity.activity}</p>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="feed"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="divide-y divide-outline-variant dark:divide-[#ffffff08]"
-                >
-                  {findings.map((event, i) => <ThreatFeedRow key={i} event={event} />)}
-                </motion.div>
-              )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
+          <FindingsPanel
+            isConnected={isConnected}
+            findings={findings}
+            dbStats={dbStats}
+            recentEngagements={recentEngagements}
+            scannerActivities={scannerActivities}
+            currentState={currentState}
+            scanStartTime={scanStartTime}
+            engagementId={engagementId}
+            stoppingId={stoppingId}
+            deletingId={deletingId}
+            rescannings={rescannings}
+            getScanProgress={getScanProgress}
+            handleStop={handleStop}
+            handleDelete={handleDelete}
+            handleRescan={handleRescan}
+            connectEngagement={connectEngagement}
+          />
 
           {/* Scanner Activity Panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="col-span-12 lg:col-span-4 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
-          >
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
-              <Terminal size={16} className="text-primary" />
-              <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Scanner Activity</h2>
-              {isConnected && scannerActivities.some((a) => a.status === "started" || a.status === "in_progress") && (
-                <div className="ml-auto flex items-center gap-1.5">
-                  <motion.span
-                    className="relative flex h-2 w-2"
-                    animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
-                    transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-                  >
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                  </motion.span>
-                  <span className="text-[10px] font-mono text-primary uppercase">Live</span>
-                </div>
-              )}
-            </div>
-            <div className="p-5">
-              <AnimatePresence mode="wait">
-                {isConnected ? (
-                  <motion.div
-                    key="timeline"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <ScanStepTimeline currentState={currentState} activities={scannerActivities} engagementStart={engagementStart} />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="empty"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-col items-center justify-center py-10 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3"
-                  >
-                    <Terminal size={24} />
-                    <p className="text-[10px] font-mono uppercase tracking-widest text-center">
-                      Connect to an engagement to view scanner activity
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
+          <ActiveEngagementPanel
+            isConnected={isConnected}
+            scannerActivities={scannerActivities}
+            currentState={currentState}
+            engagementStart={engagementStart}
+          />
 
           {/* Execution Timeline */}
           <motion.div
@@ -1707,26 +1048,7 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Tool Performance Metrics */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-            className="bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
-          >
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-outline-variant dark:border-[#ffffff08]">
-              <BarChart3 size={16} className="text-primary" />
-              <h2 className="text-sm font-headline font-medium text-on-surface dark:text-[#F0F0F5] tracking-wide uppercase">Tool Performance Metrics</h2>
-            </div>
-            <div className="p-5">
-              <Suspense fallback={
-                <div className="h-[200px] flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              }>
-                <ToolPerformanceMetrics metrics={toolMetrics} days={7} />
-              </Suspense>
-            </div>
-          </motion.div>
+          <ToolPerformanceSection toolMetrics={toolMetrics} />
         </div>
       </div>
     </div>
