@@ -195,13 +195,16 @@ class FindingNormalizer:
         "alterx": 0.30,
     }
 
-    def normalize(self, raw_finding: dict, source_tool: str) -> VulnerabilityFinding:
+    def normalize(
+        self, raw_finding: dict, source_tool: str, context: dict | None = None
+    ) -> VulnerabilityFinding:
         """
         Convert raw tool output to VulnerabilityFinding
 
         Args:
             raw_finding: Raw finding dictionary from parser
             source_tool: Name of the source tool
+            context: Optional context for severity adjustment (endpoint exposure)
 
         Returns:
             Validated VulnerabilityFinding
@@ -215,10 +218,17 @@ class FindingNormalizer:
                 raw_finding.get("type", "UNKNOWN"), source_tool, raw_finding
             )
 
-            # Normalize severity
-            normalized_severity = self._normalize_severity(
-                raw_finding.get("severity", "INFO")
-            )
+            # Normalize severity with context-aware adjustment
+            if context:
+                normalized_severity = Severity(
+                    self.normalize_severity_with_context(
+                        raw_finding.get("severity", "INFO"), context
+                    )
+                )
+            else:
+                normalized_severity = self._normalize_severity(
+                    raw_finding.get("severity", "INFO")
+                )
 
             # Calculate confidence if not provided
             confidence = raw_finding.get("confidence")
@@ -326,6 +336,49 @@ class FindingNormalizer:
         raw_severity_lower = raw_severity.lower().strip()
 
         return self.SEVERITY_MAPPINGS.get(raw_severity_lower, Severity.INFO)
+
+    def normalize_severity_with_context(
+        self, raw_severity: str, context: dict | None = None
+    ) -> str:
+        """
+        Normalize severity with context-aware adjustments.
+
+        Adjusts severity based on endpoint exposure:
+        - Internal/admin endpoints: CRITICAL → HIGH, HIGH → MEDIUM
+        - Public API endpoints: MEDIUM → HIGH
+        - Authenticated-only: CRITICAL → HIGH (still serious, but requires auth)
+        """
+        if not context:
+            return self._normalize_severity(raw_severity).value
+
+        base_severity = self._normalize_severity(raw_severity)
+        severity_order = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+
+        if base_severity.value not in severity_order:
+            return base_severity.value
+
+        current_idx = severity_order.index(base_severity.value)
+
+        is_internal = context.get("is_internal_endpoint", False)
+        is_admin = context.get("is_admin_panel", False)
+        is_public_api = context.get("is_public_api", False)
+        requires_auth = context.get("requires_auth", False)
+
+        if is_internal or is_admin:
+            if current_idx >= 4:
+                current_idx = 3
+            elif current_idx >= 3:
+                current_idx = 2
+
+        if requires_auth:
+            if current_idx >= 4:
+                current_idx = 3
+
+        if is_public_api:
+            if current_idx == 2:
+                current_idx = 3
+
+        return severity_order[current_idx]
 
     def _structure_evidence(self, raw_evidence: dict) -> dict:
         """
