@@ -537,7 +537,7 @@ class Orchestrator:
         findings = []
         if self.finding_repo:
             try:
-                raw_findings = self.finding_repo.get_findings_by_engagement(self.engagement_id)
+                raw_findings, _ = self.finding_repo.get_findings_by_engagement(self.engagement_id)
                 findings = [f.to_dict() if hasattr(f, "to_dict") else dict(f) if isinstance(f, dict) else f for f in raw_findings]
             except Exception as e:
                 logger.warning(f"Failed to load findings: {e}")
@@ -620,7 +620,7 @@ class Orchestrator:
                     from database.repositories.finding_repository import FindingRepository
                     from tools.sbom_generator import generate_sbom_from_findings
                     fr = FindingRepository()
-                    all_findings = fr.get_findings_by_engagement(self.engagement_id)
+                    all_findings, _ = fr.get_findings_by_engagement(self.engagement_id)
                     sbom_json = generate_sbom_from_findings(
                         engagement_id=self.engagement_id, findings=all_findings,
                         target_url=job.get("target", ""), repo_url=job.get("repo_url", ""),

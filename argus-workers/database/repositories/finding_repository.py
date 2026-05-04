@@ -391,30 +391,55 @@ class FindingRepository(BaseRepository):
             if not self._external_conn:
                 self._release_connection(conn)
 
-    def get_findings_by_engagement(self, engagement_id: str) -> list[dict]:
+    def get_findings_by_engagement(
+        self, engagement_id: str, limit: int = 100, offset: int = 0,
+        severity: str | None = None, finding_type: str | None = None,
+    ) -> tuple[list[dict], int]:
         """
-        Get all findings for an engagement.
+        Get findings for an engagement with pagination and optional filters.
 
         Args:
             engagement_id: Engagement ID
+            limit: Maximum number of findings to return
+            offset: Number of findings to skip
+            severity: Optional severity filter
+            finding_type: Optional finding type filter
 
         Returns:
-            List of finding dictionaries
+            Tuple of (list of finding dictionaries, total count)
         """
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
         try:
+            where_clause = "WHERE engagement_id = %s"
+            params = [engagement_id]
+
+            if severity:
+                where_clause += " AND severity = %s"
+                params.append(severity)
+
+            if finding_type:
+                where_clause += " AND finding_type = %s"
+                params.append(finding_type)
+
             cursor.execute(
-                """
+                f"SELECT COUNT(*) AS total FROM findings {where_clause}",
+                params,
+            )
+            total = cursor.fetchone()["total"]
+
+            cursor.execute(
+                f"""
                 SELECT * FROM findings
-                WHERE engagement_id = %s
+                {where_clause}
                 ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
                 """,
-                (engagement_id,)
+                params + [limit, offset],
             )
             rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+            return [dict(row) for row in rows], total
         finally:
             cursor.close()
             if not self._external_conn:
