@@ -6,11 +6,18 @@ Uses connection pooling with automatic recycling
 
 import logging
 import os
+import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
+
+warnings.warn(
+    "db_optimized.py is deprecated. Use database.connection instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 logger = logging.getLogger(__name__)
 
