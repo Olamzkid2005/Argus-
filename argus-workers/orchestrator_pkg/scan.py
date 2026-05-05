@@ -19,6 +19,12 @@ from .utils import get_nuclei_templates_path
 
 logger = logging.getLogger(__name__)
 
+NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
+    'default': 'medium,high,critical',
+    'high': 'low,medium,high,critical',
+    'extreme': 'info,low,medium,high,critical',
+}
+
 
 def execute_scan_tools(
     ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS,
@@ -99,13 +105,12 @@ def execute_scan_tools(
 
             if "nuclei" in _skip: raise Exception("__skip__")
             nuclei_timeout = TOOL_TIMEOUT_LONG
+            severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS['default'])
+            nuclei_cmd.extend(["-severity", severity])
             if agg == "high":
-                nuclei_cmd.extend(["-severity", "low,medium,high,critical"])
                 nuclei_timeout = 600
             elif agg == "extreme":
-                nuclei_cmd.extend(
-                    ["-severity", "info,low,medium,high,critical", "-tags", "fuzz"]
-                )
+                nuclei_cmd.extend(["-tags", "fuzz"])
                 nuclei_timeout = 1200
             emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
             nuclei_result = ctx.tool_runner.run(
