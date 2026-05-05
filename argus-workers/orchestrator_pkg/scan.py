@@ -2,6 +2,7 @@
 Scan execution logic extracted from Orchestrator.
 """
 
+import ipaddress
 import logging
 import socket
 
@@ -24,6 +25,28 @@ NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
     'high': 'low,medium,high,critical',
     'extreme': 'info,low,medium,high,critical',
 }
+
+
+def _is_reachable(target: str) -> bool:
+    hostname = target.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
+    try:
+        ipaddress.ip_address(hostname)
+        return True
+    except ValueError:
+        pass
+    if hostname in ('localhost', '127.0.0.1', '::1'):
+        return True
+    try:
+        socket.setdefaulttimeout(5)
+        socket.getaddrinfo(hostname, None)
+        return True
+    except socket.gaierror as e:
+        if e.errno in (-2, -3):
+            logger.warning(f'DNS: {hostname} not found — skipping')
+            return False
+        return True
+    except Exception:
+        return True
 
 
 def execute_scan_tools(
@@ -60,19 +83,8 @@ def execute_scan_tools(
         if not target:
             continue
 
-        # Pre-resolve target to fail fast if DNS is broken
-        hostname = target.replace("https://", "").replace("http://", "").split("/")[0]
-        try:
-            original_timeout = socket.getdefaulttimeout()
-            socket.setdefaulttimeout(5)
-            try:
-                socket.getaddrinfo(hostname, None)
-            finally:
-                socket.setdefaulttimeout(original_timeout)
-        except socket.gaierror as e:
-            logger.warning(
-                f"DNS resolution failed for {hostname}: {e}. Skipping target."
-            )
+        # Skip if target is unreachable (DNS NXDOMAIN/SERVFAIL only)
+        if not _is_reachable(target):
             continue
 
         # Auto-update nuclei templates if feature flag is enabled
@@ -91,232 +103,211 @@ def execute_scan_tools(
         )
 
         # Execute Nuclei for vulnerability scanning
-        try:
-            nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
+        if "nuclei" not in _skip:
+            try:
+                nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
 
-            # Use local templates if available
-            if templates_exist:
-                nuclei_cmd.extend(["-t", str(nuclei_templates)])
-                logger.info(f"Using local nuclei templates from {nuclei_templates}")
-            else:
+                # Use local templates if available
+                if templates_exist:
+                    nuclei_cmd.extend(["-t", str(nuclei_templates)])
+                    logger.info(f"Using local nuclei templates from {nuclei_templates}")
+                else:
+                    logger.warning(
+                        "Nuclei templates not found. Scan will use default template download."
+                    )
+
+                nuclei_timeout = TOOL_TIMEOUT_LONG
+                severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS['default'])
+                nuclei_cmd.extend(["-severity", severity])
+                if agg == "high":
+                    nuclei_timeout = 600
+                elif agg == "extreme":
+                    nuclei_cmd.extend(["-tags", "fuzz"])
+                    nuclei_timeout = 1200
+                emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
+                nuclei_result = ctx.tool_runner.run(
+                    "nuclei", nuclei_cmd, timeout=nuclei_timeout
+                )
+                # Debug: log nuclei result
                 logger.warning(
-                    "Nuclei templates not found. Scan will use default template download."
+                    f"NUCLEI RESULT for {target}: success={nuclei_result.success}, returncode={nuclei_result.returncode}, stdout_len={len(nuclei_result.stdout)}, stderr={nuclei_result.stderr[:200]}"
                 )
 
-            if "nuclei" in _skip: raise Exception("__skip__")
-            nuclei_timeout = TOOL_TIMEOUT_LONG
-            severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS['default'])
-            nuclei_cmd.extend(["-severity", severity])
-            if agg == "high":
-                nuclei_timeout = 600
-            elif agg == "extreme":
-                nuclei_cmd.extend(["-tags", "fuzz"])
-                nuclei_timeout = 1200
-            emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
-            nuclei_result = ctx.tool_runner.run(
-                "nuclei", nuclei_cmd, timeout=nuclei_timeout
-            )
-            # Debug: log nuclei result
-            logger.warning(
-                f"NUCLEI RESULT for {target}: success={nuclei_result.success}, returncode={nuclei_result.returncode}, stdout_len={len(nuclei_result.stdout)}, stderr={nuclei_result.stderr[:200]}"
-            )
-
-            if nuclei_result.success:
-                stdout = nuclei_result.stdout
-                parsed = ctx.parser.parse("nuclei", stdout)
-                logger.warning(
-                    f"NUCLEI PARSED: {len(parsed)} findings from {len(stdout)} bytes of output"
-                )
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "nuclei")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping nuclei (already ran via agent)")
-            else:
+                if nuclei_result.success:
+                    stdout = nuclei_result.stdout
+                    parsed = ctx.parser.parse("nuclei", stdout)
+                    logger.warning(
+                        f"NUCLEI PARSED: {len(parsed)} findings from {len(stdout)} bytes of output"
+                    )
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "nuclei")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"nuclei failed for {target}: {e}")
 
         # Execute dalfox for XSS
-        try:
-            dalfox_cmd = ["url", target, "--json"]
-            if "dalfox" in _skip: raise Exception("__skip__")
-            dalfox_timeout = TOOL_TIMEOUT_LONG
-            if agg == "high":
-                dalfox_cmd.append("-b")
-                dalfox_timeout = 600
-            elif agg == "extreme":
-                dalfox_cmd.extend(["-b", "--deep-dom"])
-                dalfox_timeout = 1200
-            emit_tool_start(ctx.engagement_id, "dalfox", dalfox_cmd)
-            dalfox_result = ctx.tool_runner.run(
-                "dalfox", dalfox_cmd, timeout=dalfox_timeout
-            )
-            if dalfox_result.success:
-                parsed = ctx.parser.parse("dalfox", dalfox_result.stdout)
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "dalfox")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping dalfox (already ran via agent)")
-            else:
+        if "dalfox" not in _skip:
+            try:
+                dalfox_cmd = ["url", target, "--json"]
+                dalfox_timeout = TOOL_TIMEOUT_LONG
+                if agg == "high":
+                    dalfox_cmd.append("-b")
+                    dalfox_timeout = 600
+                elif agg == "extreme":
+                    dalfox_cmd.extend(["-b", "--deep-dom"])
+                    dalfox_timeout = 1200
+                emit_tool_start(ctx.engagement_id, "dalfox", dalfox_cmd)
+                dalfox_result = ctx.tool_runner.run(
+                    "dalfox", dalfox_cmd, timeout=dalfox_timeout
+                )
+                if dalfox_result.success:
+                    parsed = ctx.parser.parse("dalfox", dalfox_result.stdout)
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "dalfox")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"dalfox failed for {target}: {e}")
 
         # Execute sqlmap for SQL injection
-        try:
-            sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
-            sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
-            if "sqlmap" in _skip: raise Exception("__skip__")
-            sqlmap_timeout = TOOL_TIMEOUT_LONG
-            if agg == "high":
-                sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
-                sqlmap_timeout = 600
-            elif agg == "extreme":
-                sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
-                sqlmap_timeout = 1800
-            emit_tool_start(ctx.engagement_id, "sqlmap", sqlmap_cmd)
-            sqlmap_result = ctx.tool_runner.run(
-                "sqlmap", sqlmap_cmd, timeout=sqlmap_timeout
-            )
-            if sqlmap_result.success:
-                try:
-                    with open(sqlmap_out) as f:
-                        sqlmap_output = f.read()
-                    parsed = ctx.parser.parse("sqlmap", sqlmap_output)
-                except Exception:
-                    parsed = []
+        if "sqlmap" not in _skip:
+            try:
+                sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
+                sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
+                sqlmap_timeout = TOOL_TIMEOUT_LONG
+                if agg == "high":
+                    sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
+                    sqlmap_timeout = 600
+                elif agg == "extreme":
+                    sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
+                    sqlmap_timeout = 1800
+                emit_tool_start(ctx.engagement_id, "sqlmap", sqlmap_cmd)
+                sqlmap_result = ctx.tool_runner.run(
+                    "sqlmap", sqlmap_cmd, timeout=sqlmap_timeout
+                )
+                if sqlmap_result.success:
+                    try:
+                        with open(sqlmap_out) as f:
+                            sqlmap_output = f.read()
+                        parsed = ctx.parser.parse("sqlmap", sqlmap_output)
+                    except Exception:
+                        parsed = []
 
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "sqlmap")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping sqlmap (already ran via agent)")
-            else:
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "sqlmap")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"sqlmap failed for {target}: {e}")
 
         # Execute arjun for parameter discovery
-        try:
-            arjun_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "arjun.json")
-            if "arjun" in _skip: raise Exception("__skip__")
-            arjun_threads = (
-                "20" if agg == "default" else "50" if agg == "high" else "100"
-            )
-            arjun_timeout = (
-                TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
-            )
-            emit_tool_start(
-                ctx.engagement_id,
-                "arjun",
-                ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
-            )
-            arjun_result = ctx.tool_runner.run(
-                "arjun",
-                ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
-                timeout=arjun_timeout,
-            )
-            if arjun_result.success:
-                try:
-                    with open(arjun_out) as f:
-                        arjun_output = f.read()
-                    parsed = ctx.parser.parse("arjun", arjun_output)
-                except Exception:
-                    parsed = []
+        if "arjun" not in _skip:
+            try:
+                arjun_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "arjun.json")
+                arjun_threads = (
+                    "20" if agg == "default" else "50" if agg == "high" else "100"
+                )
+                arjun_timeout = (
+                    TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
+                )
+                emit_tool_start(
+                    ctx.engagement_id,
+                    "arjun",
+                    ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
+                )
+                arjun_result = ctx.tool_runner.run(
+                    "arjun",
+                    ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
+                    timeout=arjun_timeout,
+                )
+                if arjun_result.success:
+                    try:
+                        with open(arjun_out) as f:
+                            arjun_output = f.read()
+                        parsed = ctx.parser.parse("arjun", arjun_output)
+                    except Exception:
+                        parsed = []
 
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "arjun")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping arjun (already ran via agent)")
-            else:
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "arjun")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"arjun failed for {target}: {e}")
 
         # Execute jwt_tool for JWT vulnerability testing
-        try:
-            if "jwt_tool" in _skip: raise Exception("__skip__")
-            emit_tool_start(ctx.engagement_id, "jwt_tool", ["-u", target, "-C", "-d"])
-            jwt_result = ctx.tool_runner.run(
-                "jwt_tool", ["-u", target, "-C", "-d"], timeout=120
-            )
-            if jwt_result.success:
-                parsed = ctx.parser.parse("jwt_tool", jwt_result.stdout)
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "jwt_tool")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping jwt_tool (already ran via agent)")
-            else:
+        if "jwt_tool" not in _skip:
+            try:
+                emit_tool_start(ctx.engagement_id, "jwt_tool", ["-u", target, "-C", "-d"])
+                jwt_result = ctx.tool_runner.run(
+                    "jwt_tool", ["-u", target, "-C", "-d"], timeout=120
+                )
+                if jwt_result.success:
+                    parsed = ctx.parser.parse("jwt_tool", jwt_result.stdout)
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "jwt_tool")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"jwt_tool failed for {target}: {e}")
 
         # Execute commix for command injection testing
-        try:
-            if "commix" in _skip: raise Exception("__skip__")
-            commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
-            emit_tool_start(
-                ctx.engagement_id,
-                "commix",
-                ["--url", target, "--batch", "--json-output", commix_out],
-            )
-            commix_result = ctx.tool_runner.run(
-                "commix",
-                ["--url", target, "--batch", "--json-output", commix_out],
-                timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
-            )
-            if commix_result.success:
-                try:
-                    with open(commix_out) as f:
-                        commix_output = f.read()
-                    parsed = ctx.parser.parse("commix", commix_output)
-                except Exception:
-                    parsed = []
+        if "commix" not in _skip:
+            try:
+                commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
+                emit_tool_start(
+                    ctx.engagement_id,
+                    "commix",
+                    ["--url", target, "--batch", "--json-output", commix_out],
+                )
+                commix_result = ctx.tool_runner.run(
+                    "commix",
+                    ["--url", target, "--batch", "--json-output", commix_out],
+                    timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
+                )
+                if commix_result.success:
+                    try:
+                        with open(commix_out) as f:
+                            commix_output = f.read()
+                        parsed = ctx.parser.parse("commix", commix_output)
+                    except Exception:
+                        parsed = []
 
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "commix")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping commix (already ran via agent)")
-            else:
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "commix")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"commix failed for {target}: {e}")
 
         # Execute testssl for TLS vulnerability scanning
-        try:
-            if "testssl" in _skip: raise Exception("__skip__")
-            testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
-            emit_tool_start(
-                ctx.engagement_id,
-                "testssl",
-                ["--jsonfile", testssl_out, target],
-            )
-            testssl_result = ctx.tool_runner.run(
-                "testssl",
-                ["--jsonfile", testssl_out, target],
-                timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
-            )
-            if testssl_result.success:
-                try:
-                    with open(testssl_out) as f:
-                        testssl_output = f.read()
-                    parsed = ctx.parser.parse("testssl", testssl_output)
-                except Exception:
-                    parsed = []
+        if "testssl" not in _skip:
+            try:
+                testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
+                emit_tool_start(
+                    ctx.engagement_id,
+                    "testssl",
+                    ["--jsonfile", testssl_out, target],
+                )
+                testssl_result = ctx.tool_runner.run(
+                    "testssl",
+                    ["--jsonfile", testssl_out, target],
+                    timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
+                )
+                if testssl_result.success:
+                    try:
+                        with open(testssl_out) as f:
+                            testssl_output = f.read()
+                        parsed = ctx.parser.parse("testssl", testssl_output)
+                    except Exception:
+                        parsed = []
 
-                for p in parsed:
-                    normalized = ctx._normalize_finding(p, "testssl")
-                    if normalized:
-                        all_findings.append(normalized)
-        except Exception as e:
-            if "__skip__" in str(e):
-                logger.info(f"Skipping testssl (already ran via agent)")
-            else:
+                    for p in parsed:
+                        normalized = ctx._normalize_finding(p, "testssl")
+                        if normalized:
+                            all_findings.append(normalized)
+            except Exception as e:
                 logger.warning(f"testssl failed for {target}: {e}")
 
         # Authenticate session if auth_config is provided

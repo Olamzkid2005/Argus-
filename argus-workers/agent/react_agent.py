@@ -416,21 +416,21 @@ class ReActAgent:
             result = self.registry.call(action.tool, **action.arguments)
             results.append(result)
 
-            # FIX: use actual output length to detect empty results
-            # AgentResult.findings is always [] because registry.call() never sets it.
-            # Use output content length as the real signal.
-            output_content = (result.output or "").strip()
-            output_is_empty = not result.success or len(output_content) < 30
-
-            if output_is_empty:
-                empty_output_consecutive += 1
-                logger.info(
-                    "Agent: %s produced little/no output (%d consecutive)",
-                    action.tool,
-                    empty_output_consecutive,
-                )
+            # FIX: skip counting for tools that failed or were skipped
+            # (e.g. __skip__ exception from scan.py sets success=False)
+            if result.tool in tried_tools and not result.success:
+                pass
             else:
-                empty_output_consecutive = 0
+                output_content = (result.output or "").strip()
+                if len(output_content) < 30:
+                    empty_output_consecutive += 1
+                    logger.info(
+                        "Agent: %s produced little/no output (%d consecutive)",
+                        action.tool,
+                        empty_output_consecutive,
+                    )
+                else:
+                    empty_output_consecutive = 0
 
             # Only stop on empty output if we've already run at least 4 tools
             # This prevents stopping before critical tools (nuclei, web_scanner) run
