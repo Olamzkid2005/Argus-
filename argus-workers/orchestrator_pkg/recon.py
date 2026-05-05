@@ -16,6 +16,7 @@ from config.constants import (
 from streaming import emit_tool_start
 
 from .utils import get_wordlist_path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 if TYPE_CHECKING:
     from models.recon_context import ReconContext
@@ -108,293 +109,144 @@ def execute_recon_tools(
         _emit("httpx", f"Live endpoint discovery failed: {str(e)}", "failed")
         logger.warning(f"httpx failed: {e}")
 
-    # Execute katana for web crawling
-    _emit(
-        "katana",
-        f"Crawling application routes and links up to depth {katana_depth}",
-        "started",
-    )
-    try:
-        emit_tool_start(
-            ctx.engagement_id,
-            "katana",
-            ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
-        )
-        katana_result = ctx.tool_runner.run(
-            "katana",
-            ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
-            timeout=90,
-        )
-        parsed_count = 0
-        if katana_result.success:
-            parsed = ctx.parser.parse("katana", katana_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "katana")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "katana",
-            "Web crawling complete — mapped application surface",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("katana", f"Web crawling failed: {str(e)}", "failed")
-        logger.warning(f"katana failed: {e}")
+    # Phase 2: Execute remaining recon tools in parallel
+    ffuf_wordlist_map = {
+        "default": get_wordlist_path("common.txt"),
+        "high": get_wordlist_path("extended.txt"),
+        "extreme": get_wordlist_path("comprehensive.txt"),
+    }
+    ffuf_wordlist = str(ffuf_wordlist_map.get(agg, get_wordlist_path("common.txt")))
+    ffuf_cmd = ["-u", f"{target}/FUZZ", "-w", ffuf_wordlist, "-json"]
+    if agg == "high":
+        ffuf_cmd.extend(["-t", "50"])
+    elif agg == "extreme":
+        ffuf_cmd.extend(["-t", "100", "-mc", "all"])
 
-    # Execute ffuf for fuzzing/directory discovery
-    _emit("ffuf", f"Fuzzing directories ({agg} mode)", "started")
-    try:
-        ffuf_wordlist_map = {
-            "default": get_wordlist_path("common.txt"),
-            "high": get_wordlist_path("extended.txt"),
-            "extreme": get_wordlist_path("comprehensive.txt"),
+    amass_cmd = amass_mode + [target_domain, "-json"]
+    amass_timeout = (
+        120 if agg == "default" else 180 if agg == "high" else 240
+    )
+
+    naabu_cmd = ["-host", target_domain, "-json"]
+    if naabu_ports == "-p-":
+        naabu_cmd.append("-p-")
+    else:
+        naabu_cmd.extend(["-top-ports", naabu_port_val])
+    naabu_timeout = (
+        60 if agg == "default" else 90 if agg == "high" else 120
+    )
+
+    def _run_recon_tool(ctx, tool_name, args, timeout, all_findings):
+        try:
+            result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
+            parsed_count = 0
+            if result and result.success:
+                parsed = ctx.parser.parse(tool_name, result.stdout)
+                for p in parsed:
+                    normalized = ctx._normalize_finding(p, tool_name)
+                    if normalized:
+                        all_findings.append(normalized)
+                        parsed_count += 1
+            return tool_name, True, parsed_count, None
+        except Exception as e:
+            logger.warning(f"Recon tool {tool_name} failed: {e}")
+            return tool_name, False, 0, str(e)
+
+    amass_start_msg = (
+        f"Enumerating subdomains for {target_domain} (passive)"
+        if agg == "default"
+        else f"Enumerating subdomains for {target_domain} (active + passive)"
+        if agg == "high"
+        else f"Enumerating subdomains for {target_domain} (brute force + all sources)"
+    )
+    naabu_start_msg = (
+        f"Probing open ports on {target_domain} (top 1000)"
+        if agg == "default"
+        else f"Probing open ports on {target_domain} (top 10,000)"
+        if agg == "high"
+        else f"Probing open ports on {target_domain} (full range 1-65535)"
+    )
+
+    recon_tools = {
+        "katana": {
+            "args": ["-u", target, "-jsonl", "-silent", "-d", katana_depth],
+            "timeout": 90,
+            "start_msg": f"Crawling application routes and links up to depth {katana_depth}",
+            "success_msg": "Web crawling complete \u2014 mapped application surface",
+        },
+        "ffuf": {
+            "args": ffuf_cmd,
+            "timeout": 60,
+            "start_msg": f"Fuzzing directories ({agg} mode)",
+            "success_msg": "Directory fuzzing complete",
+        },
+        "amass": {
+            "args": amass_cmd,
+            "timeout": amass_timeout,
+            "start_msg": amass_start_msg,
+            "success_msg": "Subdomain enumeration complete \u2014 found {{}} subdomains",
+        },
+        "subfinder": {
+            "args": ["-d", target_domain, "-silent"],
+            "timeout": 30,
+            "start_msg": f"Enumerating subdomains via passive sources ({target_domain})",
+            "success_msg": "Subdomain enumeration complete \u2014 found {{}} subdomains",
+        },
+        "alterx": {
+            "args": ["-d", target_domain, "-silent"],
+            "timeout": 30,
+            "start_msg": f"Generating subdomain permutations for {target_domain}",
+            "success_msg": "Permutation generation complete \u2014 generated {{}} variants",
+        },
+        "naabu": {
+            "args": naabu_cmd,
+            "timeout": naabu_timeout,
+            "start_msg": naabu_start_msg,
+            "success_msg": "Port scan complete \u2014 found {{}} open ports",
+        },
+        "whatweb": {
+            "args": ["--format=json", target],
+            "timeout": 30,
+            "start_msg": "Fingerprinting web technologies and server stack",
+            "success_msg": "Technology fingerprinting complete",
+        },
+        "nikto": {
+            "args": ["-h", target, "-Format", "csv"],
+            "timeout": 90,
+            "start_msg": "Scanning web server for misconfigurations and known issues",
+            "success_msg": "Web server scan complete",
+        },
+        "gau": {
+            "args": [target, "--json"],
+            "timeout": 60,
+            "start_msg": "Fetching known URLs from passive archives (gau)",
+            "success_msg": "Passive URL discovery complete",
+        },
+        "waybackurls": {
+            "args": [target],
+            "timeout": 45,
+            "start_msg": "Retrieving historical URLs from Wayback Machine",
+            "success_msg": "Historical URL retrieval complete",
+        },
+    }
+
+    for name, cfg in recon_tools.items():
+        _emit(name, cfg["start_msg"], "started")
+        emit_tool_start(ctx.engagement_id, name, cfg["args"])
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings): name
+            for name, cfg in recon_tools.items()
         }
-        ffuf_wordlist = str(ffuf_wordlist_map.get(agg, get_wordlist_path("common.txt")))
-        ffuf_cmd = ["-u", f"{target}/FUZZ", "-w", ffuf_wordlist, "-json"]
-        if agg == "high":
-            ffuf_cmd.extend(["-t", "50"])
-        elif agg == "extreme":
-            ffuf_cmd.extend(["-t", "100", "-mc", "all"])
-        emit_tool_start(ctx.engagement_id, "ffuf", ffuf_cmd)
-        ffuf_result = ctx.tool_runner.run(
-            "ffuf",
-            ffuf_cmd,
-            timeout=60,
-        )
-        parsed_count = 0
-        if ffuf_result.success:
-            parsed = ctx.parser.parse("ffuf", ffuf_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "ffuf")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit("ffuf", "Directory fuzzing complete", "completed", items=parsed_count)
-    except Exception as e:
-        _emit("ffuf", f"Directory fuzzing failed: {str(e)}", "failed")
-        logger.warning(f"ffuf failed: {e}")
-
-    # Execute amass for subdomain enumeration
-    amass_desc = (
-        "passive"
-        if agg == "default"
-        else "active + passive"
-        if agg == "high"
-        else "brute force + all sources"
-    )
-    _emit(
-        "amass", f"Enumerating subdomains for {target_domain} ({amass_desc})", "started"
-    )
-    try:
-        amass_cmd = amass_mode + [target_domain, "-json"]
-        amass_timeout = (
-            120 if agg == "default" else 180 if agg == "high" else 240
-        )
-        emit_tool_start(ctx.engagement_id, "amass", amass_cmd)
-        amass_result = ctx.tool_runner.run("amass", amass_cmd, timeout=amass_timeout)
-        parsed_count = 0
-        if amass_result.success:
-            parsed = ctx.parser.parse("amass", amass_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "amass")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "amass",
-            f"Subdomain enumeration complete — found {parsed_count} subdomains",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("amass", f"Subdomain enumeration failed: {str(e)}", "failed")
-        logger.warning(f"amass failed: {e}")
-
-    # Execute subfinder for additional subdomain enumeration (passive)
-    _emit(
-        "subfinder",
-        f"Enumerating subdomains via passive sources ({target_domain})",
-        "started",
-    )
-    try:
-        emit_tool_start(
-            ctx.engagement_id, "subfinder", ["-d", target_domain, "-silent"]
-        )
-        subfinder_result = ctx.tool_runner.run(
-            "subfinder", ["-d", target_domain, "-silent"], timeout=30
-        )
-        parsed_count = 0
-        if subfinder_result.success:
-            parsed = ctx.parser.parse("subfinder", subfinder_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "subfinder")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "subfinder",
-            f"Subdomain enumeration complete — found {parsed_count} subdomains",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("subfinder", f"Subdomain enumeration failed: {str(e)}", "failed")
-        logger.warning(f"subfinder failed: {e}")
-
-    # Execute alterx for subdomain permutation generation
-    _emit("alterx", f"Generating subdomain permutations for {target_domain}", "started")
-    try:
-        emit_tool_start(ctx.engagement_id, "alterx", ["-d", target_domain, "-silent"])
-        alterx_result = ctx.tool_runner.run(
-            "alterx", ["-d", target_domain, "-silent"], timeout=30
-        )
-        parsed_count = 0
-        if alterx_result.success:
-            parsed = ctx.parser.parse("alterx", alterx_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "alterx")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "alterx",
-            f"Permutation generation complete — generated {parsed_count} variants",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("alterx", f"Permutation generation failed: {str(e)}", "failed")
-        logger.warning(f"alterx failed: {e}")
-
-    # Execute naabu for port scanning
-    port_desc = (
-        "top 1000"
-        if agg == "default"
-        else "top 10,000"
-        if agg == "high"
-        else "full range 1-65535"
-    )
-    _emit("naabu", f"Probing open ports on {target_domain} ({port_desc})", "started")
-    try:
-        naabu_cmd = ["-host", target_domain, "-json"]
-        if naabu_ports == "-p-":
-            naabu_cmd.append("-p-")
-        else:
-            naabu_cmd.extend(["-top-ports", naabu_port_val])
-        naabu_timeout = (
-            60 if agg == "default" else 90 if agg == "high" else 120
-        )
-        emit_tool_start(ctx.engagement_id, "naabu", naabu_cmd)
-        naabu_result = ctx.tool_runner.run("naabu", naabu_cmd, timeout=naabu_timeout)
-        parsed_count = 0
-        if naabu_result.success:
-            parsed = ctx.parser.parse("naabu", naabu_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "naabu")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "naabu",
-            f"Port scan complete — found {parsed_count} open ports",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("naabu", f"Port scan failed: {str(e)}", "failed")
-        logger.warning(f"naabu failed: {e}")
-
-    # Execute whatweb for technology fingerprinting
-    _emit("whatweb", "Fingerprinting web technologies and server stack", "started")
-    try:
-        emit_tool_start(ctx.engagement_id, "whatweb", ["--format=json", target])
-        whatweb_result = ctx.tool_runner.run(
-            "whatweb", ["--format=json", target], timeout=30
-        )
-        parsed_count = 0
-        if whatweb_result.success:
-            parsed = ctx.parser.parse("whatweb", whatweb_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "whatweb")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "whatweb",
-            "Technology fingerprinting complete",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("whatweb", f"Technology fingerprinting failed: {str(e)}", "failed")
-        logger.warning(f"whatweb failed: {e}")
-
-    # Execute nikto for web server scanning
-    _emit(
-        "nikto", "Scanning web server for misconfigurations and known issues", "started"
-    )
-    try:
-        emit_tool_start(ctx.engagement_id, "nikto", ["-h", target, "-Format", "csv"])
-        nikto_result = ctx.tool_runner.run(
-            "nikto", ["-h", target, "-Format", "csv"], timeout=90
-        )
-        parsed_count = 0
-        if nikto_result.success:
-            parsed = ctx.parser.parse("nikto", nikto_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "nikto")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit("nikto", "Web server scan complete", "completed", items=parsed_count)
-    except Exception as e:
-        _emit("nikto", f"Web server scan failed: {str(e)}", "failed")
-        logger.warning(f"nikto failed: {e}")
-
-    # Execute gau for known URLs
-    _emit("gau", "Fetching known URLs from passive archives (gau)", "started")
-    try:
-        emit_tool_start(ctx.engagement_id, "gau", [target, "--json"])
-        gau_result = ctx.tool_runner.run(
-            "gau", [target, "--json"], timeout=60
-        )
-        parsed_count = 0
-        if gau_result.success:
-            parsed = ctx.parser.parse("gau", gau_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "gau")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit("gau", "Passive URL discovery complete", "completed", items=parsed_count)
-    except Exception as e:
-        _emit("gau", f"Passive URL discovery failed: {str(e)}", "failed")
-        logger.warning(f"gau failed: {e}")
-
-    # Execute waybackurls for historical URLs
-    _emit("waybackurls", "Retrieving historical URLs from Wayback Machine", "started")
-    try:
-        emit_tool_start(ctx.engagement_id, "waybackurls", [target])
-        wayback_result = ctx.tool_runner.run("waybackurls", [target], timeout=45)
-        parsed_count = 0
-        if wayback_result.success:
-            parsed = ctx.parser.parse("waybackurls", wayback_result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, "waybackurls")
-                if normalized:
-                    all_findings.append(normalized)
-                    parsed_count += 1
-        _emit(
-            "waybackurls",
-            "Historical URL retrieval complete",
-            "completed",
-            items=parsed_count,
-        )
-    except Exception as e:
-        _emit("waybackurls", f"Historical URL retrieval failed: {str(e)}", "failed")
-        logger.warning(f"waybackurls failed: {e}")
+        for future in as_completed(futures):
+            tool_name, success, parsed_count, error = future.result()
+            if success:
+                success_msg = recon_tools[tool_name]["success_msg"]
+                formatted_msg = success_msg.replace("{{}}", str(parsed_count)) if "{{}}" in success_msg else success_msg
+                _emit(tool_name, formatted_msg, "completed", items=parsed_count)
+            else:
+                _emit(tool_name, f"{tool_name} failed: {error}" if error else f"{tool_name} failed", "failed")
 
     recon_context = summarize_recon_findings(target, all_findings)
     return all_findings, recon_context
