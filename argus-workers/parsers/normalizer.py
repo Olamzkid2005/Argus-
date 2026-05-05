@@ -2,6 +2,8 @@
 Normalizer - Enforces VulnerabilityFinding schema and normalizes data
 """
 
+import logging
+
 from pydantic import ValidationError
 
 from models.finding import (
@@ -10,6 +12,9 @@ from models.finding import (
     Severity,
     VulnerabilityFinding,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class FindingNormalizer:
@@ -521,7 +526,7 @@ class FindingNormalizer:
                 normalized.append(finding)
             except FindingValidationError as e:
                 # Log validation error but continue
-                print(f"Skipping invalid finding: {e}")
+                logger.warning(f"Skipping invalid finding: {e}")
                 continue
 
         return normalized

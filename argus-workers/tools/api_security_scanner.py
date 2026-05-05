@@ -34,6 +34,11 @@ except ImportError:
 class APISecurityScanner:
     """Automated API security testing — no OpenAPI spec required."""
 
+    PUBLIC_ENDPOINT_PATTERNS: list[str] = [
+        "/health", "/api/health", "/api/version", "/api/status",
+        "/favicon.ico", "/robots.txt", "/api-docs", "/swagger.json",
+        "/openapi.json", "/.well-known/",
+    ]
     RATE_LIMIT_REQUEST_COUNT: int = 50
     RATE_LIMIT_CONCURRENCY: int = 10
     BOLA_ALT_IDS: list[str] = ["456", "999", "admin", "1"]
@@ -249,7 +254,7 @@ class APISecurityScanner:
                         except httpx.RequestError:
                             continue
 
-                        if resp.status_code in (401, 403, 404, 405, 501):
+                        if resp.status_code in (401, 403, 404, 405, 501) or resp.status_code >= 500:
                             continue
 
                         body = resp.text
@@ -298,6 +303,8 @@ class APISecurityScanner:
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for endpoint in endpoints:
+                if any(endpoint.startswith(p) for p in self.PUBLIC_ENDPOINT_PATTERNS):
+                    continue
                 for headers in self.AUTH_HEADER_VARIANTS:
                     full_url = urljoin(base_url, endpoint)
                     try:
@@ -397,6 +404,20 @@ class APISecurityScanner:
                         "source_tool": "api_security_scanner",
                     })
                 else:
+                    if not status_counts:
+                        findings.append({
+                            "type": "API_RATE_LIMIT_INCONCLUSIVE",
+                            "severity": "INFO",
+                            "confidence": 0.3,
+                            "endpoint": full_url,
+                            "evidence": {
+                                "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
+                                "status_distribution": {},
+                                "detail": "All requests failed — rate limit test inconclusive",
+                            },
+                            "source_tool": "api_security_scanner",
+                        })
+                        continue
                     non_error_codes = [c for c in status_counts if c < 500]
                     total_ok = sum(status_counts.get(c, 0) for c in non_error_codes)
                     if total_ok >= self.RATE_LIMIT_REQUEST_COUNT * 0.8:
@@ -483,7 +504,7 @@ class APISecurityScanner:
     def _extract_openapi_paths(
         body: str, content_type: str
     ) -> list[str]:
-        """Parse OpenAPI spec JSON/YAML for endpoint paths."""
+        """Parse OpenAPI spec JSON (only) for endpoint paths. YAML is not supported."""
         paths: list[str] = []
         if "json" in content_type or body.strip().startswith("{"):
             try:
@@ -492,7 +513,9 @@ class APISecurityScanner:
                 if "paths" in spec:
                     for path in spec["paths"]:
                         paths.append(path)
-            except (json.JSONDecodeError, Exception):
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse OpenAPI JSON body — YAML not supported")
+            except Exception:
                 pass
         return paths
 

@@ -56,6 +56,7 @@ def get_connection_pool() -> pool.ThreadedConnectionPool:
 def get_db_cursor() -> Generator[RealDictCursor, None, None]:
     """Get a database cursor from the pool"""
     conn = None
+    cursor = None
     try:
         conn = get_connection_pool().getconn()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -66,8 +67,9 @@ def get_db_cursor() -> Generator[RealDictCursor, None, None]:
             conn.rollback()
         raise
     finally:
-        if conn:
+        if cursor:
             cursor.close()
+        if conn:
             get_connection_pool().putconn(conn)
 
 

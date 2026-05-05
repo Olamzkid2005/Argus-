@@ -619,12 +619,18 @@ class PipelineExecutor:
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             future_map = {executor.submit(fn): name for name, fn in tools}
             results = []
-            for future in concurrent.futures.as_completed(future_map, timeout=600):
-                name = future_map[future]
-                try:
-                    results.append(future.result())
-                except Exception as e:
-                    logger.error(f"Parallel tool {name} failed: {e}")
+            try:
+                for future in concurrent.futures.as_completed(future_map, timeout=600):
+                    name = future_map[future]
+                    try:
+                        results.append(future.result())
+                    except Exception as e:
+                        logger.error(f"Parallel tool {name} failed: {e}")
+                        results.append(StepResult(0, name, False, error=str(e), error_code=ErrorCode.TOOL_EXECUTION_FAILED))
+            except concurrent.futures.TimeoutError:
+                logger.error("Parallel execution timed out after 600s — cancelling remaining futures")
+                for future in future_map:
+                    future.cancel()
         return results
 
     def _run_tool(self, tool_name: str, args: list[str], timeout: int | None = None) -> ToolResult:
@@ -666,7 +672,7 @@ class PipelineExecutor:
             return None
 
     def _emit(self, engagement_id: str, tool: str, activity: str, status: str,
-              domain: str = "", items: int = None):
+              domain: str = "", items: int | None = None):
         """Emit a scanner activity event."""
         self.ws_publisher.publish_scanner_activity(
             engagement_id=engagement_id,

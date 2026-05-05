@@ -41,26 +41,31 @@ class TestParallelExecutor:
         """Test that tools run via ThreadPoolExecutor when PARALLEL_EXECUTION is enabled."""
         mock_is_enabled.return_value = True
 
-        from pipeline_executor import PipelineExecutor
+        with patch("concurrent.futures.ThreadPoolExecutor") as mock_executor:
+            mock_instance = MagicMock()
+            mock_executor.return_value = mock_instance
 
-        executor = PipelineExecutor(
-            tool_runner=MagicMock(),
-            parser=MagicMock(),
-            normalizer=MagicMock(),
-            ws_publisher=MagicMock(),
-        )
+            from pipeline_executor import PipelineExecutor
 
-        executor._exec_httpx = MagicMock(return_value="result1")
-        executor._exec_katana = MagicMock(return_value="result2")
+            executor = PipelineExecutor(
+                tool_runner=MagicMock(),
+                parser=MagicMock(),
+                normalizer=MagicMock(),
+                ws_publisher=MagicMock(),
+            )
 
-        tools = [
-            ("httpx", lambda: executor._exec_httpx("target", "eng-1", "domain")),
-            ("katana", lambda: executor._exec_katana("target", "eng-1", "domain", "3")),
-        ]
-        results = executor._execute_tools_parallel(tools)
+            executor._exec_httpx = MagicMock(return_value="result1")
+            executor._exec_katana = MagicMock(return_value="result2")
 
-        assert len(results) == 2
-        mock_is_enabled.assert_called_once_with("PARALLEL_EXECUTION")
+            tools = [
+                ("httpx", lambda: executor._exec_httpx("target", "eng-1", "domain")),
+                ("katana", lambda: executor._exec_katana("target", "eng-1", "domain", "3")),
+            ]
+            results = executor._execute_tools_parallel(tools)
+
+            assert len(results) == 2
+            mock_is_enabled.assert_called_once_with("PARALLEL_EXECUTION")
+            assert mock_executor.called, "ThreadPoolExecutor was not used when PARALLEL_EXECUTION is enabled"
 
     @patch("pipeline_executor.is_enabled")
     def test_execute_recon_tools_sequential_path(self, mock_is_enabled):

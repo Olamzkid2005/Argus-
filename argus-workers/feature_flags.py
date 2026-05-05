@@ -133,15 +133,24 @@ class FeatureFlags:
     def _load_flag_from_db(self, flag_name: str) -> bool | None:
         """Load flag value from database. Returns None if not found."""
         try:
-            from database.connection import get_db
-            db = get_db()
-            with db.cursor() as cursor:
-                cursor.execute(
-                    "SELECT enabled FROM feature_flags WHERE flag_name = %s",
-                    (flag_name,)
-                )
-                row = cursor.fetchone()
-                return row[0] if row else None
+            if self.db:
+                with self.db.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT enabled FROM feature_flags WHERE flag_name = %s",
+                        (flag_name,)
+                    )
+                    row = cursor.fetchone()
+                    return row[0] if row else None
+            else:
+                from database.connection import get_db
+                db = get_db()
+                with db.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT enabled FROM feature_flags WHERE flag_name = %s",
+                        (flag_name,)
+                    )
+                    row = cursor.fetchone()
+                    return row[0] if row else None
         except Exception:
             return None
 

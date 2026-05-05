@@ -239,9 +239,11 @@ class WebSocketScanner:
         try:
             async with websockets.connect(ws_url, open_timeout=self.timeout) as ws:
                 rate_limited = False
+                messages_sent = 0
                 for i in range(self.RATE_LIMIT_MESSAGE_COUNT):
                     try:
                         await ws.send(f"rate-test-{i}")
+                        messages_sent += 1
                     except WebSocketException:
                         rate_limited = True
                         break
@@ -253,7 +255,7 @@ class WebSocketScanner:
                         "confidence": 0.9,
                         "endpoint": ws_url,
                         "evidence": {
-                            "messages_sent": i + 1,
+                            "messages_sent": messages_sent,
                             "total_attempted": self.RATE_LIMIT_MESSAGE_COUNT,
                             "detail": (
                                 "Server closed connection after rapid messages "

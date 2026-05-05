@@ -1,9 +1,12 @@
 """
 Finding repository for database operations on vulnerability findings
 """
+import logging
 import uuid
 
 from psycopg2.extras import Json, RealDictCursor
+
+logger = logging.getLogger(__name__)
 
 from database.repositories.base import BaseRepository
 
@@ -102,7 +105,12 @@ class FindingRepository(BaseRepository):
                     """,
                     (engagement_id, endpoint, finding_type, source_tool)
                 )
-                finding_id = str(cursor.fetchone()[0])
+                existing = cursor.fetchone()
+                if existing:
+                    finding_id = str(existing[0])
+                else:
+                    logger.warning("ON CONFLICT DO NOTHING fired but SELECT returned no existing finding for engagement=%s endpoint=%s type=%s source_tool=%s", engagement_id, endpoint, finding_type, source_tool)
+                    return finding_id
             conn.commit()
             return finding_id
         except Exception as e:
@@ -385,7 +393,6 @@ class FindingRepository(BaseRepository):
         cursor = conn.cursor()
 
         try:
-            from psycopg2.extras import Json
             cursor.execute(
                 """
                 UPDATE findings
@@ -434,7 +441,7 @@ class FindingRepository(BaseRepository):
                 params.append(severity)
 
             if finding_type:
-                where_clause += " AND finding_type = %s"
+                where_clause += " AND type = %s"
                 params.append(finding_type)
 
             cursor.execute(

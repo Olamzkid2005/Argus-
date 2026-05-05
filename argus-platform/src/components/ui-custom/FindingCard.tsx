@@ -76,17 +76,19 @@ export const FindingCard = React.memo(function FindingCard({ finding }: { findin
                 {(finding.confidence * 100).toFixed(0)}%
               </span>
             </div>
-            {finding.cvss_score && (
+            {finding.cvss_score != null && (
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-1 rounded-lg">
-                <a
-                  href={`https://nvd.nist.gov/vuln/detail/${finding.cve_id || 'UNKNOWN'}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-argus-magenta transition-colors"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  CVSS
-                </a>
+                {finding.cve_id && finding.cve_id !== "UNKNOWN" ? (
+                  <a
+                    href={`https://nvd.nist.gov/vuln/detail/${finding.cve_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-argus-magenta transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    CVSS
+                  </a>
+                ) : null}
                 <span className="text-argus-magenta tracking-widest">
                   {finding.cvss_score.toFixed(1)}
                 </span>

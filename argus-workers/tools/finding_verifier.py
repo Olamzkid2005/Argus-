@@ -5,6 +5,7 @@ Verifies findings by re-testing with independent methods. Gated behind
 ARGUS_FF_FINDING_VERIFICATION feature flag.
 """
 import logging
+import urllib.parse
 import httpx
 from urllib.parse import urlparse, urljoin
 from feature_flags import is_enabled
@@ -118,7 +119,6 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> d
                         result["reason"] = f"Payload '{test_payload[:20]}...' reflected in response"
                         break
                     # Check for partial reflection (URL-encoded, etc.)
-                    import urllib.parse
                     encoded = urllib.parse.quote(test_payload)
                     if encoded in text:
                         result["verified"] = True
@@ -165,7 +165,7 @@ async def verify_open_redirect(endpoint: str) -> dict:
                 else:
                     result["reason"] = f"Redirects to same domain ({final_domain})"
             else:
-                result["reason"] = "No redirect detected (status: {resp.status_code})"
+                result["reason"] = f"No redirect detected (status: {resp.status_code})"
     except httpx.HTTPError as e:
         logger.warning(f"Open redirect verification failed for {endpoint}: {e}")
         result["reason"] = f"HTTP error: {e}"
@@ -193,7 +193,7 @@ async def verify_finding(finding: dict) -> dict:
     
     Returns the finding with verification metadata added.
     """
-    finding_type = (finding.get("type") or "").lower().replace(" ", "-")
+    finding_type = (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
     verifier = VERIFIERS.get(finding_type)
     
     if not verifier:

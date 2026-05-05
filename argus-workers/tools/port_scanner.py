@@ -64,9 +64,14 @@ class PortScanResult:
     @property
     def suggested_templates(self) -> dict[str, list[str]]:
         templates: dict[str, list[str]] = {}
-        svc = self._service_name_lower
-        if svc in SERVICE_TEMPLATE_MAP:
-            templates[self.target] = SERVICE_TEMPLATE_MAP[svc]
+        for port in self.open_ports:
+            svc = port.service.lower()
+            if svc in SERVICE_TEMPLATE_MAP:
+                if self.target not in templates:
+                    templates[self.target] = []
+                for scanner in SERVICE_TEMPLATE_MAP[svc]:
+                    if scanner not in templates[self.target]:
+                        templates[self.target].append(scanner)
         return templates
 
     def _service_name_lower(self, port: OpenPort | None = None) -> str:
@@ -93,13 +98,13 @@ class PortScanner:
     @staticmethod
     def _check_tool(name: str) -> bool:
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["which", name],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            return True
+            return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 
@@ -179,6 +184,11 @@ class PortScanner:
             return result
 
         port_list = ",".join(str(p.get("port")) for p in live_ports if p.get("port"))
+        if not port_list:
+            logger.warning(f"No live ports found for {target}")
+            result.scan_duration = time.time() - start
+            return result
+
         try:
             nmap_cmd = ["nmap", "-sV", "-sC", "-p", port_list, target, "-oX", "-"]
             logger.info("Running nmap: %s", " ".join(nmap_cmd))

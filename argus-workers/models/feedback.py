@@ -63,9 +63,11 @@ class FeedbackLearningLoop:
 
     def _store_feedback(self, feedback: FindingFeedback) -> None:
         """Persist feedback record to the finding_feedback table (upsert)."""
-        conn = get_db().get_connection()
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
         try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO finding_feedback (
@@ -91,17 +93,22 @@ class FeedbackLearningLoop:
             )
             conn.commit()
         except Exception:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise
         finally:
-            cursor.close()
-            get_db().release_connection(conn)
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
 
     def _update_finding(self, feedback: FindingFeedback) -> None:
         """Mark the finding with the analyst verdict and adjust fp_likelihood."""
-        conn = get_db().get_connection()
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
         try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 UPDATE findings
@@ -115,20 +122,30 @@ class FeedbackLearningLoop:
             )
             conn.commit()
         except Exception:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise
         finally:
-            cursor.close()
-            get_db().release_connection(conn)
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
 
     def _get_finding_source_tool(self, finding_id: str) -> str | None:
         """Look up which tool produced a finding."""
-        conn = get_db().get_connection()
+        try:
+            conn = get_db().get_connection()
+        except Exception as e:
+            logger.error("Failed to get DB connection in _get_finding_source_tool: %s", e)
+            return None
         cursor = conn.cursor()
         try:
             cursor.execute("SELECT source_tool FROM findings WHERE id = %s", (finding_id,))
             row = cursor.fetchone()
             return row[0] if row else None
+        except Exception as e:
+            logger.error("Failed to query finding source tool for %s: %s", finding_id, e)
+            return None
         finally:
             cursor.close()
             get_db().release_connection(conn)
@@ -143,7 +160,11 @@ class FeedbackLearningLoop:
             logger.warning("Cannot update tool accuracy: finding %s not found", feedback.finding_id)
             return False
 
-        conn = get_db().get_connection()
+        try:
+            conn = get_db().get_connection()
+        except Exception as e:
+            logger.error("Failed to get DB connection in _update_tool_accuracy: %s", e)
+            return False
         cursor = conn.cursor()
         try:
             cursor.execute(
@@ -167,9 +188,15 @@ class FeedbackLearningLoop:
                 )
                 return True
             return False
+        except Exception:
+            if conn:
+                conn.rollback()
+            raise
         finally:
-            cursor.close()
-            get_db().release_connection(conn)
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
 
     def _update_confidence_model(self, feedback: FindingFeedback) -> bool:
         """Adjust confidence model awareness based on feedback.
@@ -195,7 +222,11 @@ class FeedbackLearningLoop:
         FP rate = 1 - (true positives / total feedback entries).
         Returns 0.0 when no feedback data exists yet.
         """
-        conn = get_db().get_connection()
+        try:
+            conn = get_db().get_connection()
+        except Exception as e:
+            logger.error("Failed to get DB connection in _get_tool_fp_rate: %s", e)
+            return 0.0
         cursor = conn.cursor()
         try:
             cursor.execute(
@@ -214,9 +245,15 @@ class FeedbackLearningLoop:
                 total, tp = row[0], row[1] or 0
                 return 1.0 - (tp / total)
             return 0.0
+        except Exception:
+            if conn:
+                conn.rollback()
+            raise
         finally:
-            cursor.close()
-            get_db().release_connection(conn)
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
 
     def _send_alert(self, tool_name: str, fp_rate: float) -> None:
         """Log a warning when a tool's FP rate exceeds the threshold."""

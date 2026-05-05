@@ -32,6 +32,8 @@ class TestFindingDedup:
         assert result == "new-uuid"
         insert_calls = [c for c in mock_cursor.execute.call_args_list if "INSERT" in c[0][0]]
         assert len(insert_calls) == 1
+        insert_sql = insert_calls[0][0][0]
+        assert "ON CONFLICT" in insert_sql
 
     def test_create_finding_duplicate_conflict(self):
         """Test creating a duplicate returns existing finding ID via fallback SELECT."""

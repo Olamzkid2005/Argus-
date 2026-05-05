@@ -264,8 +264,9 @@ class ToolHealthTracker:
         conn = None
         cursor = None
         try:
-            import psycopg2
-            conn = psycopg2.connect(self._db_conn)
+            from database.connection import get_db
+            db = get_db()
+            conn = db.get_connection()
             cursor = conn.cursor()
             cutoff = datetime.now(UTC) - timedelta(hours=24)
 
@@ -318,7 +319,7 @@ class ToolHealthTracker:
                 else:
                     status = "healthy"
 
-                results.append(ToolHealth(name=tool_name, status=status, success_rate=success_rate, avg_duration_sec=avg_duration_sec, consecutive_failures=consecutive))
+                results.append(ToolHealth(tool_name=tool_name, status=status, success_rate_24h=success_rate, avg_duration_seconds=avg_duration_sec, total_runs_24h=total_runs, last_success_at=last_success_at, consecutive_failures=consecutive))
             return results
         except Exception as e:
             logger.warning(f"Tool health query failed: {e}")
@@ -327,7 +328,7 @@ class ToolHealthTracker:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                db.release_connection(conn)
 
 
 _tool_health_tracker: ToolHealthTracker | None = None

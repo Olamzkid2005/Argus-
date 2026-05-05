@@ -505,8 +505,7 @@ class WebSocketEventPublisher:
             conn.commit()
         except Exception as e:
             # Non-critical: don't let DB write failure break the scan
-            import logging
-            logging.getLogger(__name__).warning(f"Failed to persist scanner activity: {e}")
+            logger.warning(f"Failed to persist scanner activity: {e}")
         finally:
             if cursor:
                 cursor.close()

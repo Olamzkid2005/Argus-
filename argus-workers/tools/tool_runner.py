@@ -287,7 +287,9 @@ class ToolRunner:
             subprocess.TimeoutExpired: If execution times out
         """
         # Cache check
-        cache_key = f"tool_result:{tool}:{hash(tuple(args))}"
+        import hashlib
+        args_key = str(tuple(args))
+        cache_key = f"tool_result:{tool}:{hashlib.md5(args_key.encode()).hexdigest()}"
         cached_result = cache.get(cache_key)
         if cached_result is not None:
             return ToolResult(**cached_result)
@@ -458,7 +460,7 @@ class ToolRunner:
         severity: str | None = None,
         tags: str | None = None,
         timeout: int = 600,
-    ) -> dict:
+    ) -> ToolResult:
         """
         Execute Nuclei with optional template path and filters
 
@@ -491,7 +493,7 @@ class ToolRunner:
         top_ports: str | None = None,
         port_range: str | None = None,
         timeout: int = 300,
-    ) -> dict:
+    ) -> ToolResult:
         """
         Execute Naabu port scanner
 
@@ -518,7 +520,7 @@ class ToolRunner:
         target: str,
         depth: int = 3,
         timeout: int = 300,
-    ) -> dict:
+    ) -> ToolResult:
         """
         Execute Gospider for JavaScript file and endpoint discovery
 
@@ -539,7 +541,7 @@ class ToolRunner:
         api_token: str | None = None,
         enumerate_options: list[str] | None = None,
         timeout: int = 600,
-    ) -> dict:
+    ) -> ToolResult:
         """
         Execute WPScan for WordPress security scanning
 
@@ -610,7 +612,7 @@ class ToolRunner:
 
     def run_with_circuit_breaker(
         self, tool: str, args: list[str], timeout: int = 180
-    ) -> dict:
+    ) -> ToolResult:
         """
         Execute tool with circuit breaker protection.
 

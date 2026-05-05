@@ -99,8 +99,11 @@ class EventBus:
                     "timestamp": datetime.now(UTC).isoformat(),
                     "data": data,
                 }
-                self._ws_publisher._publish_event(ws_event)
+                publish_method = getattr(self._ws_publisher, "publish_event", None) or getattr(self._ws_publisher, "_publish_event")
+                publish_method(ws_event)
                 published = True
+            except AttributeError as e:
+                logger.error("WebSocketEventPublisher has no publish_event or _publish_event method: %s", e)
             except Exception as e:
                 logger.warning("WebSocket publish failed: %s", e)
 

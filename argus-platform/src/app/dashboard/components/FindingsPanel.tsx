@@ -413,7 +413,7 @@ export default function FindingsPanel({
               transition={{ duration: 0.3 }}
               className="divide-y divide-outline-variant dark:divide-[#ffffff08]"
             >
-              {findings.map((event, i) => <ThreatFeedRow key={i} event={event} />)}
+              {findings.map((event, i) => <ThreatFeedRow key={event.id || `finding-${i}`} event={event} />)}
             </motion.div>
           )}
         </AnimatePresence>
