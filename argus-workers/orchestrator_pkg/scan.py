@@ -6,6 +6,8 @@ import ipaddress
 import logging
 import socket
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
     RATE_LIMIT_DELAY_MS,
@@ -25,6 +27,37 @@ NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
     'high': 'low,medium,high,critical',
     'extreme': 'info,low,medium,high,critical',
 }
+
+TECH_TAG_MAP = {
+    'wordpress': ['wordpress', 'wp'],
+    'php': ['php'],
+    'apache': ['apache'],
+    'nginx': ['nginx'],
+    'java': ['java', 'spring', 'tomcat'],
+    'node': ['nodejs', 'express'],
+    'react': ['javascript'],
+    'django': ['python', 'django'],
+    'flask': ['python', 'flask'],
+    'mysql': ['mysql'],
+    'postgresql': ['postgresql'],
+    'redis': ['redis'],
+    'docker': ['docker'],
+}
+
+ALWAYS_INCLUDE_TAGS = ['cve', 'rce', 'sqli', 'xss', 'ssrf', 'lfi',
+                       'exposed-panel', 'default-login', 'misconfig', 'takeover']
+
+
+def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
+    tags = set(ALWAYS_INCLUDE_TAGS)
+    if agg == 'extreme':
+        tags.add('fuzz')
+    if tech_stack:
+        for tech in tech_stack:
+            for key, mapped_tags in TECH_TAG_MAP.items():
+                if key in tech.lower():
+                    tags.update(mapped_tags)
+    return ['-tags', ','.join(sorted(tags))]
 
 
 def _is_reachable(target: str) -> bool:
@@ -47,6 +80,23 @@ def _is_reachable(target: str) -> bool:
         return True
     except Exception:
         return True
+
+
+def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
+    """Thread-safe wrapper for running a scan tool."""
+    try:
+        emit_tool_start(ctx.engagement_id, tool_name, args)
+        result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
+        if result.success and result.stdout:
+            parsed = ctx.parser.parse(tool_name, result.stdout)
+            for p in parsed:
+                normalized = ctx._normalize_finding(p, tool_name)
+                if normalized:
+                    all_findings.append(normalized)
+        return tool_name, True, result.stdout
+    except Exception as e:
+        logger.warning(f"{tool_name} failed: {e}")
+        return tool_name, False, None
 
 
 def execute_scan_tools(
@@ -102,213 +152,94 @@ def execute_scan_tools(
             nuclei_templates.rglob("*.yaml")
         )
 
-        # Execute Nuclei for vulnerability scanning
-        if "nuclei" not in _skip:
-            try:
-                nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
-
-                # Use local templates if available
-                if templates_exist:
-                    nuclei_cmd.extend(["-t", str(nuclei_templates)])
-                    logger.info(f"Using local nuclei templates from {nuclei_templates}")
-                else:
-                    logger.warning(
-                        "Nuclei templates not found. Scan will use default template download."
-                    )
-
-                nuclei_timeout = TOOL_TIMEOUT_LONG
-                severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS['default'])
-                nuclei_cmd.extend(["-severity", severity])
-                if agg == "high":
-                    nuclei_timeout = 600
-                elif agg == "extreme":
-                    nuclei_cmd.extend(["-tags", "fuzz"])
-                    nuclei_timeout = 1200
-                emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
-                nuclei_result = ctx.tool_runner.run(
-                    "nuclei", nuclei_cmd, timeout=nuclei_timeout
-                )
-                # Debug: log nuclei result
-                logger.warning(
-                    f"NUCLEI RESULT for {target}: success={nuclei_result.success}, returncode={nuclei_result.returncode}, stdout_len={len(nuclei_result.stdout)}, stderr={nuclei_result.stderr[:200]}"
-                )
-
-                if nuclei_result.success:
-                    stdout = nuclei_result.stdout
-                    parsed = ctx.parser.parse("nuclei", stdout)
-                    logger.warning(
-                        f"NUCLEI PARSED: {len(parsed)} findings from {len(stdout)} bytes of output"
-                    )
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "nuclei")
-                        if normalized:
-                            all_findings.append(normalized)
-            except Exception as e:
-                logger.warning(f"nuclei failed for {target}: {e}")
-
-        # Execute dalfox for XSS
-        if "dalfox" not in _skip:
-            try:
-                dalfox_cmd = ["url", target, "--json"]
-                dalfox_timeout = TOOL_TIMEOUT_LONG
-                if agg == "high":
-                    dalfox_cmd.append("-b")
-                    dalfox_timeout = 600
-                elif agg == "extreme":
-                    dalfox_cmd.extend(["-b", "--deep-dom"])
-                    dalfox_timeout = 1200
-                emit_tool_start(ctx.engagement_id, "dalfox", dalfox_cmd)
-                dalfox_result = ctx.tool_runner.run(
-                    "dalfox", dalfox_cmd, timeout=dalfox_timeout
-                )
-                if dalfox_result.success:
-                    parsed = ctx.parser.parse("dalfox", dalfox_result.stdout)
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "dalfox")
-                        if normalized:
-                            all_findings.append(normalized)
-            except Exception as e:
-                logger.warning(f"dalfox failed for {target}: {e}")
-
-        # Execute sqlmap for SQL injection
-        if "sqlmap" not in _skip:
-            try:
-                sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
-                sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
-                sqlmap_timeout = TOOL_TIMEOUT_LONG
-                if agg == "high":
-                    sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
-                    sqlmap_timeout = 600
-                elif agg == "extreme":
-                    sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
-                    sqlmap_timeout = 1800
-                emit_tool_start(ctx.engagement_id, "sqlmap", sqlmap_cmd)
-                sqlmap_result = ctx.tool_runner.run(
-                    "sqlmap", sqlmap_cmd, timeout=sqlmap_timeout
-                )
-                if sqlmap_result.success:
-                    try:
-                        with open(sqlmap_out) as f:
-                            sqlmap_output = f.read()
-                        parsed = ctx.parser.parse("sqlmap", sqlmap_output)
-                    except Exception:
-                        parsed = []
-
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "sqlmap")
-                        if normalized:
-                            all_findings.append(normalized)
-            except Exception as e:
-                logger.warning(f"sqlmap failed for {target}: {e}")
-
-        # Execute arjun for parameter discovery
+        # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:
             try:
                 arjun_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "arjun.json")
-                arjun_threads = (
-                    "20" if agg == "default" else "50" if agg == "high" else "100"
-                )
-                arjun_timeout = (
-                    TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
-                )
-                emit_tool_start(
-                    ctx.engagement_id,
-                    "arjun",
+                arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
+                arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
+                _run_scan_tool(ctx, "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
-                )
-                arjun_result = ctx.tool_runner.run(
-                    "arjun",
-                    ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
-                    timeout=arjun_timeout,
-                )
-                if arjun_result.success:
-                    try:
-                        with open(arjun_out) as f:
-                            arjun_output = f.read()
-                        parsed = ctx.parser.parse("arjun", arjun_output)
-                    except Exception:
-                        parsed = []
-
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "arjun")
-                        if normalized:
-                            all_findings.append(normalized)
+                    arjun_timeout, all_findings)
             except Exception as e:
                 logger.warning(f"arjun failed for {target}: {e}")
 
-        # Execute jwt_tool for JWT vulnerability testing
+        # Phase 2: all vulnerability scanners run simultaneously
+        scan_jobs = []
+
+        # Build nuclei command
+        if "nuclei" not in _skip:
+            nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
+            if templates_exist:
+                nuclei_cmd.extend(["-t", str(nuclei_templates)])
+            nuclei_timeout = TOOL_TIMEOUT_LONG
+            severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS['default'])
+            nuclei_cmd.extend(["-severity", severity])
+            nuclei_cmd.extend(_build_nuclei_tags(tech_stack, agg))
+            if agg == "high":
+                nuclei_timeout = 600
+            elif agg == "extreme":
+                nuclei_timeout = 1200
+            scan_jobs.append(("nuclei", nuclei_cmd, nuclei_timeout))
+
+        # Build dalfox command
+        if "dalfox" not in _skip:
+            dalfox_cmd = ["url", target, "--json"]
+            dalfox_timeout = TOOL_TIMEOUT_LONG
+            if agg == "high":
+                dalfox_cmd.append("-b")
+                dalfox_timeout = 600
+            elif agg == "extreme":
+                dalfox_cmd.extend(["-b", "--deep-dom"])
+                dalfox_timeout = 1200
+            scan_jobs.append(("dalfox", dalfox_cmd, dalfox_timeout))
+
+        # Build sqlmap command
+        if "sqlmap" not in _skip:
+            sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
+            sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
+            sqlmap_timeout = TOOL_TIMEOUT_LONG
+            if agg == "high":
+                sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
+                sqlmap_timeout = 600
+            elif agg == "extreme":
+                sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
+                sqlmap_timeout = 1800
+            scan_jobs.append(("sqlmap", sqlmap_cmd, sqlmap_timeout))
+
+        # Build jwt_tool command
         if "jwt_tool" not in _skip:
-            try:
-                emit_tool_start(ctx.engagement_id, "jwt_tool", ["-u", target, "-C", "-d"])
-                jwt_result = ctx.tool_runner.run(
-                    "jwt_tool", ["-u", target, "-C", "-d"], timeout=120
-                )
-                if jwt_result.success:
-                    parsed = ctx.parser.parse("jwt_tool", jwt_result.stdout)
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "jwt_tool")
-                        if normalized:
-                            all_findings.append(normalized)
-            except Exception as e:
-                logger.warning(f"jwt_tool failed for {target}: {e}")
+            scan_jobs.append(("jwt_tool", ["-u", target, "-C", "-d"], 120))
 
-        # Execute commix for command injection testing
+        # Build commix command
         if "commix" not in _skip:
-            try:
-                commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
-                emit_tool_start(
-                    ctx.engagement_id,
-                    "commix",
-                    ["--url", target, "--batch", "--json-output", commix_out],
-                )
-                commix_result = ctx.tool_runner.run(
-                    "commix",
-                    ["--url", target, "--batch", "--json-output", commix_out],
-                    timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
-                )
-                if commix_result.success:
-                    try:
-                        with open(commix_out) as f:
-                            commix_output = f.read()
-                        parsed = ctx.parser.parse("commix", commix_output)
-                    except Exception:
-                        parsed = []
+            commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
+            scan_jobs.append(("commix",
+                ["--url", target, "--batch", "--json-output", commix_out],
+                TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "commix")
-                        if normalized:
-                            all_findings.append(normalized)
-            except Exception as e:
-                logger.warning(f"commix failed for {target}: {e}")
-
-        # Execute testssl for TLS vulnerability scanning
+        # Build testssl command
         if "testssl" not in _skip:
-            try:
-                testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
-                emit_tool_start(
-                    ctx.engagement_id,
-                    "testssl",
-                    ["--jsonfile", testssl_out, target],
-                )
-                testssl_result = ctx.tool_runner.run(
-                    "testssl",
-                    ["--jsonfile", testssl_out, target],
-                    timeout=TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
-                )
-                if testssl_result.success:
-                    try:
-                        with open(testssl_out) as f:
-                            testssl_output = f.read()
-                        parsed = ctx.parser.parse("testssl", testssl_output)
-                    except Exception:
-                        parsed = []
+            testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
+            scan_jobs.append(("testssl",
+                ["--jsonfile", testssl_out, target],
+                TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
-                    for p in parsed:
-                        normalized = ctx._normalize_finding(p, "testssl")
-                        if normalized:
-                            all_findings.append(normalized)
-            except Exception as e:
-                logger.warning(f"testssl failed for {target}: {e}")
+        # Run all Phase 2 tools in parallel
+        if scan_jobs:
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures = {
+                    pool.submit(_run_scan_tool, ctx, name, args, timeout, all_findings): name
+                    for name, args, timeout in scan_jobs
+                }
+                try:
+                    for future in as_completed(futures, timeout=TOOL_TIMEOUT_LONG + 60):
+                        try:
+                            future.result()
+                        except Exception as e:
+                            logger.warning(f"Scan tool {futures[future]} error: {e}")
+                except TimeoutError:
+                    logger.warning("Scan tool batch timed out — some tools may not have completed")
 
         # Authenticate session if auth_config is provided
         authenticated_session = None
