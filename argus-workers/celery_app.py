@@ -21,17 +21,15 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# Ensure tool binaries (venv/bin, ~/go/bin) are in PATH for worker subprocesses
-import os as _os
-
-_venv_bin = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "venv", "bin")
-_go_bin = _os.path.expanduser("~/go/bin")
-_current_path = _os.environ.get("PATH", "")
+# Ensure tool binaries are in PATH for worker subprocesses
+_venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin")
+_go_bin = os.path.expanduser("~/go/bin")
+_current_path = os.environ.get("PATH", "")
 for _bin_dir in [_venv_bin, _go_bin]:
-    if _bin_dir not in _current_path and _os.path.isdir(_bin_dir):
+    if _bin_dir not in _current_path and os.path.isdir(_bin_dir):
         _current_path = f"{_bin_dir}:{_current_path}"
-if _current_path != _os.environ.get("PATH", ""):
-    _os.environ["PATH"] = _current_path
+if _current_path != os.environ.get("PATH", ""):
+    os.environ["PATH"] = _current_path
 
 
 # Configure logging

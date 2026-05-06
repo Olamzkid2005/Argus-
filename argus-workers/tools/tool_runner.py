@@ -337,6 +337,8 @@ class ToolRunner:
                     "bandit": {1},
                     "gitleaks": {1},
                     "dalfox": {1},
+                    "trivy": {1},
+                    "pip-audit": {1},
                 }
                 success = (
                     result.returncode == 0
@@ -354,7 +356,7 @@ class ToolRunner:
                         )
                     except Exception as metric_error:
                         # Don't fail execution if metrics recording fails
-                        print(f"Warning: Failed to record tool metric: {metric_error}")
+                        logger.warning("Failed to record tool metric: %s", metric_error)
 
                 # Log tool execution
                 try:
@@ -396,7 +398,7 @@ class ToolRunner:
                             engagement_id=self.engagement_id,
                         )
                     except Exception as metric_error:
-                        print(f"Warning: Failed to record tool metric: {metric_error}")
+                        logger.warning("Failed to record tool metric: %s", metric_error)
 
                 # Log timeout
                 self.logger.log_tool_executed(
@@ -431,7 +433,7 @@ class ToolRunner:
                             engagement_id=self.engagement_id,
                         )
                     except Exception as metric_error:
-                        print(f"Warning: Failed to record tool metric: {metric_error}")
+                        logger.warning("Failed to record tool metric: %s", metric_error)
 
                 # Log error
                 self.logger.log_tool_executed(
@@ -464,7 +466,7 @@ class ToolRunner:
         proc = subprocess.Popen(
             [tool_path] + args,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             cwd=str(self.sandbox_dir),
             env=env,

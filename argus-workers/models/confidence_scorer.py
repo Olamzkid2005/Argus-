@@ -44,6 +44,11 @@ class ConfidenceScorer:
         "commix": 0.70,
         "naabu": 0.80,
         "wpscan": 0.85,
+        "gitleaks": 0.95,
+        "trivy": 0.90,
+        "bandit": 0.80,
+        "pip_audit": 0.85,
+        "gospider": 0.50,
     }
 
     # Base FP rates by vulnerability category

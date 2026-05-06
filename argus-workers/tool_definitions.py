@@ -227,7 +227,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="gospider",
     description="Web spider for endpoint discovery",
-    phases=[],  # Disabled: no gospider parser exists. Katana covers web crawling.
+    phases=["recon"],  # Enabled: gospider parser exists
     default_args=["-q", "-j"],
     parameters=[
         ToolParameter("target", "Target URL", flag="-s", required=True),

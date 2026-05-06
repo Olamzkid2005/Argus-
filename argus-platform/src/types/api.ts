@@ -34,7 +34,7 @@ export interface Engagement {
 
 export type EngagementStatus =
   | "created" | "recon" | "scanning" | "analyzing"
-  | "reporting" | "completed" | "failed" | "cancelled";
+  | "reporting" | "complete" | "failed" | "cancelled";
 
 export interface EngagementState {
   id: string;

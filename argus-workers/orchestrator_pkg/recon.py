@@ -72,7 +72,7 @@ def execute_recon_tools(
     )
     amass_mode = {
         "default": ["enum", "-d"],
-        "high": ["enum", "-d"],
+        "high": ["enum", "-d", "-brute", "-active"],
         "extreme": ["enum", "-d", "-brute", "-w"],
     }.get(agg, ["enum", "-d"])
 

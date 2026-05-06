@@ -1054,6 +1054,7 @@ class WebScanner:
         """Check for mass assignment vulnerabilities."""
         api_paths = ["/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts"]
 
+        resp = None
         for path in api_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
 

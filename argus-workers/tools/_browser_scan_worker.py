@@ -6,24 +6,35 @@ from playwright.sync_api import sync_playwright
 
 def scan(target_url: str, tech_stack: list) -> list[dict]:
     findings = []
+    browser = None
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        console_errors = []
-        page.on('console', lambda msg: console_errors.append(msg.text) if msg.type == 'error' else None)
-        page.goto(target_url, timeout=30000, wait_until='networkidle')
-        for payload in ['<img src=x onerror=alert(1)>', 'javascript:alert(1)']:
-            page.goto(f'{target_url}?q={payload}', timeout=10000)
-            if any('alert' in e.lower() for e in console_errors):
-                findings.append({
-                    'type': 'DOM_XSS',
-                    'severity': 'HIGH',
-                    'endpoint': target_url,
-                    'evidence': {'payload': payload},
-                    'source_tool': 'browser_scanner',
-                    'confidence': 0.9,
-                })
-        browser.close()
+        try:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            console_errors = []
+            page.on('console', lambda msg: console_errors.append(msg.text) if msg.type == 'error' else None)
+            page.goto(target_url, timeout=30000, wait_until='networkidle')
+            for payload in ['<img src=x onerror=alert(1)>', 'javascript:alert(1)']:
+                console_errors = []  # Reset for each payload
+                page.goto(f'{target_url}?q={payload}', timeout=10000)
+                if any('alert' in e.lower() for e in console_errors):
+                    findings.append({
+                        'type': 'DOM_XSS',
+                        'severity': 'HIGH',
+                        'endpoint': target_url,
+                        'evidence': {'payload': payload},
+                        'source_tool': 'browser_scanner',
+                        'confidence': 0.9,
+                    })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Browser scan failed: {e}")
+        finally:
+            if browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
     return findings
 
 

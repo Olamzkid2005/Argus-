@@ -198,6 +198,9 @@ class FindingNormalizer:
         "nmap": 0.10,
         "subfinder": 0.10,
         "alterx": 0.30,
+        "gitleaks": 0.05,
+        "trivy": 0.10,
+        "gospider": 0.35,
     }
 
     def normalize(

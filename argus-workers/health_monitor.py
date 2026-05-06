@@ -303,7 +303,7 @@ class ToolHealthTracker:
                 if not success:
                     cons_failures[tool] += 1
                 else:
-                    cons_failures.setdefault(tool, 0)
+                    cons_failures[tool] = 0
 
             results = []
             for row in rows:

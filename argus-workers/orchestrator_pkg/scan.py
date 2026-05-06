@@ -3,6 +3,7 @@ Scan execution logic extracted from Orchestrator.
 """
 
 import ipaddress
+import json
 import logging
 import socket
 import sys
@@ -283,21 +284,24 @@ def execute_scan_tools(
                     if any(t.lower() in ' '.join(tech_stack).lower() for t in SPA_TECHS):
                         emit_tool_start(ctx.engagement_id, "browser_scanner", [target])
                         logger.info(f"SPA detected — running browser scanner for {target}")
-                        result = subprocess.run(
-                            [sys.executable, str(worker_script), target, json.dumps(tech_stack)],
-                            capture_output=True, text=True, timeout=120
-                        )
-                        if result.returncode == 0 and result.stdout.strip():
-                            browser_findings = json.loads(result.stdout)
-                            for bf in browser_findings:
-                                normalized = ctx._normalize_finding(bf, "browser_scanner")
-                                if normalized:
-                                    all_findings.append(normalized)
+                        try:
+                            result = subprocess.run(
+                                [sys.executable, str(worker_script), target, json.dumps(tech_stack)],
+                                capture_output=True, text=True, timeout=120
+                            )
+                            if result.returncode == 0 and result.stdout.strip():
+                                browser_findings = json.loads(result.stdout)
+                                for bf in browser_findings:
+                                    normalized = ctx._normalize_finding(bf, "browser_scanner")
+                                    if normalized:
+                                        all_findings.append(normalized)
+                        except subprocess.TimeoutExpired:
+                            logger.warning(f"Browser scanner timed out for {target}")
+                        except Exception as e:
+                            logger.warning(f"Browser scanner failed for {target}: {e}")
                 else:
                     logger.debug("Browser scanner worker not found, skipping")
-            except subprocess.TimeoutExpired:
-                logger.warning(f"Browser scanner timed out for {target}")
             except Exception as e:
-                logger.warning(f"Browser scanner failed for {target}: {e}")
+                logger.warning(f"Browser scanner outer error: {e}")
 
     return all_findings

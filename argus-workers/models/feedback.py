@@ -133,13 +133,11 @@ class FeedbackLearningLoop:
 
     def _get_finding_source_tool(self, finding_id: str) -> str | None:
         """Look up which tool produced a finding."""
+        conn = None
+        cursor = None
         try:
             conn = get_db().get_connection()
-        except Exception as e:
-            logger.error("Failed to get DB connection in _get_finding_source_tool: %s", e)
-            return None
-        cursor = conn.cursor()
-        try:
+            cursor = conn.cursor()
             cursor.execute("SELECT source_tool FROM findings WHERE id = %s", (finding_id,))
             row = cursor.fetchone()
             return row[0] if row else None
@@ -147,8 +145,10 @@ class FeedbackLearningLoop:
             logger.error("Failed to query finding source tool for %s: %s", finding_id, e)
             return None
         finally:
-            cursor.close()
-            get_db().release_connection(conn)
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
 
     def _update_tool_accuracy(self, feedback: FindingFeedback) -> bool:
         """Query feedback history for the finding's tool and log its accuracy.
@@ -160,13 +160,11 @@ class FeedbackLearningLoop:
             logger.warning("Cannot update tool accuracy: finding %s not found", feedback.finding_id)
             return False
 
+        conn = None
+        cursor = None
         try:
             conn = get_db().get_connection()
-        except Exception as e:
-            logger.error("Failed to get DB connection in _update_tool_accuracy: %s", e)
-            return False
-        cursor = conn.cursor()
-        try:
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT
@@ -222,13 +220,11 @@ class FeedbackLearningLoop:
         FP rate = 1 - (true positives / total feedback entries).
         Returns 0.0 when no feedback data exists yet.
         """
+        conn = None
+        cursor = None
         try:
             conn = get_db().get_connection()
-        except Exception as e:
-            logger.error("Failed to get DB connection in _get_tool_fp_rate: %s", e)
-            return 0.0
-        cursor = conn.cursor()
-        try:
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT

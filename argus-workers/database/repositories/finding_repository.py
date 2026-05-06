@@ -110,12 +110,12 @@ class FindingRepository(BaseRepository):
                     finding_id = str(existing[0])
                 else:
                     logger.warning("ON CONFLICT DO NOTHING fired but SELECT returned no existing finding for engagement=%s endpoint=%s type=%s source_tool=%s", engagement_id, endpoint, finding_type, source_tool)
-                    return finding_id
+                    return None
             conn.commit()
             return finding_id
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            raise e
+            raise
         finally:
             cursor.close()
             if not self._external_conn:
@@ -199,9 +199,9 @@ class FindingRepository(BaseRepository):
                 )
             conn.commit()
             return finding_id
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            raise e
+            raise
         finally:
             cursor.close()
             if not self._external_conn:
@@ -373,9 +373,9 @@ class FindingRepository(BaseRepository):
                 (confidence, finding_id)
             )
             conn.commit()
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            raise e
+            raise
         finally:
             cursor.close()
             if not self._external_conn:
@@ -404,9 +404,9 @@ class FindingRepository(BaseRepository):
                 (Json(llm_result), finding_id)
             )
             conn.commit()
-        except Exception as e:
+        except Exception:
             conn.rollback()
-            raise e
+            raise
         finally:
             cursor.close()
             if not self._external_conn:
