@@ -79,9 +79,8 @@ class TestWpscanParser:
         assert len(findings) == 1
         # Actual type is WP_VULNERABILITY_{vuln_type.upper()}
         assert findings[0]["type"] == "WP_VULNERABILITY_PLUGIN1"
-        # Note: original code has a bug where >= 7.0 is checked before >= 9.0
-        # so 9.5 yields HIGH instead of CRITICAL
-        assert findings[0]["severity"] == "HIGH"
+        # CVSS 9.5 should be CRITICAL
+        assert findings[0]["severity"] == "CRITICAL"
         assert findings[0]["confidence"] == 0.85
 
     def test_parse_empty(self):

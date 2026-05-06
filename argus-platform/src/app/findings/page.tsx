@@ -268,7 +268,7 @@ export default function FindingsPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") signIn();
-  }, [status, router, signIn]);
+  }, [status, router]);
 
   // Fetch AI status and preferred model
   useEffect(() => {

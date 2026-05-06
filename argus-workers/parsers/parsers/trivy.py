@@ -33,6 +33,7 @@ class TrivyParser(BaseParser):
                         "title": vuln.get("Title", ""),
                         "target": target,
                     },
+                    "tool": "trivy",
                 }
                 findings.append(finding)
         return findings

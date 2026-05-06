@@ -72,7 +72,7 @@ export default function EngagementsListPage() {
     if (status === "unauthenticated") {
       signIn();
     }
-  }, [status, signIn]);
+  }, [status]);
 
   useEffect(() => {
     if (status !== "authenticated") return;

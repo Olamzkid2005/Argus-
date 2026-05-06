@@ -72,7 +72,7 @@ export default function ComplianceReportsPage() {
     if (status === "unauthenticated") {
       signIn();
     }
-  }, [status, router, signIn]);
+  }, [status, router]);
 
   useEffect(() => {
     if (status !== "authenticated") return;

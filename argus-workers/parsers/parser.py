@@ -20,9 +20,9 @@ from tracing import ExecutionSpan, StructuredLogger
 from parsers.parsers.base import BaseParser, ParserError, _safe_get
 
 from parsers.parsers import (
-    FfufParser, GauParser, HttpxParser,
+    FfufParser, GauParser, GospiderParser, HttpxParser,
     KatanaParser, NucleiParser, SqlmapParser,
-    WaybackurlsParser,
+    WaybackurlsParser, WpscanParser,
 )
 
 logger = logging.getLogger(__name__)

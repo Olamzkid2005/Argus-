@@ -315,7 +315,7 @@ export default function DashboardPage() {
       setScanStartTime(null);
     }
     // Clear scan start time when user disconnects (handled in disconnectEngagement)
-  }, [currentState]);
+  }, [currentState, scanStartTime]);
 
   // Detect scan completion and show banner/toast
   useEffect(() => {
@@ -328,7 +328,7 @@ export default function DashboardPage() {
       return () => clearTimeout(bannerTimer);
     }
     prevStateRef.current = currentState;
-  }, [currentState]);
+  }, [currentState, showToast]);
 
   // Fetch findings from DB so they persist beyond Redis TTL
   useEffect(() => {
@@ -361,7 +361,7 @@ export default function DashboardPage() {
     fetchFindings();
     const interval = setInterval(fetchFindings, 5000);
     return () => clearInterval(interval);
-  }, [engagementId, isConnected, scanStartTime]);
+  }, [engagementId, isConnected, scanStartTime, handleEngagementAccessDenied]);
 
   const {
     events,
@@ -519,7 +519,7 @@ export default function DashboardPage() {
     fetchTimeline();
     const interval = setInterval(fetchTimeline, 10000);
     return () => clearInterval(interval);
-  }, [engagementId, isConnected]);
+  }, [engagementId, isConnected, handleEngagementAccessDenied]);
 
   // Derive attack paths from dbFindings (already polled every 5s)
   // instead of making a redundant API call that only gets DB findings.
@@ -600,7 +600,7 @@ export default function DashboardPage() {
     fetchState();
     const interval = setInterval(fetchState, 3000);
     return () => clearInterval(interval);
-  }, [engagementId]);
+  }, [engagementId, handleEngagementAccessDenied]);
 
   const handleApprove = async () => {
     if (!engagementId || isApproving) return;

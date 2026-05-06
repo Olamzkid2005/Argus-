@@ -41,8 +41,8 @@ class WpscanParser(BaseParser):
         # Interesting findings (exposed files, version info, user enumeration)
         for item in data.get("interesting_findings", []):
             f = self._make_finding(
-                finding_type=item.get("type", "WORDPRESS_MISCONFIGURATION").upper(),
-                severity="MEDIUM",
+                finding_type=f"WP_{item.get('type', 'WORDPRESS_MISCONFIGURATION').upper()}",
+                severity="HIGH" if item.get("type") in ("db_backup",) else "MEDIUM",
                 endpoint=item.get("url") or target,
                 evidence={
                     "description": item.get("to_s", ""),
@@ -55,17 +55,22 @@ class WpscanParser(BaseParser):
         # Plugin vulnerabilities
         for plugin_name, plugin_data in data.get("plugins", {}).items():
             for vuln in plugin_data.get("vulnerabilities", []):
-                findings.append(self._vuln_finding(vuln, target, f"plugin:{plugin_name}"))
+                findings.append(self._vuln_finding(vuln, target, plugin_name.upper()))
 
         # Theme vulnerabilities
         for theme_name, theme_data in data.get("themes", {}).items():
             for vuln in theme_data.get("vulnerabilities", []):
-                findings.append(self._vuln_finding(vuln, target, f"theme:{theme_name}"))
+                findings.append(self._vuln_finding(vuln, target, theme_name.upper()))
+
+        # Top-level vulnerabilities dict (source_name -> vuln list)
+        for source_name, vulns in data.get("vulnerabilities", {}).items():
+            for vuln in vulns:
+                findings.append(self._vuln_finding(vuln, target, source_name.upper()))
 
         # WordPress core vulnerabilities
         wp_version = data.get("version", {})
         for vuln in wp_version.get("vulnerabilities", []):
-            findings.append(self._vuln_finding(vuln, target, "wordpress_core"))
+            findings.append(self._vuln_finding(vuln, target, "CORE", finding_type="WP_CORE_VULNERABILITY"))
 
         # Users (enumeration finding)
         users = data.get("users", {})
@@ -79,19 +84,29 @@ class WpscanParser(BaseParser):
 
         return findings
 
-    def _vuln_finding(self, vuln: dict, target: str, source: str) -> dict:
+    def _vuln_finding(self, vuln: dict, target: str, source: str, finding_type: str | None = None) -> dict:
         title = vuln.get("title", "WordPress Vulnerability")
         refs = vuln.get("references", {})
         cve_ids = refs.get("cve", [])
-        cvss = None
-        if cve_ids:
-            # Try to extract CVSS from title or leave for NVD enrichment
-            pass
+        # Derive severity from cvss severity label, falling back to score-based mapping
+        cvss_data = vuln.get("cvss", {})
+        severity_str = str(cvss_data.get("severity", "")).lower()
+        if not severity_str:
+            score = cvss_data.get("score")
+            if score is not None:
+                if score >= 9.0:
+                    severity_str = "critical"
+                elif score >= 7.0:
+                    severity_str = "high"
+                elif score >= 4.0:
+                    severity_str = "medium"
+                else:
+                    severity_str = "low"
+            else:
+                severity_str = "high"  # Default for vulns without CVSS data
         return self._make_finding(
-            finding_type="WORDPRESS_VULNERABILITY",
-            severity=self.SEVERITY_MAP.get(
-                str(vuln.get("cvss", {}).get("severity", "")).lower(), "HIGH"
-            ),
+            finding_type=finding_type or f"WP_VULNERABILITY_{source}",
+            severity=self.SEVERITY_MAP.get(severity_str, "HIGH"),
             endpoint=target,
             evidence={
                 "title": title,

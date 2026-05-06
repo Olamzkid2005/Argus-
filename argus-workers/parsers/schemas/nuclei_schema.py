@@ -44,7 +44,7 @@ def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
         "type": info.get("name", "UNKNOWN"),
         "severity": severity,
         "endpoint": data.get("matched-at", ""),
-        "source_tool": "nuclei",
+        "tool": "nuclei",
         "evidence": {
             "template_id": data.get("template-id"),
             "matcher_name": data.get("matcher-name"),

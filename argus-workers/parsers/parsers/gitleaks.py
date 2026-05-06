@@ -34,6 +34,7 @@ class GitleaksParser(BaseParser):
                     "offender": (item.get("Secret") or "")[:100],
                     "match": item.get("Match"),
                 },
+                "tool": "gitleaks",
             }
             findings.append(finding)
         return findings

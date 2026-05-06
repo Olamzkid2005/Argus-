@@ -31,6 +31,7 @@ class BanditParser(BaseParser):
                     "test_name": issue.get("test_name", ""),
                 },
                 "confidence": 0.90,
+                "tool": "bandit",
             }
             findings.append(finding)
         return findings

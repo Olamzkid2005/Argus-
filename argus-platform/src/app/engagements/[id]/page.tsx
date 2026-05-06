@@ -119,7 +119,7 @@ export default function EngagementDetailPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") signIn();
-  }, [status, router, signIn]);
+  }, [status, router]);
 
   const fetchEngagement = useCallback(async () => {
     try {
@@ -175,7 +175,7 @@ export default function EngagementDetailPage() {
       fetchTimeline();
     }, 5000);
     return () => clearInterval(interval);
-  }, [engagement?.status, fetchEngagement, fetchFindings, fetchTimeline]);
+  }, [engagement?.status, fetchEngagement, fetchFindings, fetchTimeline, engagement]);
 
   const handleStop = async () => {
     if (!confirm("Stop this scan?")) return;

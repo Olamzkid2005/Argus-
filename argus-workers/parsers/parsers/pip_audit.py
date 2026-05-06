@@ -33,6 +33,7 @@ class PipAuditParser(BaseParser):
                     "title": name,
                 },
                 "confidence": 0.95,
+                "tool": "pip_audit",
             }
             findings.append(finding)
         return findings
