@@ -28,6 +28,7 @@ import time
 from urllib.parse import urljoin, urlparse
 
 import requests
+import threading
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
@@ -279,12 +280,23 @@ class WebScanner:
         return self.findings
 
     def _safe_request(self, method: str, url: str, **kwargs) -> requests.Response | None:
-        """Make HTTP request with error handling."""
+        """Make HTTP request with error handling. Thread-safe — uses per-thread sessions."""
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", True)  # Verify SSL certs by default
-            resp = self.session.request(method, url, **kwargs)
+            # Use thread-local session for thread safety during concurrent checks
+            if not hasattr(self, "_thread_session"):
+                self._thread_session = threading.local()
+            thread_session = getattr(self._thread_session, "session", None)
+            if thread_session is None:
+                thread_session = requests.Session()
+                thread_session.headers.update({
+                    "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
+                    "Accept": "*/*",
+                })
+                self._thread_session.session = thread_session
+            resp = thread_session.request(method, url, **kwargs)
             time.sleep(self.rate_limit)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
