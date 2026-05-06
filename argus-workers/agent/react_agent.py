@@ -29,8 +29,10 @@ from llm_service import LLMService
 
 from .agent_action import AgentAction
 from .agent_prompts import (
-    TOOL_SELECTION_SYSTEM_PROMPT,
+    BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT,
     REPO_TOOL_SELECTION_SYSTEM_PROMPT,
+    TOOL_SELECTION_SYSTEM_PROMPT,
+    _load_bugbounty_context,
     build_tool_selection_prompt,
     build_observation_summary,
 )
@@ -80,6 +82,7 @@ class ReActAgent:
         decision_repo: Any = None,
         engagement_id: str = None,
         phase: str = "scan",
+        mode: str | None = None,
     ):
         self.registry = registry
         self.max_iterations = max_iterations
@@ -88,6 +91,7 @@ class ReActAgent:
         self.engagement_id = engagement_id
         self.history: list[dict] = []
         self._phase = phase
+        self._mode = mode  # None = standard, "bugbounty" = Bug-Reaper methodology
 
     def add_to_history(self, role: str, content: str, data: dict = None):
         """Add an entry to the agent's history/context."""
@@ -181,9 +185,15 @@ class ReActAgent:
 
     def _get_system_prompt(self, recon_context: Any = None) -> str:
         """
-        Return the correct system prompt based on scan type.
-        Repo scans get the SAST-focused prompt; web scans get the webapp prompt.
+        Return the correct system prompt based on scan type and mode.
+        - bugbounty mode → Bug-Reaper ROI-ordered methodology
+        - repo scans → SAST-focused prompt
+        - default → standard webapp scanning prompt
         """
+        # Bug-Reaper mode takes priority
+        if self._mode == "bugbounty":
+            return BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT
+
         if recon_context and hasattr(recon_context, "scan_type"):
             if recon_context.scan_type == "repo":
                 return REPO_TOOL_SELECTION_SYSTEM_PROMPT
@@ -221,11 +231,17 @@ class ReActAgent:
 === RECON SUMMARY (PROSE) ===
 {recon_summary}"""
 
+        # Load Bug-Reaper methodology context in bug bounty mode
+        bugbounty_context = ""
+        if self._mode == "bugbounty":
+            bugbounty_context = _load_bugbounty_context(recon_context, tried_tools)
+
         user_prompt = build_tool_selection_prompt(
             recon_section,
             self.registry.list_tools(),
             tried_tools,
             context,  # observation history — now has real content
+            bugbounty_context=bugbounty_context,
         )
 
         system_prompt = self._get_system_prompt(recon_context)

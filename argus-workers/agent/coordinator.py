@@ -58,7 +58,7 @@ class CoordinatorAgent:
 
     def get_phase_agent(self, phase: str, tool_runner=None,
                         llm_client=None, decision_repo=None,
-                        engagement_id: str = None) -> ReActAgent:
+                        engagement_id: str = None, mode: str | None = None) -> ReActAgent:
         """Create a ReAct agent for a specific phase."""
         return create_phase_agent(
             phase,
@@ -66,10 +66,11 @@ class CoordinatorAgent:
             engagement_id=engagement_id or self.engagement_id,
             llm_client=llm_client,
             decision_repo=decision_repo,
+            mode=mode,
         )
 
     def run_phase(self, phase: str, context: dict, tool_runner=None,
-                  llm_client=None, decision_repo=None) -> list:
+                  llm_client=None, decision_repo=None, mode: str | None = None) -> list:
         """Run a single phase with tools."""
         self._ensure_phase_agents()
         agent = create_phase_agent(
@@ -78,6 +79,7 @@ class CoordinatorAgent:
             engagement_id=self.engagement_id,
             llm_client=llm_client,
             decision_repo=decision_repo,
+            mode=mode,
         )
         task_desc = self.PHASE_AGENTS.get(phase, {}).get("description", phase)
         results = agent.run(task_desc, initial_context=context)
@@ -91,6 +93,7 @@ def create_phase_agent(
     engagement_id: str = None,
     llm_client=None,
     decision_repo=None,
+    mode: str | None = None,
 ) -> ReActAgent:
     """
     Create a ReActAgent for a specific phase with tools pre-registered.
@@ -101,6 +104,7 @@ def create_phase_agent(
         engagement_id: Optional engagement ID for context
         llm_client: Optional LLMClient for LLM-driven tool selection
         decision_repo: Optional AgentDecisionRepository for logging
+        mode: Optional mode ('bugbounty' for Bug-Reaper methodology, None for default)
 
     Returns:
         Configured ReActAgent
@@ -133,5 +137,6 @@ def create_phase_agent(
         decision_repo=decision_repo,
         engagement_id=engagement_id,
         phase=phase,
+        mode=mode,
     )
     return agent

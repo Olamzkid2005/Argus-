@@ -7,8 +7,14 @@ They must give the LLM enough information to reason correctly about:
   - What each tool does and when it is appropriate
   - What has already been tried and what it produced
   - What it should NEVER do (stop too early, skip nuclei, ignore findings)
+
+Bug-Reaper Integration:
+  - BUGBOUNTY_TOOL_CATALOGUE: Bug-Reaper's ROI-ordered hunting priority
+  - BUGBOUNTY_STOPPING_RULES: Stricter stopping rules for bug bounty mode
+  - _load_bugbounty_context(): Loads Bug-Reaper methodology .md files into agent context
 """
 import json
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # TOOL CAPABILITY CATALOGUE
@@ -164,6 +170,140 @@ npm-audit
   Priority: HIGH if Node.js project.
 """
 
+BUGBOUNTY_TOOL_CATALOGUE = """
+TOOL CATALOGUE — BUG BOUNTY (Bug-Reaper Priority Order)
+Hunt in this order for maximum bounty ROI. Each class lists the tool(s) to run.
+
+=== PRIORITY 1 — IDOR / BOLA / ACCESS CONTROL ===
+Test every resource endpoint for missing authorization.
+Tools: web_scanner (IDOR checks), jwt_tool (mass assignment),
+       arjun (hidden resource parameters)
+Signal: Look for ?id=, ?user_id=, /api/*/[id] endpoints with sequential IDs.
+Method: Two-account test — resource ID from Account A accessed by Account B.
+Severity if confirmed: High/Critical
+
+=== PRIORITY 2 — AUTH / SESSION / OAUTH BYPASS ===
+Test password reset token reuse, JWT weaknesses, MFA bypass.
+Tools: jwt_tool (alg:none, RS256->HS256, kid injection),
+       web_scanner (auth checks, response manipulation)
+Signal: Bearer tokens, auth_endpoints, reset-password endpoints.
+Severity if confirmed: High/Critical
+
+=== PRIORITY 3 — API / GRAPHQL ===
+Test BOLA, BFLA, mass assignment, rate limit bypass.
+Tools: web_scanner (API checks), nuclei (api templates)
+Signal: has_api=true, /api/*, /graphql, introspection endpoints.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 4 — SSRF (INTERNAL + CLOUD IMDS) ===
+Test callback/webhook/fetch URL parameters for internal access.
+Tools: nuclei (SSRF templates), web_scanner (SSRF detection checks)
+Signal: callback_url, webhook, notify_url, file_url, avatar_url parameters.
+Severity if confirmed: High/Critical
+
+=== PRIORITY 5 — XSS (REFLECTED/STORED/DOM) ===
+Test parameter-bearing URLs and form inputs for script execution.
+Tools: dalfox (XSS scanning), web_scanner (XSS checks), nuclei (XSS templates)
+Signal: parameter_bearing_urls, form inputs, auth_endpoints.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 6 — BUSINESS LOGIC ===
+Test price manipulation, race conditions, workflow bypass.
+Tools: web_scanner (logic testing), custom payloads
+Signal: Checkout, payments, coupon, referral endpoints.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 7 — CORS MISCONFIGURATION ===
+Test origin reflection with Access-Control-Allow-Credentials.
+Tools: nuclei (CORS templates), web_scanner (CORS checks)
+Signal: API responses returning ACAO headers.
+Severity if confirmed: High/Critical
+
+=== PRIORITY 8 — SQL INJECTION ===
+Test login/search/filter parameters for injection.
+Tools: sqlmap (SQL injection), nuclei (SQLi templates)
+Signal: ?id=, ?search=, ?sort=, ?order=, login forms, search bars.
+Severity if confirmed: High/Critical
+
+=== PRIORITY 9 — NoSQL INJECTION ===
+Test JSON body operator injection ($ne, $gt, $regex).
+Tools: web_scanner (NoSQL checks), manual testing
+Signal: MongoDB/Mongoose detected, JSON API endpoints accepting $ operators.
+Severity if confirmed: High/Critical
+
+=== PRIORITY 10 — SUBDOMAIN TAKEOVER ===
+Test dangling CNAME records to external services.
+Tools: nuclei (takeover templates), dnsx/httpx (via recon)
+Signal: NXDOMAIN with CNAME to GitHub/Heroku/AWS/Netlify/etc.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 11 — CSRF ===
+Test state-changing actions without tokens.
+Tools: web_scanner (CSRF checks)
+Signal: Sensitive POST endpoints without SameSite cookie or CSRF token.
+Severity if confirmed: Medium/High
+
+=== PRIORITY 12 — RCE (COMMAND INJECTION / DESERIALIZATION) ===
+Test shell-like parameters for command execution.
+Tools: commix (command injection), nuclei (RCE templates)
+Signal: cmd, exec, ping, system parameters; file upload endpoints.
+Severity if confirmed: Critical
+
+=== PRIORITY 13 — PROTOTYPE POLLUTION ===
+Test __proto__ injection in JSON bodies.
+Tools: web_scanner (prototype pollution checks)
+Signal: Node.js/Express apps, JSON body parsers.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 14 — HTTP REQUEST SMUGGLING ===
+Test CL.TE/TE.CL boundary confusion.
+Tools: nuclei (smuggling templates)
+Signal: HTTP/1.1 endpoints behind proxies, transfer-encoding headers.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 15 — SSTI ===
+Test template injection in user input reflected in templates.
+Tools: nuclei (SSTI templates), manual payloads
+Signal: {, {{, #{ in reflected content from user input.
+Severity if confirmed: Critical
+
+=== PRIORITY 16 — LFI / PATH TRAVERSAL ===
+Test file parameters for directory traversal.
+Tools: nuclei (LFI templates), web_scanner (LFI checks)
+Signal: ?file=, ?page=, ?template=, ?include=, ?load=, ?path= parameters.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 17 — XXE ===
+Test XML input for external entity injection.
+Tools: nuclei (XXE templates), web_scanner (XXE detection)
+Signal: XML/SOAP endpoints, SVG file uploads, Content-Type: text/xml.
+Severity if confirmed: Medium/Critical
+
+=== PRIORITY 18 — OPEN REDIRECT ===
+Test redirect parameters for unvalidated destination.
+Tools: web_scanner (open redirect checks)
+Signal: ?next=, ?redirect=, ?url=, ?return=, ?goto= parameters.
+Severity if confirmed: Low/High (High when chained with OAuth)
+"""
+
+BUGBOUNTY_STOPPING_RULES = """
+MANDATORY STOPPING RULES — BUG BOUNTY MODE:
+
+You MAY ONLY return {"tool": "__done__"} when ALL of these are true:
+  1. Recon is complete — target surface mapped, tech stack identified
+  2. IDOR/BOLA tools have run if resource endpoints exist (two-account test eligible)
+  3. Auth bypass tools have run (jwt_tool, password reset testing)
+  4. SSRF testing has run if URL parameters accept external URLs
+  5. XSS tools have run (dalfox OR web_scanner XSS checks) on parameter-bearing URLs
+  6. SQLi injection tools have run (sqlmap) if ?id=, ?search= parameters exist
+  7. Every context-specific tool for identified tech signals has been run
+  8. At least 6 distinct tool executions have been attempted (minimum coverage)
+
+CRITICAL: In bug bounty mode, empty findings are NORMAL — NOT a reason to stop.
+A clean scan on a mature target is common. Do NOT stop early just because
+you haven't found anything yet. Continue debugging the full attack surface.
+"""
+
 # ---------------------------------------------------------------------------
 # STOPPING RULES — prevents the agent from stopping too early
 # ---------------------------------------------------------------------------
@@ -267,6 +407,98 @@ Return ONLY valid JSON. No markdown, no explanation outside the JSON.
 """
 
 
+BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT = f"""
+You are a senior bug bounty hunter operating a systematic web application scanner.
+
+CONTEXT:
+Recon is complete. You now have an attack surface map. Your job is to select
+the NEXT tool to run following Bug-Reaper's ROI-ordered methodology.
+
+DECISION PROCESS:
+Read the recon findings carefully. Then ask yourself:
+  1. "Which vulnerability class has the highest bounty ROI that hasn't been tested?"
+  2. "What evidence in the recon signals this class is likely present?"
+  3. "What is the single best tool to confirm or eliminate it?"
+Select the tool whose findings would have the highest payout if confirmed.
+
+HUNTING ORDER (by bounty ROI):
+Priority 1: IDOR / Access Control — test every resource endpoint
+Priority 2: Auth Bypass / JWT — password reset, alg none, role escalation
+Priority 3: API/GraphQL — BOLA, BFLA, introspection, mass assignment
+Priority 4: SSRF — cloud IMDS, internal services, webhooks
+Priority 5: XSS — reflected, stored, DOM on parameter-bearing URLs
+[Remaining: Biz Logic, CORS, SQLi, NoSQLi, Subdomain Takeover, CSRF,
+ RCE, Prototype Pollution, HTTP Smuggling, SSTI, LFI, XXE, Open Redirect]
+
+{BUGBOUNTY_TOOL_CATALOGUE}
+
+{BUGBOUNTY_STOPPING_RULES}
+
+Return ONLY valid JSON. No markdown, no explanation outside the JSON.
+{{
+  "tool": "<exact tool name from catalogue above>",
+  "arguments": {{ "target": "<url>" }},
+  "reasoning": "<1-3 sentences citing the specific bug bounty priority and recon signal>"
+}}
+"""
+
+def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
+    """
+    Load the relevant Bug-Reaper methodology for the next hunting priority.
+    Injects the .md methodology file into the agent's context so the LLM
+    knows exactly what payloads and techniques to use.
+    """
+    from pathlib import Path
+    
+    # Bug-Reaper's priority-ordered hunting classes with their associated tools
+    PRIORITY_ORDER = [
+        ("idor", ["arjun", "jwt_tool", "web_scanner"],
+         "Test every ?id=, ?user_id=, /api/*/[id] endpoint with two-account swap"),
+        ("auth-bypass", ["jwt_tool", "web_scanner"],
+         "Test password reset reuse, role field in API responses, OAuth state parameter"),
+        ("api-graphql", ["web_scanner", "nuclei"],
+         "Test BOLA, BFLA, introspection, mass assignment on API endpoints"),
+        ("ssrf", ["nuclei", "web_scanner"],
+         "Test URL parameters, webhooks, file fetch, PDF generation endpoints"),
+        ("xss", ["dalfox", "web_scanner"],
+         "Test parameter-bearing URLs, form inputs, JSON reflection points"),
+        ("sqli", ["sqlmap", "nuclei"],
+         "Test login forms, search, filter, sort parameters"),
+        ("subdomain-takeover", ["nuclei"],
+         "Test dangling CNAME records - GitHub Pages, Heroku, AWS S3, etc."),
+        ("cors", ["nuclei", "web_scanner"],
+         "Test Origin reflection with Access-Control-Allow-Credentials"),
+        ("rce", ["commix", "nuclei"],
+         "Test cmd, exec, ping, system parameters for command injection"),
+        ("ssti", ["nuclei"],
+         "Test template injection with {{7*7}} probes"),
+        ("lfi", ["nuclei", "web_scanner"],
+         "Test ?file=, ?page=, ?template= parameters for path traversal"),
+    ]
+    
+    # Find the first priority class where none of its tools have run yet
+    kb_root = Path(__file__).parent / "bugbounty_knowledge"
+    
+    for vuln_class, tools, quick_win in PRIORITY_ORDER:
+        if not any(t in tried_tools for t in tools):
+            ref_file = kb_root / "vulnerabilities" / f"{vuln_class}.md"
+            if ref_file.exists():
+                try:
+                    content = ref_file.read_text(encoding="utf-8")
+                    # Take first ~2000 chars = confirmation approach + key patterns
+                    summary = content[:2000]
+                    return f"""
+=== BUG BOUNTY HUNTING CONTEXT: {vuln_class.upper()} ===
+{summary}
+
+QUICK WIN: {quick_win}
+"""
+                except Exception:
+                    pass
+    
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # USER PROMPT BUILDER
 # ---------------------------------------------------------------------------
@@ -276,10 +508,18 @@ def build_tool_selection_prompt(
     available_tools: list[dict],
     tried_tools: set,
     observation_history: str,
+    bugbounty_context: str = "",
 ) -> str:
     """
     Build the user prompt for tool selection.
     Passes full tool descriptions so the LLM can make informed decisions.
+
+    Args:
+        recon_context: Recon findings summary
+        available_tools: List of available tool dicts
+        tried_tools: Set of tool names already executed
+        observation_history: Summary of what previous tools found
+        bugbounty_context: Optional Bug-Reaper methodology context for bug bounty mode
     """
     tools_json = json.dumps(
         [
@@ -301,7 +541,7 @@ def build_tool_selection_prompt(
         indent=2,
     )
 
-    return f"""
+    prompt = f"""
 === RECON FINDINGS ===
 {recon_context}
 
@@ -318,6 +558,12 @@ Based on the recon findings above, select the single best next tool.
 Your reasoning must directly cite a specific signal from the recon summary.
 Return JSON only.
 """
+
+    # Inject Bug-Reaper methodology context if available
+    if bugbounty_context:
+        prompt = bugbounty_context + "\n" + prompt
+
+    return prompt
 
 
 def build_observation_summary(tool_name: str, result) -> str:
