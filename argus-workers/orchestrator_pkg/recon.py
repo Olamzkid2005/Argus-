@@ -239,14 +239,20 @@ def execute_recon_tools(
             pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings): name
             for name, cfg in recon_tools.items()
         }
-        for future in as_completed(futures):
-            tool_name, success, parsed_count, error = future.result()
-            if success:
-                success_msg = recon_tools[tool_name]["success_msg"]
-                formatted_msg = success_msg.replace("{{}}", str(parsed_count)) if "{{}}" in success_msg else success_msg
-                _emit(tool_name, formatted_msg, "completed", items=parsed_count)
-            else:
-                _emit(tool_name, f"{tool_name} failed: {error}" if error else f"{tool_name} failed", "failed")
+        try:
+            for future in as_completed(futures, timeout=150):
+                tool_name, success, parsed_count, error = future.result()
+                if success:
+                    success_msg = recon_tools[tool_name]["success_msg"]
+                    formatted_msg = success_msg.replace("{{}}", str(parsed_count)) if "{{}}" in success_msg else success_msg
+                    _emit(tool_name, formatted_msg, "completed", items=parsed_count)
+                else:
+                    _emit(tool_name, f"{tool_name} failed: {error}" if error else f"{tool_name} failed", "failed")
+        except TimeoutError:
+            logger.warning("Recon tool batch timed out after 150s — some tools may not have completed")
+            # Cancel remaining futures
+            for future in futures:
+                future.cancel()
 
     recon_context = summarize_recon_findings(target, all_findings)
     return all_findings, recon_context
