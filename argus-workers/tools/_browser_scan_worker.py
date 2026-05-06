@@ -15,9 +15,11 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
             page.on('console', lambda msg: console_errors.append(msg.text) if msg.type == 'error' else None)
             page.goto(target_url, timeout=30000, wait_until='networkidle')
             for payload in ['<img src=x onerror=alert(1)>', 'javascript:alert(1)']:
-                console_errors = []  # Reset for each payload
+                pre_test_count = len(console_errors)
                 page.goto(f'{target_url}?q={payload}', timeout=10000)
-                if any('alert' in e.lower() for e in console_errors):
+                # Only check errors that appeared AFTER this payload navigation
+                new_errors = console_errors[pre_test_count:]
+                if any('alert' in e.lower() for e in new_errors):
                     findings.append({
                         'type': 'DOM_XSS',
                         'severity': 'HIGH',
