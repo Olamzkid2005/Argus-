@@ -11,6 +11,7 @@ JOB_TYPES = [
     "full_report",
     "asset_discovery",
     "asset_risk_scoring",
+    "bugbounty_report",
 ]
 
 TASK_NAME_MAP: dict[str, str] = {
@@ -23,6 +24,7 @@ TASK_NAME_MAP: dict[str, str] = {
     "full_report": "tasks.report.generate_full_report",
     "asset_discovery": "tasks.asset_discovery.run_asset_discovery",
     "asset_risk_scoring": "tasks.asset_discovery.update_asset_risk_scores",
+    "bugbounty_report": "tasks.bugbounty.generate_bugbounty_report",
 }
 
 

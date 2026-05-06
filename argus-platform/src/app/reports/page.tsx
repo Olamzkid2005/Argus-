@@ -16,6 +16,7 @@ import {
   Share2,
   ShieldCheck,
   Plus,
+  Bug,
 } from "lucide-react";
 import ScannerReveal from "@/components/effects/ScannerReveal";
 
@@ -148,6 +149,11 @@ export default function ReportsPage() {
     }
   };
 
+  const handleBugBountyExport = async () => {
+    // Open a dialog or navigate to bug bounty report page
+    router.push("/reports/bugbounty");
+  };
+
   const filtered = useMemo(() => {
     return reports.filter((r) => {
       const matchesSearch =
@@ -235,6 +241,14 @@ export default function ReportsPage() {
           >
             <ShieldCheck size={14} />
             Compliance
+          </button>
+
+          <button
+            onClick={handleBugBountyExport}
+            className="flex items-center gap-2 px-5 py-2.5 border border-amber-500/30 text-amber-500 font-bold text-xs tracking-widest uppercase hover:bg-amber-500/10 transition-all duration-300 rounded-lg"
+          >
+            <Bug size={14} />
+            Bug Bounty
           </button>
         </div>
       </motion.div>
