@@ -37,6 +37,27 @@ class ReconContext:
     dependency_vulns_count: int = 0
     repo_clone_success: bool = False
 
+    def to_llm_structured(self) -> str:
+        """Return structured recon data as JSON for LLM tool selection."""
+        import json
+
+        return json.dumps(
+            {
+                "target": self.target_url,
+                "live_endpoints_count": len(self.live_endpoints),
+                "parameter_bearing_urls": (self.parameter_bearing_urls or [])[:10],
+                "auth_endpoints": (self.auth_endpoints or [])[:5],
+                "api_endpoints": (self.api_endpoints or [])[:5],
+                "open_ports": [p.get("port") for p in (self.open_ports or [])[:5]],
+                "tech_stack": (self.tech_stack or [])[:10],
+                "has_login_page": self.has_login_page,
+                "has_api": self.has_api,
+                "has_file_upload": self.has_file_upload,
+                "findings_count": self.findings_count,
+            },
+            indent=2,
+        )
+
     def to_llm_summary(self) -> str:
         """Compact text summary for LLM context window. Max ~800 tokens."""
         lines = [

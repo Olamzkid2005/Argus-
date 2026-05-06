@@ -204,14 +204,25 @@ class ReActAgent:
         if not llm_service or not llm_service.is_available():
             return None
 
+        recon_structured = (
+            recon_context.to_llm_structured()
+            if hasattr(recon_context, "to_llm_structured")
+            else "{}"
+        )
         recon_summary = (
             recon_context.to_llm_summary()
             if hasattr(recon_context, "to_llm_summary")
             else str(recon_context)
         )
 
+        recon_section = f"""=== RECON FINDINGS (STRUCTURED) ===
+{recon_structured}
+
+=== RECON SUMMARY (PROSE) ===
+{recon_summary}"""
+
         user_prompt = build_tool_selection_prompt(
-            recon_summary,
+            recon_section,
             self.registry.list_tools(),
             tried_tools,
             context,  # observation history — now has real content
