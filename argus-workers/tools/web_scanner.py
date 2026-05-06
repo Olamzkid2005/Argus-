@@ -23,7 +23,6 @@ import base64
 import json
 import logging
 import re
-import signal
 import socket
 import time
 from urllib.parse import urljoin, urlparse
@@ -230,64 +229,51 @@ class WebScanner:
 
         logger.info(f"Starting comprehensive web scan: {self.target_url}")
 
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         checks = [
-            ("check_security_headers", self.check_security_headers),
-            ("check_csp", self.check_csp),
-            ("check_cookies", self.check_cookies),
-            ("check_cors", self.check_cors),
-            ("parameter_discovery", self.parameter_discovery),
-            ("parameter_fuzzing", self.parameter_fuzzing),
-            ("check_sensitive_files", self.check_sensitive_files),
-            ("check_js_secrets", self.check_js_secrets),
-            ("check_open_redirects", self.check_open_redirects),
-            ("check_host_header_injection", self.check_host_header_injection),
-            ("check_verb_tampering", self.check_verb_tampering),
-            ("check_debug_endpoints", self.check_debug_endpoints),
-            ("check_auth_endpoints", self.check_auth_endpoints),
-            ("check_mass_assignment", self.check_mass_assignment),
-            ("check_xss", self.check_xss),
-            ("check_ssti", self.check_ssti),
-            ("check_lfi", self.check_lfi),
-            ("check_xxe", self.check_xxe),
-            ("check_graphql_introspection", self.check_graphql_introspection),
-            ("check_jwt_algorithm_confusion", self.check_jwt_algorithm_confusion),
-            ("check_prototype_pollution", self.check_prototype_pollution),
-            ("check_cache_poisoning", self.check_cache_poisoning),
-            ("check_http_request_smuggling", self.check_http_request_smuggling),
-            ("check_dom_xss", self.check_dom_xss),
-            ("check_openapi_discovery", self.check_openapi_discovery),
-            ("differential_analysis", self.differential_analysis),
-            ("detect_waf", self.detect_waf),
-            ("time_based_detection", self.time_based_detection),
-            ("ssl_verify", self.ssl_verify),
-            ("response_analysis", self.response_analysis),
+            self.check_security_headers,
+            self.check_csp,
+            self.check_cookies,
+            self.check_cors,
+            self.parameter_discovery,
+            self.parameter_fuzzing,
+            self.check_sensitive_files,
+            self.check_js_secrets,
+            self.check_open_redirects,
+            self.check_host_header_injection,
+            self.check_verb_tampering,
+            self.check_debug_endpoints,
+            self.check_auth_endpoints,
+            self.check_mass_assignment,
+            self.check_xss,
+            self.check_ssti,
+            self.check_lfi,
+            self.check_xxe,
+            self.check_graphql_introspection,
+            self.check_jwt_algorithm_confusion,
+            self.check_prototype_pollution,
+            self.check_cache_poisoning,
+            self.check_http_request_smuggling,
+            self.check_dom_xss,
+            self.check_openapi_discovery,
+            self.differential_analysis,
+            self.detect_waf,
+            self.time_based_detection,
+            self.ssl_verify,
+            self.response_analysis,
         ]
 
-        SOFT_TIME_LIMIT = 120
-
-        class _SoftTimeLimitExceeded(Exception):
-            pass
-
-        def _timeout_handler(signum, frame):
-            raise _SoftTimeLimitExceeded()
-
-        signal.signal(signal.SIGALRM, _timeout_handler)
-
-        for name, method in checks:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = {pool.submit(check): check.__name__ for check in checks}
             try:
-                signal.alarm(0)
-                signal.alarm(SOFT_TIME_LIMIT)
-                try:
-                    method()
-                except _SoftTimeLimitExceeded:
-                    logger.warning(f"{name} exceeded {SOFT_TIME_LIMIT}s soft time limit")
-                except Exception as e:
-                    logger.error(f"{name} failed (non-fatal): {e}", exc_info=True)
-                finally:
-                    signal.alarm(0)
-            except Exception as e:
-                logger.error(f"{name} failed (non-fatal): {e}", exc_info=True)
-                signal.alarm(0)
+                for future in as_completed(futures, timeout=120):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logger.warning(f'{futures[future]} failed: {e}')
+            except TimeoutError:
+                logger.warning("WebScanner check batch timed out")
 
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings

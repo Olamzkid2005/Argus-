@@ -5,6 +5,7 @@ Scan execution logic extracted from Orchestrator.
 import ipaddress
 import logging
 import socket
+import sys
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -271,22 +272,31 @@ def execute_scan_tools(
         except Exception as e:
             logger.warning(f"WebScanner failed for {target}: {e}")
 
-        # Browser-based SPA scanner (optional, triggered by tech_stack)
+        # Browser-based SPA scanner (subprocess approach to avoid event loop conflicts)
         if tech_stack:
             try:
-                from tools.browser_scanner import is_spa_target, scan as browser_scan
-                if is_spa_target(tech_stack):
-                    emit_tool_start(ctx.engagement_id, "browser_scanner", [target])
-                    logger.info(f"SPA detected — running browser scanner for {target}")
-                    browser_findings = browser_scan(target)
-                    for bf in browser_findings:
-                        normalized = ctx._normalize_finding(bf, "browser_scanner")
-                        if normalized:
-                            all_findings.append(normalized)
+                from pathlib import Path
+                import subprocess
+                worker_script = Path(__file__).parent.parent / 'tools' / '_browser_scan_worker.py'
+                if worker_script.exists():
+                    SPA_TECHS = ['react', 'vue', 'angular', 'next', 'nuxt', 'svelte', 'gatsby']
+                    if any(t.lower() in ' '.join(tech_stack).lower() for t in SPA_TECHS):
+                        emit_tool_start(ctx.engagement_id, "browser_scanner", [target])
+                        logger.info(f"SPA detected — running browser scanner for {target}")
+                        result = subprocess.run(
+                            [sys.executable, str(worker_script), target, json.dumps(tech_stack)],
+                            capture_output=True, text=True, timeout=120
+                        )
+                        if result.returncode == 0 and result.stdout.strip():
+                            browser_findings = json.loads(result.stdout)
+                            for bf in browser_findings:
+                                normalized = ctx._normalize_finding(bf, "browser_scanner")
+                                if normalized:
+                                    all_findings.append(normalized)
                 else:
-                    logger.debug(f"No SPA framework in tech_stack, skipping browser scanner")
-            except ImportError:
-                logger.debug("Playwright not available, skipping browser scanner")
+                    logger.debug("Browser scanner worker not found, skipping")
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Browser scanner timed out for {target}")
             except Exception as e:
                 logger.warning(f"Browser scanner failed for {target}: {e}")
 
