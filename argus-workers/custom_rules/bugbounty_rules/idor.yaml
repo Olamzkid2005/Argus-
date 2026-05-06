@@ -1,0 +1,47 @@
+# IDOR/BOLA Rules — From Bug-Reaper IDOR Methodology
+# Priority 1 in bug bounty ROI — Two-account test is gold standard
+rules:
+  - id: br_idor_predictable_id
+    message: "Endpoint uses sequential/predictable resource IDs in URL parameter"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-639
+    tags: ["idor", "access-control", "bugbounty", "bola"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(\\?|&)(id|user_id|account_id|order_id|invoice_id|customer_id|file_id|report_id|message_id|payment_id|transaction_id|resource_id|doc_id|ref_id)=\\d+"
+      - regex: "(?i)/(users|accounts|orders|invoices|customers|payments|transactions|files|messages|documents|reports)/(\\d+)(/|$)"
+    metadata:
+      category: access-control
+      confidence: 0.65
+      detection_method: "Two-account test: Resource ID from Account A accessed via Account B's session"
+
+  - id: br_idor_uuid_ref
+    message: "UUID/GUID resource reference without confirmed authorization — UUIDs prevent enumeration but do NOT enforce access control"
+    severity: MEDIUM
+    source: bugbounty
+    cwe: CWE-639
+    tags: ["idor", "access-control", "bugbounty", "uuid"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(\\?|&)(id|uuid|guid|token|ref|reference)=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+      - regex: "/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(/|$|\\?)"
+    metadata:
+      category: access-control
+      confidence: 0.50
+      detection_method: "UUID in path/param — share UUID between two accounts, test if accessible"
+
+  - id: br_mass_assignment_role
+    message: "Potential mass assignment — role/admin field present in API request/response body"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-915
+    tags: ["mass-assignment", "access-control", "bugbounty", "privilege-escalation"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)\"(role|isAdmin|is_admin|user_type|account_type|permissions|access_level|privilege_level)\"\\s*:"
+      - regex: "(?i)(role|admin|isAdmin|is_admin|user_type)=[a-zA-Z]+"
+    metadata:
+      category: mass-assignment
+      confidence: 0.70
+      detection_method: "Try adding role: admin to PUT/PATCH request — check if privilege escalation occurs"

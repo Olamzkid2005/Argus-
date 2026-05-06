@@ -1,0 +1,114 @@
+# Subdomain Takeover Rules — From Bug-Reaper Subdomain Takeover Methodology
+# Priority 10 in bug bounty ROI (but chains to Critical via CORS/OAuth)
+rules:
+  - id: br_takeover_github_pages
+    message: "Potential GitHub Pages subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "github-pages", "bugbounty", "dns"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)There isn't a GitHub Pages site here"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.80
+      detection_method: "Create GitHub Pages repo matching the CNAME — claim the subdomain"
+
+  - id: br_takeover_heroku
+    message: "Potential Heroku subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "heroku", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)No such app"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.80
+      detection_method: "heroku create <appname> matching the CNAME"
+
+  - id: br_takeover_aws_s3
+    message: "Potential AWS S3 bucket subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "aws-s3", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(NoSuchBucket|The specified bucket does not exist)"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.80
+      detection_method: "aws s3api create-bucket --bucket <name> matching CNAME"
+
+  - id: br_takeover_azure
+    message: "Potential Azure subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "azure", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)404 Web Site not found"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.75
+      detection_method: "Create Azure Web App with custom domain matching CNAME"
+
+  - id: br_takeover_netlify
+    message: "Potential Netlify subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "netlify", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)Not Found - Request ID:"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.75
+      detection_method: "Add custom domain to new Netlify site matching CNAME"
+
+  - id: br_takeover_vercel
+    message: "Potential Vercel subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "vercel", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)The deployment could not be found"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.75
+      detection_method: "Deploy matching project on Vercel with the custom domain"
+
+  - id: br_takeover_fastly
+    message: "Potential Fastly subdomain takeover — matching service fingerprint"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "fastly", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)Fastly error: unknown domain"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.70
+      detection_method: "Create Fastly service with matching domain"
+
+  - id: br_takeover_shopify
+    message: "Potential Shopify subdomain takeover — matching service fingerprint"
+    severity: MEDIUM
+    source: bugbounty
+    cwe: CWE-350
+    tags: ["subdomain-takeover", "shopify", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)Sorry, this shop is currently unavailable"
+    metadata:
+      category: subdomain-takeover
+      confidence: 0.70
+      detection_method: "Create Shopify store matching the subdomain name"
