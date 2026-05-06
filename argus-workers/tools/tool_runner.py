@@ -6,6 +6,7 @@ Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 20.4, 21.1, 21.2, 22.1
 
 import logging
 import os
+import select
 import site
 import subprocess
 import sys
@@ -452,6 +453,67 @@ class ToolRunner:
                     error=str(e),
                     trace_id=get_trace_id(),
                 )
+
+    def run_streaming(
+        self, tool: str, args: list[str], timeout: int, on_line: callable
+    ) -> ToolResult:
+        """Stream tool output line by line, calling on_line() for each."""
+        tool_path = self._resolve_tool_path(tool)
+        env = self._locked_env(tool)
+
+        proc = subprocess.Popen(
+            [tool_path] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(self.sandbox_dir),
+            env=env,
+        )
+
+        stdout_lines = []
+        start = time.time()
+
+        try:
+            while proc.poll() is None:
+                if time.time() - start > timeout:
+                    proc.kill()
+                    break
+
+                ready, _, _ = select.select([proc.stdout], [], [], 0.1)
+                if ready:
+                    line = proc.stdout.readline()
+                    if line:
+                        stdout_lines.append(line)
+                        try:
+                            on_line(line.rstrip("\n\r"))
+                        except Exception:
+                            pass
+
+            remaining, _ = proc.communicate(timeout=5)
+            if remaining:
+                for line in remaining.splitlines(keepends=True):
+                    stdout_lines.append(line)
+                    try:
+                        on_line(line.rstrip("\n\r"))
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            logger.warning("Streaming error for %s: %s", tool, e)
+            proc.kill()
+
+        stdout = "".join(stdout_lines)
+        returncode = proc.returncode if proc.returncode is not None else -1
+        return ToolResult(
+            stdout=stdout,
+            stderr="",
+            returncode=returncode,
+            tool=tool,
+            success=returncode == 0,
+            duration_ms=int((time.time() - start) * 1000),
+            timeout=time.time() - start > timeout,
+            trace_id=get_trace_id(),
+        )
 
     def run_nuclei(
         self,

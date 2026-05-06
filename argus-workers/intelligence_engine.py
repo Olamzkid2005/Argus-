@@ -10,6 +10,7 @@ import logging
 import os
 import re
 from collections import defaultdict
+from urllib.parse import urlparse
 
 import httpx
 
@@ -95,44 +96,38 @@ class IntelligenceEngine:
         Returns:
             Findings with updated confidence scores
         """
-        # Group findings by endpoint and type to detect tool agreement
-        finding_groups = defaultdict(list)
-
-        for finding in findings:
-            key = (finding.get("endpoint"), finding.get("type"))
-            finding_groups[key].append(finding)
+        # Group findings by normalized vulnerability family for tool agreement
+        finding_groups = self._group_findings_for_agreement(findings)
 
         scored_findings = []
 
-        for finding in findings:
-            key = (finding.get("endpoint"), finding.get("type"))
-            group = finding_groups[key]
-
-            # Calculate tool agreement
+        for group in finding_groups.values():
+            # Calculate tool agreement once per group
             tool_agreement = self._calculate_tool_agreement(group)
 
-            # Get evidence strength
-            evidence_strength = self._get_evidence_strength(finding)
+            for finding in group:
+                # Get evidence strength
+                evidence_strength = self._get_evidence_strength(finding)
 
-            # Get FP likelihood
-            fp_likelihood = finding.get("fp_likelihood", 0.2)
-            if fp_likelihood is None:
-                fp_likelihood = 0.2
-            try:
-                fp_likelihood = float(fp_likelihood)
-            except (TypeError, ValueError):
-                fp_likelihood = 0.2
+                # Get FP likelihood
+                fp_likelihood = finding.get("fp_likelihood", 0.2)
+                if fp_likelihood is None:
+                    fp_likelihood = 0.2
+                try:
+                    fp_likelihood = float(fp_likelihood)
+                except (TypeError, ValueError):
+                    fp_likelihood = 0.2
 
-            # Calculate confidence
-            confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
-            confidence = max(0.0, min(1.0, confidence))
+                # Calculate confidence
+                confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
+                confidence = max(0.0, min(1.0, confidence))
 
-            # Update finding
-            scored_finding = finding.copy()
-            scored_finding["confidence"] = confidence
-            scored_finding["tool_agreement_level"] = self._get_agreement_level(len(group))
+                # Update finding
+                scored_finding = finding.copy()
+                scored_finding["confidence"] = confidence
+                scored_finding["tool_agreement_level"] = self._get_agreement_level(len(group))
 
-            scored_findings.append(scored_finding)
+                scored_findings.append(scored_finding)
 
         return scored_findings
 
@@ -185,6 +180,36 @@ class IntelligenceEngine:
         }
 
         return scores.get(evidence_strength, 0.6)
+
+    def _group_findings_for_agreement(self, findings: list[dict]) -> dict:
+        """Group findings that represent the same vulnerability family for tool agreement."""
+        TYPE_FAMILIES = {
+            "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS"],
+            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "ERROR_SQLI"],
+            "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
+            "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
+            "SSRF": ["SSRF", "OPEN_REDIRECT"],
+            "INFO": ["INFO", "INFORMATION_DISCLOSURE", "DIRECTORY_LISTING"],
+        }
+
+        groups = {}
+        for finding in findings:
+            parsed = urlparse(finding.get("endpoint", ""))
+            normalized_endpoint = f"{parsed.netloc}{parsed.path}"
+
+            finding_type = finding.get("type", "").upper()
+            normalized_type = finding_type
+            for family, members in TYPE_FAMILIES.items():
+                if normalized_type in members:
+                    normalized_type = family
+                    break
+
+            key = f"{normalized_type}:{normalized_endpoint}"
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(finding)
+
+        return groups
 
     def generate_actions(self, scored_findings: list[dict], context: dict) -> list[dict]:
         """

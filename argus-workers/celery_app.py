@@ -123,7 +123,8 @@ app.conf.update(
     result_extended=True,  # Store additional metadata
     result_compression="gzip",  # Compress results
     # Worker Configuration - Optimization
-    worker_prefetch_multiplier=1,  # Fetch one task at a time
+    worker_concurrency=int(os.getenv("CELERY_CONCURRENCY", "8")),  # Concurrent tasks
+    worker_prefetch_multiplier=1,  # Don't pre-fetch — each task is long
     worker_max_tasks_per_child=100,  # Restart worker after 100 tasks
     worker_disable_rate_limits=False,
     worker_send_task_events=True,  # Enable task events
