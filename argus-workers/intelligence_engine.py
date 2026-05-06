@@ -122,10 +122,20 @@ class IntelligenceEngine:
                 confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
                 confidence = max(0.0, min(1.0, confidence))
 
+                # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings
+                # Findings from bug bounty rules (requires_validation: true) remain "Theoretical"
+                # until validated — they should not be treated as high-confidence automatically
+                if finding.get("requires_validation") and finding.get("source") == "bugbounty":
+                    confidence = min(confidence, 0.70)
+
                 # Update finding
                 scored_finding = finding.copy()
                 scored_finding["confidence"] = confidence
                 scored_finding["tool_agreement_level"] = self._get_agreement_level(len(group))
+
+                # Propagate Bug-Reaper validation flag
+                if finding.get("requires_validation"):
+                    scored_finding["needs_validation"] = True
 
                 scored_findings.append(scored_finding)
 
