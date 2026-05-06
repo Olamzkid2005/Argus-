@@ -136,8 +136,12 @@ def execute_recon_tools(
         60 if agg == "default" else 90 if agg == "high" else 120
     )
 
-    def _run_recon_tool(ctx, tool_name, args, timeout, all_findings):
+    def _run_recon_tool(ctx, tool_name, args, timeout, all_findings, start_msg=None):
         try:
+            # Emit start event when tool actually begins (not before pool submits)
+            if start_msg:
+                _emit(tool_name, start_msg, "started")
+            emit_tool_start(ctx.engagement_id, tool_name, args)
             result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
             parsed_count = 0
             if result and result.success:
@@ -230,13 +234,9 @@ def execute_recon_tools(
         },
     }
 
-    for name, cfg in recon_tools.items():
-        _emit(name, cfg["start_msg"], "started")
-        emit_tool_start(ctx.engagement_id, name, cfg["args"])
-
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {
-            pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings): name
+            pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings, cfg.get("start_msg")): name
             for name, cfg in recon_tools.items()
         }
         try:
