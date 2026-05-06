@@ -169,7 +169,7 @@ def execute_scan_tools(
         # Phase 2: all vulnerability scanners run simultaneously
         scan_jobs = []
 
-        # Build nuclei command
+        # Build and run nuclei command with streaming (real-time findings)
         if "nuclei" not in _skip:
             nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
             if templates_exist:
@@ -182,7 +182,25 @@ def execute_scan_tools(
                 nuclei_timeout = 600
             elif agg == "extreme":
                 nuclei_timeout = 1200
-            scan_jobs.append(("nuclei", nuclei_cmd, nuclei_timeout))
+
+            def _on_nuclei_line(line: str):
+                """Callback for streaming nuclei output."""
+                try:
+                    finding = json.loads(line)
+                    from parsers.schemas.nuclei_schema import validate_nuclei_finding
+                    validated = validate_nuclei_finding(finding)
+                    if validated:
+                        normalized = ctx._normalize_finding(validated, "nuclei")
+                        if normalized:
+                            all_findings.append(normalized)
+                except Exception:
+                    pass
+
+            try:
+                emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
+                ctx.tool_runner.run_streaming("nuclei", nuclei_cmd, nuclei_timeout, _on_nuclei_line)
+            except Exception as e:
+                logger.warning(f"nuclei streaming failed for {target}: {e}")
 
         # Build dalfox command
         if "dalfox" not in _skip:
