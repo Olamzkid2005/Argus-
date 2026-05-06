@@ -38,19 +38,19 @@ class CustomRuleEngine:
             self._load_rules()
 
     def _load_rules(self):
-        """Load all YAML rule files from rules directory."""
+        """Load all YAML rule files from rules directory (recursive)."""
         if not self.rules_dir:
             return
 
-        for rule_file in self.rules_dir.glob("*.yml"):
+        for rule_file in self.rules_dir.rglob("*.yml"):
             try:
                 rule_data = yaml.safe_load(rule_file.read_text())
                 if isinstance(rule_data, dict) and "rules" in rule_data:
                     for rule in rule_data["rules"]:
-                        rule["_source_file"] = str(rule_file.name)
+                        rule["_source_file"] = str(rule_file.relative_to(self.rules_dir))
                         self.rules.append(rule)
                 elif isinstance(rule_data, dict) and "id" in rule_data:
-                    rule_data["_source_file"] = str(rule_file.name)
+                    rule_data["_source_file"] = str(rule_file.relative_to(self.rules_dir))
                     self.rules.append(rule_data)
             except Exception as e:
                 raise CustomRuleError(f"Failed to load rule {rule_file}: {e}") from e
@@ -76,26 +76,38 @@ class CustomRuleEngine:
             try:
                 matches = self._match_rule(rule, content)
                 for match in matches:
-                    findings.append(
-                        {
-                            "type": rule.get("id", "CUSTOM_RULE"),
-                            "severity": rule.get("severity", "INFO").upper(),
-                            "endpoint": source_path,
-                            "evidence": {
-                                "message": rule.get("message", ""),
-                                "matched_text": match.get("matched", "")[:200],
-                                "line": match.get("line", 0),
-                                "rule_id": rule.get("id", ""),
-                                "category": rule.get("metadata", {}).get(
-                                    "category", "custom"
-                                ),
-                            },
-                            "confidence": rule.get("metadata", {}).get(
-                                "confidence", 0.80
+                    finding = {
+                        "type": rule.get("id", "CUSTOM_RULE"),
+                        "severity": rule.get("severity", "INFO").upper(),
+                        "endpoint": source_path,
+                        "evidence": {
+                            "message": rule.get("message", ""),
+                            "matched_text": match.get("matched", "")[:200],
+                            "line": match.get("line", 0),
+                            "rule_id": rule.get("id", ""),
+                            "category": rule.get("metadata", {}).get(
+                                "category", "custom"
                             ),
-                            "tool": "custom_rule_engine",
-                        }
-                    )
+                        },
+                        "confidence": rule.get("metadata", {}).get(
+                            "confidence", 0.80
+                        ),
+                        "tool": "custom_rule_engine",
+                    }
+                    # Bug-Reaper integration fields
+                    source = rule.get("source")
+                    if source:
+                        finding["source"] = source
+                    cwe = rule.get("cwe")
+                    if cwe:
+                        finding["cwe"] = cwe
+                    tags = rule.get("tags")
+                    if tags:
+                        finding["tags"] = tags
+                    requires_val = rule.get("requires_validation", False)
+                    if requires_val:
+                        finding["requires_validation"] = True
+                    findings.append(finding)
             except Exception as e:
                 raise CustomRuleError(
                     f"Rule {rule.get('id', 'unknown')} failed: {e}"
