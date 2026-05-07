@@ -14,6 +14,7 @@ import {
   Trash2,
   Target,
   ShieldAlert,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { WebSocketEvent } from "@/lib/websocket-events";
@@ -269,7 +270,7 @@ export default function FindingsPanel({
                                 {rescannings.has(eng.id) ? (
                                   <Loader2 size={14} className="animate-spin" />
                                 ) : (
-                                  <Loader2 size={14} />
+                                  <RefreshCw size={14} />
                                 )}
                               </button>
                               <button

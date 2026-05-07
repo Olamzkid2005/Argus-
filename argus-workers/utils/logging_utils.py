@@ -26,7 +26,7 @@ SECRET_PATTERNS = {
     'jwt': re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'),
 
     # Private keys
-    'private_key': re.compile(r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----'),
+    'private_key': re.compile(r'-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+|ENCRYPTED\s+)?PRIVATE\s+KEY-----'),
 
     # Database URLs
     'db_url': re.compile(r'(?i)(database[_-]?url|db[_-]?url|connection[_-]?string["\']?\s*[:=]\s*["\']?)((?:mysql|postgres|postgresql|mongodb)://[^\s"\'<>]+)'),

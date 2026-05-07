@@ -64,7 +64,7 @@ def dispatch_task(task_name: str, args: list, task_id: str = None) -> dict:
     logger.info(f"Dispatching task {task_name} with args {args}")
 
     # Ensure the correct Python path is used by setting environment
-    os.environ["PYTHONPATH"] = PROJECT_ROOT
+    os.environ["PYTHONPATH"] = f"{PROJECT_ROOT}:{os.environ.get('PYTHONPATH', '')}"
 
     # Make sure DATABASE_URL is set
     if not os.getenv("DATABASE_URL"):

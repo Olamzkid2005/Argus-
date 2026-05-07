@@ -78,6 +78,7 @@ const severityConfig = {
 };
 
 function EvidenceBlock({ data }: { data: any }) {
+  if (data == null) return null;
   const [copied, setCopied] = useState(false);
   const code = typeof data === "string" ? data : JSON.stringify(data, null, 2);
   const handleCopy = () => {
@@ -612,7 +613,9 @@ export default function FindingsPage() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `findings-export-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       showToast("success", `Exported ${selectedFindings.size} findings`);
     } catch (err) {

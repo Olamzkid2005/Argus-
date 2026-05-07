@@ -175,7 +175,7 @@ class EngagementStateMachine:
 
         except Exception as e:
             conn.rollback()
-            print(f"Failed to persist state transition: {e}")
+            logger.error(f"Failed to persist state transition: {e}")
             raise
         finally:
             if not self._external_conn:

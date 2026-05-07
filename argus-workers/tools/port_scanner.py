@@ -156,8 +156,23 @@ class PortScanner:
                 logger.warning("naabu exited with code %d: %s", naabu_proc.returncode, naabu_proc.stderr.strip())
             live_ports = self._parse_naabu_ports(naabu_proc.stdout)
             logger.info("naabu found %d live ports", len(live_ports))
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             logger.warning("naabu timed out after %ds", self.NAABU_TIMEOUT)
+            # Parse any partial results from naabu's stdout captured before timeout
+            if e.stdout:
+                live_ports = self._parse_naabu_ports(e.stdout)
+                logger.info("naabu partial results: %d live ports", len(live_ports))
+            # Return early with partial results instead of continuing to nmap
+            for p in live_ports:
+                op = OpenPort(
+                    port=p.get("port", 0),
+                    protocol=p.get("protocol", "tcp"),
+                    state="open",
+                )
+                result.open_ports.append(op)
+                result.service_map[op.port] = op
+            result.scan_duration = time.time() - start
+            return result
         except FileNotFoundError:
             logger.warning("naabu binary not found")
             return result

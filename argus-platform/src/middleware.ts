@@ -51,7 +51,6 @@ export async function middleware(request: NextRequest) {
   // API Version headers
   const path = request.nextUrl.pathname;
   if (path.startsWith("/api/")) {
-    log.api(request.method, path, { query: request.nextUrl.search });
     // Add default rate limit headers to all API responses
     response.headers.set("X-RateLimit-Limit", "100");
     response.headers.set("X-RateLimit-Window", "60s");
@@ -184,6 +183,9 @@ export async function middleware(request: NextRequest) {
         // Rate limiting failed, continue without it
       }
     }
+
+    // Log API request after rate limiting (don't log rate-limited requests)
+    log.api(request.method, path, { query: request.nextUrl.search });
 
     // Audit log sensitive operations
     const sensitivePaths = [
