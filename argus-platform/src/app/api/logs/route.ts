@@ -26,6 +26,8 @@ export async function GET(req: Request) {
     const client = await pool.connect();
 
     try {
+      const orgId = (session.user as { orgId?: string }).orgId;
+
       // Build query
       let query = `
         SELECT 
@@ -38,10 +40,12 @@ export async function GET(req: Request) {
           el.metadata,
           el.created_at
         FROM execution_logs el
-        WHERE el.trace_id IS NOT NULL
+        JOIN engagements e ON e.id = el.engagement_id
+        WHERE e.org_id = $1
+          AND el.trace_id IS NOT NULL
       `;
-      const params: unknown[] = [];
-      let paramIndex = 1;
+      const params: unknown[] = [orgId];
+      let paramIndex = 2;
 
       if (level) {
         query += ` AND el.log_level = $${paramIndex}`;

@@ -419,7 +419,7 @@ class PipelineExecutor:
 
         try:
             self._emit(engagement_id, tool, "Fetching known URLs (gau)", "started", domain)
-            result = self._run_tool(tool, [target, "--json"])
+            result = self._run_tool(tool, ["--json", target])
             findings = self._parse_and_normalize(result, tool)
             count = len(findings)
             self._emit(engagement_id, tool, "Passive URL discovery complete", "completed", domain, count)
@@ -454,7 +454,7 @@ class PipelineExecutor:
 
         try:
             self._emit(engagement_id, tool, "Scanning for vulnerabilities", "started", domain)
-            cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
+            cmd = ["-u", target, "-jsonl", "-", "-silent"]
             timeout = 600
             if agg == "high":
                 cmd.extend(["-severity", "low,medium,high,critical"])

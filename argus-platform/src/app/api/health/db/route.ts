@@ -1,5 +1,6 @@
 // Database health check endpoint
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import { pool, getPoolStats } from "@/lib/db";
 import { log } from "@/lib/logger";
 
@@ -9,6 +10,7 @@ import { log } from "@/lib/logger";
  * Returns database health status
  */
 export async function GET() {
+  await requireAuth();
   log.api('GET', '/api/health/db');
   const startTime = Date.now();
   const checks: Record<string, unknown> = {};
@@ -16,22 +18,23 @@ export async function GET() {
   try {
     // 1. Check connection
     const client = await pool.connect();
-    checks.connection = "ok";
+    try {
+      checks.connection = "ok";
+      
+      // 2. Run simple query
+      const queryStart = Date.now();
+      await client.query("SELECT 1");
+      checks.query_time_ms = Date.now() - queryStart;
+      
+      // 3. Check pool stats
+      const poolStats = getPoolStats();
+      checks.pool = poolStats;
+      checks.pool_healthy = poolStats.waitingCount < 5;
+    } finally {
+      client.release();
+    }
     
-    // 2. Run simple query
-    const queryStart = Date.now();
-    await client.query("SELECT 1");
-    checks.query_time_ms = Date.now() - queryStart;
-    
-    // 3. Check pool stats
-    const poolStats = getPoolStats();
-    checks.pool = poolStats;
-    checks.pool_healthy = poolStats.waitingCount < 5;
-    
-    // 4. Release connection
-    client.release();
-    
-    // 5. Check for long-running queries
+    // 4. Check for long-running queries
     const longRunning = await pool.query(`
       SELECT pid, now() - pg_stat_activity.query_start as duration, query
       FROM pg_stat_activity 

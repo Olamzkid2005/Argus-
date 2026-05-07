@@ -120,7 +120,7 @@ module.exports = {
         md: "0.125rem",
         sm: "0.125rem",
         xs: "0.125rem",
-        full: "0.75rem",
+        full: "9999px",
       },
       boxShadow: {
         xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",

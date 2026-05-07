@@ -1,5 +1,6 @@
 // Threat intelligence enrichment endpoint
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import { log } from "@/lib/logger";
 
 interface EnrichmentRequest {
@@ -20,6 +21,7 @@ interface Finding {
  * Mock data — in production, proxy to Python backend enrichment service.
  */
 export async function POST(req: Request) {
+  await requireAuth();
   log.api("POST", "/api/system/enrichment");
   try {
     const body: EnrichmentRequest = await req.json();

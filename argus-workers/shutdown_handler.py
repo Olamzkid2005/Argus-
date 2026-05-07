@@ -9,6 +9,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,8 @@ class GracefulShutdownHandler:
         self.shutdown_requested = False
         self.original_sigterm_handler: signal.Handler | None = None
         self.original_sigint_handler: signal.Handler | None = None
-        self.active_tasks = set()  # Track active task IDs
+        self.active_tasks: set = set()  # Track active task IDs
+        self._lock = threading.Lock()
         self.shutdown_deadline = None
         self.force_exit_after = int(os.getenv("WORKER_SHUTDOWN_TIMEOUT", "30"))  # seconds
 
@@ -50,8 +52,10 @@ class GracefulShutdownHandler:
             logger.info("Notifying Celery of shutdown")
 
         # Log active tasks
-        if self.active_tasks:
-            logger.info(f"Waiting for {len(self.active_tasks)} active tasks to complete")
+        with self._lock:
+            active_count = len(self.active_tasks)
+        if active_count:
+            logger.info(f"Waiting for {active_count} active tasks to complete")
 
     def should_shutdown(self) -> bool:
         """Check if shutdown was requested"""
@@ -64,7 +68,9 @@ class GracefulShutdownHandler:
                 return True
 
         # Allow shutdown if no active tasks
-        if not self.active_tasks:
+        with self._lock:
+            has_active = bool(self.active_tasks)
+        if not has_active:
             return True
 
         return True  # Signal shutdown is requested, task should check and finish quickly
@@ -75,11 +81,13 @@ class GracefulShutdownHandler:
 
     def register_task(self, task_id: str):
         """Register an active task"""
-        self.active_tasks.add(task_id)
+        with self._lock:
+            self.active_tasks.add(task_id)
 
     def unregister_task(self, task_id: str):
         """Unregister a completed task"""
-        self.active_tasks.discard(task_id)
+        with self._lock:
+            self.active_tasks.discard(task_id)
 
     def restore(self):
         """Restore original signal handlers"""

@@ -1,5 +1,6 @@
 // Circuit breaker status endpoint
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import { log } from "@/lib/logger";
 
 interface CircuitBreakerTool {
@@ -17,6 +18,7 @@ interface CircuitBreakerTool {
  * Mock data — in production, proxy to Python backend's tools/circuit_breaker.py get_status().
  */
 export async function GET() {
+  await requireAuth();
   log.api("GET", "/api/system/circuit-breaker");
   try {
     const tools: CircuitBreakerTool[] = [

@@ -36,10 +36,12 @@ class CheckpointManager:
         Returns:
             Checkpoint ID
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor()
             checkpoint_id = str(uuid.uuid4())
 
             cursor.execute(
@@ -58,11 +60,14 @@ class CheckpointManager:
             return checkpoint_id
 
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise Exception(f"Failed to save checkpoint: {e}") from e
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def load_checkpoint(self, engagement_id: str) -> dict | None:
         """
@@ -74,10 +79,12 @@ class CheckpointManager:
         Returns:
             Checkpoint data or None if no checkpoint exists
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
                 SELECT id, engagement_id, phase, data, created_at
@@ -97,8 +104,10 @@ class CheckpointManager:
             return None
 
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def has_checkpoint(self, engagement_id: str) -> bool:
         """
@@ -110,10 +119,12 @@ class CheckpointManager:
         Returns:
             True if checkpoint exists
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM checkpoints
@@ -126,8 +137,10 @@ class CheckpointManager:
             return count > 0
 
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def list_checkpoints(self, engagement_id: str) -> list[dict]:
         """
@@ -139,10 +152,12 @@ class CheckpointManager:
         Returns:
             List of checkpoint metadata
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
                 SELECT id, engagement_id, phase, created_at
@@ -156,8 +171,10 @@ class CheckpointManager:
             return [dict(row) for row in cursor.fetchall()]
 
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def delete_checkpoints(self, engagement_id: str):
         """
@@ -166,10 +183,12 @@ class CheckpointManager:
         Args:
             engagement_id: Engagement ID
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor()
             cursor.execute(
                 """
                 DELETE FROM checkpoints
@@ -181,11 +200,14 @@ class CheckpointManager:
             conn.commit()
 
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise Exception(f"Failed to delete checkpoints: {e}") from e
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def resume_from_checkpoint(self, engagement_id: str) -> dict | None:
         """
@@ -264,10 +286,12 @@ class CheckpointManager:
         Returns:
             Number of checkpoints deleted
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor()
             cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
 
             cursor.execute(
@@ -282,11 +306,14 @@ class CheckpointManager:
             return cursor.rowcount
 
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise Exception(f"Failed to cleanup checkpoints: {e}") from e
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
 
 class CheckpointContext:

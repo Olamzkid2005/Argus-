@@ -51,3 +51,1159 @@
 [2026-05-03 20:42:15,272: INFO/MainProcess] mingle: searching for neighbors
 [2026-05-03 20:42:16,291: INFO/MainProcess] mingle: all alone
 [2026-05-03 20:42:16,403: INFO/MainProcess] celery@MacBook-Air.local ready.
+[2026-05-03 20:54:55,684: INFO/MainProcess] Task tasks.recon.run_recon[7a64a86c-4393-433d-b03b-bc9e7c825ef0] received
+[2026-05-03 20:54:56,700: WARNING/ForkPoolWorker-2] [91ff48aa] job_started: Job started: recon
+[2026-05-03 20:54:56,713: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-03 20:54:56,719: INFO/ForkPoolWorker-2] Loaded tool definition: alterx
+[2026-05-03 20:54:56,724: INFO/ForkPoolWorker-2] Loaded tool definition: arjun
+[2026-05-03 20:54:56,727: INFO/ForkPoolWorker-2] Loaded tool definition: katana
+[2026-05-03 20:54:56,732: INFO/ForkPoolWorker-2] Loaded tool definition: semgrep
+[2026-05-03 20:54:56,740: INFO/ForkPoolWorker-2] Loaded tool definition: trivy
+[2026-05-03 20:54:56,742: INFO/ForkPoolWorker-2] Loaded tool definition: sqlmap
+[2026-05-03 20:54:56,747: INFO/ForkPoolWorker-2] Loaded tool definition: amass
+[2026-05-03 20:54:56,752: INFO/ForkPoolWorker-2] Loaded tool definition: ffuf
+[2026-05-03 20:54:56,759: INFO/ForkPoolWorker-2] Loaded tool definition: gau
+[2026-05-03 20:54:56,766: INFO/ForkPoolWorker-2] Loaded tool definition: nuclei
+[2026-05-03 20:54:56,768: INFO/ForkPoolWorker-2] Loaded tool definition: waybackurls
+[2026-05-03 20:54:56,773: INFO/ForkPoolWorker-2] Loaded tool definition: testssl
+[2026-05-03 20:54:56,783: INFO/ForkPoolWorker-2] Loaded tool definition: gospider
+[2026-05-03 20:54:56,789: INFO/ForkPoolWorker-2] Loaded tool definition: naabu
+[2026-05-03 20:54:56,791: INFO/ForkPoolWorker-2] Loaded tool definition: bandit
+[2026-05-03 20:54:56,795: INFO/ForkPoolWorker-2] Loaded tool definition: gitleaks
+[2026-05-03 20:54:56,798: INFO/ForkPoolWorker-2] Loaded tool definition: jwt_tool
+[2026-05-03 20:54:56,809: INFO/ForkPoolWorker-2] Loaded tool definition: nmap
+[2026-05-03 20:54:56,817: INFO/ForkPoolWorker-2] Loaded tool definition: pip-audit
+[2026-05-03 20:54:56,823: INFO/ForkPoolWorker-2] Loaded tool definition: subfinder
+[2026-05-03 20:54:56,826: INFO/ForkPoolWorker-2] Loaded tool definition: wpscan
+[2026-05-03 20:54:56,832: INFO/ForkPoolWorker-2] Loaded tool definition: commix
+[2026-05-03 20:54:56,834: INFO/ForkPoolWorker-2] Loaded tool definition: nikto
+[2026-05-03 20:54:56,840: INFO/ForkPoolWorker-2] Loaded tool definition: dalfox
+[2026-05-03 20:54:56,843: INFO/ForkPoolWorker-2] Loaded tool definition: whatweb
+[2026-05-03 20:54:56,846: INFO/ForkPoolWorker-2] Loaded tool definition: httpx
+[2026-05-03 20:54:56,923: WARNING/ForkPoolWorker-2] [91ff48aa] job_started: Job started: recon
+[2026-05-03 20:54:57,681: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: httpx
+[2026-05-03 20:54:57,700: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 654ms
+[2026-05-03 20:55:17,327: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: katana
+[2026-05-03 20:55:17,383: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 19567ms
+[2026-05-03 20:55:17,427: WARNING/ForkPoolWorker-2] [91ff48aa] parser_completed: Parser completed: katana
+[2026-05-03 20:55:17,447: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN parsing: 44ms
+[2026-05-03 20:56:17,795: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: ffuf
+[2026-05-03 20:56:17,853: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 60250ms
+[2026-05-03 20:56:18,249: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: amass
+[2026-05-03 20:56:18,273: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 349ms
+[2026-05-03 20:56:26,298: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: subfinder
+[2026-05-03 20:56:26,314: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 7968ms
+[2026-05-03 20:56:26,335: WARNING/ForkPoolWorker-2] [91ff48aa] parser_completed: Parser completed: subfinder
+[2026-05-03 20:56:26,353: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN parsing: 21ms
+[2026-05-03 20:56:26,750: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: alterx
+[2026-05-03 20:56:26,767: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 350ms
+[2026-05-03 20:56:36,014: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: naabu
+[2026-05-03 20:56:36,074: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 9196ms
+[2026-05-03 20:56:36,099: WARNING/ForkPoolWorker-2] [91ff48aa] parser_completed: Parser completed: naabu
+[2026-05-03 20:56:36,118: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN parsing: 25ms
+[2026-05-03 20:56:38,157: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: whatweb
+[2026-05-03 20:56:38,174: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 1990ms
+[2026-05-03 20:58:08,509: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: nikto
+[2026-05-03 20:58:08,571: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 90288ms
+[2026-05-03 20:59:08,799: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: gau
+[2026-05-03 20:59:08,815: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 60186ms
+[2026-05-03 20:59:51,627: WARNING/ForkPoolWorker-2] [91ff48aa] tool_executed: Tool executed: waybackurls
+[2026-05-03 20:59:51,686: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN tool_execution: 42722ms
+[2026-05-03 20:59:51,712: WARNING/ForkPoolWorker-2] [91ff48aa] parser_completed: Parser completed: waybackurls
+[2026-05-03 20:59:51,729: WARNING/ForkPoolWorker-2] [91ff48aa] SPAN parsing: 25ms
+[2026-05-03 20:59:51,789: INFO/ForkPoolWorker-2] Database pool initialized (min=2, max=20, pgbouncer_mode=session)
+[2026-05-03 20:59:53,802: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 20:59:54,826: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 20:59:54,838: INFO/ForkPoolWorker-2] Stored embedding for finding 378fbeec-f79d-4296-8f72-34831778b98f
+[2026-05-03 20:59:56,715: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 20:59:58,551: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 20:59:58,556: INFO/ForkPoolWorker-2] Stored embedding for finding a5b60da0-9740-4cde-a08c-521992579f4a
+[2026-05-03 20:59:59,436: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:00,445: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:00,454: INFO/ForkPoolWorker-2] Stored embedding for finding 25f5a859-06b9-45dc-8c21-7e6a168b3d8c
+[2026-05-03 21:00:01,379: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:02,302: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:02,307: INFO/ForkPoolWorker-2] Stored embedding for finding c1586e8f-5281-40db-9050-6b9d2a6a7399
+[2026-05-03 21:00:03,228: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:04,450: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:04,457: INFO/ForkPoolWorker-2] Stored embedding for finding 4bdf1917-786d-45d7-a03f-a15665d20389
+[2026-05-03 21:00:05,348: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:06,235: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:06,240: INFO/ForkPoolWorker-2] Stored embedding for finding 34674bdb-79b7-4ee6-b59e-a6d2bbd537f6
+[2026-05-03 21:00:08,245: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:09,697: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:09,702: INFO/ForkPoolWorker-2] Stored embedding for finding e2cdbaf3-1144-4be7-b8b7-2674352c5edc
+[2026-05-03 21:00:11,124: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:12,233: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:12,240: INFO/ForkPoolWorker-2] Stored embedding for finding c9b0b5d1-1c09-48cd-8baa-c9bae52dae16
+[2026-05-03 21:00:13,202: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:14,070: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:14,075: INFO/ForkPoolWorker-2] Stored embedding for finding 2519afa9-517f-4950-8403-fcfc7a487327
+[2026-05-03 21:00:15,019: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:16,424: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:16,438: INFO/ForkPoolWorker-2] Stored embedding for finding 2fb6460b-140b-4c23-9e8b-cecff017cea7
+[2026-05-03 21:00:17,353: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:18,203: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:18,211: INFO/ForkPoolWorker-2] Stored embedding for finding 20225e8a-075d-405c-b4a5-20e662238a86
+[2026-05-03 21:00:20,015: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:21,276: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:21,284: INFO/ForkPoolWorker-2] Stored embedding for finding d7c44752-b921-4f4e-a756-014e3ae71340
+[2026-05-03 21:00:22,272: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:23,088: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:23,093: INFO/ForkPoolWorker-2] Stored embedding for finding a2dd9ddf-ad54-4663-a3c6-049beb724b73
+[2026-05-03 21:00:23,982: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:25,136: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:25,145: INFO/ForkPoolWorker-2] Stored embedding for finding 0a57840b-c781-4562-b8b6-a4a61756b936
+[2026-05-03 21:00:26,470: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:27,409: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:27,423: INFO/ForkPoolWorker-2] Stored embedding for finding f1385311-dea3-4b84-b61e-c38a7fa47d16
+[2026-05-03 21:00:28,169: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:29,025: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:29,033: INFO/ForkPoolWorker-2] Stored embedding for finding a6030b0e-d9e3-463b-991b-b2e6fc40e287
+[2026-05-03 21:00:29,838: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:30,671: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:30,675: INFO/ForkPoolWorker-2] Stored embedding for finding 5b803b71-87cd-4add-b073-060094a2035c
+[2026-05-03 21:00:31,500: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:33,122: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:33,129: INFO/ForkPoolWorker-2] Stored embedding for finding b01163e0-840e-443d-b967-e2d21930e91b
+[2026-05-03 21:00:34,090: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:35,272: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:35,279: INFO/ForkPoolWorker-2] Stored embedding for finding 9f9530e1-d99a-40a4-8613-0ff596c17cf9
+[2026-05-03 21:00:35,997: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:36,736: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:36,746: INFO/ForkPoolWorker-2] Stored embedding for finding 975acfd8-d308-445b-8e36-e269186aa01e
+[2026-05-03 21:00:37,729: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:38,754: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:38,766: INFO/ForkPoolWorker-2] Stored embedding for finding 35c0f2d5-09f9-4d20-831e-c5951933234a
+[2026-05-03 21:00:39,679: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:40,907: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:40,956: INFO/ForkPoolWorker-2] Stored embedding for finding 93c7a31b-3a66-4e5e-8972-39dcef36c26c
+[2026-05-03 21:00:41,825: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:42,708: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:42,713: INFO/ForkPoolWorker-2] Stored embedding for finding b95d37af-aa48-4996-af2c-fd9eb4f571c9
+[2026-05-03 21:00:43,624: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:44,902: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:44,907: INFO/ForkPoolWorker-2] Stored embedding for finding c4816af8-c1fa-466c-ae31-09aef1375c75
+[2026-05-03 21:00:45,921: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:49,117: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:49,125: INFO/ForkPoolWorker-2] Stored embedding for finding 130071dd-c1b7-40b0-a9cf-d2dccd79556e
+[2026-05-03 21:00:52,174: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:53,416: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:53,420: INFO/ForkPoolWorker-2] Stored embedding for finding 0c4fb3c4-4049-4742-8347-b84f4acd7cfd
+[2026-05-03 21:00:54,344: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:55,445: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:55,451: INFO/ForkPoolWorker-2] Stored embedding for finding 83c9b9e9-4872-4358-a45a-f8d663c19810
+[2026-05-03 21:00:56,251: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:57,492: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:00:57,501: INFO/ForkPoolWorker-2] Stored embedding for finding 36e8a01b-609e-45bf-a082-69ee6e7a0486
+[2026-05-03 21:00:58,822: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:00,042: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:00,053: INFO/ForkPoolWorker-2] Stored embedding for finding 86d74199-e6b0-4c73-a49f-66807a422313
+[2026-05-03 21:01:01,108: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:02,201: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:02,215: INFO/ForkPoolWorker-2] Stored embedding for finding b760f0bc-c13c-4cba-a525-67607de421dd
+[2026-05-03 21:01:03,328: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:04,664: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:04,674: INFO/ForkPoolWorker-2] Stored embedding for finding fda46952-63e0-41e6-b035-d550dbc9b39c
+[2026-05-03 21:01:05,683: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:06,810: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:06,825: INFO/ForkPoolWorker-2] Stored embedding for finding a00aed80-4275-4de7-9fb1-a357bc469ab5
+[2026-05-03 21:01:07,819: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:08,840: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:08,851: INFO/ForkPoolWorker-2] Stored embedding for finding 106a2757-15db-4b76-8793-819f6d3ea407
+[2026-05-03 21:01:09,742: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:10,812: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:10,821: INFO/ForkPoolWorker-2] Stored embedding for finding c1a24cdb-4293-4876-aadf-46d3d3c41c43
+[2026-05-03 21:01:11,930: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:13,267: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:13,316: INFO/ForkPoolWorker-2] Stored embedding for finding 002db70c-7600-4c6d-8441-33e855845de7
+[2026-05-03 21:01:14,135: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:15,822: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:15,829: INFO/ForkPoolWorker-2] Stored embedding for finding 79264507-5bae-42b3-8fb9-bfd77b5b7150
+[2026-05-03 21:01:19,512: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:20,530: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:20,538: INFO/ForkPoolWorker-2] Stored embedding for finding f20b0b68-2120-418f-9403-fb08c65fc227
+[2026-05-03 21:01:21,561: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:22,580: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:22,591: INFO/ForkPoolWorker-2] Stored embedding for finding 6ed2817d-5b5a-4442-b0fb-ca5de9020693
+[2026-05-03 21:01:23,624: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:24,558: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:24,570: INFO/ForkPoolWorker-2] Stored embedding for finding 3e6d4e96-e5c1-4246-a5ac-8f60273b674e
+[2026-05-03 21:01:25,771: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:26,674: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:26,686: INFO/ForkPoolWorker-2] Stored embedding for finding d0b8cdcc-a5ff-4a62-9308-e6f58047003d
+[2026-05-03 21:01:28,109: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:29,030: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:29,043: INFO/ForkPoolWorker-2] Stored embedding for finding 42f84ead-cacd-4a68-ad22-0deb7e044f55
+[2026-05-03 21:01:29,826: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:31,285: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:31,296: INFO/ForkPoolWorker-2] Stored embedding for finding d31d18fd-d57c-4d20-9a8d-3b821f3ea057
+[2026-05-03 21:01:32,209: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:32,969: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:32,986: INFO/ForkPoolWorker-2] Stored embedding for finding 41d83683-5c44-441a-bca4-e3897822f3f0
+[2026-05-03 21:01:33,834: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:34,789: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:34,800: INFO/ForkPoolWorker-2] Stored embedding for finding 86aa196f-cc1d-447d-b05a-83b3b93c08ec
+[2026-05-03 21:01:35,669: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:36,504: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:36,512: INFO/ForkPoolWorker-2] Stored embedding for finding c4c3fccc-c408-4b8f-a55b-40f9fc1c856c
+[2026-05-03 21:01:37,631: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:38,866: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:38,885: INFO/ForkPoolWorker-2] Stored embedding for finding 0c6aaf8a-b463-4e9a-88dd-31ee19634d7a
+[2026-05-03 21:01:40,510: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:41,931: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:41,942: INFO/ForkPoolWorker-2] Stored embedding for finding 787dea27-e4b2-4082-9d1d-993eb83fe57f
+[2026-05-03 21:01:44,798: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:52,204: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:01:52,225: INFO/ForkPoolWorker-2] Stored embedding for finding 26fd1606-6824-4940-a00b-4818ec0cb8b5
+[2026-05-03 21:01:58,315: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:00,557: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:00,570: INFO/ForkPoolWorker-2] Stored embedding for finding db2ac23a-dda5-42ed-a698-543a45c50734
+[2026-05-03 21:02:03,232: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:05,279: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:05,290: INFO/ForkPoolWorker-2] Stored embedding for finding 4ac8630b-53a0-464b-b8ad-3eaccee8741c
+[2026-05-03 21:02:07,428: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:08,866: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:08,887: INFO/ForkPoolWorker-2] Stored embedding for finding 78a9b790-683d-41a3-9af2-1fce9dfc81b2
+[2026-05-03 21:02:09,826: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:10,705: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:10,720: INFO/ForkPoolWorker-2] Stored embedding for finding 85d72b11-e2ed-451f-9030-3284c17d4c1a
+[2026-05-03 21:02:12,138: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:13,238: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:13,250: INFO/ForkPoolWorker-2] Stored embedding for finding 8079d0b0-cb95-421a-a942-2b0c99cc76c7
+[2026-05-03 21:02:14,597: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:15,587: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:15,604: INFO/ForkPoolWorker-2] Stored embedding for finding c447a8df-d564-4470-8c6b-bb01fe5fe144
+[2026-05-03 21:02:16,457: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:17,361: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:17,379: INFO/ForkPoolWorker-2] Stored embedding for finding 418368f1-a87b-4fc2-a211-0c7fc7abd04e
+[2026-05-03 21:02:18,200: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:19,142: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:19,156: INFO/ForkPoolWorker-2] Stored embedding for finding db240da2-6c49-4e5c-9bd0-ae1ea86b61c3
+[2026-05-03 21:02:20,739: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:21,559: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:21,573: INFO/ForkPoolWorker-2] Stored embedding for finding 6567afd6-1903-4e24-bb7f-916fd0933e3f
+[2026-05-03 21:02:22,382: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:23,607: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:23,616: INFO/ForkPoolWorker-2] Stored embedding for finding 75111740-8137-4111-84ef-59d20fd0b37b
+[2026-05-03 21:02:24,430: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:25,659: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:25,671: INFO/ForkPoolWorker-2] Stored embedding for finding 603ed81d-b491-458e-b1af-eb04eb0245f2
+[2026-05-03 21:02:30,468: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:40,762: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:40,772: INFO/ForkPoolWorker-2] Stored embedding for finding 516ea206-a20c-433c-b512-84c5036b8758
+[2026-05-03 21:02:48,799: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:50,622: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:50,633: INFO/ForkPoolWorker-2] Stored embedding for finding 6e3b2091-aba9-409e-84b0-e0156b9cd0b8
+[2026-05-03 21:02:52,177: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:55,144: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:55,156: INFO/ForkPoolWorker-2] Stored embedding for finding 74fbbcc5-1f64-45b7-9001-a6e2c46db460
+[2026-05-03 21:02:57,192: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:59,548: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:02:59,563: INFO/ForkPoolWorker-2] Stored embedding for finding f20c69d3-8988-41db-b527-c49737fb35f9
+[2026-05-03 21:03:00,438: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:01,625: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:01,638: INFO/ForkPoolWorker-2] Stored embedding for finding 446032f2-7cdb-468c-8262-401c80ece5f9
+[2026-05-03 21:03:02,625: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:03,703: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:03,727: INFO/ForkPoolWorker-2] Stored embedding for finding aeefbe08-7424-468a-9564-a633b9e825b8
+[2026-05-03 21:03:04,770: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:05,729: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:05,737: INFO/ForkPoolWorker-2] Stored embedding for finding 53c1c815-3f85-43d9-8d21-d334c8105f53
+[2026-05-03 21:03:07,125: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:09,686: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:09,701: INFO/ForkPoolWorker-2] Stored embedding for finding 2f577f72-9ecb-44ab-a906-50a1c8c9d8cb
+[2026-05-03 21:03:15,358: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:22,510: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:22,520: INFO/ForkPoolWorker-2] Stored embedding for finding 2bb50f02-e4ed-4503-a79d-5d48fb57b306
+[2026-05-03 21:03:23,303: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:24,335: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:24,391: INFO/ForkPoolWorker-2] Stored embedding for finding c36b58b6-7582-4444-abdc-242d87e481bd
+[2026-05-03 21:03:25,364: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:26,648: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:26,659: INFO/ForkPoolWorker-2] Stored embedding for finding 5eaadcd8-f13d-4163-9577-7f4f64c6ae41
+[2026-05-03 21:03:27,912: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:28,936: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:28,980: INFO/ForkPoolWorker-2] Stored embedding for finding a6c80e8e-cd34-45b0-888b-770c91c30427
+[2026-05-03 21:03:30,896: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:32,212: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:32,222: INFO/ForkPoolWorker-2] Stored embedding for finding bee4d241-3b12-4379-bca1-aecf115bb752
+[2026-05-03 21:03:33,552: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:34,793: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:34,802: INFO/ForkPoolWorker-2] Stored embedding for finding f94614df-7ba2-4a9f-893f-733afe32b968
+[2026-05-03 21:03:36,304: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:37,229: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:37,240: INFO/ForkPoolWorker-2] Stored embedding for finding b77170da-7e42-4d4e-b700-3f83e402d889
+[2026-05-03 21:03:38,291: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:39,178: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:39,189: INFO/ForkPoolWorker-2] Stored embedding for finding 68034ee1-9b81-4740-84f9-165e0b2d1500
+[2026-05-03 21:03:40,099: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:41,121: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:41,138: INFO/ForkPoolWorker-2] Stored embedding for finding 629b76cd-0921-4c00-8134-ce223ee9ff2a
+[2026-05-03 21:03:42,116: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:43,168: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:43,180: INFO/ForkPoolWorker-2] Stored embedding for finding 47761117-759f-4a89-a9bb-94814bde8310
+[2026-05-03 21:03:44,406: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:45,693: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:45,703: INFO/ForkPoolWorker-2] Stored embedding for finding b433ebc9-426a-4e90-9357-d7ec7e74fdb9
+[2026-05-03 21:03:47,779: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:48,897: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:48,912: INFO/ForkPoolWorker-2] Stored embedding for finding 6c686391-e1f3-429f-b87b-503e722abcc0
+[2026-05-03 21:03:50,336: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:51,464: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:03:51,474: INFO/ForkPoolWorker-2] Stored embedding for finding fae7970a-ef63-46b2-939b-848bd15a42aa
+[2026-05-03 21:03:57,223: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:05,799: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:05,821: INFO/ForkPoolWorker-2] Stored embedding for finding f004b695-2714-4e15-af6e-2166f0a72ec8
+[2026-05-03 21:04:11,988: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:14,196: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:14,203: INFO/ForkPoolWorker-2] Stored embedding for finding 75dcafde-921b-4a57-bf2b-fd1536ee5c26
+[2026-05-03 21:04:15,218: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:16,140: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:16,153: INFO/ForkPoolWorker-2] Stored embedding for finding 92856b42-155b-4094-b25e-c8cba17d9a82
+[2026-05-03 21:04:17,164: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:18,254: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:18,489: INFO/ForkPoolWorker-2] Stored embedding for finding 54209370-ea6b-44b5-88ff-8d3f530490d3
+[2026-05-03 21:04:19,616: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:20,753: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:20,764: INFO/ForkPoolWorker-2] Stored embedding for finding 773db75f-af80-479e-afc7-ef9bbef0d6a7
+[2026-05-03 21:04:21,875: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:23,000: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:23,011: INFO/ForkPoolWorker-2] Stored embedding for finding b1a713db-17d5-43dc-b697-4cae17c0743b
+[2026-05-03 21:04:24,609: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:25,567: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:25,580: INFO/ForkPoolWorker-2] Stored embedding for finding 26a37e17-cc33-4222-ae76-45bdde0f225a
+[2026-05-03 21:04:26,383: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:27,622: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:27,673: INFO/ForkPoolWorker-2] Stored embedding for finding 4eec5ebc-e80c-4b84-9083-d73da2cd7324
+[2026-05-03 21:04:28,632: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:29,656: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:29,664: INFO/ForkPoolWorker-2] Stored embedding for finding 75c7af44-e9b3-4e5b-bd66-8eaee759c834
+[2026-05-03 21:04:30,680: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:31,747: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:31,756: INFO/ForkPoolWorker-2] Stored embedding for finding 2346c8c0-12c0-4d92-83c7-2cbb0762f1ea
+[2026-05-03 21:04:33,101: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:34,476: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:34,486: INFO/ForkPoolWorker-2] Stored embedding for finding a3e040c6-affe-4c1f-bb2a-e63819b6b5a4
+[2026-05-03 21:04:35,933: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:37,439: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:37,452: INFO/ForkPoolWorker-2] Stored embedding for finding fba266e8-11e3-4079-8977-1a4b591dd13f
+[2026-05-03 21:04:39,385: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:40,306: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:40,315: INFO/ForkPoolWorker-2] Stored embedding for finding f757ccdb-f3f2-4ed4-b787-cc03ce11b89f
+[2026-05-03 21:04:41,126: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:42,148: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:42,157: INFO/ForkPoolWorker-2] Stored embedding for finding 0f52d536-c842-4444-84af-ce68964a7dba
+[2026-05-03 21:04:43,089: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:44,607: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:44,619: INFO/ForkPoolWorker-2] Stored embedding for finding 04115cfa-0d7d-4f8c-b5ce-2a5bc889fc73
+[2026-05-03 21:04:45,528: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:46,962: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:46,978: INFO/ForkPoolWorker-2] Stored embedding for finding fc584bf8-3318-41fc-8be6-b814bca82db7
+[2026-05-03 21:04:47,781: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:48,706: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:48,736: INFO/ForkPoolWorker-2] Stored embedding for finding 5a11c11f-67fe-4dce-b440-76dc0acff286
+[2026-05-03 21:04:49,725: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:50,751: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:50,762: INFO/ForkPoolWorker-2] Stored embedding for finding beb04de6-ecdf-47d5-b274-51b0e732ac19
+[2026-05-03 21:04:51,770: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:52,843: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:52,853: INFO/ForkPoolWorker-2] Stored embedding for finding e0f7226a-cc53-4a8e-87c2-cc0efb7713ef
+[2026-05-03 21:04:54,129: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:55,259: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:55,279: INFO/ForkPoolWorker-2] Stored embedding for finding b5d3fbac-409a-4b16-ba98-912737871b99
+[2026-05-03 21:04:56,484: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:57,917: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:57,925: INFO/ForkPoolWorker-2] Stored embedding for finding e1a280e9-e607-4ee0-86db-6d7ff7ae895e
+[2026-05-03 21:04:58,844: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:59,968: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:04:59,983: INFO/ForkPoolWorker-2] Stored embedding for finding 0f63ade6-3895-467b-b002-f038bafce97b
+[2026-05-03 21:05:01,004: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:01,993: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:02,004: INFO/ForkPoolWorker-2] Stored embedding for finding ebc8f554-bc22-4996-ae3f-de7b04348653
+[2026-05-03 21:05:02,931: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:04,052: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:04,062: INFO/ForkPoolWorker-2] Stored embedding for finding 743e6f14-1061-4e38-a7f4-e7e776d5d876
+[2026-05-03 21:05:05,191: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:06,417: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:06,426: INFO/ForkPoolWorker-2] Stored embedding for finding fa5ea78d-a572-4f78-afc6-84cfbaab6ffa
+[2026-05-03 21:05:07,343: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:08,364: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:08,420: INFO/ForkPoolWorker-2] Stored embedding for finding d1e67ed1-2dfc-479b-bb8e-51a7f4aa3e55
+[2026-05-03 21:05:09,488: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:10,617: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:10,732: INFO/ForkPoolWorker-2] Stored embedding for finding 2ddfbb5d-42a0-4668-b0d3-ff01bc0c4c08
+[2026-05-03 21:05:12,263: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:13,062: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:13,080: INFO/ForkPoolWorker-2] Stored embedding for finding e1104b0c-99ec-40f5-bc3a-76027965a93f
+[2026-05-03 21:05:13,834: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:14,667: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:14,677: INFO/ForkPoolWorker-2] Stored embedding for finding 3626f81c-034c-41aa-9ca0-71c1aa17679e
+[2026-05-03 21:05:15,734: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:16,605: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:16,614: INFO/ForkPoolWorker-2] Stored embedding for finding adc3f634-f25f-4ae7-ad17-1afc34a12020
+[2026-05-03 21:05:17,471: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:18,523: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:18,543: INFO/ForkPoolWorker-2] Stored embedding for finding 6ebbd204-978f-455d-88a4-21ca1707091e
+[2026-05-03 21:05:19,443: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:20,237: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:20,245: INFO/ForkPoolWorker-2] Stored embedding for finding 902d76ea-4b18-4322-bb93-80fff575afaa
+[2026-05-03 21:05:21,316: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:22,193: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:22,206: INFO/ForkPoolWorker-2] Stored embedding for finding 79a64300-6f7f-4835-8062-e9fc8f878286
+[2026-05-03 21:05:23,107: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:24,044: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:24,060: INFO/ForkPoolWorker-2] Stored embedding for finding 97ecc6d8-e849-44b8-8842-b99dc64e658d
+[2026-05-03 21:05:25,159: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:26,060: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:26,074: INFO/ForkPoolWorker-2] Stored embedding for finding c0728a26-a0fc-41bc-ba49-a05f529367ac
+[2026-05-03 21:05:27,062: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:28,041: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:28,055: INFO/ForkPoolWorker-2] Stored embedding for finding d0b01d86-fd9a-4eae-835c-3f3e5b620cf2
+[2026-05-03 21:05:29,045: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:29,938: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:29,948: INFO/ForkPoolWorker-2] Stored embedding for finding b35c6790-62d0-4785-a15b-58b84543f7ec
+[2026-05-03 21:05:30,713: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:31,711: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:31,719: INFO/ForkPoolWorker-2] Stored embedding for finding 70ae38db-c6fd-4687-83bc-7ecdf97dc34d
+[2026-05-03 21:05:32,529: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:33,452: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:33,460: INFO/ForkPoolWorker-2] Stored embedding for finding 74efd240-2180-4dc6-8154-8543e50fb04c
+[2026-05-03 21:05:34,476: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:35,498: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:35,544: INFO/ForkPoolWorker-2] Stored embedding for finding 7ce90708-a9ed-450e-a5c2-621a12810214
+[2026-05-03 21:05:36,519: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:37,363: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:37,380: INFO/ForkPoolWorker-2] Stored embedding for finding 135740c9-4dc0-427e-885b-14bd918eca7c
+[2026-05-03 21:05:38,262: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:39,188: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:39,208: INFO/ForkPoolWorker-2] Stored embedding for finding 6daa0003-c286-4e39-9375-8d96813e048b
+[2026-05-03 21:05:40,310: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:43,532: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:43,550: INFO/ForkPoolWorker-2] Stored embedding for finding 3526d950-ec52-4a98-b0c7-f83d3aae1b9f
+[2026-05-03 21:05:46,154: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:49,423: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:49,435: INFO/ForkPoolWorker-2] Stored embedding for finding b82cb562-7393-4f65-89df-54843cb58918
+[2026-05-03 21:05:50,684: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:56,927: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:56,939: INFO/ForkPoolWorker-2] Stored embedding for finding ec7dffd1-db7d-47d6-a3e5-dc24fedc768d
+[2026-05-03 21:05:58,024: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:59,155: INFO/ForkPoolWorker-2] HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 401 Unauthorized"
+[2026-05-03 21:05:59,167: INFO/ForkPoolWorker-2] Stored embedding for finding ae8c0471-28ba-4b70-a394-7db66cbc15c5
+[2026-05-03 21:06:15,797: INFO/ForkPoolWorker-2] Stored embedding for finding 0fdb75ea-cdb4-453d-ac52-289b3dd150de
+[2026-05-03 21:06:15,956: INFO/ForkPoolWorker-2] Stored embedding for finding 47334a94-0f50-4b35-94e3-c4a629247fbc
+[2026-05-03 21:06:16,210: INFO/ForkPoolWorker-2] Stored embedding for finding b2835900-94f8-4970-9f5e-a631e123b656
+[2026-05-03 21:06:16,408: INFO/ForkPoolWorker-2] Stored embedding for finding 70a2bc9c-d004-419a-8959-3cbc76b18b24
+[2026-05-03 21:06:16,566: INFO/ForkPoolWorker-2] Stored embedding for finding ad515b0a-ef5a-4278-8385-06fdb471548a
+[2026-05-03 21:06:16,722: INFO/ForkPoolWorker-2] Stored embedding for finding 033923d2-95a6-465c-a6e9-819c412e7481
+[2026-05-03 21:06:16,858: INFO/ForkPoolWorker-2] Stored embedding for finding 81a801de-90a0-48da-85b6-e9e56374c01b
+[2026-05-03 21:06:17,142: INFO/ForkPoolWorker-2] Stored embedding for finding 5e06a8dc-735c-414a-a93f-c812225b5cb0
+[2026-05-03 21:06:17,286: INFO/ForkPoolWorker-2] Stored embedding for finding 51512646-1e6c-405a-a976-2b41fdfca8d9
+[2026-05-03 21:06:17,378: INFO/ForkPoolWorker-2] Stored embedding for finding 4236a340-ada0-4037-aa48-eeb2fd429686
+[2026-05-03 21:06:17,484: INFO/ForkPoolWorker-2] Stored embedding for finding 6ef9225f-4e51-413b-bc2b-1585fe9a63f0
+[2026-05-03 21:06:17,578: INFO/ForkPoolWorker-2] Stored embedding for finding 30c62406-8a4f-46cf-ab0c-96493b06c139
+[2026-05-03 21:06:17,675: INFO/ForkPoolWorker-2] Stored embedding for finding f3fea4a9-3987-4697-8458-ed84fd3925f3
+[2026-05-03 21:06:17,761: INFO/ForkPoolWorker-2] Stored embedding for finding c445fd0a-9f4b-4da6-912d-ede68a635adc
+[2026-05-03 21:06:17,845: INFO/ForkPoolWorker-2] Stored embedding for finding f42befe2-d5da-4b2c-a410-c85c6787a680
+[2026-05-03 21:06:17,935: INFO/ForkPoolWorker-2] Stored embedding for finding c4b624ad-b441-4102-9492-38e88e40d3a1
+[2026-05-03 21:06:18,089: INFO/ForkPoolWorker-2] Stored embedding for finding fa3f023f-2ac0-4e00-a38b-6291ea7771ae
+[2026-05-03 21:06:18,251: INFO/ForkPoolWorker-2] Stored embedding for finding c473d332-58b0-4a92-8459-24dbe05a94ab
+[2026-05-03 21:06:18,393: INFO/ForkPoolWorker-2] Stored embedding for finding 9112a0bd-66c5-4a38-9c49-56478d441495
+[2026-05-03 21:06:18,506: INFO/ForkPoolWorker-2] Stored embedding for finding 364c04fd-7351-4eb3-bca4-5857e74e2ae8
+[2026-05-03 21:06:18,614: INFO/ForkPoolWorker-2] Stored embedding for finding 56824402-0049-476c-aac9-1f81568f66ff
+[2026-05-03 21:06:18,727: INFO/ForkPoolWorker-2] Stored embedding for finding d843a831-1fb2-4b34-a9d2-c99d47b00f90
+[2026-05-03 21:06:18,820: INFO/ForkPoolWorker-2] Stored embedding for finding 9099ea89-5d0c-4c38-9591-6e895bb2cdd3
+[2026-05-03 21:06:18,914: INFO/ForkPoolWorker-2] Stored embedding for finding 21f51a19-4371-48d6-9acd-f76ff2e1a420
+[2026-05-03 21:06:19,018: INFO/ForkPoolWorker-2] Stored embedding for finding 932cb799-daf2-42c6-81f7-12b07262ea83
+[2026-05-03 21:06:19,138: INFO/ForkPoolWorker-2] Stored embedding for finding 3c4ece0d-9b50-49e3-96c5-a5f3b894f326
+[2026-05-03 21:06:19,275: INFO/ForkPoolWorker-2] Stored embedding for finding c3865fc8-1a20-4070-9809-74e29650baad
+[2026-05-03 21:06:19,362: INFO/ForkPoolWorker-2] Stored embedding for finding 086c4eba-0819-4801-987a-2360bc302950
+[2026-05-03 21:06:19,481: INFO/ForkPoolWorker-2] Stored embedding for finding 45795c89-244b-41d0-8d0f-b815eb831d9a
+[2026-05-03 21:06:19,576: INFO/ForkPoolWorker-2] Stored embedding for finding 869e6a0a-0fa6-44ab-a9ae-1dda794e1bcb
+[2026-05-03 21:06:19,993: INFO/ForkPoolWorker-2] Stored embedding for finding 71d9c968-354d-4857-8b79-2f12f5bb7f95
+[2026-05-03 21:06:20,127: INFO/ForkPoolWorker-2] Stored embedding for finding bcf5a3bc-b3a9-4c4c-8b1e-21e9c8c2aefa
+[2026-05-03 21:06:20,265: INFO/ForkPoolWorker-2] Stored embedding for finding 3fcbdaee-7935-49be-87aa-89f0ab4361b8
+[2026-05-03 21:06:20,403: INFO/ForkPoolWorker-2] Stored embedding for finding bdd85d2b-7804-4a54-ba83-ea85a675f126
+[2026-05-03 21:06:20,497: INFO/ForkPoolWorker-2] Stored embedding for finding 2182b88a-b67e-49fb-938d-a36c6637e903
+[2026-05-03 21:06:20,597: INFO/ForkPoolWorker-2] Stored embedding for finding 1cb4ff91-770b-4545-9502-83a97b1e357d
+[2026-05-03 21:06:20,704: INFO/ForkPoolWorker-2] Stored embedding for finding af35d1af-5090-48d6-9c30-e0a811442e0a
+[2026-05-03 21:06:20,799: INFO/ForkPoolWorker-2] Stored embedding for finding bc50719d-58c2-4c86-89d3-a5eb994e1164
+[2026-05-03 21:06:20,901: INFO/ForkPoolWorker-2] Stored embedding for finding b6a9fe89-76c8-498b-8059-7087e869c17c
+[2026-05-03 21:06:21,013: INFO/ForkPoolWorker-2] Stored embedding for finding 207440af-9407-435f-9484-c871529aa4fd
+[2026-05-03 21:06:21,275: INFO/ForkPoolWorker-2] Stored embedding for finding 712a7099-245c-4581-9e61-028e8c226646
+[2026-05-03 21:06:21,379: INFO/ForkPoolWorker-2] Stored embedding for finding 50216600-afb5-4ff3-8c37-a82ee6bce2f4
+[2026-05-03 21:06:21,478: INFO/ForkPoolWorker-2] Stored embedding for finding 5ec84614-25d5-4198-8712-06e7603388c1
+[2026-05-03 21:06:21,598: INFO/ForkPoolWorker-2] Stored embedding for finding 6ee71bae-c7fc-49c6-9440-569f4a36312c
+[2026-05-03 21:06:21,700: INFO/ForkPoolWorker-2] Stored embedding for finding 44e9acd3-93da-4fc6-ba5c-86ceb4932586
+[2026-05-03 21:06:21,806: INFO/ForkPoolWorker-2] Stored embedding for finding 320e528d-a761-4702-9acb-c9f33586aaaf
+[2026-05-03 21:06:21,914: INFO/ForkPoolWorker-2] Stored embedding for finding e3748ccb-6a0b-43d2-866f-7f290e2b94a5
+[2026-05-03 21:06:22,099: INFO/ForkPoolWorker-2] Stored embedding for finding 39ceb6e3-d98c-4a57-b02b-39fd06251013
+[2026-05-03 21:06:22,241: INFO/ForkPoolWorker-2] Stored embedding for finding 990d40df-ab44-4e0d-830d-58644256ea3e
+[2026-05-03 21:06:22,653: INFO/ForkPoolWorker-2] Stored embedding for finding 7511c070-dda0-43b2-9311-f6a50343f119
+[2026-05-03 21:06:22,873: INFO/ForkPoolWorker-2] Stored embedding for finding f2d23f1b-a377-469a-a019-e1072e8d73ad
+[2026-05-03 21:06:23,093: INFO/ForkPoolWorker-2] Stored embedding for finding e7e16c9e-e234-4213-9b34-748700438e3f
+[2026-05-03 21:06:23,241: INFO/ForkPoolWorker-2] Stored embedding for finding 450c8799-ed78-4060-bbbc-b21e059bfb7f
+[2026-05-03 21:06:23,342: INFO/ForkPoolWorker-2] Stored embedding for finding 13e8f5af-baa9-44e0-9416-0eb4451198e6
+[2026-05-03 21:06:23,447: INFO/ForkPoolWorker-2] Stored embedding for finding 5a2a4568-9e6a-44de-b16a-4a917c5a258b
+[2026-05-03 21:06:23,600: INFO/ForkPoolWorker-2] Stored embedding for finding 7d4059d3-774b-4e5e-b781-0acac85b41e1
+[2026-05-03 21:06:23,706: INFO/ForkPoolWorker-2] Stored embedding for finding b8733093-5c2b-4b50-8f1f-e82a1b8ffafc
+[2026-05-03 21:06:23,885: INFO/ForkPoolWorker-2] Stored embedding for finding 049ce3e2-35e2-40e9-ac1e-21f4b582274f
+[2026-05-03 21:06:24,036: INFO/ForkPoolWorker-2] Stored embedding for finding b1c46a4e-54df-416d-8657-50653e5547f6
+[2026-05-03 21:06:24,134: INFO/ForkPoolWorker-2] Stored embedding for finding daf91b58-0626-4fb1-82a3-511d9b6dc485
+[2026-05-03 21:06:24,274: INFO/ForkPoolWorker-2] Stored embedding for finding 03612964-31d6-4aff-bf3b-00807113ef3d
+[2026-05-03 21:06:24,397: INFO/ForkPoolWorker-2] Stored embedding for finding 3b892eb6-ba26-4c05-bb75-8d15b541cfed
+[2026-05-03 21:06:24,488: INFO/ForkPoolWorker-2] Stored embedding for finding 697f1347-5fc3-4e2e-a5c2-46d9ccf95e51
+[2026-05-03 21:06:24,624: INFO/ForkPoolWorker-2] Stored embedding for finding 4df5f6de-954b-4108-b546-20ec551bbd50
+[2026-05-03 21:06:24,714: INFO/ForkPoolWorker-2] Stored embedding for finding 0fa97385-1830-4924-8507-b2c215f2d6e0
+[2026-05-03 21:06:24,792: INFO/ForkPoolWorker-2] Stored embedding for finding 5bb1fdd2-9767-4e35-a29d-18655b43c30f
+[2026-05-03 21:06:24,968: INFO/ForkPoolWorker-2] Stored embedding for finding 49336798-5b40-42e2-93b1-046f441c1c14
+[2026-05-03 21:06:25,055: INFO/ForkPoolWorker-2] Stored embedding for finding 55b2348c-8967-4d62-9aa0-60231e3a2dff
+[2026-05-03 21:06:25,153: INFO/ForkPoolWorker-2] Stored embedding for finding 392ea36b-cb72-4ee2-a143-8fd9db41f917
+[2026-05-03 21:06:25,229: INFO/ForkPoolWorker-2] Stored embedding for finding fcbf365e-66e4-4296-aa80-af4f516bbb64
+[2026-05-03 21:06:25,308: INFO/ForkPoolWorker-2] Stored embedding for finding 881acaf7-5c36-4613-941d-8a6928d1bc01
+[2026-05-03 21:06:25,381: INFO/ForkPoolWorker-2] Stored embedding for finding a52d59de-8eb9-4511-97fa-4100157d1831
+[2026-05-03 21:06:25,505: INFO/ForkPoolWorker-2] Stored embedding for finding 8ba36b88-8d9e-4b25-842d-c81ee7e8ed60
+[2026-05-03 21:06:25,617: INFO/ForkPoolWorker-2] Stored embedding for finding 33dc1636-6a31-4d5d-986f-b79edaa2d5c8
+[2026-05-03 21:06:25,697: INFO/ForkPoolWorker-2] Stored embedding for finding 63ebbd92-c14c-4810-8e5b-9e9c86b00153
+[2026-05-03 21:06:25,772: INFO/ForkPoolWorker-2] Stored embedding for finding 18af65a7-7087-46fa-b15d-fe2e8956e013
+[2026-05-03 21:06:25,892: INFO/ForkPoolWorker-2] Stored embedding for finding fafec175-7056-453c-a003-0c5068895e91
+[2026-05-03 21:06:25,980: INFO/ForkPoolWorker-2] Stored embedding for finding 7af507c2-0163-4da6-9aee-908962e0cbd5
+[2026-05-03 21:06:26,057: INFO/ForkPoolWorker-2] Stored embedding for finding 36e9f2ca-032a-4d17-9056-6926b7f503d3
+[2026-05-03 21:06:26,139: INFO/ForkPoolWorker-2] Stored embedding for finding 9f2b854e-0e0c-45e0-a1a4-2d0a71603e74
+[2026-05-03 21:06:26,499: INFO/ForkPoolWorker-2] Stored embedding for finding c71256e8-be66-4b59-84bd-bf5f1eae4991
+[2026-05-03 21:06:26,626: INFO/ForkPoolWorker-2] Stored embedding for finding e17d2f19-9a30-4943-b620-237b90b447b0
+[2026-05-03 21:06:26,712: INFO/ForkPoolWorker-2] Stored embedding for finding 53e28859-688c-4e73-8b78-0fe5ca150f19
+[2026-05-03 21:06:26,807: INFO/ForkPoolWorker-2] Stored embedding for finding cdcb5f77-c477-4409-b663-aecbda8b2b4d
+[2026-05-03 21:06:26,890: INFO/ForkPoolWorker-2] Stored embedding for finding 17032470-5b51-48ad-9c5f-9e0f6f77815b
+[2026-05-03 21:06:26,971: INFO/ForkPoolWorker-2] Stored embedding for finding 58e23f29-ffc8-4a7d-99d1-b78374fe9171
+[2026-05-03 21:06:27,055: INFO/ForkPoolWorker-2] Stored embedding for finding 304ea7be-30bc-48cd-8e86-37aca80d614b
+[2026-05-03 21:06:27,142: INFO/ForkPoolWorker-2] Stored embedding for finding 8ef41c6b-f164-4cc5-a3e8-7f65f4ee71e0
+[2026-05-03 21:06:27,225: INFO/ForkPoolWorker-2] Stored embedding for finding 3bec164f-4d6b-49ac-9204-d6547d6afb20
+[2026-05-03 21:06:27,307: INFO/ForkPoolWorker-2] Stored embedding for finding 51a7d3bd-4a80-4f3d-a65e-8f32d3239f5d
+[2026-05-03 21:06:27,386: INFO/ForkPoolWorker-2] Stored embedding for finding c4a0ac9f-b556-4e5e-8b88-a18dfd29da30
+[2026-05-03 21:06:27,516: INFO/ForkPoolWorker-2] Stored embedding for finding fefdd0a5-6088-42dc-bf23-6a14908e6eb1
+[2026-05-03 21:06:27,609: INFO/ForkPoolWorker-2] Stored embedding for finding 8c6199cc-0838-4720-8a6e-d0dd36a4fb18
+[2026-05-03 21:06:27,691: INFO/ForkPoolWorker-2] Stored embedding for finding 233b27b0-cb1d-4d23-8ec5-b0e09061a992
+[2026-05-03 21:06:27,766: INFO/ForkPoolWorker-2] Stored embedding for finding 925d3018-dfec-4497-a46e-b5b83e0d404b
+[2026-05-03 21:06:27,844: INFO/ForkPoolWorker-2] Stored embedding for finding e1951a07-0e7e-4187-bed3-960c5963b505
+[2026-05-03 21:06:27,931: INFO/ForkPoolWorker-2] Stored embedding for finding 821d5310-12c4-4889-a735-3e16b5955b02
+[2026-05-03 21:06:28,016: INFO/ForkPoolWorker-2] Stored embedding for finding f0d0ba67-1f52-42b3-84ad-aa6d1e2a25a4
+[2026-05-03 21:06:28,099: INFO/ForkPoolWorker-2] Stored embedding for finding 12a08c37-d64b-4bcf-93e5-b6bd94b4a392
+[2026-05-03 21:06:28,185: INFO/ForkPoolWorker-2] Stored embedding for finding 77bb7f3a-94d2-471c-9724-f8e7aef8b638
+[2026-05-03 21:06:28,269: INFO/ForkPoolWorker-2] Stored embedding for finding 7e87bcb8-7fad-47cd-9377-e16eb4492fe2
+[2026-05-03 21:06:28,349: INFO/ForkPoolWorker-2] Stored embedding for finding 5330c830-52a1-4a14-a6c0-dc3b1a375a98
+[2026-05-03 21:06:28,436: INFO/ForkPoolWorker-2] Stored embedding for finding f0c8ac80-548d-4564-a12c-1a89191ce126
+[2026-05-03 21:06:28,515: INFO/ForkPoolWorker-2] Stored embedding for finding 3f4c0722-28a0-4f13-89f8-d9ff6184cb60
+[2026-05-03 21:06:28,591: INFO/ForkPoolWorker-2] Stored embedding for finding cac6452e-3a25-4a61-ac9b-e94ccda1367f
+[2026-05-03 21:06:28,675: INFO/ForkPoolWorker-2] Stored embedding for finding b69391a5-6cfb-4fef-9ec6-9328230352a5
+[2026-05-03 21:06:28,996: INFO/ForkPoolWorker-2] Stored embedding for finding 1ce416b1-b35e-448c-866d-3a484ea969f6
+[2026-05-03 21:06:29,100: INFO/ForkPoolWorker-2] Stored embedding for finding f6e8eeb8-956e-4a43-92e1-35d1d7da6ab4
+[2026-05-03 21:06:29,438: INFO/ForkPoolWorker-2] Stored embedding for finding 8df3a1c8-ea2e-47da-b50b-495cf519a24e
+[2026-05-03 21:06:29,545: INFO/ForkPoolWorker-2] Stored embedding for finding fc2e58d1-b04b-4af0-bd74-b0aca6971288
+[2026-05-03 21:06:29,731: INFO/ForkPoolWorker-2] Stored embedding for finding b86ffc9f-af2d-43e4-97e2-bb3b3c2a73c8
+[2026-05-03 21:06:29,806: INFO/ForkPoolWorker-2] Stored embedding for finding bf2f39c3-dbab-493a-b9a2-12470e92b688
+[2026-05-03 21:06:29,974: INFO/ForkPoolWorker-2] Stored embedding for finding 9a8e2832-81e9-43df-a61e-5556daa38575
+[2026-05-03 21:06:30,188: INFO/ForkPoolWorker-2] Stored embedding for finding 51729a24-e322-4dfa-9023-f551cb73f6b8
+[2026-05-03 21:06:30,314: INFO/ForkPoolWorker-2] Stored embedding for finding 663c0760-386e-4f55-a449-34b509493f3a
+[2026-05-03 21:06:30,436: INFO/ForkPoolWorker-2] Stored embedding for finding 2ec5eb13-769b-457a-aa7c-1b06c83dd71b
+[2026-05-03 21:06:30,552: INFO/ForkPoolWorker-2] Stored embedding for finding de868b66-0737-4764-9752-c924ff72ddbe
+[2026-05-03 21:06:30,629: INFO/ForkPoolWorker-2] Stored embedding for finding 97f1721e-595c-4f52-8173-e9c2097e3451
+[2026-05-03 21:06:30,702: INFO/ForkPoolWorker-2] Stored embedding for finding 5aa6a4de-0ac9-4532-bac7-1476ab9864a1
+[2026-05-03 21:06:30,774: INFO/ForkPoolWorker-2] Stored embedding for finding b642910f-ac14-4fed-bd64-d32ab4a0cd17
+[2026-05-03 21:06:30,848: INFO/ForkPoolWorker-2] Stored embedding for finding 2a91a603-1f07-4cfe-856d-17967fc62adb
+[2026-05-03 21:06:30,925: INFO/ForkPoolWorker-2] Stored embedding for finding d21c13d3-c931-4645-9498-fbc76acefa26
+[2026-05-03 21:06:30,996: INFO/ForkPoolWorker-2] Stored embedding for finding bc520732-37f7-49d5-b211-e7f0dbff6334
+[2026-05-03 21:06:31,079: INFO/ForkPoolWorker-2] Stored embedding for finding 9cbe2f9c-d954-4c72-875d-e679bbdfbc86
+[2026-05-03 21:06:31,156: INFO/ForkPoolWorker-2] Stored embedding for finding 6019e768-4d87-4c33-80f3-3c5f1a6460cb
+[2026-05-03 21:06:31,241: INFO/ForkPoolWorker-2] Stored embedding for finding ec96c81c-6cce-49f7-93b0-b3d56edad3fe
+[2026-05-03 21:06:31,317: INFO/ForkPoolWorker-2] Stored embedding for finding 09df481b-9b2c-4423-8ead-3e6dff0a6e59
+[2026-05-03 21:06:31,395: INFO/ForkPoolWorker-2] Stored embedding for finding c71665ed-787b-4ec9-a02f-a0c04f44dc52
+[2026-05-03 21:06:31,469: INFO/ForkPoolWorker-2] Stored embedding for finding 245b94c2-38f4-443a-9234-342d3383adc6
+[2026-05-03 21:06:31,576: INFO/ForkPoolWorker-2] Stored embedding for finding 659d8ab7-b7fb-4963-83c8-10d2109273d6
+[2026-05-03 21:06:31,651: INFO/ForkPoolWorker-2] Stored embedding for finding 386e53ea-3705-4a9f-8868-ccb41b09be5e
+[2026-05-03 21:06:31,731: INFO/ForkPoolWorker-2] Stored embedding for finding 554ac9a6-cdc9-41b0-b7dc-a2e66e650eb2
+[2026-05-03 21:06:31,814: INFO/ForkPoolWorker-2] Stored embedding for finding 79db5578-c63a-4c8b-a10b-7e0abeefc302
+[2026-05-03 21:06:31,897: INFO/ForkPoolWorker-2] Stored embedding for finding 291ad742-57c5-4f9a-b34e-31155cec2a63
+[2026-05-03 21:06:31,970: INFO/ForkPoolWorker-2] Stored embedding for finding 0a65db5f-3eaf-4095-acc8-705d944d12ea
+[2026-05-03 21:06:32,050: INFO/ForkPoolWorker-2] Stored embedding for finding b888d541-6eb7-4180-9036-c33ed39f6bef
+[2026-05-03 21:06:32,123: INFO/ForkPoolWorker-2] Stored embedding for finding e61ee905-85d4-44f8-9644-562440a0d1bb
+[2026-05-03 21:06:32,204: INFO/ForkPoolWorker-2] Stored embedding for finding 33ecbebb-9547-4450-966b-5c2718909f78
+[2026-05-03 21:06:32,285: INFO/ForkPoolWorker-2] Stored embedding for finding 0aa152be-4b65-4d00-8e62-95ab0888b7e7
+[2026-05-03 21:06:32,360: INFO/ForkPoolWorker-2] Stored embedding for finding b4157787-964b-43db-96b4-6f155638a3f1
+[2026-05-03 21:06:32,440: INFO/ForkPoolWorker-2] Stored embedding for finding 1644f868-247e-4b7f-9466-69550388f520
+[2026-05-03 21:06:32,515: INFO/ForkPoolWorker-2] Stored embedding for finding 31d9874e-f8fb-4e15-98c2-690e3091f65e
+[2026-05-03 21:06:32,594: INFO/ForkPoolWorker-2] Stored embedding for finding ccee029d-19f2-4a29-8746-40d5364bdccb
+[2026-05-03 21:06:32,670: INFO/ForkPoolWorker-2] Stored embedding for finding d058f1e5-ae77-4c0b-82ef-30eb18c175d3
+[2026-05-03 21:06:32,750: INFO/ForkPoolWorker-2] Stored embedding for finding b15e7769-267b-4894-9c7c-fa78735b7c02
+[2026-05-03 21:06:33,156: INFO/ForkPoolWorker-2] Stored embedding for finding 3f0220b0-6a3b-4971-b0b6-5533373cd781
+[2026-05-03 21:06:33,550: INFO/ForkPoolWorker-2] Stored embedding for finding 6958f33c-ef52-467a-8a4d-ed1fa7608ef3
+[2026-05-03 21:06:33,669: INFO/ForkPoolWorker-2] Stored embedding for finding 92d063b3-0dc9-48cd-9869-c7b53f43247f
+[2026-05-03 21:06:33,733: INFO/ForkPoolWorker-2] Stored embedding for finding 119ca5e1-9458-4109-a177-09f4c8fbc80f
+[2026-05-03 21:06:33,816: INFO/ForkPoolWorker-2] Stored embedding for finding 2f61291c-78f3-4f40-b803-ea3f70f44b6e
+[2026-05-03 21:06:33,894: INFO/ForkPoolWorker-2] Stored embedding for finding 93b53d2a-876a-4c9b-af72-3e23fe5148ce
+[2026-05-03 21:06:33,968: INFO/ForkPoolWorker-2] Stored embedding for finding ef7a5bf9-c48c-4b31-b6f8-4fde73fd934f
+[2026-05-03 21:06:34,043: INFO/ForkPoolWorker-2] Stored embedding for finding 1250f480-8bb4-4cc5-b3e8-707f40310780
+[2026-05-03 21:06:34,163: INFO/ForkPoolWorker-2] Stored embedding for finding 517a17e1-7a0d-4d68-a58a-fa7e948ae2e9
+[2026-05-03 21:06:34,242: INFO/ForkPoolWorker-2] Stored embedding for finding 4d456c05-ef43-4649-9774-d3291bca5fa5
+[2026-05-03 21:06:34,358: INFO/ForkPoolWorker-2] Stored embedding for finding 2a0d07e8-5fcc-446a-ae2f-d0ca20d83507
+[2026-05-03 21:06:34,489: INFO/ForkPoolWorker-2] Stored embedding for finding e35e7239-470d-4eb4-ad51-24b3bb04dafb
+[2026-05-03 21:06:34,622: INFO/ForkPoolWorker-2] Stored embedding for finding 33250ca7-158d-419a-98cf-81706260573f
+[2026-05-03 21:06:34,730: INFO/ForkPoolWorker-2] Stored embedding for finding 1357bc78-d645-4a3a-b012-92a2b92a12a2
+[2026-05-03 21:06:34,798: INFO/ForkPoolWorker-2] Stored embedding for finding c93364b6-b560-4098-9d20-f72d1cf4db1a
+[2026-05-03 21:06:34,966: INFO/ForkPoolWorker-2] Stored embedding for finding 405c35c9-9a97-4fd0-81b0-d70d87ceb4f2
+[2026-05-03 21:06:35,090: INFO/ForkPoolWorker-2] Stored embedding for finding b8efbab5-94a1-45dc-a353-9c137d866346
+[2026-05-03 21:06:35,170: INFO/ForkPoolWorker-2] Stored embedding for finding 6086c4e4-e629-4b3d-bb5a-997129d3074c
+[2026-05-03 21:06:35,281: INFO/ForkPoolWorker-2] Stored embedding for finding 53f7e005-e945-4552-b5ab-e3e9a6aa375a
+[2026-05-03 21:06:35,369: INFO/ForkPoolWorker-2] Stored embedding for finding 3aabaeeb-f371-49b0-ad39-2ee9a0280a05
+[2026-05-03 21:06:35,443: INFO/ForkPoolWorker-2] Stored embedding for finding 7819cbe9-8a6d-4a80-963e-7d21c7eeecd1
+[2026-05-03 21:06:35,519: INFO/ForkPoolWorker-2] Stored embedding for finding 8e67fc1b-534b-4657-8a09-bd197dc679e6
+[2026-05-03 21:06:35,594: INFO/ForkPoolWorker-2] Stored embedding for finding 20020f3d-9f62-43b1-95fc-3e199d450874
+[2026-05-03 21:06:35,672: INFO/ForkPoolWorker-2] Stored embedding for finding ef10e271-f4b9-458a-9951-c1e7bc7b0d51
+[2026-05-03 21:06:35,747: INFO/ForkPoolWorker-2] Stored embedding for finding ff50f428-1481-4578-9e49-f732906bec06
+[2026-05-03 21:06:35,823: INFO/ForkPoolWorker-2] Stored embedding for finding 2333c2a8-7aa2-47cd-bfa8-342e959b6029
+[2026-05-03 21:06:35,899: INFO/ForkPoolWorker-2] Stored embedding for finding 6e1ef617-68cd-405e-af7a-9cdc7154cb0a
+[2026-05-03 21:06:35,986: INFO/ForkPoolWorker-2] Stored embedding for finding 41417938-ef72-45fa-aaa3-f3a77d4f2e6b
+[2026-05-03 21:06:36,066: INFO/ForkPoolWorker-2] Stored embedding for finding 3efd1358-b8a5-4c7a-abd6-cd2da2fc8a92
+[2026-05-03 21:06:36,185: INFO/ForkPoolWorker-2] Stored embedding for finding d2469d99-c996-4dd6-a17a-a7b933db9e55
+[2026-05-03 21:06:36,264: INFO/ForkPoolWorker-2] Stored embedding for finding 74671ec2-2a62-435f-8558-d396c19cd31a
+[2026-05-03 21:06:36,340: INFO/ForkPoolWorker-2] Stored embedding for finding 77fc1dfa-49eb-4997-a233-bd93589fb517
+[2026-05-03 21:06:36,416: INFO/ForkPoolWorker-2] Stored embedding for finding 41ddd1b6-bf19-4f18-a77e-f734c21d11e4
+[2026-05-03 21:06:36,492: INFO/ForkPoolWorker-2] Stored embedding for finding 0aea6a41-8ad0-4a40-9c56-73861f8b24d0
+[2026-05-03 21:06:36,582: INFO/ForkPoolWorker-2] Stored embedding for finding 51c75b81-5ffb-435a-bc94-7a4f565bb7ef
+[2026-05-03 21:06:36,650: INFO/ForkPoolWorker-2] Stored embedding for finding 20b93f9d-98c4-4440-a675-ca11884a7a8c
+[2026-05-03 21:06:36,741: INFO/ForkPoolWorker-2] Stored embedding for finding e6dd7db8-684d-459c-bafd-a1507ff4c524
+[2026-05-03 21:06:36,808: INFO/ForkPoolWorker-2] Stored embedding for finding 32431d70-03c9-4054-be1d-617942fce45a
+[2026-05-03 21:06:36,885: INFO/ForkPoolWorker-2] Stored embedding for finding d9587478-830b-427e-8739-90d51ee32eb4
+[2026-05-03 21:06:36,965: INFO/ForkPoolWorker-2] Stored embedding for finding 334e6f18-c389-447c-92cc-6df53f62365a
+[2026-05-03 21:06:37,040: INFO/ForkPoolWorker-2] Stored embedding for finding c535c31a-00b9-427a-be21-d85dc3ce847f
+[2026-05-03 21:06:37,110: INFO/ForkPoolWorker-2] Stored embedding for finding 7a9680cb-a6ac-4eff-ade1-b6c0e06b1b66
+[2026-05-03 21:06:37,307: INFO/ForkPoolWorker-2] Stored embedding for finding 4d1cf8d1-a245-4945-9faa-873559340cc4
+[2026-05-03 21:06:37,395: INFO/ForkPoolWorker-2] Stored embedding for finding 504c7d3a-2ae7-4f95-866d-810a7f89b10b
+[2026-05-03 21:06:37,478: INFO/ForkPoolWorker-2] Stored embedding for finding 304b5758-cc39-44a8-b742-d1818f1a5171
+[2026-05-03 21:06:37,569: INFO/ForkPoolWorker-2] Stored embedding for finding 09c06d0a-9404-4c90-929c-fb51c48feff2
+[2026-05-03 21:06:37,646: INFO/ForkPoolWorker-2] Stored embedding for finding ec4add0a-7c54-4350-aac8-b03a70349f75
+[2026-05-03 21:06:37,720: INFO/ForkPoolWorker-2] Stored embedding for finding c77f8e3e-20bb-4a8c-8454-f948306e4698
+[2026-05-03 21:06:37,795: INFO/ForkPoolWorker-2] Stored embedding for finding 92854704-c1d0-4171-bffc-af42c0278494
+[2026-05-03 21:06:37,868: INFO/ForkPoolWorker-2] Stored embedding for finding 7d9112cc-7c47-464e-a49d-bb8af7463ad9
+[2026-05-03 21:06:37,947: INFO/ForkPoolWorker-2] Stored embedding for finding cad597a3-9837-4923-8069-1a896d7b31ff
+[2026-05-03 21:06:38,023: INFO/ForkPoolWorker-2] Stored embedding for finding 0e9641b0-fd63-4d4a-8b9c-ef202dac9c35
+[2026-05-03 21:06:38,149: INFO/ForkPoolWorker-2] Stored embedding for finding b27fa953-07c6-48bf-9f26-be160a60ef61
+[2026-05-03 21:06:38,226: INFO/ForkPoolWorker-2] Stored embedding for finding f87c600b-a41f-44f1-b2cc-e664bca8c241
+[2026-05-03 21:06:38,314: INFO/ForkPoolWorker-2] Stored embedding for finding 265547e1-2822-4df0-b0a5-c449d8f56b23
+[2026-05-03 21:06:38,395: INFO/ForkPoolWorker-2] Stored embedding for finding 493dfcba-bbeb-41d6-8129-6e927c753303
+[2026-05-03 21:06:38,470: INFO/ForkPoolWorker-2] Stored embedding for finding 465f1731-d272-4b21-a7e4-2a1299661465
+[2026-05-03 21:06:38,544: INFO/ForkPoolWorker-2] Stored embedding for finding 52f929b9-7557-43c1-8320-883ba5273014
+[2026-05-03 21:06:38,621: INFO/ForkPoolWorker-2] Stored embedding for finding 99e8c685-18a7-4e22-821d-0334e7eb9901
+[2026-05-03 21:06:38,697: INFO/ForkPoolWorker-2] Stored embedding for finding 84dfc0d0-6968-4cc4-a074-956df95891fd
+[2026-05-03 21:06:38,771: INFO/ForkPoolWorker-2] Stored embedding for finding 624d59e7-a7e7-4896-baac-9f2166915f28
+[2026-05-03 21:06:38,846: INFO/ForkPoolWorker-2] Stored embedding for finding 4bd9e58f-91a2-4102-a8dc-00ddef2b8dca
+[2026-05-03 21:06:38,921: INFO/ForkPoolWorker-2] Stored embedding for finding 20486a61-95ba-4e8d-bf34-c67f788f5018
+[2026-05-03 21:06:38,993: INFO/ForkPoolWorker-2] Stored embedding for finding 7b02cc1b-3c25-4813-b989-e290963d9747
+[2026-05-03 21:06:39,070: INFO/ForkPoolWorker-2] Stored embedding for finding 55fbeaf7-8ce3-4cc8-a20f-90e6b9029dd1
+[2026-05-03 21:06:39,151: INFO/ForkPoolWorker-2] Stored embedding for finding 32ba423f-7334-4b23-8c9d-3363e72ee183
+[2026-05-03 21:06:39,230: INFO/ForkPoolWorker-2] Stored embedding for finding c60335ba-7eaa-418e-9554-61a748c1238e
+[2026-05-03 21:06:39,316: INFO/ForkPoolWorker-2] Stored embedding for finding 12dee746-8778-4d6a-a277-2f2169a76442
+[2026-05-03 21:06:39,392: INFO/ForkPoolWorker-2] Stored embedding for finding 04f0ccdb-5680-4ce5-adf2-31a3d15c3c4b
+[2026-05-03 21:06:39,466: INFO/ForkPoolWorker-2] Stored embedding for finding df6f0cb3-04de-4f8e-891e-e441a5bf4b60
+[2026-05-03 21:06:39,556: INFO/ForkPoolWorker-2] Stored embedding for finding 95de70dc-08c8-4ebe-94d2-f3d11afc70a1
+[2026-05-03 21:06:39,629: INFO/ForkPoolWorker-2] Stored embedding for finding 1e226b25-b2c9-4ceb-ba24-fbd9c2a23f78
+[2026-05-03 21:06:39,704: INFO/ForkPoolWorker-2] Stored embedding for finding a3006648-d616-4844-8859-4e8293fd1d11
+[2026-05-03 21:06:39,783: INFO/ForkPoolWorker-2] Stored embedding for finding 621d4d48-f87b-4bb3-97d7-d114aa975e03
+[2026-05-03 21:06:39,859: INFO/ForkPoolWorker-2] Stored embedding for finding b1dd3e7b-fb52-42bc-b9a8-c56d9ec5a56f
+[2026-05-03 21:06:39,937: INFO/ForkPoolWorker-2] Stored embedding for finding 606effb2-9298-43fe-a79c-437a7fe9ef15
+[2026-05-03 21:06:40,016: INFO/ForkPoolWorker-2] Stored embedding for finding 203da044-0287-4176-85d3-fc69e4c481d0
+[2026-05-03 21:06:40,084: INFO/ForkPoolWorker-2] Stored embedding for finding 1b66ae07-d84f-4341-88b1-26b88ad2325e
+[2026-05-03 21:06:40,161: INFO/ForkPoolWorker-2] Stored embedding for finding a93e85bd-2931-4220-9eb1-f2492474e5ed
+[2026-05-03 21:06:40,232: INFO/ForkPoolWorker-2] Stored embedding for finding c3b6c855-42b6-4e7e-9323-e222bb23133b
+[2026-05-03 21:06:40,311: INFO/ForkPoolWorker-2] Stored embedding for finding 7abb8695-d019-4a64-9f1e-1e6d869a690d
+[2026-05-03 21:06:40,384: INFO/ForkPoolWorker-2] Stored embedding for finding c8cf6dba-e50d-41b3-b3ab-ed107c8a712d
+[2026-05-03 21:06:40,466: INFO/ForkPoolWorker-2] Stored embedding for finding 9a2e8bbc-2090-471a-9932-fc83bbce28c5
+[2026-05-03 21:06:40,539: INFO/ForkPoolWorker-2] Stored embedding for finding d86b4d76-c76a-4c31-b559-5bc0afc008be
+[2026-05-03 21:06:40,624: INFO/ForkPoolWorker-2] Stored embedding for finding b11a8905-7150-41de-bc7b-bff6072ca318
+[2026-05-03 21:06:40,701: INFO/ForkPoolWorker-2] Stored embedding for finding a469c04d-e59c-4949-b59d-c03a64aa8964
+[2026-05-03 21:06:40,781: INFO/ForkPoolWorker-2] Stored embedding for finding 4bcd3bf0-c53f-4c3f-8cc9-e26647d105c3
+[2026-05-03 21:06:40,862: INFO/ForkPoolWorker-2] Stored embedding for finding ea5c9f5f-aeaf-45b9-ac15-ee6e403e61f8
+[2026-05-03 21:06:40,934: INFO/ForkPoolWorker-2] Stored embedding for finding da44cb04-e690-410b-bb3a-dd9d21bcc156
+[2026-05-03 21:06:41,012: INFO/ForkPoolWorker-2] Stored embedding for finding f7beaadb-2d68-4332-a0e4-34b1f911b4a4
+[2026-05-03 21:06:41,091: INFO/ForkPoolWorker-2] Stored embedding for finding 3a947a50-0756-410c-beb3-7ead9d9e9775
+[2026-05-03 21:06:41,170: INFO/ForkPoolWorker-2] Stored embedding for finding ea4fbe12-8e45-4f33-961f-06a64b1b3575
+[2026-05-03 21:06:41,274: INFO/ForkPoolWorker-2] Stored embedding for finding 29187da3-0e4f-433a-b300-d0027e8b7196
+[2026-05-03 21:06:41,356: INFO/ForkPoolWorker-2] Stored embedding for finding 3d94847f-a331-4f5f-b869-437d21694341
+[2026-05-03 21:06:41,435: INFO/ForkPoolWorker-2] Stored embedding for finding 207e7588-ea5e-4ab9-83d5-1f2896467130
+[2026-05-03 21:06:41,509: INFO/ForkPoolWorker-2] Stored embedding for finding 81f719e1-e619-446b-ae98-4d0661b36b3d
+[2026-05-03 21:06:41,584: INFO/ForkPoolWorker-2] Stored embedding for finding 9503b608-e09d-4ff6-a1f7-5f717f18fdf0
+[2026-05-03 21:06:41,660: INFO/ForkPoolWorker-2] Stored embedding for finding cdfcfd94-cea3-441d-b885-756475c9b73a
+[2026-05-03 21:06:41,739: INFO/ForkPoolWorker-2] Stored embedding for finding f562b7cc-1b3e-4a6f-9e80-8d6b691b935e
+[2026-05-03 21:06:41,866: INFO/ForkPoolWorker-2] Stored embedding for finding 3f5d4f0a-eb7b-43ff-a873-bd2ed18583dc
+[2026-05-03 21:06:41,941: INFO/ForkPoolWorker-2] Stored embedding for finding 1c7a847d-42ed-4290-8eed-1c710c0af2ac
+[2026-05-03 21:06:42,025: INFO/ForkPoolWorker-2] Stored embedding for finding cd60bdd4-9961-47bb-9550-eb3f8caa9f7e
+[2026-05-03 21:06:42,101: INFO/ForkPoolWorker-2] Stored embedding for finding e8fa4777-c8a4-4bdd-86e2-5f047f14f341
+[2026-05-03 21:06:42,186: INFO/ForkPoolWorker-2] Stored embedding for finding 158173e5-a12a-4b85-aaf2-c1d351cf5b69
+[2026-05-03 21:06:42,267: INFO/ForkPoolWorker-2] Stored embedding for finding 3c813909-8ed5-4891-9895-73bfac5a8c19
+[2026-05-03 21:06:42,347: INFO/ForkPoolWorker-2] Stored embedding for finding ecfea11c-fe12-496e-9e2a-bce8fc0a16cf
+[2026-05-03 21:06:42,422: INFO/ForkPoolWorker-2] Stored embedding for finding 37b68a3e-ac3b-4ebb-bb79-d54f9e5838a5
+[2026-05-03 21:06:42,501: INFO/ForkPoolWorker-2] Stored embedding for finding b8059d80-38b5-4874-8fe2-8fd36672091a
+[2026-05-03 21:06:42,578: INFO/ForkPoolWorker-2] Stored embedding for finding 06a0bccb-965b-4dfe-84ab-dc8639d79ff4
+[2026-05-03 21:06:42,654: INFO/ForkPoolWorker-2] Stored embedding for finding b06424ce-5c63-4264-bd13-ba082ff277e0
+[2026-05-03 21:06:42,733: INFO/ForkPoolWorker-2] Stored embedding for finding eb516a45-c051-47dc-a558-496c9499cb24
+[2026-05-03 21:06:42,842: INFO/ForkPoolWorker-2] Stored embedding for finding 64e88c8c-50a7-40a2-ae37-74068bb8d442
+[2026-05-03 21:06:42,919: INFO/ForkPoolWorker-2] Stored embedding for finding c776a2f5-d2b7-4c35-b1ec-502694bd624a
+[2026-05-03 21:06:42,995: INFO/ForkPoolWorker-2] Stored embedding for finding aeca7c7c-80cd-421a-aea4-6e8ec942c162
+[2026-05-03 21:06:43,076: INFO/ForkPoolWorker-2] Stored embedding for finding 2ef27996-ac9d-477e-9daf-20ff71c729fd
+[2026-05-03 21:06:43,149: INFO/ForkPoolWorker-2] Stored embedding for finding d3aacffa-0d43-4703-b0f3-f828f6cf0662
+[2026-05-03 21:06:43,236: INFO/ForkPoolWorker-2] Stored embedding for finding 70920eb5-fbf7-487b-87bc-77b73a54a67b
+[2026-05-03 21:06:43,309: INFO/ForkPoolWorker-2] Stored embedding for finding 279ef2ca-db8c-4c07-a259-7ae32127776a
+[2026-05-03 21:06:43,383: INFO/ForkPoolWorker-2] Stored embedding for finding 747c4206-d416-44cb-97da-909cab487e43
+[2026-05-03 21:06:43,454: INFO/ForkPoolWorker-2] Stored embedding for finding 5312bf61-4db6-434b-888a-445b82a95c42
+[2026-05-03 21:06:43,521: INFO/ForkPoolWorker-2] Stored embedding for finding e43e31ad-6c44-458e-82f5-bbe4aef1a595
+[2026-05-03 21:06:43,591: INFO/ForkPoolWorker-2] Stored embedding for finding 8b1dd9e9-38a0-42b5-8f22-965d996cb47d
+[2026-05-03 21:06:43,715: INFO/ForkPoolWorker-2] Stored embedding for finding 3273c80a-5661-40f6-a79c-af96209eb396
+[2026-05-03 21:06:43,791: INFO/ForkPoolWorker-2] Stored embedding for finding 9bc05592-c881-4ef8-ad44-3a55ba964dde
+[2026-05-03 21:06:43,869: INFO/ForkPoolWorker-2] Stored embedding for finding 6815f51e-ee03-48ce-935e-3498ef15d392
+[2026-05-03 21:06:43,948: INFO/ForkPoolWorker-2] Stored embedding for finding 1200e591-f7df-4ba3-a560-0d4c9ba25a6b
+[2026-05-03 21:06:44,020: INFO/ForkPoolWorker-2] Stored embedding for finding 65ed6b47-b3f5-4b1d-ac8b-52c8a84ade29
+[2026-05-03 21:06:44,102: INFO/ForkPoolWorker-2] Stored embedding for finding ddd68097-6f3b-4109-a069-8ffa1516ad86
+[2026-05-03 21:06:44,181: INFO/ForkPoolWorker-2] Stored embedding for finding 9f34c65d-100e-4fa2-9e93-cc9baeb3b675
+[2026-05-03 21:06:44,258: INFO/ForkPoolWorker-2] Stored embedding for finding a9c02fd9-4133-4dea-833b-5989120dc039
+[2026-05-03 21:06:44,340: INFO/ForkPoolWorker-2] Stored embedding for finding 7f564f95-afe8-4b9b-b0d7-f4cd4a22f24b
+[2026-05-03 21:06:44,412: INFO/ForkPoolWorker-2] Stored embedding for finding 2789fee9-7e05-4a66-9678-d6397ef6bc48
+[2026-05-03 21:06:44,490: INFO/ForkPoolWorker-2] Stored embedding for finding cb65ab80-92ce-4542-8b40-055385d35c29
+[2026-05-03 21:06:44,570: INFO/ForkPoolWorker-2] Stored embedding for finding d2f988c8-5985-4630-9444-2aa263a99444
+[2026-05-03 21:06:44,684: INFO/ForkPoolWorker-2] Stored embedding for finding 675f324f-0f12-4375-859a-5952ae1b5fbe
+[2026-05-03 21:06:44,758: INFO/ForkPoolWorker-2] Stored embedding for finding 6eb422b1-d1df-4e81-b2b6-e3b11d73e828
+[2026-05-03 21:06:44,829: INFO/ForkPoolWorker-2] Stored embedding for finding 7f5f01df-3ac7-40d1-a378-b9269faf4117
+[2026-05-03 21:06:44,923: INFO/ForkPoolWorker-2] Stored embedding for finding cad9668a-ebdb-419d-8b8f-86fc6069d03b
+[2026-05-03 21:06:45,006: INFO/ForkPoolWorker-2] Stored embedding for finding a6f583f6-4a03-4330-8b86-fe598181f5f4
+[2026-05-03 21:06:45,088: INFO/ForkPoolWorker-2] Stored embedding for finding f0a921e8-2e1e-4ece-9097-93b474cca442
+[2026-05-03 21:06:45,162: INFO/ForkPoolWorker-2] Stored embedding for finding 03c11568-0b52-4fdc-ba7b-ec6d9fdb436c
+[2026-05-03 21:06:45,237: INFO/ForkPoolWorker-2] Stored embedding for finding 289cae77-1588-4e7c-940c-e4df3055866b
+[2026-05-03 21:06:45,323: INFO/ForkPoolWorker-2] Stored embedding for finding 91aa92e4-96ab-4574-8b5b-54103e82882f
+[2026-05-03 21:06:45,402: INFO/ForkPoolWorker-2] Stored embedding for finding 8ac9f4fa-6d00-489e-8e35-d246c52fb3ee
+[2026-05-03 21:06:45,471: INFO/ForkPoolWorker-2] Stored embedding for finding dc57ce79-4423-4cf2-bfd0-9038c3a60bd2
+[2026-05-03 21:06:45,548: INFO/ForkPoolWorker-2] Stored embedding for finding 9df9aa58-4932-40cb-90fc-5695195de42f
+[2026-05-03 21:06:45,629: INFO/ForkPoolWorker-2] Stored embedding for finding 4044f5b6-f1db-4848-af0f-8554d468eb71
+[2026-05-03 21:06:45,702: INFO/ForkPoolWorker-2] Stored embedding for finding de0e4502-81b8-41aa-8445-f2efe9ea8daf
+[2026-05-03 21:06:45,777: INFO/ForkPoolWorker-2] Stored embedding for finding df0320d1-43f7-4175-8564-9bcd22de633d
+[2026-05-03 21:06:45,849: INFO/ForkPoolWorker-2] Stored embedding for finding fcbd073e-a7e1-4c9b-b5c3-535cbf82dafd
+[2026-05-03 21:06:45,923: INFO/ForkPoolWorker-2] Stored embedding for finding a8cc4279-1f8d-4671-a5dc-b07f7307ff61
+[2026-05-03 21:06:46,003: INFO/ForkPoolWorker-2] Stored embedding for finding c34de117-0be1-448c-90da-954917b42b9a
+[2026-05-03 21:06:46,087: INFO/ForkPoolWorker-2] Stored embedding for finding 1c0adb84-7237-4f44-93bb-c31c3104e04a
+[2026-05-03 21:06:46,167: INFO/ForkPoolWorker-2] Stored embedding for finding 984066d6-2bd4-4da9-a12c-5208921d3a10
+[2026-05-03 21:06:46,244: INFO/ForkPoolWorker-2] Stored embedding for finding b4bd37f8-44e1-401c-bbe7-032fcd200ebb
+[2026-05-03 21:06:46,324: INFO/ForkPoolWorker-2] Stored embedding for finding 06e01d40-db6f-413c-9103-d00cfda84aa1
+[2026-05-03 21:06:46,401: INFO/ForkPoolWorker-2] Stored embedding for finding 1d8fb654-a6cb-46aa-b778-6857babee3d5
+[2026-05-03 21:06:46,489: INFO/ForkPoolWorker-2] Stored embedding for finding 78561900-92a7-4fe4-b9df-f2cbb8b8f5f4
+[2026-05-03 21:06:46,604: INFO/ForkPoolWorker-2] Stored embedding for finding 73a9ccf3-be76-41ed-ac64-72d47c39f86a
+[2026-05-03 21:06:46,680: INFO/ForkPoolWorker-2] Stored embedding for finding f54bbe82-9dac-4aa6-b2fe-1541fae42f3d
+[2026-05-03 21:06:46,747: INFO/ForkPoolWorker-2] Stored embedding for finding 58469772-a176-4234-b6f9-4d7926a4c728
+[2026-05-03 21:06:46,819: INFO/ForkPoolWorker-2] Stored embedding for finding 4b91f771-ef7b-4243-8734-c97e26ba7bb4
+[2026-05-03 21:06:46,893: INFO/ForkPoolWorker-2] Stored embedding for finding 48459275-8d14-434d-837c-5d8e6dd3bb4a
+[2026-05-03 21:06:46,969: INFO/ForkPoolWorker-2] Stored embedding for finding bbb35e84-70bc-4c2e-b3fe-9f8de2659240
+[2026-05-03 21:06:47,052: INFO/ForkPoolWorker-2] Stored embedding for finding 9161d5d5-91a3-4f4b-b56f-80b88f1b114f
+[2026-05-03 21:06:47,130: INFO/ForkPoolWorker-2] Stored embedding for finding e864f2c8-714d-466a-a073-ce09adf51111
+[2026-05-03 21:06:47,212: INFO/ForkPoolWorker-2] Stored embedding for finding 5e73c3ff-21b9-420d-a697-13f4f9e608c5
+[2026-05-03 21:06:47,296: INFO/ForkPoolWorker-2] Stored embedding for finding f483f81c-ce08-4870-8151-71845bf6fd46
+[2026-05-03 21:06:47,372: INFO/ForkPoolWorker-2] Stored embedding for finding f5b4902d-9781-48fe-9e7f-4b6e3457c9b2
+[2026-05-03 21:06:47,451: INFO/ForkPoolWorker-2] Stored embedding for finding 0605eec6-e721-4500-8bc0-730047a91504
+[2026-05-03 21:06:47,533: INFO/ForkPoolWorker-2] Stored embedding for finding 03e3aa90-59af-49e0-98eb-f8ffbe69bb1e
+[2026-05-03 21:06:47,606: INFO/ForkPoolWorker-2] Stored embedding for finding ae7cebae-987c-4f28-bf6b-274a50856f78
+[2026-05-03 21:06:47,680: INFO/ForkPoolWorker-2] Stored embedding for finding 9644326f-ea98-44a5-9666-422e7baec8a6
+[2026-05-03 21:06:47,753: INFO/ForkPoolWorker-2] Stored embedding for finding 7669b81a-3e74-4f5d-b6e5-5c0171b35138
+[2026-05-03 21:06:47,830: INFO/ForkPoolWorker-2] Stored embedding for finding 9aa6f866-4232-4672-8acb-d15d61275d7f
+[2026-05-03 21:06:47,933: INFO/ForkPoolWorker-2] Stored embedding for finding df6bef47-29a9-467f-869d-d7ddc6714407
+[2026-05-03 21:06:48,016: INFO/ForkPoolWorker-2] Stored embedding for finding 5ba86d9f-8618-42d5-9e06-8146f3a434c4
+[2026-05-03 21:06:48,114: INFO/ForkPoolWorker-2] Stored embedding for finding 6cd5fb78-9a02-4d64-90d3-580ae9d83883
+[2026-05-03 21:06:48,189: INFO/ForkPoolWorker-2] Stored embedding for finding 04bd6bf7-7e0e-44e2-affa-1904ae84988a
+[2026-05-03 21:06:48,266: INFO/ForkPoolWorker-2] Stored embedding for finding d9c744f0-d51a-4464-b2fb-00339d66835a
+[2026-05-03 21:06:48,341: INFO/ForkPoolWorker-2] Stored embedding for finding 1c6be74e-81f6-409d-b116-527b2d6d6c16
+[2026-05-03 21:06:48,417: INFO/ForkPoolWorker-2] Stored embedding for finding 0f87bae8-92f2-4fc2-b47f-2e14bd17b744
+[2026-05-03 21:06:48,496: INFO/ForkPoolWorker-2] Stored embedding for finding c9fd522e-9661-4b11-881b-6daa3b8becb3
+[2026-05-03 21:06:48,570: INFO/ForkPoolWorker-2] Stored embedding for finding 678b07a5-d6e9-4fef-a90d-da0fe1ce5b42
+[2026-05-03 21:06:48,647: INFO/ForkPoolWorker-2] Stored embedding for finding 0291548d-995c-4a92-b809-001dd90d4e97
+[2026-05-03 21:06:48,721: INFO/ForkPoolWorker-2] Stored embedding for finding 181211a1-cd52-47cf-87ee-83bbf24e3675
+[2026-05-03 21:06:48,799: INFO/ForkPoolWorker-2] Stored embedding for finding d31fa344-40cd-47db-90bf-f855c8b75b46
+[2026-05-03 21:06:48,882: INFO/ForkPoolWorker-2] Stored embedding for finding 7d481534-4cf8-4697-bf31-d7fc3d561fd5
+[2026-05-03 21:06:48,956: INFO/ForkPoolWorker-2] Stored embedding for finding 1064bc08-3586-41e5-9638-bf08fd2d423c
+[2026-05-03 21:06:49,036: INFO/ForkPoolWorker-2] Stored embedding for finding e0254aad-473f-488b-b2fb-e45361ae7b43
+[2026-05-03 21:06:49,113: INFO/ForkPoolWorker-2] Stored embedding for finding 76b04400-2d19-494e-a0ea-ca4bda061e52
+[2026-05-03 21:06:49,195: INFO/ForkPoolWorker-2] Stored embedding for finding 88302b27-40d2-4d10-8e3e-b749e8a70256
+[2026-05-03 21:06:49,279: INFO/ForkPoolWorker-2] Stored embedding for finding d5a5c15a-b2b0-4152-9d5c-50a2919e4b4f
+[2026-05-03 21:06:49,359: INFO/ForkPoolWorker-2] Stored embedding for finding 3147a163-a4c9-4d6e-bcec-5cf344dbace8
+[2026-05-03 21:06:49,712: INFO/ForkPoolWorker-2] Stored embedding for finding 251a833b-391d-4f42-8987-b6a97faf43de
+[2026-05-03 21:06:50,293: INFO/ForkPoolWorker-2] Stored embedding for finding ecf82d13-8a3a-4199-93b4-636a7203a4e1
+[2026-05-03 21:06:50,463: INFO/ForkPoolWorker-2] Stored embedding for finding e156256a-93a8-478c-8d4a-9b3f0127985a
+[2026-05-03 21:06:50,535: INFO/ForkPoolWorker-2] Stored embedding for finding 0fd12953-3bcb-46d1-a74c-1bd35de32f85
+[2026-05-03 21:06:50,610: INFO/ForkPoolWorker-2] Stored embedding for finding e5241f60-0666-447e-a701-6d43856b8cab
+[2026-05-03 22:28:23,086: INFO/ForkPoolWorker-2] Stored embedding for finding df443c3f-7769-4385-bdb6-e021d83aa38a
+[2026-05-03 22:28:24,477: INFO/ForkPoolWorker-2] Stored embedding for finding d144b824-ba23-43e1-a511-a060687e6141
+[2026-05-03 22:28:24,919: INFO/ForkPoolWorker-2] Stored embedding for finding fb901c09-b11e-47ce-a78b-9daf2171101c
+[2026-05-03 22:28:25,060: INFO/ForkPoolWorker-2] Stored embedding for finding e9da9d6f-3494-4139-8215-3462fe38e180
+[2026-05-03 22:28:25,171: INFO/ForkPoolWorker-2] Stored embedding for finding 54c171ee-1f2d-4982-a195-9bb1072e2c1f
+[2026-05-03 22:28:25,272: INFO/ForkPoolWorker-2] Stored embedding for finding 8eaae995-6d93-46df-8577-5dd5c6783e90
+[2026-05-03 22:28:25,408: INFO/ForkPoolWorker-2] Stored embedding for finding e040afbc-a247-40c1-a01c-672d9e6b75ab
+[2026-05-03 22:28:25,495: INFO/ForkPoolWorker-2] Stored embedding for finding 34c595ed-302a-4e2e-a4fe-619b0a2eb61f
+[2026-05-03 22:28:25,566: INFO/ForkPoolWorker-2] Stored embedding for finding 56b1d82e-faea-42fa-861a-57918578ad06
+[2026-05-03 22:28:25,639: INFO/ForkPoolWorker-2] Stored embedding for finding cf170397-6da0-4fb3-a0d0-102a4c64a756
+[2026-05-03 22:28:25,813: INFO/ForkPoolWorker-2] Stored embedding for finding b8600363-8aba-4790-8746-155daa2dafd2
+[2026-05-03 22:28:25,885: INFO/ForkPoolWorker-2] Stored embedding for finding 91f9aeea-d664-42c7-a39e-49a9a75e202d
+[2026-05-03 22:28:25,963: INFO/ForkPoolWorker-2] Stored embedding for finding b4ef3e05-f7dd-4fe6-a1a8-7432865d5daa
+[2026-05-03 22:28:26,263: INFO/ForkPoolWorker-2] Stored embedding for finding 4dd92a89-eea1-41b3-b898-6bfa8a59c48f
+[2026-05-03 22:28:26,372: INFO/ForkPoolWorker-2] Stored embedding for finding 806b878b-0406-41a9-81c3-626de4834b8f
+[2026-05-03 22:28:26,446: INFO/ForkPoolWorker-2] Stored embedding for finding 8d0aeba8-8e7c-4a49-a360-791bad4e6f29
+[2026-05-03 22:28:26,519: INFO/ForkPoolWorker-2] Stored embedding for finding 7009eb77-1ebc-4c10-b512-9e9e58c19bb9
+[2026-05-03 22:28:26,594: INFO/ForkPoolWorker-2] Stored embedding for finding 85d12f3a-7d80-4205-ae57-28d87736d6e4
+[2026-05-03 22:28:26,715: INFO/ForkPoolWorker-2] Stored embedding for finding e559f03b-42f5-4b52-a9cf-a6f1d4420475
+[2026-05-03 22:28:26,785: INFO/ForkPoolWorker-2] Stored embedding for finding 24247d5f-5866-481f-9891-80ab9d71f5fa
+[2026-05-03 22:28:26,885: INFO/ForkPoolWorker-2] Stored embedding for finding c72ed60a-effc-40f2-ba69-98716fa4465d
+[2026-05-03 22:28:26,958: INFO/ForkPoolWorker-2] Stored embedding for finding f128a3ec-ee29-4e95-a5bd-edfb6b608bd4
+[2026-05-03 22:28:27,032: INFO/ForkPoolWorker-2] Stored embedding for finding 8c157eb4-697c-4142-b096-5d42c48014e7
+[2026-05-03 22:28:27,102: INFO/ForkPoolWorker-2] Stored embedding for finding 0961f02a-7c35-4334-8b7f-9ffa71670924
+[2026-05-03 22:28:27,172: INFO/ForkPoolWorker-2] Stored embedding for finding 916d9ecc-f031-4d3a-af59-563f9e5d0861
+[2026-05-03 22:28:27,241: INFO/ForkPoolWorker-2] Stored embedding for finding 0357f708-2643-43c5-8be3-9e718bcf1193
+[2026-05-03 22:28:27,318: INFO/ForkPoolWorker-2] Stored embedding for finding 070e1bd0-fd59-4802-abcb-754272ff6d9f
+[2026-05-03 22:28:27,409: INFO/ForkPoolWorker-2] Stored embedding for finding aa0230bc-3a23-410e-8e20-6c79b6bf18f7
+[2026-05-03 22:28:27,498: INFO/ForkPoolWorker-2] Stored embedding for finding 8fb58b51-300f-45c7-aa16-916678f8e209
+[2026-05-03 22:28:27,572: INFO/ForkPoolWorker-2] Stored embedding for finding 9b721d1e-9e27-481b-b6b0-35960c8b864b
+[2026-05-03 22:28:27,684: INFO/ForkPoolWorker-2] Stored embedding for finding 325d4b61-fa6d-4d10-a890-3ac8a1b3ef05
+[2026-05-03 22:28:27,755: INFO/ForkPoolWorker-2] Stored embedding for finding 1d0b5bc0-5400-4371-8df0-013e2e9b48b2
+[2026-05-03 22:28:27,826: INFO/ForkPoolWorker-2] Stored embedding for finding 249ae0bd-0451-42cf-8e70-31d3965755fd
+[2026-05-03 22:28:27,897: INFO/ForkPoolWorker-2] Stored embedding for finding 9fb6b4a4-613e-48c1-8cdd-7a69955c7937
+[2026-05-03 22:28:27,968: INFO/ForkPoolWorker-2] Stored embedding for finding 227018cb-b178-45b3-93bf-1aa3762a398d
+[2026-05-03 22:28:28,098: INFO/ForkPoolWorker-2] Stored embedding for finding a8357a68-c82c-4ab3-9c3f-30693d743acd
+[2026-05-03 22:28:28,257: INFO/ForkPoolWorker-2] Stored embedding for finding 99926afe-7510-445e-a790-60229b42a199
+[2026-05-03 22:28:28,341: INFO/ForkPoolWorker-2] Stored embedding for finding ad35ef60-709d-4b71-b0cc-262278124612
+[2026-05-03 22:28:28,412: INFO/ForkPoolWorker-2] Stored embedding for finding 10cab43c-df81-4b49-98b9-4dd13f96ef84
+[2026-05-03 22:28:28,487: INFO/ForkPoolWorker-2] Stored embedding for finding 4d5ad364-50e5-41d8-8217-4a8c45eb5e51
+[2026-05-03 22:28:28,603: INFO/ForkPoolWorker-2] Stored embedding for finding 707df1ff-1757-41e4-9dc1-ac71dbaf038e
+[2026-05-03 22:28:28,678: INFO/ForkPoolWorker-2] Stored embedding for finding 1f6614c9-cd84-4018-a9e4-8becbde9b5ee
+[2026-05-03 22:28:28,749: INFO/ForkPoolWorker-2] Stored embedding for finding 8255b251-aac6-4203-b082-988566ce6e31
+[2026-05-03 22:28:28,822: INFO/ForkPoolWorker-2] Stored embedding for finding 204bd884-b3dd-4f1b-beec-929ffdb3a594
+[2026-05-03 22:28:28,892: INFO/ForkPoolWorker-2] Stored embedding for finding 1a36905f-8ec4-45e8-b30b-144c5b0d7014
+[2026-05-03 22:28:28,963: INFO/ForkPoolWorker-2] Stored embedding for finding b8bcdfbe-e1f1-432c-90e7-7f733248cecb
+[2026-05-03 22:28:29,033: INFO/ForkPoolWorker-2] Stored embedding for finding d901f658-27e7-4b59-9dca-00b666c70389
+[2026-05-03 22:28:29,107: INFO/ForkPoolWorker-2] Stored embedding for finding ada4f349-96e8-4189-8cfd-ca2b3dddb431
+[2026-05-03 22:28:29,175: INFO/ForkPoolWorker-2] Stored embedding for finding 45497aa2-a651-4b53-a932-ee8eb8dee23c
+[2026-05-03 22:28:29,249: INFO/ForkPoolWorker-2] Stored embedding for finding a3759066-3314-445d-9ed5-5238be50a77d
+[2026-05-03 22:28:29,319: INFO/ForkPoolWorker-2] Stored embedding for finding 2d9b9a25-ae5c-4076-b91a-40c85cff63c4
+[2026-05-03 22:28:29,390: INFO/ForkPoolWorker-2] Stored embedding for finding 056b258c-ca39-4761-9b14-5437bbc9eea7
+[2026-05-03 22:28:29,464: INFO/ForkPoolWorker-2] Stored embedding for finding 21bbc2d9-7b90-448d-86a2-c5db4c37a5be
+[2026-05-03 22:28:29,544: INFO/ForkPoolWorker-2] Stored embedding for finding dc8eb4a3-cd0e-4831-b122-6862a112f8ae
+[2026-05-03 22:28:29,614: INFO/ForkPoolWorker-2] Stored embedding for finding c425300b-9edd-495c-a2b8-5b9851e7704f
+[2026-05-03 22:28:29,730: INFO/ForkPoolWorker-2] Stored embedding for finding 56856728-3d68-4f93-99c0-a51ccc0ed130
+[2026-05-03 22:28:29,828: INFO/ForkPoolWorker-2] Stored embedding for finding cc2a5915-62bf-4422-8ebb-3d707edeab63
+[2026-05-03 22:28:29,939: INFO/ForkPoolWorker-2] Stored embedding for finding 0b9e1cd6-320a-4e79-88ab-6c6be618e2e4
+[2026-05-03 22:28:30,010: INFO/ForkPoolWorker-2] Stored embedding for finding c0be70b7-616c-408e-bfb1-8b8b69235ff8
+[2026-05-03 22:28:30,079: INFO/ForkPoolWorker-2] Stored embedding for finding af19ee53-d120-41bd-a7ca-154e06950584
+[2026-05-03 22:28:30,149: INFO/ForkPoolWorker-2] Stored embedding for finding ac4d3a3d-2c9d-4238-80e1-6e9a59ccb8eb
+[2026-05-03 22:28:30,215: INFO/ForkPoolWorker-2] Stored embedding for finding 6d713c0a-7fff-4947-8b75-3965861402a3
+[2026-05-03 22:28:30,283: INFO/ForkPoolWorker-2] Stored embedding for finding 8eae1564-d877-4530-b9ce-80fd38f201fe
+[2026-05-03 22:28:30,352: INFO/ForkPoolWorker-2] Stored embedding for finding c16d7ef3-86ff-489c-a1b7-f4bd82e26b25
+[2026-05-03 22:28:30,417: INFO/ForkPoolWorker-2] Stored embedding for finding c4fc4164-88c5-4ef7-8bb8-aafabea17e44
+[2026-05-03 22:28:30,489: INFO/ForkPoolWorker-2] Stored embedding for finding c008d9e7-b25b-49d9-81f9-9c4af321df19
+[2026-05-03 22:28:30,558: INFO/ForkPoolWorker-2] Stored embedding for finding 28f3f72c-bbed-4f1e-ba85-8dc21f5d6af1
+[2026-05-03 22:28:30,627: INFO/ForkPoolWorker-2] Stored embedding for finding f914df72-b226-4444-9c2c-0a09c0776a3d
+[2026-05-03 22:28:30,697: INFO/ForkPoolWorker-2] Stored embedding for finding d79432f6-3bed-4a7d-a59f-445c0a09c903
+[2026-05-03 22:28:30,765: INFO/ForkPoolWorker-2] Stored embedding for finding 3b6313b1-caa3-4f35-a1e6-776ebacb76e3
+[2026-05-03 22:28:30,835: INFO/ForkPoolWorker-2] Stored embedding for finding d1b7e4d0-e3f1-490f-9858-cb5dfa98eddf
+[2026-05-03 22:28:30,904: INFO/ForkPoolWorker-2] Stored embedding for finding 66ab50ee-1331-4b25-a04e-bb5c0ad4e208
+[2026-05-03 22:28:31,019: INFO/ForkPoolWorker-2] Stored embedding for finding d03d8a7e-ce52-465d-b672-4d84ee1c8188
+[2026-05-03 22:28:31,089: INFO/ForkPoolWorker-2] Stored embedding for finding 8391be8d-84d2-4db6-a1c8-e71f405ea6e8
+[2026-05-03 22:28:31,155: INFO/ForkPoolWorker-2] Stored embedding for finding e42bf7cf-84f1-41ea-ba33-bc1c879ec214
+[2026-05-03 22:28:31,222: INFO/ForkPoolWorker-2] Stored embedding for finding 80c5749b-fb44-4c8a-a0e8-4ac4683d62ae
+[2026-05-03 22:28:31,289: INFO/ForkPoolWorker-2] Stored embedding for finding a0cd654f-5bb5-479e-a6fa-11aeff99e97f
+[2026-05-03 22:28:31,358: INFO/ForkPoolWorker-2] Stored embedding for finding 9dffefb9-c29c-434d-a35c-27638f670cff
+[2026-05-03 22:28:31,430: INFO/ForkPoolWorker-2] Stored embedding for finding ffb71e17-024e-4a0f-a13f-809e450e1b73
+[2026-05-03 22:28:31,618: INFO/ForkPoolWorker-2] Stored embedding for finding 9a4ee906-03c7-4ef1-ae9a-251eb26c4948
+[2026-05-03 22:28:31,687: INFO/ForkPoolWorker-2] Stored embedding for finding 38239604-053f-45fa-9343-4c08659e9e41
+[2026-05-03 22:28:31,757: INFO/ForkPoolWorker-2] Stored embedding for finding 64b001c9-98e9-45bc-9eb1-f4d7c5111d5f
+[2026-05-03 22:28:31,828: INFO/ForkPoolWorker-2] Stored embedding for finding 3e87e961-3c04-4b2c-8490-19e600b808b4
+[2026-05-03 22:28:31,896: INFO/ForkPoolWorker-2] Stored embedding for finding f503d37b-2882-4ad7-8355-6058d92b4053
+[2026-05-03 22:28:31,965: INFO/ForkPoolWorker-2] Stored embedding for finding 0608f110-7346-457d-b716-aeac87eb4298
+[2026-05-03 22:28:32,041: INFO/ForkPoolWorker-2] Stored embedding for finding d4eac637-3ebb-4a3e-b9b9-875c8e4db63e
+[2026-05-03 22:28:32,110: INFO/ForkPoolWorker-2] Stored embedding for finding 8bbd87ff-503a-4f18-a34b-b7070f9dccfa
+[2026-05-03 22:28:32,178: INFO/ForkPoolWorker-2] Stored embedding for finding 2615c760-3a0f-4453-8336-82fb4141ca6b
+[2026-05-03 22:28:32,245: INFO/ForkPoolWorker-2] Stored embedding for finding babd259b-fd24-4d9f-a7ed-22e5deec9768
+[2026-05-03 22:28:32,314: INFO/ForkPoolWorker-2] Stored embedding for finding 984882a8-bc3e-4f2c-95d4-424b4e515e74
+[2026-05-03 22:28:32,382: INFO/ForkPoolWorker-2] Stored embedding for finding 5ad8d573-9ca9-4fae-a84e-557d23d3e91a
+[2026-05-03 22:28:32,454: INFO/ForkPoolWorker-2] Stored embedding for finding fcdcdb38-1a49-4741-9bc1-db7589c8d8d7
+[2026-05-03 22:28:32,528: INFO/ForkPoolWorker-2] Stored embedding for finding e528828c-4c9a-4060-9849-a122e9602841
+[2026-05-03 22:28:32,597: INFO/ForkPoolWorker-2] Stored embedding for finding 96cfe5e0-71e2-4ac9-99a8-44c1a5c2f1a6
+[2026-05-03 22:28:32,663: INFO/ForkPoolWorker-2] Stored embedding for finding d2174738-3959-4a73-837f-4008b3f4db3c
+[2026-05-03 22:28:32,732: INFO/ForkPoolWorker-2] Stored embedding for finding c782c1de-0088-4df2-94aa-5d2712fee3b3
+[2026-05-03 22:28:32,801: INFO/ForkPoolWorker-2] Stored embedding for finding 26bdd579-223f-4b6b-ae35-f4e7451398f7
+[2026-05-03 22:28:32,871: INFO/ForkPoolWorker-2] Stored embedding for finding 72293c86-b21e-4d17-ab46-f924b0532e4b
+[2026-05-03 22:28:32,941: INFO/ForkPoolWorker-2] Stored embedding for finding ff2afd7f-8ffa-4a8a-ab4a-5338479bbf3c
+[2026-05-03 22:28:33,013: INFO/ForkPoolWorker-2] Stored embedding for finding 1b35fc58-598b-47b8-941c-ffd3869664e0
+[2026-05-03 22:28:33,084: INFO/ForkPoolWorker-2] Stored embedding for finding 1d64f663-4188-408e-b694-12e62d17ca99
+[2026-05-03 22:28:33,150: INFO/ForkPoolWorker-2] Stored embedding for finding 53163408-47fb-4545-9fc8-c804e3c63155
+[2026-05-03 22:28:33,215: INFO/ForkPoolWorker-2] Stored embedding for finding b06ee50a-6473-4a94-91df-c3c9cbd0205f
+[2026-05-03 22:28:33,283: INFO/ForkPoolWorker-2] Stored embedding for finding 847c18bd-e757-47d4-998a-ff8f7606f068
+[2026-05-03 22:28:33,352: INFO/ForkPoolWorker-2] Stored embedding for finding 61d813a8-dd82-4b5a-a878-0ea521e4a667
+[2026-05-03 22:28:33,424: INFO/ForkPoolWorker-2] Stored embedding for finding 201b2f3d-3d98-4dd5-9bc7-a2b38a99faae
+[2026-05-03 22:28:33,499: INFO/ForkPoolWorker-2] Stored embedding for finding 02e6a9ee-2b90-4a00-a7bb-4ab3bede2c0e
+[2026-05-03 22:28:33,571: INFO/ForkPoolWorker-2] Stored embedding for finding 1cac7d04-86ff-4193-8e32-672049c0f81e
+[2026-05-03 22:28:33,648: INFO/ForkPoolWorker-2] Stored embedding for finding 37b6ec93-5594-4832-97e7-beb1d41e93d0
+[2026-05-03 22:28:33,718: INFO/ForkPoolWorker-2] Stored embedding for finding 8271c66c-d4e9-4e2f-9e7d-16770491439a
+[2026-05-03 22:28:33,794: INFO/ForkPoolWorker-2] Stored embedding for finding 35aef2f9-7bc1-4b07-bf3f-101ede25ab15
+[2026-05-03 22:28:33,867: INFO/ForkPoolWorker-2] Stored embedding for finding ef312914-0059-4a95-95c6-e6cce0c6cb19
+[2026-05-03 22:28:33,946: INFO/ForkPoolWorker-2] Stored embedding for finding d996a7c1-73b8-4e9e-ad1c-7d6c9d538f0d
+[2026-05-03 22:28:34,021: INFO/ForkPoolWorker-2] Stored embedding for finding 488e1dbf-7b96-4182-992d-d1c8157626d7
+[2026-05-03 22:28:34,093: INFO/ForkPoolWorker-2] Stored embedding for finding d1ab6251-1f8a-4c67-baca-42c190df548d
+[2026-05-03 22:28:34,164: INFO/ForkPoolWorker-2] Stored embedding for finding 31fe64d2-1a60-4318-9252-958adfd80ac7
+[2026-05-03 22:28:34,234: INFO/ForkPoolWorker-2] Stored embedding for finding b86986ba-50d6-46ac-bb93-e106a8afa597
+[2026-05-03 22:28:34,309: INFO/ForkPoolWorker-2] Stored embedding for finding a73b8e65-d938-4728-b16e-ac2729856b5e
+[2026-05-03 22:28:34,387: INFO/ForkPoolWorker-2] Stored embedding for finding a281e4d5-bf67-405a-8f72-6c7abe4c4c0c
+[2026-05-03 22:28:34,494: INFO/ForkPoolWorker-2] Stored embedding for finding a83700c2-f334-4cf1-b5bf-b715772b254f
+[2026-05-03 22:28:34,567: INFO/ForkPoolWorker-2] Stored embedding for finding 5945dee5-80fd-4800-bd5a-ec5ada57ee24
+[2026-05-03 22:28:34,635: INFO/ForkPoolWorker-2] Stored embedding for finding 33915129-94c5-4a4a-b89f-871a2336ece4
+[2026-05-03 22:28:34,703: INFO/ForkPoolWorker-2] Stored embedding for finding 9af8714b-0316-4a28-b383-c5eeb31533b3
+[2026-05-03 22:28:34,771: INFO/ForkPoolWorker-2] Stored embedding for finding a3b87161-13a6-466d-8ab6-be2f8e612884
+[2026-05-03 22:28:34,842: INFO/ForkPoolWorker-2] Stored embedding for finding 998acc62-1593-4f70-8a1f-2b5d10a7a031
+[2026-05-03 22:28:34,911: INFO/ForkPoolWorker-2] Stored embedding for finding f6526b5f-4dcf-4901-af93-0c48336301f9
+[2026-05-03 22:28:35,025: INFO/ForkPoolWorker-2] Stored embedding for finding f99d301d-2ec5-4a60-974c-f9690873f8d6
+[2026-05-03 22:28:35,093: INFO/ForkPoolWorker-2] Stored embedding for finding be41edd9-5a8e-4042-ba1d-a8acbb8349fe
+[2026-05-03 22:28:35,161: INFO/MainProcess] Task tasks.recon.run_recon[7a64a86c-4393-433d-b03b-bc9e7c825ef0] received
+[2026-05-03 22:28:35,173: INFO/ForkPoolWorker-2] Stored embedding for finding 079a3503-8402-436e-a17a-501467a692cd
+[2026-05-03 22:28:35,358: INFO/ForkPoolWorker-2] Stored embedding for finding 6a4293f6-2662-4877-9b8b-07acc753d676
+[2026-05-03 22:28:35,500: INFO/ForkPoolWorker-2] Stored embedding for finding 37730bec-3e59-4ccd-b77f-90c394dd212b
+[2026-05-03 22:28:35,511: WARNING/ForkPoolWorker-4] [b61f1995] job_started: Job started: recon
+[2026-05-03 22:28:35,521: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-05-03 22:28:35,528: INFO/ForkPoolWorker-4] Loaded tool definition: alterx
+[2026-05-03 22:28:35,531: INFO/ForkPoolWorker-4] Loaded tool definition: arjun
+[2026-05-03 22:28:35,535: INFO/ForkPoolWorker-4] Loaded tool definition: katana
+[2026-05-03 22:28:35,540: INFO/ForkPoolWorker-4] Loaded tool definition: semgrep
+[2026-05-03 22:28:35,544: INFO/ForkPoolWorker-4] Loaded tool definition: trivy
+[2026-05-03 22:28:35,548: INFO/ForkPoolWorker-4] Loaded tool definition: sqlmap
+[2026-05-03 22:28:35,552: INFO/ForkPoolWorker-4] Loaded tool definition: amass
+[2026-05-03 22:28:35,560: INFO/ForkPoolWorker-4] Loaded tool definition: ffuf
+[2026-05-03 22:28:35,562: INFO/ForkPoolWorker-4] Loaded tool definition: gau
+[2026-05-03 22:28:35,567: INFO/ForkPoolWorker-4] Loaded tool definition: nuclei
+[2026-05-03 22:28:35,575: INFO/ForkPoolWorker-4] Loaded tool definition: waybackurls
+[2026-05-03 22:28:35,580: INFO/ForkPoolWorker-4] Loaded tool definition: testssl
+[2026-05-03 22:28:35,583: INFO/ForkPoolWorker-4] Loaded tool definition: gospider
+[2026-05-03 22:28:35,590: INFO/ForkPoolWorker-4] Loaded tool definition: naabu
+[2026-05-03 22:28:35,593: INFO/ForkPoolWorker-4] Loaded tool definition: bandit
+[2026-05-03 22:28:35,598: INFO/ForkPoolWorker-4] Loaded tool definition: gitleaks
+[2026-05-03 22:28:35,601: INFO/ForkPoolWorker-4] Loaded tool definition: jwt_tool
+[2026-05-03 22:28:35,607: INFO/ForkPoolWorker-4] Loaded tool definition: nmap
+[2026-05-03 22:28:35,609: INFO/ForkPoolWorker-4] Loaded tool definition: pip-audit
+[2026-05-03 22:28:35,613: INFO/ForkPoolWorker-4] Loaded tool definition: subfinder
+[2026-05-03 22:28:35,618: INFO/ForkPoolWorker-4] Loaded tool definition: wpscan
+[2026-05-03 22:28:35,624: INFO/ForkPoolWorker-4] Loaded tool definition: commix
+[2026-05-03 22:28:35,627: INFO/ForkPoolWorker-4] Loaded tool definition: nikto
+[2026-05-03 22:28:35,631: INFO/ForkPoolWorker-4] Loaded tool definition: dalfox
+[2026-05-03 22:28:35,634: INFO/ForkPoolWorker-4] Loaded tool definition: whatweb
+[2026-05-03 22:28:35,639: INFO/ForkPoolWorker-4] Loaded tool definition: httpx
+[2026-05-03 22:28:35,699: WARNING/ForkPoolWorker-4] [b61f1995] job_started: Job started: recon
+[2026-05-03 22:28:35,707: INFO/ForkPoolWorker-2] Stored embedding for finding f7df724a-2f96-45e9-9f76-1ac71e5114de
+[2026-05-03 22:28:35,919: INFO/ForkPoolWorker-2] Stored embedding for finding c2275e9a-ef93-4f1f-b7f5-feadc3676e77
+[2026-05-03 22:28:36,186: INFO/ForkPoolWorker-2] Stored embedding for finding ba0e024a-ad02-4c0c-b098-813bbf54098f
+[2026-05-03 22:28:36,404: INFO/ForkPoolWorker-2] Stored embedding for finding 75a3391e-b42b-4ec4-8848-5bbed5573a04
+[2026-05-03 22:28:36,498: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: httpx
+[2026-05-03 22:28:36,506: INFO/ForkPoolWorker-2] Stored embedding for finding 91c3ee76-8ea3-425d-a837-99cda04084e0
+[2026-05-03 22:28:36,511: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 770ms
+[2026-05-03 22:28:36,639: INFO/ForkPoolWorker-2] Stored embedding for finding 5d9ff9f6-a590-4add-a37f-9de46eef6f94
+[2026-05-03 22:28:37,065: INFO/ForkPoolWorker-2] Stored embedding for finding 8af146fc-a979-4a16-8941-549a89ac9dda
+[2026-05-03 22:28:37,262: INFO/ForkPoolWorker-2] Stored embedding for finding db435af3-8334-41fb-b126-2737c82a76e6
+[2026-05-03 22:28:37,548: INFO/ForkPoolWorker-2] Stored embedding for finding fe735ffb-f3a8-4336-b4e5-1ba0f188c8ff
+[2026-05-03 22:28:37,689: INFO/ForkPoolWorker-2] Stored embedding for finding 685bc69e-93f2-4a4f-9752-213c3b43f430
+[2026-05-03 22:28:37,760: INFO/ForkPoolWorker-2] Stored embedding for finding b5afb1ec-c2da-406b-bdb9-5adfea6a9e8c
+[2026-05-03 22:28:37,832: INFO/ForkPoolWorker-2] Stored embedding for finding 35ba38f1-07e4-4f96-a535-c3fc00b4b674
+[2026-05-03 22:28:37,902: INFO/ForkPoolWorker-2] Stored embedding for finding 51d778a5-496f-4d30-a3fe-2f83215eafa3
+[2026-05-03 22:28:37,986: INFO/ForkPoolWorker-2] Stored embedding for finding 32f9b9f9-559c-4421-bc36-bc56cfc9ebde
+[2026-05-03 22:28:38,060: INFO/ForkPoolWorker-2] Stored embedding for finding f5fada00-1644-48a6-a6a7-3df2c4450a3a
+[2026-05-03 22:28:38,154: INFO/ForkPoolWorker-2] Stored embedding for finding bfd39917-7a30-4d4e-803e-792d7fefeb1e
+[2026-05-03 22:28:38,254: INFO/ForkPoolWorker-2] Stored embedding for finding 77848761-6d27-4d77-b86f-ad0864e18db6
+[2026-05-03 22:28:38,348: INFO/ForkPoolWorker-2] Stored embedding for finding 9b2d64a0-e41e-4128-ade9-efd37fca2bc4
+[2026-05-03 22:28:38,446: INFO/ForkPoolWorker-2] Stored embedding for finding b989ef6a-8573-426c-9b59-50527a74d3d8
+[2026-05-03 22:28:38,514: INFO/ForkPoolWorker-2] Stored embedding for finding 06c96366-5338-4f5a-b2e3-4dc59f503c40
+[2026-05-03 22:28:38,585: INFO/ForkPoolWorker-2] Stored embedding for finding 5e6e1499-61cc-4452-b7e9-67fa129fdce1
+[2026-05-03 22:28:38,654: INFO/ForkPoolWorker-2] Stored embedding for finding 1b0e908c-e52d-4f5f-a7cc-20819df4fef9
+[2026-05-03 22:28:38,723: INFO/ForkPoolWorker-2] Stored embedding for finding 09405a1d-0240-4f5f-a3f2-2bcfcbe074c9
+[2026-05-03 22:28:38,799: INFO/ForkPoolWorker-2] Stored embedding for finding b7964d93-375f-4ea1-a410-07b215422ff9
+[2026-05-03 22:28:38,875: INFO/ForkPoolWorker-2] Stored embedding for finding cb2d545f-de1e-4da9-9f59-a7bff8607f36
+[2026-05-03 22:28:38,944: INFO/ForkPoolWorker-2] Stored embedding for finding 099fb615-558a-4cc7-9aee-61801dcc8596
+[2026-05-03 22:28:39,013: INFO/ForkPoolWorker-2] Stored embedding for finding 6cd2d5c5-8002-4e77-aa18-cdf28d31c45b
+[2026-05-03 22:28:39,088: INFO/ForkPoolWorker-2] Stored embedding for finding b9a45fa2-f8a0-4529-ace5-cc0fd837790f
+[2026-05-03 22:28:39,167: INFO/ForkPoolWorker-2] Stored embedding for finding 77dfc4d3-6c5d-4d62-8c52-ee2cb00166f9
+[2026-05-03 22:28:39,232: INFO/ForkPoolWorker-2] Stored embedding for finding b885431a-d573-4ce9-81b6-18362e0a366f
+[2026-05-03 22:28:39,302: INFO/ForkPoolWorker-2] Stored embedding for finding 8c68cc28-57d6-4cb7-ac78-b1b479b3cf1f
+[2026-05-03 22:28:39,375: INFO/ForkPoolWorker-2] Stored embedding for finding 2e3d2840-b9d6-4332-8535-4a1201e58142
+[2026-05-03 22:28:39,445: INFO/ForkPoolWorker-2] Stored embedding for finding 2461cbfe-7f84-4a11-977a-fcd540928249
+[2026-05-03 22:28:39,514: INFO/ForkPoolWorker-2] Stored embedding for finding 7de4567e-638d-45ef-95ae-5bb83955bf64
+[2026-05-03 22:28:39,584: INFO/ForkPoolWorker-2] Stored embedding for finding fcff61be-863e-43e9-9039-35ec3ae4d53e
+[2026-05-03 22:28:39,654: INFO/ForkPoolWorker-2] Stored embedding for finding d9ee418c-e965-4c1b-b084-c8ca8b69a0c4
+[2026-05-03 22:28:39,725: INFO/ForkPoolWorker-2] Stored embedding for finding e8cd0c09-d0aa-4bee-9809-78097e3a0db4
+[2026-05-03 22:28:39,798: INFO/ForkPoolWorker-2] Stored embedding for finding 1df18162-4022-4856-8537-e4ef0a25df68
+[2026-05-03 22:28:39,963: INFO/ForkPoolWorker-2] Stored embedding for finding 28909d3c-619f-4861-a673-f8046d0d828a
+[2026-05-03 22:28:40,035: INFO/ForkPoolWorker-2] Stored embedding for finding 684f3a56-85fa-4950-bc91-f6b8b767e701
+[2026-05-03 22:28:40,124: INFO/ForkPoolWorker-2] Stored embedding for finding 87cc9e12-2281-40ea-8ce9-f48ef8f500a9
+[2026-05-03 22:28:40,200: INFO/ForkPoolWorker-2] Stored embedding for finding c4d943ec-feb2-482d-89ce-b968768513ac
+[2026-05-03 22:28:40,275: INFO/ForkPoolWorker-2] Stored embedding for finding 4575db7c-708f-4144-86a5-bc2c443be5fa
+[2026-05-03 22:28:40,381: INFO/ForkPoolWorker-2] Stored embedding for finding 8c84b7ca-c6d6-406c-8eac-0598cde2299f
+[2026-05-03 22:28:40,463: INFO/ForkPoolWorker-2] Stored embedding for finding 7deb1ca1-122b-414a-b0aa-a0ad82b0712e
+[2026-05-03 22:28:40,532: INFO/ForkPoolWorker-2] Stored embedding for finding d49e89b7-724b-4c9e-807a-cf038ded28c7
+[2026-05-03 22:28:40,603: INFO/ForkPoolWorker-2] Stored embedding for finding 3446cc16-3e76-4573-94a5-062c838c839a
+[2026-05-03 22:28:40,674: INFO/ForkPoolWorker-2] Stored embedding for finding 86535724-dbe4-4eeb-bea1-72bd907c620a
+[2026-05-03 22:28:40,744: INFO/ForkPoolWorker-2] Stored embedding for finding c666973c-6558-444f-8ca3-dbe7e20238a9
+[2026-05-03 22:28:40,816: INFO/ForkPoolWorker-2] Stored embedding for finding 43a400be-4c89-44ce-a612-32daa0ba4e62
+[2026-05-03 22:28:40,886: INFO/ForkPoolWorker-2] Stored embedding for finding 56ab1905-c1d5-4213-aeff-59fd5f6817ca
+[2026-05-03 22:28:40,955: INFO/ForkPoolWorker-2] Stored embedding for finding 1a9b1872-c54d-4664-9e0a-f9a74bcad571
+[2026-05-03 22:28:41,023: INFO/ForkPoolWorker-2] Stored embedding for finding 805c10ad-ccb5-4173-bd1a-02e177c155ce
+[2026-05-03 22:28:41,092: INFO/ForkPoolWorker-2] Stored embedding for finding e7778074-e346-473b-8e68-43b211d880c2
+[2026-05-03 22:28:41,160: INFO/ForkPoolWorker-2] Stored embedding for finding 1a0457e4-a475-4e31-bcb1-c38dad641ede
+[2026-05-03 22:28:41,228: INFO/ForkPoolWorker-2] Stored embedding for finding b2addcce-0a71-4cf0-b701-f732fbb12829
+[2026-05-03 22:28:41,297: INFO/ForkPoolWorker-2] Stored embedding for finding 78f24445-882f-4ba3-a713-e088835b73fe
+[2026-05-03 22:28:41,365: INFO/ForkPoolWorker-2] Stored embedding for finding 7d48d84f-d883-4fbb-8901-f71a6d52d522
+[2026-05-03 22:28:41,435: INFO/ForkPoolWorker-2] Stored embedding for finding c9ef3fa6-4a0a-4b7f-95cc-4e12dc23e4dd
+[2026-05-03 22:28:41,503: INFO/ForkPoolWorker-2] Stored embedding for finding 1992bd7e-3b0f-4fda-8a2d-b40ee7b42f37
+[2026-05-03 22:28:41,573: INFO/ForkPoolWorker-2] Stored embedding for finding e5296a6a-b2d6-4cf9-b810-8883b08a43ea
+[2026-05-03 22:28:41,640: INFO/ForkPoolWorker-2] Stored embedding for finding ca707ea5-5894-4fe6-9c2c-e1744997a442
+[2026-05-03 22:28:41,708: INFO/ForkPoolWorker-2] Stored embedding for finding b9e1a48d-31b5-49a5-af0e-fce5b25f8c5d
+[2026-05-03 22:28:41,823: INFO/ForkPoolWorker-2] Stored embedding for finding b5b9f0b7-67cd-4505-acaf-a6526abe3a93
+[2026-05-03 22:28:41,865: INFO/MainProcess] Task tasks.asset_discovery.run_asset_discovery[c55676ef-4ca9-400a-bec1-6ee5e161e4ae] received
+[2026-05-03 22:28:41,881: INFO/MainProcess] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] received
+[2026-05-03 22:28:41,882: INFO/ForkPoolWorker-2] Task 7a64a86c-4393-433d-b03b-bc9e7c825ef0 succeeded
+[2026-05-03 22:28:41,882: INFO/ForkPoolWorker-2] Task tasks.recon.run_recon[7a64a86c-4393-433d-b03b-bc9e7c825ef0] succeeded in 736.7265486090328s: {'phase': 'recon', 'status': 'completed', 'findings_count': 665, 'next_state': 'scanning', 'recon_context': {'target_url': 'https://preview.owasp-juice.shop', 'live_endpoints': [], 'subdomains': [], 'open_ports': [{...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}], 'tech_stack': [], 'crawled_paths': ['https://preview.owasp-juice.shop', 'https://preview.owasp-juice.shop/scripts.js', 'https://preview.owasp-juice.shop/polyfills.js', 'https://preview.owasp-juice.shop/chunk-KMKORQM7.js', 'https://preview.owasp-juice.shop/chunk-TGFL4V2O.js', 'https://preview.owasp-juice.shop/chunk-PX7UKXVL.js', 'https://preview.owasp-juice.shop/chunk-VPD3OZTP.js', 'https://preview.owasp-juice.shop/chunk-FRW5M442.js', 'https://preview.owasp-juice.shop/chunk-TRHXI2PP.js', 'https://preview.owasp-juice.shop/%7B%7Bhref%7D%7D', 'https://preview.owasp-juice.shop/chunk-2RZLIETD.js', 'https://preview.owasp-juice.shop/styles.css', 'https://preview.owasp-juice.shop/chunk-UNFVUBM2.js', 'https://preview.owasp-juice.shop/chunk-...', ...]}}
+[2026-05-03 22:28:42,045: WARNING/ForkPoolWorker-1] [91ff48aa] job_started: Job started: scan
+[2026-05-03 22:28:42,105: INFO/MainProcess] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] received
+[2026-05-03 22:28:42,122: WARNING/ForkPoolWorker-1] Task 2263587d-7a41-43ec-861e-d07c95c47e3c retrying (attempt 0): Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932
+[2026-05-03 22:28:42,123: INFO/ForkPoolWorker-1] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] retry: Retry in 1s: Exception('Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932')
+[2026-05-03 22:28:43,177: WARNING/ForkPoolWorker-2] [91ff48aa] job_started: Job started: scan
+[2026-05-03 22:28:43,206: INFO/MainProcess] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] received
+[2026-05-03 22:28:43,221: WARNING/ForkPoolWorker-2] Task 2263587d-7a41-43ec-861e-d07c95c47e3c retrying (attempt 1): Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932
+[2026-05-03 22:28:43,222: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] retry: Retry in 1s: Exception('Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932')
+[2026-05-03 22:28:44,228: WARNING/ForkPoolWorker-2] [91ff48aa] job_started: Job started: scan
+[2026-05-03 22:28:44,248: INFO/MainProcess] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] received
+[2026-05-03 22:28:44,252: WARNING/ForkPoolWorker-2] Task 2263587d-7a41-43ec-861e-d07c95c47e3c retrying (attempt 2): Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932
+[2026-05-03 22:28:44,253: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] retry: Retry in 0s: Exception('Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932')
+[2026-05-03 22:28:44,267: WARNING/ForkPoolWorker-1] [91ff48aa] job_started: Job started: scan
+[2026-05-03 22:28:44,302: WARNING/ForkPoolWorker-1] MEDIUM ERROR: {'task_id': '2263587d-7a41-43ec-861e-d07c95c47e3c', 'task_name': 'tasks.scan.run_scan', 'error_type': 'Exception', 'error_message': 'Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932', 'category': 'unknown', 'severity': 'medium', 'should_retry': True, 'retry_delay': 30, 'context': {'args': "['03161e11-62bc-4818-9b6a-d75e5c44a384', ['https://preview.owasp-juice.shop'], {'max_cycles': 5, 'max_depth': 3}, '91ff48aa-1860-4c73-807e-2c1106c33e8e', True]", 'kwargs': '{}'}}
+[2026-05-03 22:28:44,303: ERROR/ForkPoolWorker-1] Task 2263587d-7a41-43ec-861e-d07c95c47e3c failed: Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932
+[2026-05-03 22:28:44,303: ERROR/ForkPoolWorker-1] Task tasks.scan.run_scan[2263587d-7a41-43ec-861e-d07c95c47e3c] raised unexpected: Exception('Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 290, in __call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
+    ret = task.retry(exc=exc, **retry_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
+    raise_with_context(exc)
+    ~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
+    return task._orig_run(*args, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/scan.py", line 23, in run_scan
+    with task_context(self, engagement_id, "scan",
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      job_extra={"targets": targets, "budget": budget, "agent_mode": agent_mode,
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                 "recon_context": recon_context},
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      trace_id=trace_id) as ctx:
+                      ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/base.py", line 103, in task_context
+    with LockContext(lock, engagement_id):
+         ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/distributed_lock.py", line 212, in __enter__
+    raise Exception(
+    ...<2 lines>...
+    )
+Exception: Failed to acquire lock for engagement 03161e11-62bc-4818-9b6a-d75e5c44a384. Held by worker: 0f773728-809c-493b-a9dc-6a4a81067932
+[2026-05-03 22:28:46,870: WARNING/ForkPoolWorker-2] [91ff48aa] job_started: Job started: asset_discovery
+[2026-05-03 22:28:46,891: INFO/ForkPoolWorker-2] Task c55676ef-4ca9-400a-bec1-6ee5e161e4ae succeeded
+[2026-05-03 22:28:46,891: INFO/ForkPoolWorker-2] Task tasks.asset_discovery.run_asset_discovery[c55676ef-4ca9-400a-bec1-6ee5e161e4ae] succeeded in 0.040549452998675406s: {'status': 'completed', 'assets_discovered': 2, 'assets': [{'id': '433425be-ab92-48f4-9a7c-08ef62206b78', 'type': 'domain', 'identifier': 'preview.owasp-juice.shop'}, {'id': 'b3e5b62f-9d24-45c9-8798-82c910025f93', 'type': 'endpoint', 'identifier': 'https://preview.owasp-juice.shop'}], 'trace_id': '91ff48aa-1860-4c73-807e-2c1106c33e8e'}
+[2026-05-03 22:28:48,348: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: katana
+[2026-05-03 22:28:48,360: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 11803ms
+[2026-05-03 22:28:48,376: WARNING/ForkPoolWorker-4] [b61f1995] parser_completed: Parser completed: katana
+[2026-05-03 22:28:48,388: WARNING/ForkPoolWorker-4] [b61f1995] SPAN parsing: 15ms
+[2026-05-03 22:28:48,908: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: ffuf
+[2026-05-03 22:28:48,921: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 490ms
+[2026-05-03 22:28:48,975: WARNING/ForkPoolWorker-4] [b61f1995] parser_completed: Parser completed: ffuf
+[2026-05-03 22:28:48,988: WARNING/ForkPoolWorker-4] [b61f1995] SPAN parsing: 53ms
+[2026-05-03 22:28:49,256: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: amass
+[2026-05-03 22:28:49,268: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 237ms
+[2026-05-03 22:28:49,697: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: subfinder
+[2026-05-03 22:28:49,749: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 398ms
+[2026-05-03 22:28:49,767: WARNING/ForkPoolWorker-4] [b61f1995] parser_completed: Parser completed: subfinder
+[2026-05-03 22:28:49,781: WARNING/ForkPoolWorker-4] [b61f1995] SPAN parsing: 16ms
+[2026-05-03 22:28:50,116: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: alterx
+[2026-05-03 22:28:50,130: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 302ms
+[2026-05-03 22:28:50,679: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: naabu
+[2026-05-03 22:28:50,706: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 518ms
+[2026-05-03 22:58:32,376: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: whatweb
+[2026-05-03 22:58:32,430: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 1781638ms
+[2026-05-03 22:58:33,450: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: nikto
+[2026-05-03 22:58:33,463: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 947ms
+[2026-05-03 22:58:33,478: WARNING/ForkPoolWorker-4] [b61f1995] parser_completed: Parser completed: nikto
+[2026-05-03 22:58:33,490: WARNING/ForkPoolWorker-4] [b61f1995] SPAN parsing: 14ms
+[2026-05-03 22:58:33,697: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: gau
+[2026-05-03 22:58:33,711: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 177ms
+[2026-05-03 22:58:33,726: WARNING/ForkPoolWorker-4] [b61f1995] parser_completed: Parser completed: gau
+[2026-05-03 22:58:33,738: WARNING/ForkPoolWorker-4] [b61f1995] SPAN parsing: 15ms
+[2026-05-03 22:58:33,921: WARNING/ForkPoolWorker-4] [b61f1995] tool_executed: Tool executed: waybackurls
+[2026-05-03 22:58:33,933: WARNING/ForkPoolWorker-4] [b61f1995] SPAN tool_execution: 151ms
+[2026-05-03 22:58:33,948: WARNING/ForkPoolWorker-4] [b61f1995] parser_completed: Parser completed: waybackurls
+[2026-05-03 22:58:33,960: WARNING/ForkPoolWorker-4] [b61f1995] SPAN parsing: 14ms
+[2026-05-03 22:58:33,998: INFO/ForkPoolWorker-4] Database pool initialized (min=2, max=20, pgbouncer_mode=session)
+[2026-05-03 22:58:34,412: INFO/ForkPoolWorker-4] Stored embedding for finding 8f8c4a56-4dd5-44dd-98fb-0a8244915e5e
+[2026-05-03 22:58:34,463: INFO/MainProcess] Task tasks.asset_discovery.run_asset_discovery[4e4179c8-29a7-468f-bb35-0c0b5a3595dd] received
+[2026-05-03 22:58:34,465: INFO/MainProcess] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] received
+[2026-05-03 22:58:34,467: INFO/ForkPoolWorker-4] Task 7a64a86c-4393-433d-b03b-bc9e7c825ef0 succeeded
+[2026-05-03 22:58:34,467: INFO/ForkPoolWorker-4] Task tasks.recon.run_recon[7a64a86c-4393-433d-b03b-bc9e7c825ef0] succeeded in 22.857807096967008s: {'phase': 'recon', 'status': 'completed', 'findings_count': 1, 'next_state': 'scanning', 'recon_context': {'target_url': 'https://preview.owasp-juice.shop', 'live_endpoints': [], 'subdomains': [], 'open_ports': [], 'tech_stack': [], 'crawled_paths': ['https://preview.owasp-juice.shop'], 'parameter_bearing_urls': [], 'auth_endpoints': [], 'api_endpoints': [], 'findings_count': 1, 'has_login_page': False, 'has_api': False, 'has_file_upload': False, 'scan_type': 'url', 'repo_url': '', 'languages_detected': [], 'vulnerability_types': [], 'severity_breakdown': {}, 'critical_files': [], 'frameworks_detected': [], 'has_hardcoded_secrets': False, 'dependency_vulns_count': 0, 'repo_clone_success': False}, 'trace_id': 'b61f1995-1d51-490e-bf34-b2e9328e440f'}
+[2026-05-03 22:58:34,484: WARNING/ForkPoolWorker-2] [b61f1995] job_started: Job started: scan
+[2026-05-03 22:58:34,506: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-03 22:58:34,525: INFO/MainProcess] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] received
+[2026-05-03 22:58:34,529: WARNING/ForkPoolWorker-2] Task bcc345f2-08c8-4a1f-89e8-702db72f5ef4 retrying (attempt 0): Invalid transition from failed to scanning. Valid transitions: []
+[2026-05-03 22:58:34,530: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] retry: Retry in 0s: InvalidStateTransition('Invalid transition from failed to scanning. Valid transitions: []')
+[2026-05-03 22:58:34,586: WARNING/ForkPoolWorker-4] [b61f1995] job_started: Job started: scan
+[2026-05-03 22:58:34,607: INFO/ForkPoolWorker-4] LLM payload generator initialized
+[2026-05-03 22:58:34,624: INFO/MainProcess] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] received
+[2026-05-03 22:58:34,632: WARNING/ForkPoolWorker-4] Task bcc345f2-08c8-4a1f-89e8-702db72f5ef4 retrying (attempt 1): Invalid transition from failed to scanning. Valid transitions: []
+[2026-05-03 22:58:34,632: INFO/ForkPoolWorker-4] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] retry: Retry in 2s: InvalidStateTransition('Invalid transition from failed to scanning. Valid transitions: []')
+[2026-05-03 22:58:36,644: WARNING/ForkPoolWorker-2] [b61f1995] job_started: Job started: scan
+[2026-05-03 22:58:36,662: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-03 22:58:36,681: INFO/MainProcess] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] received
+[2026-05-03 22:58:36,684: WARNING/ForkPoolWorker-2] Task bcc345f2-08c8-4a1f-89e8-702db72f5ef4 retrying (attempt 2): Invalid transition from failed to scanning. Valid transitions: []
+[2026-05-03 22:58:36,684: INFO/ForkPoolWorker-2] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] retry: Retry in 4s: InvalidStateTransition('Invalid transition from failed to scanning. Valid transitions: []')
+[2026-05-03 22:58:39,557: WARNING/ForkPoolWorker-2] [b61f1995] job_started: Job started: asset_discovery
+[2026-05-03 22:58:39,591: INFO/ForkPoolWorker-2] Task 4e4179c8-29a7-468f-bb35-0c0b5a3595dd succeeded
+[2026-05-03 22:58:39,592: INFO/ForkPoolWorker-2] Task tasks.asset_discovery.run_asset_discovery[4e4179c8-29a7-468f-bb35-0c0b5a3595dd] succeeded in 0.13588474999414757s: {'status': 'completed', 'assets_discovered': 2, 'assets': [{'id': 'e4a1e1ef-cb7f-4839-911c-96e6901fb3ce', 'type': 'domain', 'identifier': 'preview.owasp-juice.shop'}, {'id': '5c67ef66-ded0-4b3e-b4ef-23a331ad8bc2', 'type': 'endpoint', 'identifier': 'https://preview.owasp-juice.shop'}], 'trace_id': 'b61f1995-1d51-490e-bf34-b2e9328e440f'}
+[2026-05-03 22:58:40,700: WARNING/ForkPoolWorker-2] [b61f1995] job_started: Job started: scan
+[2026-05-03 22:58:40,717: INFO/ForkPoolWorker-2] LLM payload generator initialized
+[2026-05-03 22:58:40,741: INFO/ForkPoolWorker-2] LOW ERROR: {'task_id': 'bcc345f2-08c8-4a1f-89e8-702db72f5ef4', 'task_name': 'tasks.scan.run_scan', 'error_type': 'InvalidStateTransition', 'error_message': 'Invalid transition from failed to scanning. Valid transitions: []', 'category': 'validation', 'severity': 'low', 'should_retry': False, 'retry_delay': 0, 'context': {'args': "['03161e11-62bc-4818-9b6a-d75e5c44a384', ['https://preview.owasp-juice.shop'], {'max_cycles': 5, 'max_depth': 3}, 'b61f1995-1d51-490e-bf34-b2e9328e440f', True]", 'kwargs': '{}'}}
+[2026-05-03 22:58:40,764: WARNING/ForkPoolWorker-2] Task bcc345f2-08c8-4a1f-89e8-702db72f5ef4 (tasks.scan.run_scan) added to DLQ after 3 retries
+[2026-05-03 22:58:40,765: ERROR/ForkPoolWorker-2] Task bcc345f2-08c8-4a1f-89e8-702db72f5ef4 failed: Invalid transition from failed to scanning. Valid transitions: []
+[2026-05-03 22:58:40,766: ERROR/ForkPoolWorker-2] Task tasks.scan.run_scan[bcc345f2-08c8-4a1f-89e8-702db72f5ef4] raised unexpected: InvalidStateTransition('Invalid transition from failed to scanning. Valid transitions: []')
+Traceback (most recent call last):
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/celery_app.py", line 290, in __call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 60, in run
+    ret = task.retry(exc=exc, **retry_kwargs)
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/task.py", line 769, in retry
+    raise_with_context(exc)
+    ~~~~~~~~~~~~~~~~~~^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/venv/lib/python3.14/site-packages/celery/app/autoretry.py", line 38, in run
+    return task._orig_run(*args, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/tasks/scan.py", line 27, in run_scan
+    ctx.state.transition("scanning", "Starting scan")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mac/Documents/Argus-/argus-workers/state_machine.py", line 107, in transition
+    raise InvalidStateTransition(
+    ...<2 lines>...
+    )
+state_machine.InvalidStateTransition: Invalid transition from failed to scanning. Valid transitions: []
+
+worker: Warm shutdown (MainProcess)
+
+worker: Warm shutdown (MainProcess)

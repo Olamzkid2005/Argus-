@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
     const client = await pool.connect();
 
     try {
+      const orgId = (session.user as { orgId?: string }).orgId;
+
       let query = `
         SELECT 
           tm.tool_name,
@@ -26,10 +28,12 @@ export async function GET(req: NextRequest) {
           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms) as median_duration_ms,
           SUM(CASE WHEN success = true THEN 1 ELSE 0 END)::float / COUNT(*) * 100 as success_rate
         FROM tool_metrics tm
-        WHERE tm.created_at > NOW() - INTERVAL '1 day' * $1
+        JOIN engagements e ON e.id = tm.engagement_id
+        WHERE e.org_id = $1
+          AND tm.created_at > NOW() - INTERVAL '1 day' * $2
       `;
-      const params: unknown[] = [days];
-      let paramIndex = 2;
+      const params: unknown[] = [orgId, days];
+      let paramIndex = 3;
 
       if (tool) {
         query += ` AND tm.tool_name = $${paramIndex}`;
@@ -44,13 +48,15 @@ export async function GET(req: NextRequest) {
 
       // Get recent failures
       const failuresQuery = `
-        SELECT tool_name, error_message, created_at 
-        FROM execution_failures 
-        WHERE created_at > NOW() - INTERVAL '1 day' * $1
-        ORDER BY created_at DESC 
+        SELECT ef.tool_name, ef.error_message, ef.created_at 
+        FROM execution_failures ef
+        JOIN engagements e ON e.id = ef.engagement_id
+        WHERE e.org_id = $1
+          AND ef.created_at > NOW() - INTERVAL '1 day' * $2
+        ORDER BY ef.created_at DESC 
         LIMIT 10
       `;
-      const failuresResult = await client.query(failuresQuery, [days]);
+      const failuresResult = await client.query(failuresQuery, [orgId, days]);
 
       return NextResponse.json({
         metrics: result.rows,

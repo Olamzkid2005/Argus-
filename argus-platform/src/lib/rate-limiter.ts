@@ -61,16 +61,8 @@ export function createRateLimit(config: RateLimitConfig = defaultConfig) {
       );
     }
 
-    // Return rate limit headers for successful requests
-    return NextResponse.json(
-      { success: true },
-      {
-        headers: {
-          "X-RateLimit-Limit": String(config.maxRequests),
-          "X-RateLimit-Remaining": String(config.maxRequests - record.count),
-        },
-      },
-    );
+    // Return null for successful requests (caller handles response)
+    return null;
   };
 }
 

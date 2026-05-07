@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import { log } from "@/lib/logger";
 import { pool } from "@/lib/db";
 
@@ -13,6 +14,7 @@ interface ToolHealthData {
 }
 
 export async function GET() {
+  await requireAuth();
   log.api("GET", "/api/system/health");
   try {
     let dbStatus = { status: "healthy", detail: "Connected" };

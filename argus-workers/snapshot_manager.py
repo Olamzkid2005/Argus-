@@ -38,9 +38,11 @@ class SnapshotManager:
         Returns:
             Snapshot dictionary with all state data
         """
-        conn = connect(self.db_conn_string)
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
             # Set SERIALIZABLE isolation level
             conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
 
@@ -127,11 +129,14 @@ class SnapshotManager:
             return snapshot_data
 
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             raise Exception(f"Failed to create snapshot: {e}") from e
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def _to_jsonable(self, value):
         """Recursively convert values to JSON-safe types."""
@@ -199,10 +204,12 @@ class SnapshotManager:
         Returns:
             Snapshot data or None if not found
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
                 SELECT id, engagement_id, version, snapshot_data, created_at
@@ -220,8 +227,10 @@ class SnapshotManager:
             return None
 
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def get_latest_snapshot(self, engagement_id: str) -> dict | None:
         """
@@ -233,10 +242,12 @@ class SnapshotManager:
         Returns:
             Latest snapshot data or None
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
                 SELECT id, engagement_id, version, snapshot_data, created_at
@@ -256,8 +267,10 @@ class SnapshotManager:
             return None
 
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def list_snapshots(self, engagement_id: str) -> list[dict]:
         """
@@ -269,10 +282,12 @@ class SnapshotManager:
         Returns:
             List of snapshot metadata (without full data)
         """
-        conn = connect(self.db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        conn = None
+        cursor = None
 
         try:
+            conn = connect(self.db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
                 SELECT id, engagement_id, version, created_at
@@ -286,5 +301,7 @@ class SnapshotManager:
             return [dict(row) for row in cursor.fetchall()]
 
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()

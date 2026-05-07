@@ -475,12 +475,8 @@ class IntelligenceEngine:
             cve_ids = self._extract_cve_ids(finding)
             if cve_ids:
                 threat_intel["cve_ids"] = cve_ids
-                # Fetch CVE details from NVD
-                try:
-                    loop = asyncio.get_running_loop()
-                    nvd_data = self._fetch_nvd_cve_data(cve_ids)
-                except RuntimeError:
-                    nvd_data = asyncio.run(self._fetch_nvd_cve_data_async(cve_ids))
+                # Fetch CVE details from NVD (sync path only to avoid asyncio.run() conflicts)
+                nvd_data = self._fetch_nvd_cve_data(cve_ids)
                 threat_intel["cve_details"] = nvd_data
 
             # Get EPSS scores for exploitability prediction

@@ -85,7 +85,11 @@ def execute_scan_pipeline(
             ws_publisher=ctx.ws_publisher,
             finding_repo=None,
         )
-        return executor.execute_scan_tools(targets, aggressiveness)
+        all_results = []
+        for target in targets:
+            results = executor.execute_scan_tools(target, aggressiveness)
+            all_results.extend(results)
+        return all_results
     else:
         warnings.warn(
             "Using legacy execute_scan_tools. Migrate to PipelineExecutor.",

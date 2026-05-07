@@ -316,10 +316,9 @@ class PGVectorRepository:
                 if not keywords:
                     return []
 
-                # Build SQL with keyword matching
-                conditions = " OR ".join(
-                    f"f.evidence::text ILIKE %%{kw}%%" for kw in keywords[:5]
-                )
+                # Build parameterized ILIKE ANY query
+                kw_patterns = [f"%{kw}%" for kw in keywords[:5]]
+                placeholders = ", ".join("%s" for _ in kw_patterns)
 
                 cursor.execute(
                     f"""
@@ -332,10 +331,10 @@ class PGVectorRepository:
                         0.5 AS similarity
                     FROM findings f
                     WHERE f.engagement_id != %s
-                      AND ({conditions})
+                      AND f.evidence::text ILIKE ANY(ARRAY[{placeholders}])
                     LIMIT %s
                     """,
-                    (engagement_id, limit)
+                    [engagement_id] + kw_patterns + [limit]
                 )
 
                 results = []

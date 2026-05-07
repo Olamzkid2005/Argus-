@@ -1,5 +1,6 @@
 // Worker health and monitoring endpoint
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import redis from "@/lib/redis";
 import { log } from "@/lib/logger";
 
@@ -9,6 +10,7 @@ import { log } from "@/lib/logger";
  * Returns worker system health status including Redis-based queue info
  */
 export async function GET(req: Request) {
+  await requireAuth();
   log.api('GET', '/api/health/worker');
   try {
     const { searchParams } = new URL(req.url);

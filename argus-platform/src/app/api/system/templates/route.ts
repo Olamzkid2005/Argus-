@@ -1,5 +1,6 @@
 // Prompt templates endpoint
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import { log } from "@/lib/logger";
 
 interface Template {
@@ -15,6 +16,7 @@ interface Template {
  * Mock data — in production, proxy to Python backend template registry.
  */
 export async function GET() {
+  await requireAuth();
   log.api("GET", "/api/system/templates");
   try {
     const templates: Template[] = [

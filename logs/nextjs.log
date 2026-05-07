@@ -3,7 +3,17 @@
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 5.3s
+ ✓ Ready in 4.8s
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
  ○ Compiling /src/middleware ...
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
@@ -25,39 +35,7 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- GET / 200 in 8917ms
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- GET /auth/signin 200 in 7838ms
-2026-05-03T13:38:56.388Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET / 200 in 10916ms
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -78,22 +56,95 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-2026-05-03T13:38:59.438Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:39:00.918Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 4563ms
-2026-05-03T13:39:00.982Z [Argus] [API] GET /api/auth/session {"query":""}
- GET /api/auth/session 200 in 50ms
-2026-05-03T13:39:02.155Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:39:06.796Z [Argus] [API] GET /api/auth/providers {"query":""}
- GET /api/auth/providers 200 in 58ms
-2026-05-03T13:39:06.889Z [Argus] [API] GET /api/auth/csrf {"query":""}
- GET /api/auth/csrf 200 in 95ms
-2026-05-03T13:39:07.016Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
+ GET /auth/signin 200 in 3064ms
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /favicon.ico 200 in 3110ms
+2026-05-03T19:53:57.075Z [Argus] [API] GET /api/auth/session {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-03T19:53:59.948Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 3400ms
+ GET /auth/signin 200 in 3367ms
+2026-05-03T19:54:00.774Z [Argus] [API] POST /api/auth/_log {"query":""}
+2026-05-03T19:54:00.781Z [Argus] [API] POST /api/auth/_log {"query":""}
+2026-05-03T19:54:00.785Z [Argus] [API] POST /api/auth/_log {"query":""}
+2026-05-03T19:54:00.796Z [Argus] [API] GET /api/auth/session {"query":""}
+2026-05-03T19:54:01.951Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/auth/_log 200 in 1155ms
+ POST /api/auth/_log 200 in 1152ms
+ POST /api/auth/_log 200 in 1152ms
+2026-05-03T19:54:02.116Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 31ms
+2026-05-03T19:54:02.164Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 117ms
+2026-05-03T19:54:02.841Z [Argus] [Auth] NextAuth route initialized 
+2026-05-03T19:54:12.464Z [Argus] [API] GET /api/auth/providers {"query":""}
+ GET /api/auth/providers 200 in 51ms
+2026-05-03T19:54:12.538Z [Argus] [API] GET /api/auth/csrf {"query":""}
+ GET /api/auth/csrf 200 in 93ms
+2026-05-03T19:54:12.646Z [Argus] [API] POST /api/auth/callback/credentials {"query":""}
 Database client connected
-2026-05-03T13:39:08.196Z [Argus] [Auth] NextAuth route initialized 
- POST /api/auth/callback/credentials 200 in 1623ms
-2026-05-03T13:39:08.658Z [Argus] [API] GET /api/auth/session {"query":""}
- GET /api/auth/session 200 in 45ms
+2026-05-03T19:54:13.557Z [Argus] [Auth] NextAuth route initialized 
+ POST /api/auth/callback/credentials 200 in 1158ms
+2026-05-03T19:54:13.823Z [Argus] [API] GET /api/auth/session {"query":""}
+ GET /api/auth/session 200 in 34ms
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -104,7 +155,7 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-2026-05-03T13:39:10.274Z [Argus] [Auth] NextAuth route initialized 
+2026-05-03T19:54:15.126Z [Argus] [Auth] NextAuth route initialized 
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -115,31 +166,11 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-2026-05-03T13:39:20.296Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:39:20.303Z [Argus] [API] GET /api/settings {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:39:20.442Z [Argus] [API] GET /api/dashboard/stats {"query":""}
-2026-05-03T13:39:20.621Z [Argus] [API] GET /api/security-rating {"query":""}
-2026-05-03T13:39:20.623Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
+2026-05-03T19:54:19.545Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:54:19.555Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:54:19.556Z [Argus] [API] GET /api/dashboard/stats {"query":""}
+2026-05-03T19:54:19.557Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-03T19:54:19.558Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -160,219 +191,46 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-2026-05-03T13:39:34.389Z [Argus] [API] GET /api/dashboard/stats 
-(node:75603) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-03T19:54:21.921Z [Argus] [API] GET /api/dashboard/stats 
+(node:82981) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
 (Use `node --trace-deprecation ...` to show where the warning was created)
- GET /api/ai/explain 200 in 14294ms
 Database client connected
 Database client connected
- GET /api/settings 200 in 14368ms
+ GET /api/ai/explain 200 in 2462ms
 Database client connected
 Database client connected
-2026-05-03T13:39:34.696Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:39:34.723Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T13:39:34.758Z [Argus] [API] GET /api/dashboard/stats -> 200 
- GET /api/dashboard/stats 200 in 14288ms
- GET /api/security-rating 200 in 14126ms
- GET /api/tools/performance?days=7 200 in 14150ms
-2026-05-03T13:39:34.857Z [Argus] [API] GET /api/security-rating {"query":""}
-2026-05-03T13:39:34.859Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
-2026-05-03T13:39:34.860Z [Argus] [API] GET /api/dashboard/stats {"query":""}
- GET /api/ai/explain 200 in 285ms
- GET /api/settings 200 in 287ms
-2026-05-03T13:39:35.051Z [Argus] [API] GET /api/dashboard/stats 
- GET /api/tools/performance?days=7 200 in 196ms
- GET /api/security-rating 200 in 518ms
-2026-05-03T13:39:40.884Z [Argus] [API] GET /api/dashboard/stats -> 200 
- GET /api/dashboard/stats 200 in 6042ms
-2026-05-03T13:39:52.769Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T13:39:52.774Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:39:52.990Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:39:53.543Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 359ms
- GET /api/settings 200 in 1197ms
- GET /api/ai/explain 200 in 1207ms
-2026-05-03T13:39:54.465Z [Argus] [API] POST /api/engagement/create {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:39:57.242Z [Argus] [Auth] NextAuth route initialized 
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:39:59.671Z [Argus] [API] POST /api/engagement/create 
- POST /api/engagement/create 200 in 5354ms
-2026-05-03T13:40:00.127Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:40:00.478Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 676ms
-2026-05-03T13:40:01.896Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:40:21.049Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:40:21.051Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 60ms
- GET /api/settings 200 in 62ms
-2026-05-03T13:40:30.807Z [Argus] [API] GET /api/engagements {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- GET /api/engagements 200 in 1179ms
-2026-05-03T13:40:51.044Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:40:51.045Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 44ms
- GET /api/settings 200 in 49ms
-2026-05-03T13:41:02.260Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 27ms
-2026-05-03T13:41:21.014Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:41:21.016Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 54ms
- GET /api/settings 200 in 60ms
-2026-05-03T13:41:51.032Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:41:51.034Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 59ms
- GET /api/settings 200 in 69ms
-2026-05-03T13:41:54.948Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:41:55.105Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 205ms
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:41:59.428Z [Argus] [Auth] NextAuth route initialized 
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- GET /settings 200 in 8167ms
-2026-05-03T13:42:06.337Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:42:06.462Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 158ms
-2026-05-03T13:42:06.512Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:42:06.513Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/auth/session 200 in 169ms
- GET /api/settings 200 in 206ms
-2026-05-03T13:42:06.741Z [Argus] [API] GET /api/webhooks {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:42:07.441Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:42:07.518Z [Argus] [API] GET /api/webhooks 
-2026-05-03T13:42:07.525Z [Argus] [API] GET /api/webhooks -> 200 {"count":0}
- GET /api/webhooks 200 in 786ms
-2026-05-03T13:42:07.540Z [Argus] [API] GET /api/reports/scheduled {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:42:08.367Z [Argus] [API] GET /api/reports/scheduled 
-2026-05-03T13:42:08.400Z [Argus] [API] GET /api/reports/scheduled -> 200 {"count":0}
- GET /api/reports/scheduled 200 in 860ms
-2026-05-03T13:42:35.420Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:42:35.457Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 60ms
-2026-05-03T13:42:37.622Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:43:03.835Z [Argus] [API] POST /api/ai/test {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- POST /api/ai/test 200 in 5007ms
-2026-05-03T13:43:26.866Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:43:26.894Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 36ms
-2026-05-03T13:43:29.326Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:43:29.353Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:43:29.353Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:54:22.037Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/settings 200 in 2525ms
+ GET /api/security-rating 200 in 2541ms
+ GET /api/ai/explain 200 in 75ms
+ GET /api/tools/performance?days=7 200 in 2563ms
+2026-05-03T19:54:22.148Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 2595ms
+2026-05-03T19:54:22.190Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:54:22.191Z [Argus] [API] POST /api/ai/test {"query":""}
+2026-05-03T19:54:22.195Z [Argus] [API] GET /api/security-rating {"query":""}
+2026-05-03T19:54:22.197Z [Argus] [API] GET /api/tools/performance {"query":"?days=7"}
+2026-05-03T19:54:22.248Z [Argus] [API] GET /api/dashboard/stats {"query":""}
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -413,423 +271,21 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
- GET /api/ai/explain 200 in 1625ms
- GET /api/settings 200 in 1637ms
-2026-05-03T13:43:31.022Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:43:31.023Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 61ms
- GET /api/settings 200 in 72ms
-2026-05-03T13:43:42.148Z [Argus] [API] PUT /api/settings {"query":""}
- PUT /api/settings 200 in 26ms
-2026-05-03T13:43:42.353Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:43:42.356Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 39ms
- GET /api/settings 200 in 56ms
-2026-05-03T13:43:42.428Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1949ms
-2026-05-03T13:43:56.697Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:43:56.726Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 36ms
-2026-05-03T13:43:57.870Z [Argus] [API] POST /api/engagement/create {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:43:59.369Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:43:59.576Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:43:59.577Z [Argus] [API] GET /api/settings {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-2026-05-03T13:44:01.629Z [Argus] [API] POST /api/engagement/create 
- POST /api/engagement/create 200 in 3779ms
- GET /api/ai/explain 200 in 2073ms
- GET /api/settings 200 in 2076ms
-2026-05-03T13:44:01.674Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 2169ms
-2026-05-03T13:44:16.974Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:44:16.991Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 56ms
-2026-05-03T13:44:18.158Z [Argus] [API] POST /api/engagement/create {"query":""}
-2026-05-03T13:44:18.177Z [Argus] [API] POST /api/engagement/create 
-2026-05-03T13:44:18.698Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:44:19.697Z [Argus] [API] POST /api/engagement/create -> 200 {"engagementId":"c02d5ee0-5f95-47e0-8670-62622da49c4d","scanType":"url"}
- POST /api/engagement/create 200 in 1538ms
-2026-05-03T13:44:29.352Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:44:29.353Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 89ms
- GET /api/settings 200 in 93ms
-2026-05-03T13:44:29.478Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1500ms
-2026-05-03T13:44:59.353Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:44:59.355Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 41ms
- GET /api/settings 200 in 46ms
-2026-05-03T13:44:59.412Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1255ms
-2026-05-03T13:45:06.767Z [Argus] [API] GET /api/engagements {"query":""}
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
- ⚠ ./node_modules/pg/lib/native/client.js
-Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
-
-Import trace for requested module:
-./node_modules/pg/lib/native/client.js
-./node_modules/pg/lib/native/index.js
-./node_modules/pg/lib/index.js
-./node_modules/pg/esm/index.mjs
-./src/lib/db.ts
-./src/lib/audit.ts
-(node:75603) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [BoundPool]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
-(node:75603) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 connect listeners added to [BoundPool]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
- GET /api/engagements 200 in 1988ms
-2026-05-03T13:45:29.355Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:45:29.356Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 68ms
- GET /api/settings 200 in 73ms
-2026-05-03T13:45:29.442Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 2281ms
-2026-05-03T13:45:38.973Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 26ms
-2026-05-03T13:46:00.024Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:46:00.029Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/settings 200 in 82ms
- GET /api/ai/explain 200 in 87ms
-2026-05-03T13:46:00.132Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1549ms
-2026-05-03T13:46:10.508Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 117ms
-2026-05-03T13:46:40.850Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 19ms
-2026-05-03T13:47:11.005Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 20ms
-2026-05-03T13:47:41.309Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 30ms
-2026-05-03T13:48:10.785Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:48:10.786Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 40ms
- GET /api/settings 200 in 52ms
-2026-05-03T13:48:10.855Z [Argus] [API] POST /api/ai/test {"query":""}
-2026-05-03T13:48:11.590Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 40ms
- POST /api/ai/test 200 in 1297ms
-2026-05-03T13:48:31.042Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:48:31.043Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 51ms
- GET /api/settings 200 in 55ms
-2026-05-03T13:48:31.116Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1507ms
-2026-05-03T13:48:41.773Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 30ms
-2026-05-03T13:49:11.946Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 98ms
-2026-05-03T13:49:31.366Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T13:49:31.368Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 58ms
- GET /api/settings 200 in 74ms
-2026-05-03T13:49:31.453Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1231ms
-2026-05-03T13:49:42.514Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 51ms
-2026-05-03T13:50:12.772Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 38ms
-2026-05-03T13:50:31.371Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:50:31.373Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 63ms
- GET /api/settings 200 in 79ms
-2026-05-03T13:50:31.462Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 5302ms
-2026-05-03T13:50:42.986Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 26ms
-2026-05-03T13:51:13.226Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 59ms
-2026-05-03T13:51:31.375Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:51:31.377Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/settings 200 in 54ms
- GET /api/ai/explain 200 in 56ms
-2026-05-03T13:51:31.454Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1286ms
-2026-05-03T13:51:43.524Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 23ms
-2026-05-03T13:52:13.769Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 46ms
-2026-05-03T13:52:31.368Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:52:31.370Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 53ms
- GET /api/settings 200 in 58ms
-2026-05-03T13:52:31.445Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1207ms
-2026-05-03T13:52:43.997Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 32ms
-2026-05-03T13:53:14.233Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 61ms
-2026-05-03T13:53:31.362Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:53:31.364Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 47ms
- GET /api/settings 200 in 52ms
-2026-05-03T13:53:31.428Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 2050ms
-2026-05-03T13:53:44.519Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 30ms
-2026-05-03T13:54:14.818Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 42ms
-2026-05-03T13:54:31.370Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:54:31.373Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 58ms
- GET /api/settings 200 in 65ms
-2026-05-03T13:54:31.455Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1412ms
-2026-05-03T13:55:31.412Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:55:31.413Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 178ms
- GET /api/settings 200 in 183ms
-2026-05-03T13:55:31.616Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1238ms
-2026-05-03T13:56:31.365Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T13:56:31.367Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:54:25.705Z [Argus] [API] GET /api/dashboard/stats 
+ GET /api/tools/performance?days=7 200 in 3544ms
+ GET /api/security-rating 200 in 3570ms
+ GET /api/settings 200 in 3603ms
+2026-05-03T19:54:25.844Z [Argus] [API] POST /api/ai/test {"query":""}
+2026-05-03T19:54:25.846Z [Argus] [API] GET /api/dashboard/stats -> 200 
+ GET /api/dashboard/stats 200 in 3591ms
+ POST /api/ai/test 200 in 5333ms
+ POST /api/ai/test 200 in 5708ms
+2026-05-03T19:54:48.884Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:54:48.889Z [Argus] [API] GET /api/settings {"query":""}
  GET /api/settings 200 in 47ms
- GET /api/ai/explain 200 in 60ms
-2026-05-03T13:56:31.447Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 2554ms
-2026-05-03T13:56:41.669Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T13:56:41.700Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 40ms
-2026-05-03T13:56:44.208Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T13:56:45.300Z [Argus] [API] POST /api/engagement/create {"query":""}
-2026-05-03T13:56:45.344Z [Argus] [API] POST /api/engagement/create 
-2026-05-03T13:56:46.877Z [Argus] [API] POST /api/engagement/create -> 200 {"engagementId":"d22a8f51-ac6c-4011-b52e-b3981df11a68","scanType":"url"}
- POST /api/engagement/create 200 in 1574ms
-2026-05-03T13:56:59.672Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:56:59.674Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 52ms
- GET /api/settings 200 in 86ms
-2026-05-03T13:56:59.886Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1799ms
-2026-05-03T13:57:29.671Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:57:29.672Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 45ms
- GET /api/settings 200 in 58ms
-2026-05-03T13:57:29.747Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1334ms
-2026-05-03T13:57:34.813Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 71ms
-2026-05-03T13:57:59.672Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:57:59.673Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 41ms
- GET /api/settings 200 in 45ms
-2026-05-03T13:57:59.732Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1512ms
-2026-05-03T13:58:05.057Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 39ms
-2026-05-03T13:58:29.678Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:58:29.682Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 63ms
- GET /api/settings 200 in 68ms
-2026-05-03T13:58:29.761Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1373ms
-2026-05-03T13:58:35.210Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 33ms
-2026-05-03T13:58:59.677Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T13:58:59.679Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 47ms
- GET /api/settings 200 in 49ms
-2026-05-03T13:58:59.744Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1295ms
-2026-05-03T13:59:05.338Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 62ms
-2026-05-03T13:59:29.677Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T13:59:29.679Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 64ms
- GET /api/settings 200 in 68ms
-2026-05-03T13:59:29.762Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1291ms
-2026-05-03T13:59:35.556Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 37ms
-2026-05-03T13:59:59.675Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T13:59:59.676Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 51ms
- GET /api/settings 200 in 57ms
-2026-05-03T13:59:59.758Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 2050ms
-2026-05-03T14:00:05.717Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 43ms
-2026-05-03T14:00:30.341Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:00:30.344Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/settings 200 in 50ms
- GET /api/ai/explain 200 in 52ms
-2026-05-03T14:00:30.417Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1342ms
-2026-05-03T14:00:35.873Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 28ms
-2026-05-03T14:01:06.039Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 48ms
-2026-05-03T14:01:31.459Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:01:31.464Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 64ms
- GET /api/settings 200 in 68ms
-2026-05-03T14:01:31.549Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 2683ms
-2026-05-03T14:01:36.153Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 36ms
-2026-05-03T14:02:06.402Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 109ms
-2026-05-03T14:02:31.397Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:02:31.398Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 77ms
- GET /api/settings 200 in 125ms
-2026-05-03T14:02:31.549Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1440ms
-2026-05-03T14:02:36.591Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 31ms
-2026-05-03T14:03:06.750Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 54ms
-2026-05-03T14:03:31.459Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:03:31.462Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 59ms
- GET /api/settings 200 in 63ms
-2026-05-03T14:03:31.545Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1329ms
-2026-05-03T14:03:36.928Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 36ms
-2026-05-03T14:04:07.063Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 47ms
-2026-05-03T14:04:31.374Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:04:31.384Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 77ms
- GET /api/settings 200 in 91ms
-2026-05-03T14:04:31.565Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1534ms
-2026-05-03T14:04:37.219Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 58ms
-2026-05-03T14:05:07.408Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 48ms
-2026-05-03T14:05:31.427Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:05:31.432Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/settings 200 in 37ms
- GET /api/ai/explain 200 in 40ms
-2026-05-03T14:05:31.492Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1948ms
-2026-05-03T14:05:37.544Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 43ms
-2026-05-03T14:06:07.692Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 24ms
-2026-05-03T14:06:31.396Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:06:31.397Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 48ms
- GET /api/settings 200 in 54ms
-2026-05-03T14:06:31.476Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1333ms
-2026-05-03T14:06:37.815Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 29ms
-2026-05-03T14:07:31.509Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:07:31.511Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 81ms
- GET /api/settings 200 in 87ms
-2026-05-03T14:07:31.619Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1925ms
-2026-05-03T14:07:35.384Z [Argus] [API] GET /api/auth/session {"query":""}
- GET /api/auth/session 200 in 77ms
-2026-05-03T14:07:36.811Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T14:08:00.342Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:08:00.343Z [Argus] [API] GET /api/settings {"query":""}
  GET /api/ai/explain 200 in 50ms
- GET /api/settings 200 in 54ms
-2026-05-03T14:08:00.410Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1278ms
-2026-05-03T14:08:05.939Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 26ms
-2026-05-03T14:08:30.341Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:08:30.351Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 60ms
- GET /api/settings 200 in 74ms
-2026-05-03T14:08:30.455Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1768ms
-2026-05-03T14:08:36.079Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 23ms
-2026-05-03T14:09:06.302Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 72ms
-2026-05-03T14:09:31.437Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:09:31.439Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 34ms
- GET /api/settings 200 in 43ms
-2026-05-03T14:09:31.491Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1208ms
-2026-05-03T14:09:36.470Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 23ms
-2026-05-03T14:10:06.612Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 35ms
-2026-05-03T14:10:31.434Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:10:31.446Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 90ms
- GET /api/settings 200 in 96ms
-2026-05-03T14:10:31.566Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1175ms
-2026-05-03T14:10:36.757Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 37ms
-2026-05-03T14:11:06.921Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 29ms
-2026-05-03T14:11:31.410Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:11:31.411Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 77ms
- GET /api/settings 200 in 86ms
-2026-05-03T14:11:31.510Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1223ms
-2026-05-03T14:11:37.033Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 26ms
-2026-05-03T14:12:07.134Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 22ms
-2026-05-03T14:12:31.383Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:12:31.384Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 84ms
- GET /api/settings 200 in 90ms
-2026-05-03T14:12:31.486Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1404ms
-2026-05-03T14:12:37.240Z [Argus] [API] GET /api/engagements {"query":""}
- GET /api/engagements 200 in 29ms
-2026-05-03T14:12:52.937Z [Argus] [API] GET /api/auth/session {"query":""}
- GET /api/auth/session 200 in 49ms
-2026-05-03T14:12:53.580Z [Argus] [API] GET /api/findings {"query":""}
+2026-05-03T19:54:48.955Z [Argus] [API] POST /api/ai/test {"query":""}
+2026-05-03T19:54:52.807Z [Argus] [API] POST /api/engagement/create {"query":""}
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -840,7 +296,6 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-2026-05-03T14:12:54.840Z [Argus] [Auth] NextAuth route initialized 
  ⚠ ./node_modules/pg/lib/native/client.js
 Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
 
@@ -851,158 +306,248 @@ Import trace for requested module:
 ./node_modules/pg/esm/index.mjs
 ./src/lib/db.ts
 ./src/lib/audit.ts
-2026-05-03T14:12:55.870Z [Argus] [API] GET /api/findings {"query":""}
-2026-05-03T14:12:55.881Z [Argus] [API] GET /api/findings -> 200 {"total":null,"returned":10}
- GET /api/findings 200 in 2302ms
-2026-05-03T14:13:00.340Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:13:00.340Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 59ms
- GET /api/settings 200 in 63ms
-2026-05-03T14:13:00.419Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1297ms
-2026-05-03T14:13:30.344Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:13:30.345Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 39ms
- GET /api/settings 200 in 42ms
-2026-05-03T14:13:30.401Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1425ms
-2026-05-03T14:14:31.350Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:14:31.351Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 33ms
- GET /api/settings 200 in 38ms
-2026-05-03T14:14:31.400Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1293ms
-2026-05-03T14:15:31.401Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:15:31.403Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 61ms
- GET /api/settings 200 in 66ms
-2026-05-03T14:15:31.486Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1979ms
-2026-05-03T14:16:31.375Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:16:31.376Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 61ms
- GET /api/settings 200 in 67ms
-2026-05-03T14:16:31.455Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 985ms
-2026-05-03T14:17:31.347Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:17:31.348Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 56ms
- GET /api/settings 200 in 55ms
-2026-05-03T14:17:31.432Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1485ms
-2026-05-03T14:18:31.363Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:18:31.366Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:54:53.977Z [Argus] [API] POST /api/engagement/create 
+ POST /api/ai/test 200 in 6156ms
+2026-05-03T19:54:55.823Z [Argus] [API] POST /api/engagement/create -> 200 {"engagementId":"03161e11-62bc-4818-9b6a-d75e5c44a384","scanType":"url"}
+ POST /api/engagement/create 200 in 3010ms
+2026-05-03T19:55:18.893Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:55:18.894Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 71ms
+ GET /api/settings 200 in 78ms
+2026-05-03T19:55:18.985Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 6540ms
+2026-05-03T19:55:41.586Z [Argus] [API] GET /api/engagements {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ GET /api/engagements 200 in 1249ms
+2026-05-03T19:55:48.887Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:55:48.888Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 55ms
+ GET /api/settings 200 in 60ms
+2026-05-03T19:55:48.965Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 4687ms
+2026-05-03T19:56:13.037Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 27ms
+2026-05-03T19:56:18.888Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:56:18.890Z [Argus] [API] GET /api/ai/explain {"query":""}
  GET /api/ai/explain 200 in 46ms
  GET /api/settings 200 in 56ms
-2026-05-03T14:18:31.438Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1474ms
-2026-05-03T14:19:31.437Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:19:31.439Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 65ms
- GET /api/settings 200 in 72ms
-2026-05-03T14:19:31.530Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1434ms
-2026-05-03T14:20:31.356Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:20:31.357Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 34ms
- GET /api/settings 200 in 39ms
-2026-05-03T14:20:31.407Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1782ms
-2026-05-03T14:21:31.375Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:21:31.376Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 47ms
- GET /api/settings 200 in 53ms
-2026-05-03T14:21:31.441Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1326ms
-2026-05-03T14:22:31.362Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:22:31.365Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 45ms
+2026-05-03T19:56:18.958Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 1568ms
+2026-05-03T19:56:44.504Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 178ms
+2026-05-03T19:56:48.884Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:56:48.886Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 46ms
+ GET /api/settings 200 in 51ms
+2026-05-03T19:56:48.950Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 5864ms
+2026-05-03T19:57:14.896Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 120ms
+2026-05-03T19:57:19.375Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:57:19.377Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 77ms
+ GET /api/settings 200 in 81ms
+2026-05-03T19:57:19.475Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 5851ms
+2026-05-03T19:57:45.237Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 31ms
+2026-05-03T19:57:49.370Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:57:49.372Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 51ms
  GET /api/settings 200 in 54ms
-2026-05-03T14:22:31.433Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1313ms
-2026-05-03T14:23:31.357Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:23:31.371Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T19:57:49.468Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 1741ms
+2026-05-03T19:58:15.448Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 24ms
+2026-05-03T19:58:45.644Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 24ms
+2026-05-03T19:59:13.371Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T19:59:13.374Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/settings 200 in 32ms
+ GET /api/ai/explain 200 in 34ms
+2026-05-03T19:59:13.422Z [Argus] [API] POST /api/ai/test {"query":""}
+2026-05-03T19:59:15.781Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 33ms
+ POST /api/ai/test 200 in 6395ms
+2026-05-03T19:59:45.947Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 19ms
+2026-05-03T20:00:13.373Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T20:00:13.374Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 99ms
+ GET /api/settings 200 in 105ms
+2026-05-03T20:00:13.488Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 2023ms
+2026-05-03T20:00:16.109Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 21ms
+2026-05-03T20:00:46.350Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 32ms
+2026-05-03T20:01:13.371Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T20:01:13.372Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 58ms
+ GET /api/settings 200 in 65ms
+2026-05-03T20:01:13.445Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 1477ms
+2026-05-03T20:01:16.558Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 20ms
+2026-05-03T20:01:46.764Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 239ms
+2026-05-03T20:02:13.380Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T20:02:13.381Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 73ms
+ GET /api/settings 200 in 80ms
+2026-05-03T20:02:13.480Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 2440ms
+2026-05-03T20:02:17.328Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 37ms
+2026-05-03T20:02:47.572Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 22ms
+2026-05-03T20:03:13.372Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T20:03:13.376Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 69ms
+ GET /api/settings 200 in 78ms
+2026-05-03T20:03:13.464Z [Argus] [API] POST /api/ai/test {"query":""}
+2026-05-03T20:03:17.772Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 20ms
+ POST /api/ai/test 200 in 7894ms
+2026-05-03T20:03:48.015Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 47ms
+2026-05-03T20:04:13.375Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T20:04:13.379Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 73ms
+ GET /api/settings 200 in 88ms
+2026-05-03T20:04:13.491Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 2911ms
+2026-05-03T20:04:18.276Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 186ms
+2026-05-03T20:04:48.717Z [Argus] [API] GET /api/engagements {"query":""}
+ GET /api/engagements 200 in 21ms
+2026-05-03T20:05:13.371Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T20:05:13.372Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 61ms
+ GET /api/settings 200 in 63ms
+2026-05-03T20:05:13.447Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 200 in 1455ms
+2026-05-03T20:06:14.289Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T20:06:14.291Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 168ms
+ GET /api/settings 200 in 191ms
+2026-05-03T20:06:14.515Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 49ms
+2026-05-03T21:28:42.818Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T21:28:42.820Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 231ms
+ GET /api/settings 200 in 234ms
+2026-05-03T21:28:43.068Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 29ms
+2026-05-03T21:59:19.233Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T21:59:19.235Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 45ms
+ GET /api/settings 200 in 50ms
+2026-05-03T21:59:19.302Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 62ms
+2026-05-03T22:00:19.232Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-03T22:00:19.235Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 67ms
+ GET /api/settings 200 in 72ms
+2026-05-03T22:00:19.321Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 84ms
+2026-05-03T22:01:19.237Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T22:01:19.241Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 96ms
+ GET /api/settings 200 in 109ms
+2026-05-03T22:01:19.365Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 27ms
+2026-05-03T22:17:51.303Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-03T22:17:51.306Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 38ms
+ GET /api/settings 200 in 45ms
+2026-05-03T22:17:51.360Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 20ms
+2026-05-04T00:07:14.745Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-04T00:07:14.770Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 511ms
+ GET /api/settings 200 in 535ms
+2026-05-04T00:07:15.321Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 22ms
+2026-05-04T00:08:13.299Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-04T00:08:13.302Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 47ms
+ GET /api/settings 200 in 54ms
+2026-05-04T00:08:13.401Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 36ms
+2026-05-04T02:09:07.512Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-04T02:09:07.528Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 51ms
+ GET /api/settings 200 in 55ms
+2026-05-04T02:09:07.602Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 20ms
+2026-05-04T02:25:23.053Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-04T02:25:23.055Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 48ms
+ GET /api/settings 200 in 52ms
+2026-05-04T02:25:23.118Z [Argus] [API] POST /api/ai/test {"query":""}
+ POST /api/ai/test 500 in 21ms
+2026-05-04T19:28:58.145Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-04T19:28:58.154Z [Argus] [API] GET /api/settings {"query":""}
+ GET /api/ai/explain 200 in 120ms
+ GET /api/settings 200 in 125ms
+2026-05-04T19:29:58.121Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-04T19:29:58.122Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 67ms
+ GET /api/settings 200 in 90ms
+2026-05-04T19:30:58.128Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-04T19:30:58.132Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 50ms
+ GET /api/settings 200 in 56ms
+2026-05-04T19:31:59.800Z [Argus] [API] GET /api/settings {"query":""}
+2026-05-04T19:31:59.805Z [Argus] [API] GET /api/ai/explain {"query":""}
+ GET /api/ai/explain 200 in 146ms
+ GET /api/settings 200 in 155ms
+2026-05-04T19:32:00.149Z [Argus] [API] GET /api/auth/session {"query":""}
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+ ⚠ ./node_modules/pg/lib/native/client.js
+Module not found: Can't resolve 'pg-native' in '/Users/mac/Documents/Argus-/argus-platform/node_modules/pg/lib/native'
+
+Import trace for requested module:
+./node_modules/pg/lib/native/client.js
+./node_modules/pg/lib/native/index.js
+./node_modules/pg/lib/index.js
+./node_modules/pg/esm/index.mjs
+./src/lib/db.ts
+./src/lib/audit.ts
+2026-05-04T19:32:02.654Z [Argus] [Auth] NextAuth route initialized 
+ GET /api/auth/session 200 in 2485ms
+2026-05-04T19:32:03.648Z [Argus] [Auth] NextAuth route initialized 
+2026-05-04T19:32:05.258Z [Argus] [API] GET /api/ai/explain {"query":""}
+2026-05-04T19:32:05.258Z [Argus] [API] GET /api/settings {"query":""}
  GET /api/ai/explain 200 in 73ms
  GET /api/settings 200 in 76ms
-2026-05-03T14:23:31.473Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1789ms
-2026-05-03T14:24:31.383Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:24:31.385Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 44ms
- GET /api/settings 200 in 49ms
-2026-05-03T14:24:31.446Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 5325ms
-2026-05-03T14:25:31.375Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:25:31.377Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 47ms
- GET /api/settings 200 in 51ms
-2026-05-03T14:25:31.442Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1546ms
-2026-05-03T14:26:31.357Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:26:31.359Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 100ms
- GET /api/settings 200 in 105ms
-2026-05-03T14:26:31.482Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1511ms
-2026-05-03T14:27:31.355Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:27:31.356Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 63ms
- GET /api/settings 200 in 75ms
-2026-05-03T14:27:31.449Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1445ms
-2026-05-03T14:28:31.381Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:28:31.385Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 79ms
- GET /api/settings 200 in 86ms
-2026-05-03T14:28:31.480Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1521ms
-2026-05-03T14:29:31.360Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:29:31.361Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 55ms
- GET /api/settings 200 in 66ms
-2026-05-03T14:29:31.455Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1428ms
-2026-05-03T14:29:50.373Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T14:29:50.452Z [Argus] [Auth] NextAuth route initialized 
- GET /api/auth/session 200 in 133ms
-2026-05-03T14:29:51.415Z [Argus] [Auth] NextAuth route initialized 
-2026-05-03T14:30:00.349Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:30:00.352Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 31ms
- GET /api/settings 200 in 37ms
-2026-05-03T14:30:00.399Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1214ms
-2026-05-03T14:30:30.353Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:30:30.355Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 36ms
- GET /api/settings 200 in 41ms
-2026-05-03T14:30:30.406Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1274ms
-2026-05-03T14:31:08.016Z [Argus] [API] GET /api/auth/session {"query":""}
-2026-05-03T14:31:08.017Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:31:08.019Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/auth/session 200 in 83ms
- GET /api/ai/explain 200 in 107ms
- GET /api/settings 200 in 113ms
-2026-05-03T14:31:08.155Z [Argus] [API] POST /api/ai/test {"query":""}
-2026-05-03T14:31:10.251Z [Argus] [Auth] NextAuth route initialized 
- POST /api/ai/test 200 in 3946ms
-2026-05-03T14:31:30.353Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:31:30.355Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 47ms
- GET /api/settings 200 in 55ms
-2026-05-03T14:31:30.425Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1360ms
-2026-05-03T14:32:00.349Z [Argus] [API] GET /api/settings {"query":""}
-2026-05-03T14:32:00.351Z [Argus] [API] GET /api/ai/explain {"query":""}
- GET /api/ai/explain 200 in 31ms
- GET /api/settings 200 in 36ms
-2026-05-03T14:32:00.399Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1285ms
-2026-05-03T14:32:31.369Z [Argus] [API] GET /api/ai/explain {"query":""}
-2026-05-03T14:32:31.372Z [Argus] [API] GET /api/settings {"query":""}
- GET /api/ai/explain 200 in 33ms
- GET /api/settings 200 in 37ms
-2026-05-03T14:32:31.420Z [Argus] [API] POST /api/ai/test {"query":""}
- POST /api/ai/test 200 in 1600ms
 [?25h

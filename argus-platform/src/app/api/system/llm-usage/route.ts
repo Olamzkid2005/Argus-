@@ -1,5 +1,6 @@
 // LLM usage and cost tracking endpoint
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/session";
 import { log } from "@/lib/logger";
 
 interface ModelUsage {
@@ -16,6 +17,7 @@ interface ModelUsage {
  * Mock data — in production, proxy to Python backend usage tracker.
  */
 export async function GET() {
+  await requireAuth();
   log.api("GET", "/api/system/llm-usage");
   try {
     const models: ModelUsage[] = [

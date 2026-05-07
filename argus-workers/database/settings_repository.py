@@ -23,6 +23,7 @@ class SettingsRepository:
         Returns:
             Setting value or None if not found
         """
+        conn = None
         try:
             conn = connect(self.connection_string)
             cursor = conn.cursor()
@@ -34,12 +35,14 @@ class SettingsRepository:
 
             row = cursor.fetchone()
             cursor.close()
-            conn.close()
 
             return row[0] if row else None
         except Exception as e:
             print(f"Failed to get user setting: {e}")
             return None
+        finally:
+            if conn:
+                conn.close()
 
     def get_user_settings(self, user_email: str) -> dict[str, str]:
         """
@@ -51,6 +54,7 @@ class SettingsRepository:
         Returns:
             Dictionary of settings
         """
+        conn = None
         try:
             conn = connect(self.connection_string)
             cursor = conn.cursor()
@@ -62,12 +66,14 @@ class SettingsRepository:
 
             rows = cursor.fetchall()
             cursor.close()
-            conn.close()
 
             return {row[0]: row[1] for row in rows if row[1]}
         except Exception as e:
             print(f"Failed to get user settings: {e}")
             return {}
+        finally:
+            if conn:
+                conn.close()
 
     def set_user_setting(self, user_email: str, key: str, value: str) -> bool:
         """
@@ -81,6 +87,7 @@ class SettingsRepository:
         Returns:
             True if successful
         """
+        conn = None
         try:
             conn = connect(self.connection_string)
             cursor = conn.cursor()
@@ -94,12 +101,14 @@ class SettingsRepository:
 
             conn.commit()
             cursor.close()
-            conn.close()
 
             return True
         except Exception as e:
             print(f"Failed to set user setting: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def delete_user_setting(self, user_email: str, key: str) -> bool:
         """
@@ -112,6 +121,7 @@ class SettingsRepository:
         Returns:
             True if successful
         """
+        conn = None
         try:
             conn = connect(self.connection_string)
             cursor = conn.cursor()
@@ -123,12 +133,14 @@ class SettingsRepository:
 
             conn.commit()
             cursor.close()
-            conn.close()
 
             return True
         except Exception as e:
             print(f"Failed to delete user setting: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
 
 
 # Convenience function

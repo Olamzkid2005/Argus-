@@ -14,7 +14,8 @@ import { pool } from "@/lib/db";
  */
 export async function GET(req: Request) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    const orgId = (session.user as { orgId?: string }).orgId;
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "24h";
 
@@ -27,9 +28,10 @@ export async function GET(req: Request) {
           status,
           COUNT(*) as count
         FROM engagements
-        WHERE created_at > NOW() - INTERVAL '1 hour' * $1
+        WHERE org_id = $1
+          AND created_at > NOW() - INTERVAL '1 hour' * $2
         GROUP BY status
-      `, [period === "24h" ? 24 : period === "7d" ? 168 : 720]);
+      `, [orgId, period === "24h" ? 24 : period === "7d" ? 168 : 720]);
 
       // Get execution stats
       const executionStats = await client.query(`
@@ -37,33 +39,42 @@ export async function GET(req: Request) {
           COUNT(*) as total_executions,
           SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as successful,
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-        FROM job_states
-        WHERE created_at > NOW() - INTERVAL '1 hour' * $1
-      `, [period === "24h" ? 24 : period === "7d" ? 168 : 720]);
+        FROM job_states js
+        JOIN engagements e ON e.id = js.engagement_id
+        WHERE e.org_id = $1
+          AND js.created_at > NOW() - INTERVAL '1 hour' * $2
+      `, [orgId, period === "24h" ? 24 : period === "7d" ? 168 : 720]);
 
       // Get average execution time
       const avgExecutionTime = await client.query(`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (completed_at - created_at))) as avg_duration
-        FROM job_states
-        WHERE completed_at IS NOT NULL
-          AND created_at > NOW() - INTERVAL '1 hour' * $1
-      `, [period === "24h" ? 24 : period === "7d" ? 168 : 720]);
+        FROM job_states js
+        JOIN engagements e ON e.id = js.engagement_id
+        WHERE e.org_id = $1
+          AND js.completed_at IS NOT NULL
+          AND js.created_at > NOW() - INTERVAL '1 hour' * $2
+      `, [orgId, period === "24h" ? 24 : period === "7d" ? 168 : 720]);
 
       // Get error log count
       const errorCount = await client.query(`
         SELECT COUNT(*) as count
-        FROM execution_logs
-        WHERE log_level = 'ERROR'
-          AND created_at > NOW() - INTERVAL '1 hour' * $1
-      `, [period === "24h" ? 24 : period === "7d" ? 168 : 720]);
+        FROM execution_logs el
+        JOIN engagements e ON e.id = el.engagement_id
+        WHERE e.org_id = $1
+          AND el.log_level = 'ERROR'
+          AND el.created_at > NOW() - INTERVAL '1 hour' * $2
+      `, [orgId, period === "24h" ? 24 : period === "7d" ? 168 : 720]);
 
       // Get active traces
       const activeTraces = await client.query(`
-        SELECT DISTINCT trace_id
-        FROM execution_spans
-        WHERE created_at > NOW() - INTERVAL '1 hour'
-      `);
+        SELECT DISTINCT es.trace_id
+        FROM execution_spans es
+        JOIN execution_logs el ON el.trace_id = es.trace_id
+        JOIN engagements e ON e.id = el.engagement_id
+        WHERE e.org_id = $1
+          AND es.created_at > NOW() - INTERVAL '1 hour'
+      `, [orgId]);
 
       return NextResponse.json({
         period,
