@@ -47,6 +47,12 @@ def build_task_args(
         "full_report": [engagement_id],
         "asset_discovery": [engagement_id, target],
         "asset_risk_scoring": [engagement_id],
+        "bugbounty_report": [
+            engagement_id,
+            kwargs.get("platform", "hackerone"),
+            kwargs.get("output_path", ""),
+            trace_id,
+        ],
     }
     return args_map.get(job_type, [engagement_id, target, budget])
 
@@ -66,6 +72,8 @@ class JobMessage:
     auth_config: dict | None = None
     trace_id: str = ""
     created_at: str = ""
+    platform: str = ""
+    output_path: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "JobMessage":
@@ -81,4 +89,6 @@ class JobMessage:
             self.trace_id,
             standard=self.standard,
             auth_config=self.auth_config,
+            platform=self.platform,
+            output_path=self.output_path,
         )

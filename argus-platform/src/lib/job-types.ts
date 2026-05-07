@@ -35,4 +35,6 @@ export interface JobMessage {
   agent_mode?: boolean;
   trace_id: string;
   created_at: string;
+  platform?: string;
+  output_path?: string;
 }

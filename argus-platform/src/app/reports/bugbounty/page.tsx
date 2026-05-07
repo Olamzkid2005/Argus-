@@ -226,7 +226,7 @@ export default function BugBountyPage() {
 
         <p className="text-[11px] text-on-surface-variant/50 font-body">
           Bug-Reaper methodology applied: findings filtered by Bug-Reaper audit rules
-          (confidence &ge; 0.65, severity &ge; Medium, false positives excluded)
+          (confidence {'>='} 0.65, severity {'>='} Medium, false positives excluded)
         </p>
       </motion.div>
     </div>

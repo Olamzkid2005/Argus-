@@ -135,7 +135,7 @@ export async function pushJob(job: JobMessage): Promise<string> {
     }
 
     // Build the job payload matching dispatch_task.py expectations
-    const jobPayload = {
+    const jobPayload: Record<string, unknown> = {
       type: job.type,
       engagement_id: job.engagement_id,
       target: job.target,
@@ -143,6 +143,8 @@ export async function pushJob(job: JobMessage): Promise<string> {
       standard: job.standard,
       budget: job.budget,
       trace_id: traceId,
+      platform: (job as any).platform,
+      output_path: (job as any).output_path,
     };
 
     const child = spawn(pythonPath, [dispatchScript], {
