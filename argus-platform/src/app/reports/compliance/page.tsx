@@ -183,8 +183,8 @@ export default function ComplianceReportsPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <Loader2 className="h-8 w-8 animate-spin text-on-surface" />
       </div>
     );
   }
@@ -192,44 +192,44 @@ export default function ComplianceReportsPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen px-8 py-8 bg-void">
+    <div className="min-h-screen px-8 py-8 bg-surface">
       {/* Header */}
       <div className="mb-8">
         <button
           onClick={() => router.push("/reports")}
-          className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors mb-4 text-sm"
+          className="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors mb-4 text-sm"
         >
           <ArrowLeft size={14} />
           Back to Reports
         </button>
         <div className="flex items-center gap-2 mb-2">
-          <ShieldCheck size={18} className="text-prism-cream" />
-          <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">
+          <ShieldCheck size={18} className="text-on-surface" />
+          <span className="text-[11px] font-mono text-on-surface-variant tracking-widest uppercase">
             Compliance Framework
           </span>
         </div>
-        <h1 className="text-4xl font-semibold text-text-primary tracking-tight">COMPLIANCE REPORTS</h1>
-        <p className="text-sm text-text-secondary mt-2">
+        <h1 className="text-4xl font-semibold text-on-surface tracking-tight">COMPLIANCE REPORTS</h1>
+        <p className="text-sm text-on-surface-variant mt-2">
           Generate OWASP Top 10, PCI DSS, and SOC 2 compliance reports
         </p>
       </div>
 
       {/* Generate Report Panel */}
-      <div className="border border-structural bg-surface/20 p-6 mb-8">
-        <h2 className="text-sm font-bold text-text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
-          <FileText size={14} className="text-prism-cream" />
+      <div className="border border-outline-variant bg-surface/20 p-6 mb-8">
+        <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest mb-4 flex items-center gap-2">
+          <FileText size={14} className="text-on-surface" />
           Generate New Report
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
-            <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-2">
+            <label className="block text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-2">
               Engagement
             </label>
             <select
               value={engagementId}
               onChange={(e) => setEngagementId(e.target.value)}
-              className="w-full px-3 py-2 border border-structural bg-surface/30 text-sm text-text-primary outline-none focus:border-prism-cream transition-colors font-mono text-xs"
+              className="w-full px-3 py-2 border border-outline-variant bg-surface/30 text-sm text-on-surface outline-none focus:border-prism-cream transition-colors font-mono text-xs"
             >
               <option value="" className="bg-surface">Select engagement...</option>
               {engagements.map((eng) => (
@@ -241,13 +241,13 @@ export default function ComplianceReportsPage() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-text-secondary uppercase tracking-wider mb-2">
+            <label className="block text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-2">
               Compliance Standard
             </label>
             <select
               value={selectedStandard}
               onChange={(e) => setSelectedStandard(e.target.value)}
-              className="w-full px-3 py-2 border border-structural bg-surface/30 text-sm text-text-primary outline-none focus:border-prism-cream transition-colors font-mono text-xs"
+              className="w-full px-3 py-2 border border-outline-variant bg-surface/30 text-sm text-on-surface outline-none focus:border-prism-cream transition-colors font-mono text-xs"
             >
               <option value="owasp_top10" className="bg-surface">OWASP Top 10</option>
               <option value="pci_dss" className="bg-surface">PCI DSS 4.0</option>
@@ -259,7 +259,7 @@ export default function ComplianceReportsPage() {
             <button
               onClick={handleGenerate}
               disabled={isGenerating || !engagementId}
-              className="flex items-center gap-2 px-6 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow-cream disabled:opacity-50 w-full justify-center"
+              className="flex items-center gap-2 px-6 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow disabled:opacity-50 w-full justify-center"
             >
               {isGenerating ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -271,14 +271,14 @@ export default function ComplianceReportsPage() {
           </div>
         </div>
 
-        <div className="text-[11px] text-text-secondary">
+        <div className="text-[11px] text-on-surface-variant">
           {standardConfig[selectedStandard as keyof typeof standardConfig]?.description}
         </div>
       </div>
 
       {/* Reports List */}
-      <div className="border border-structural bg-surface/20">
-        <div className="grid grid-cols-[100px_1fr_140px_120px_120px_100px] gap-4 px-5 py-3 border-b border-structural text-[11px] font-mono text-text-secondary tracking-wider uppercase">
+      <div className="border border-outline-variant bg-surface/20">
+        <div className="grid grid-cols-[100px_1fr_140px_120px_120px_100px] gap-4 px-5 py-3 border-b border-outline-variant text-[11px] font-mono text-on-surface-variant tracking-wider uppercase">
           <span>Report ID</span>
           <span>Title</span>
           <span>Standard</span>
@@ -295,15 +295,15 @@ export default function ComplianceReportsPage() {
           return (
             <div
               key={report.id}
-              className="grid grid-cols-[100px_1fr_140px_120px_120px_100px] gap-4 px-5 py-4 items-center border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors"
+              className="grid grid-cols-[100px_1fr_140px_120px_120px_100px] gap-4 px-5 py-4 items-center border-b border-outline-variant last:border-b-0 hover:bg-surface/10 transition-colors"
             >
-              <span className="text-[11px] font-mono text-text-secondary uppercase">
+              <span className="text-[11px] font-mono text-on-surface-variant uppercase">
                 {report.id.split("-")[0]}
               </span>
 
               <div>
-                <div className="text-sm text-text-primary">{report.title}</div>
-                <div className="text-[10px] text-text-secondary font-mono mt-0.5">
+                <div className="text-sm text-on-surface">{report.title}</div>
+                <div className="text-[10px] text-on-surface-variant font-mono mt-0.5">
                   Engagement: {report.engagement_id}
                 </div>
               </div>
@@ -312,7 +312,7 @@ export default function ComplianceReportsPage() {
                 className="text-[10px] font-mono font-bold px-2 py-0.5 border w-fit"
                 style={{
                   color: standardStyle.color,
-                  borderColor: "var(--border-structural)",
+                  borderColor: "var(--border-outline-variant)",
                   backgroundColor: "transparent",
                 }}
               >
@@ -321,12 +321,12 @@ export default function ComplianceReportsPage() {
 
               <div className="flex items-center gap-2">
                 <StatusIcon size={14} style={{ color: statusStyle.color }} />
-                <span className="text-[11px] text-text-secondary uppercase">
+                <span className="text-[11px] text-on-surface-variant uppercase">
                   {statusStyle.label}
                 </span>
               </div>
 
-              <span className="text-[11px] font-mono text-text-secondary">
+              <span className="text-[11px] font-mono text-on-surface-variant">
                 {new Date(report.created_at).toLocaleDateString()}
               </span>
 
@@ -335,14 +335,14 @@ export default function ComplianceReportsPage() {
                   <>
                     <button
                       onClick={() => handleView(report.id)}
-                      className="p-1.5 text-text-secondary hover:text-prism-cyan transition-colors"
+                      className="p-1.5 text-on-surface-variant hover:text-prism-cyan transition-colors"
                       title="View"
                     >
                       <Eye size={14} />
                     </button>
                     <button
                       onClick={() => handleDownload(report.id)}
-                      className="p-1.5 text-text-secondary hover:text-prism-cream transition-colors"
+                      className="p-1.5 text-on-surface-variant hover:text-on-surface transition-colors"
                       title="Download"
                     >
                       <Download size={14} />
@@ -355,7 +355,7 @@ export default function ComplianceReportsPage() {
         })}
 
         {reports.length === 0 && (
-          <div className="px-5 py-20 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase">
+          <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase">
             NO COMPLIANCE REPORTS GENERATED
           </div>
         )}

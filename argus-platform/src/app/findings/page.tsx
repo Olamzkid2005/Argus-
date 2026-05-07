@@ -266,6 +266,32 @@ export default function FindingsPage() {
   const [remediationContent, setRemediationContent] = useState<Record<string, string>>({});
   const [similarFindings, setSimilarFindings] = useState<Finding[]>([]);
 
+  // Fetch remediation content when the remediation tab is activated
+  useEffect(() => {
+    if (activeTab !== "remediation" || !selectedFindingId) return;
+    const finding = findings.find((f) => f.id === selectedFindingId);
+    if (!finding) return;
+    const fetchRemediation = async () => {
+      try {
+        const response = await fetch("/api/ai/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ findings: [finding], model: selectedModel }),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          const content = data.explanations?.[finding.id] || data.explanations?.[0] || "";
+          setRemediationContent((prev) => ({ ...prev, [selectedFindingId]: content }));
+        } else {
+          setRemediationContent((prev) => ({ ...prev, [selectedFindingId]: "Failed to generate remediation steps." }));
+        }
+      } catch (err) {
+        setRemediationContent((prev) => ({ ...prev, [selectedFindingId]: "Failed to generate remediation steps." }));
+      }
+    };
+    fetchRemediation();
+  }, [activeTab, selectedFindingId, findings, selectedModel]);
+
   useEffect(() => {
     if (status === "unauthenticated") signIn();
   }, [status, router]);

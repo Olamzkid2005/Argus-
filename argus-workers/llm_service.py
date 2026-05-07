@@ -107,7 +107,11 @@ class LLMService:
                 )
                 return self._fallback("Cost cap exceeded")
 
-            return json.loads(response_text)
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logger.warning("LLM returned non-JSON response (%.200r...), using fallback: %s", response_text, e)
+                return self._fallback(f"JSON parse error: {e}")
 
         except Exception as e:
             logger.warning(f"LLM call failed: {e}")

@@ -84,11 +84,10 @@ SEVERITY_MULTIPLIERS = {
 EVIDENCE_ADJUSTMENTS = {
     "verified": 1.0,
     "strong": 0.95,
-    "VERIFIED": 1.0,
-    "REQUEST_RESPONSE": 0.9,
-    "PAYLOAD": 0.85,
+    "request_response": 0.9,
+    "payload": 0.85,
     "moderate": 0.85,
-    "MINIMAL": 0.7,
+    "minimal": 0.7,
     "weak": 0.7,
     "none": 0.6,
     "": 0.85,
@@ -115,10 +114,10 @@ def estimate_cvss(
 
     NOTE: This is a heuristic estimate, not a certified CVSS score.
     """
-    # Normalize inputs
-    finding_type = finding_type.upper().strip() if finding_type else ""
-    severity = severity.upper().strip() if severity else "INFO"
-    evidence_strength = evidence_strength.strip() if evidence_strength else "moderate"
+    # Normalize inputs — str() coercion prevents crash on non-string inputs
+    finding_type = str(finding_type or "").upper().strip()
+    severity = str(severity or "").upper().strip() or "INFO"
+    evidence_strength = str(evidence_strength or "").lower().strip() or "moderate"
 
     # Look up base score, default to 5.0 (medium)
     base = TYPE_BASE_SCORES.get(finding_type, 5.0)

@@ -1,6 +1,9 @@
 import json
+import logging
 
 from parsers.parsers.base import BaseParser
+
+logger = logging.getLogger(__name__)
 
 
 class DalfoxParser(BaseParser):
@@ -27,5 +30,6 @@ class DalfoxParser(BaseParser):
                 }
                 findings.append(finding)
             except json.JSONDecodeError:
+                logger.warning("Non-JSON line encountered in Dalfox output, skipping: %s", line[:200])
                 continue
         return findings

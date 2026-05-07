@@ -278,7 +278,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const payload = { ...settings };
+      const payload = { ...settings, temperature: temperature.toString() };
       if (customModel.trim()) {
         payload.preferred_ai_model = customModel;
       }

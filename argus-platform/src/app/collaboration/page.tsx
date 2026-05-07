@@ -271,8 +271,8 @@ export default function CollaborationPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <Loader2 className="h-8 w-8 animate-spin text-on-surface" />
       </div>
     );
   }
@@ -280,34 +280,34 @@ export default function CollaborationPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen px-8 py-8 bg-void">
+    <div className="min-h-screen px-8 py-8 bg-surface">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Users size={18} className="text-prism-cream" />
-          <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">Collaboration Center</span>
+          <Users size={18} className="text-on-surface" />
+          <span className="text-[11px] font-mono text-on-surface-variant tracking-widest uppercase">Collaboration Center</span>
           {unreadCount > 0 && (
             <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30">
               {unreadCount} unread
             </span>
           )}
         </div>
-        <h1 className="text-4xl font-semibold text-text-primary tracking-tight">COLLABORATION</h1>
-        <p className="text-sm text-text-secondary mt-2">
+        <h1 className="text-4xl font-semibold text-on-surface tracking-tight">COLLABORATION</h1>
+        <p className="text-sm text-on-surface-variant mt-2">
           Team coordination, finding assignments, and approval workflows
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-6 border-b border-structural">
+      <div className="flex items-center gap-2 mb-6 border-b border-outline-variant">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-5 py-3 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2 ${
               activeTab === tab.id
-                ? "border-prism-cream text-prism-cream bg-surface/30"
-                : "border-transparent text-text-secondary hover:text-text-primary"
+                ? "border-prism-cream text-on-surface bg-surface/30"
+                : "border-transparent text-on-surface-variant hover:text-on-surface"
             }`}
           >
             <tab.icon size={14} />
@@ -320,10 +320,10 @@ export default function CollaborationPage() {
       {activeTab === "team" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Team Members</h2>
+            <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase">Team Members</h2>
             <button
               onClick={() => setShowInviteForm(!showInviteForm)}
-              className="flex items-center gap-2 px-4 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow-cream"
+              className="flex items-center gap-2 px-4 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow"
             >
               {showInviteForm ? <XCircle size={12} /> : <UserPlus size={12} />}
               {showInviteForm ? "Cancel" : "Invite Member"}
@@ -331,19 +331,19 @@ export default function CollaborationPage() {
           </div>
 
           {showInviteForm && (
-            <div className="border border-structural bg-surface/30 p-4 space-y-3">
+            <div className="border border-outline-variant bg-surface/30 p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="user@company.com"
-                  className="px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors font-mono"
+                  className="px-3 py-2 bg-surface/50 border border-outline-variant text-xs text-on-surface outline-none focus:border-prism-cream transition-colors font-mono"
                 />
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
-                  className="px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors font-mono"
+                  className="px-3 py-2 bg-surface/50 border border-outline-variant text-xs text-on-surface outline-none focus:border-prism-cream transition-colors font-mono"
                 >
                   <option value="admin">Admin</option>
                   <option value="member">Member</option>
@@ -352,15 +352,15 @@ export default function CollaborationPage() {
               </div>
               <button
                 onClick={handleInvite}
-                className="px-5 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow-cream"
+                className="px-5 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow"
               >
                 Add to Team
               </button>
             </div>
           )}
 
-          <div className="border border-structural bg-surface/20">
-            <div className="grid grid-cols-[1fr_120px_120px_100px_40px] gap-4 px-5 py-3 border-b border-structural text-[11px] font-mono text-text-secondary tracking-wider uppercase">
+          <div className="border border-outline-variant bg-surface/20">
+            <div className="grid grid-cols-[1fr_120px_120px_100px_40px] gap-4 px-5 py-3 border-b border-outline-variant text-[11px] font-mono text-on-surface-variant tracking-wider uppercase">
               <span>User</span>
               <span>Role</span>
               <span>Status</span>
@@ -370,31 +370,31 @@ export default function CollaborationPage() {
             {teamMembers.map((member) => (
               <div
                 key={member.id}
-                className="grid grid-cols-[1fr_120px_120px_100px_40px] gap-4 px-5 py-3 items-center border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors"
+                className="grid grid-cols-[1fr_120px_120px_100px_40px] gap-4 px-5 py-3 items-center border-b border-outline-variant last:border-b-0 hover:bg-surface/10 transition-colors"
               >
                 <div>
-                  <div className="text-sm text-text-primary">{member.name || member.email}</div>
-                  <div className="text-[10px] text-text-secondary font-mono">{member.email}</div>
+                  <div className="text-sm text-on-surface">{member.name || member.email}</div>
+                  <div className="text-[10px] text-on-surface-variant font-mono">{member.email}</div>
                 </div>
-                <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 border border-structural w-fit" style={{ color: "var(--prism-cream)" }}>
+                <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 border border-outline-variant w-fit" style={{ color: "var(--prism-cream)" }}>
                   {member.team_role}
                 </span>
                 <span className="text-[10px] font-mono uppercase" style={{ color: member.invitation_status === "active" ? "#00FF88" : "var(--text-secondary)" }}>
                   {member.invitation_status}
                 </span>
-                <span className="text-[10px] font-mono text-text-secondary">
+                <span className="text-[10px] font-mono text-on-surface-variant">
                   {new Date(member.created_at).toLocaleDateString()}
                 </span>
                 <button
                   onClick={() => handleRemoveMember(member.id)}
-                  className="p-1.5 text-text-secondary hover:text-red-500 transition-colors"
+                  className="p-1.5 text-on-surface-variant hover:text-red-500 transition-colors"
                 >
                   <Trash2 size={12} />
                 </button>
               </div>
             ))}
             {teamMembers.length === 0 && (
-              <div className="px-5 py-12 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase">
+              <div className="px-5 py-12 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase">
                 No team members yet
               </div>
             )}
@@ -414,23 +414,23 @@ export default function CollaborationPage() {
                 fetchComments(e.target.value);
               }}
               placeholder="Enter Finding ID to view comments..."
-              className="flex-1 px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors font-mono"
+              className="flex-1 px-3 py-2 bg-surface/50 border border-outline-variant text-xs text-on-surface outline-none focus:border-prism-cream transition-colors font-mono"
             />
           </div>
 
           {selectedFindingId && (
             <>
-              <div className="border border-structural bg-surface/20 max-h-[400px] overflow-y-auto space-y-2 p-4">
+              <div className="border border-outline-variant bg-surface/20 max-h-[400px] overflow-y-auto space-y-2 p-4">
                 {comments.length === 0 ? (
-                  <p className="text-[10px] font-mono text-text-secondary/40 uppercase tracking-widest text-center py-8">No comments yet</p>
+                  <p className="text-[10px] font-mono text-on-surface-variant/40 uppercase tracking-widest text-center py-8">No comments yet</p>
                 ) : (
                   comments.map((comment) => (
-                    <div key={comment.id} className="border border-structural bg-surface/10 p-3">
+                    <div key={comment.id} className="border border-outline-variant bg-surface/10 p-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-bold text-text-primary">{comment.user_name || comment.user_email}</span>
-                        <span className="text-[9px] font-mono text-text-secondary">{new Date(comment.created_at).toLocaleString()}</span>
+                        <span className="text-[10px] font-bold text-on-surface">{comment.user_name || comment.user_email}</span>
+                        <span className="text-[9px] font-mono text-on-surface-variant">{new Date(comment.created_at).toLocaleString()}</span>
                       </div>
-                      <p className="text-xs text-text-secondary">{comment.content}</p>
+                      <p className="text-xs text-on-surface-variant">{comment.content}</p>
                     </div>
                   ))
                 )}
@@ -442,11 +442,11 @@ export default function CollaborationPage() {
                   onChange={(e) => setNewComment(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
                   placeholder="Add a comment..."
-                  className="flex-1 px-3 py-2 bg-surface/50 border border-structural text-xs text-text-primary outline-none focus:border-prism-cream transition-colors"
+                  className="flex-1 px-3 py-2 bg-surface/50 border border-outline-variant text-xs text-on-surface outline-none focus:border-prism-cream transition-colors"
                 />
                 <button
                   onClick={handleAddComment}
-                  className="px-4 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow-cream"
+                  className="px-4 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow"
                 >
                   <Send size={12} />
                 </button>
@@ -458,8 +458,8 @@ export default function CollaborationPage() {
 
       {/* Assignments Tab */}
       {activeTab === "assignments" && (
-        <div className="border border-structural bg-surface/20">
-          <div className="grid grid-cols-[1fr_120px_100px_100px_120px_40px] gap-4 px-5 py-3 border-b border-structural text-[11px] font-mono text-text-secondary tracking-wider uppercase">
+        <div className="border border-outline-variant bg-surface/20">
+          <div className="grid grid-cols-[1fr_120px_100px_100px_120px_40px] gap-4 px-5 py-3 border-b border-outline-variant text-[11px] font-mono text-on-surface-variant tracking-wider uppercase">
             <span>Finding</span>
             <span>Assigned To</span>
             <span>Status</span>
@@ -468,19 +468,19 @@ export default function CollaborationPage() {
             <span></span>
           </div>
           {assignments.map((a) => (
-            <div key={a.id} className="grid grid-cols-[1fr_120px_100px_100px_120px_40px] gap-4 px-5 py-3 items-center border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors">
+            <div key={a.id} className="grid grid-cols-[1fr_120px_100px_100px_120px_40px] gap-4 px-5 py-3 items-center border-b border-outline-variant last:border-b-0 hover:bg-surface/10 transition-colors">
               <div>
-                <div className="text-xs text-text-primary font-mono">{a.finding_type}</div>
-                <div className="text-[9px] text-text-secondary truncate">{a.endpoint}</div>
+                <div className="text-xs text-on-surface font-mono">{a.finding_type}</div>
+                <div className="text-[9px] text-on-surface-variant truncate">{a.endpoint}</div>
               </div>
-              <div className="text-[10px] text-text-secondary font-mono">{a.assigned_to_name || a.assigned_to_email}</div>
+              <div className="text-[10px] text-on-surface-variant font-mono">{a.assigned_to_name || a.assigned_to_email}</div>
               <span className="text-[10px] font-mono uppercase" style={{ color: a.status === "resolved" ? "#00FF88" : a.status === "in_progress" ? "var(--prism-cyan)" : "var(--prism-cream)" }}>
                 {a.status}
               </span>
               <span className="text-[10px] font-mono uppercase" style={{ color: a.priority === "urgent" ? "#FF4444" : a.priority === "high" ? "#FF8800" : "var(--text-secondary)" }}>
                 {a.priority}
               </span>
-              <span className="text-[10px] font-mono text-text-secondary">
+              <span className="text-[10px] font-mono text-on-surface-variant">
                 {a.due_date ? new Date(a.due_date).toLocaleDateString() : "—"}
               </span>
               <button
@@ -499,14 +499,14 @@ export default function CollaborationPage() {
                     showToast("error", "Failed to update assignment");
                   }
                 }}
-                className="p-1.5 text-text-secondary hover:text-prism-cyan transition-colors"
+                className="p-1.5 text-on-surface-variant hover:text-prism-cyan transition-colors"
               >
                 <CheckSquare size={12} />
               </button>
             </div>
           ))}
           {assignments.length === 0 && (
-            <div className="px-5 py-12 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase">
+            <div className="px-5 py-12 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase">
               No assignments yet
             </div>
           )}
@@ -517,28 +517,28 @@ export default function CollaborationPage() {
       {activeTab === "approvals" && (
         <div className="space-y-4">
           {approvalRequests.map((req) => (
-            <div key={req.id} className="border border-structural bg-surface/20 p-5">
+            <div key={req.id} className="border border-outline-variant bg-surface/20 p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <CheckSquare size={14} className="text-prism-cream" />
-                    <span className="text-sm font-medium text-text-primary">{req.workflow_name}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 border border-structural" style={{ color: req.status === "approved" ? "#00FF88" : req.status === "rejected" ? "#FF4444" : "var(--prism-cyan)" }}>
+                    <CheckSquare size={14} className="text-on-surface" />
+                    <span className="text-sm font-medium text-on-surface">{req.workflow_name}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 border border-outline-variant" style={{ color: req.status === "approved" ? "#00FF88" : req.status === "rejected" ? "#FF4444" : "var(--prism-cyan)" }}>
                       {req.status}
                     </span>
                   </div>
-                  <p className="text-[11px] text-text-secondary font-mono">
+                  <p className="text-[11px] text-on-surface-variant font-mono">
                     Requested by {req.requester_name} · {req.engagement_target || "N/A"}
                   </p>
                 </div>
-                <span className="text-[10px] font-mono text-text-secondary">{new Date(req.created_at).toLocaleDateString()}</span>
+                <span className="text-[10px] font-mono text-on-surface-variant">{new Date(req.created_at).toLocaleDateString()}</span>
               </div>
-              {req.notes && <p className="text-xs text-text-secondary mb-3">{req.notes}</p>}
+              {req.notes && <p className="text-xs text-on-surface-variant mb-3">{req.notes}</p>}
               {req.status === "pending" && (
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => handleApproveRequest(req.id, "approve")}
-                    className="flex items-center gap-2 px-4 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow-cream"
+                    className="flex items-center gap-2 px-4 py-2 bg-prism-cream text-void text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-glow"
                   >
                     <CheckCircle2 size={12} />
                     Approve
@@ -555,7 +555,7 @@ export default function CollaborationPage() {
             </div>
           ))}
           {approvalRequests.length === 0 && (
-            <div className="px-5 py-12 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase border border-structural">
+            <div className="px-5 py-12 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant">
               No approval requests
             </div>
           )}
@@ -566,7 +566,7 @@ export default function CollaborationPage() {
       {activeTab === "activity" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-text-primary tracking-wide uppercase">Activity Feed</h2>
+            <h2 className="text-sm font-medium text-on-surface tracking-wide uppercase">Activity Feed</h2>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
@@ -579,42 +579,42 @@ export default function CollaborationPage() {
 
           {/* Notifications */}
           {notifications.length > 0 && (
-            <div className="border border-structural bg-surface/20 mb-4">
-              <div className="px-5 py-3 border-b border-structural text-[11px] font-mono text-text-secondary tracking-wider uppercase">
+            <div className="border border-outline-variant bg-surface/20 mb-4">
+              <div className="px-5 py-3 border-b border-outline-variant text-[11px] font-mono text-on-surface-variant tracking-wider uppercase">
                 Notifications
               </div>
               {notifications.map((n) => (
-                <div key={n.id} className={`px-5 py-3 border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors ${!n.is_read ? "bg-prism-cyan/5" : ""}`}>
+                <div key={n.id} className={`px-5 py-3 border-b border-outline-variant last:border-b-0 hover:bg-surface/10 transition-colors ${!n.is_read ? "bg-prism-cyan/5" : ""}`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <Bell size={12} className={n.is_read ? "text-text-secondary" : "text-prism-cyan"} />
-                    <span className="text-xs font-bold text-text-primary">{n.title}</span>
+                    <Bell size={12} className={n.is_read ? "text-on-surface-variant" : "text-prism-cyan"} />
+                    <span className="text-xs font-bold text-on-surface">{n.title}</span>
                     {!n.is_read && <div className="w-1.5 h-1.5 rounded-full bg-prism-cyan" />}
                   </div>
-                  <p className="text-[11px] text-text-secondary">{n.message}</p>
+                  <p className="text-[11px] text-on-surface-variant">{n.message}</p>
                 </div>
               ))}
             </div>
           )}
 
           {/* Activities */}
-          <div className="border border-structural bg-surface/20">
-            <div className="px-5 py-3 border-b border-structural text-[11px] font-mono text-text-secondary tracking-wider uppercase">
+          <div className="border border-outline-variant bg-surface/20">
+            <div className="px-5 py-3 border-b border-outline-variant text-[11px] font-mono text-on-surface-variant tracking-wider uppercase">
               Recent Activity
             </div>
             {activities.map((activity) => (
-              <div key={activity.id} className="px-5 py-3 border-b border-structural last:border-b-0 hover:bg-surface/10 transition-colors">
+              <div key={activity.id} className="px-5 py-3 border-b border-outline-variant last:border-b-0 hover:bg-surface/10 transition-colors">
                 <div className="flex items-center gap-2 mb-1">
-                  <Activity size={12} className="text-text-secondary" />
-                  <span className="text-[10px] font-mono uppercase text-prism-cream">{activity.activity_type}</span>
-                  <span className="text-[9px] font-mono text-text-secondary">{new Date(activity.created_at).toLocaleString()}</span>
+                  <Activity size={12} className="text-on-surface-variant" />
+                  <span className="text-[10px] font-mono uppercase text-on-surface">{activity.activity_type}</span>
+                  <span className="text-[9px] font-mono text-on-surface-variant">{new Date(activity.created_at).toLocaleString()}</span>
                 </div>
-                <p className="text-[11px] text-text-secondary">
+                <p className="text-[11px] text-on-surface-variant">
                   {activity.user_name || "System"} · {activity.entity_type} · {activity.entity_id.split("-")[0]}
                 </p>
               </div>
             ))}
             {activities.length === 0 && (
-              <div className="px-5 py-12 text-center text-text-secondary/40 italic text-sm tracking-widest uppercase">
+              <div className="px-5 py-12 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase">
                 No recent activity
               </div>
             )}

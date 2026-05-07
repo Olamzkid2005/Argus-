@@ -118,7 +118,7 @@ export default function RateLimitConfig({
             >
               Concurrency
             </label>
-            <span className="text-xs font-mono font-bold text-argus-cyan">
+            <span className="text-xs font-mono font-bold text-cyan-500">
               {value.concurrent_requests} Spans
             </span>
           </div>
@@ -132,7 +132,7 @@ export default function RateLimitConfig({
             onChange={(e) =>
               handleChange("concurrent_requests", parseInt(e.target.value))
             }
-            className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-argus-cyan"
+            className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-cyan-500"
           />
           <p className="text-[10px] text-muted-foreground leading-relaxed">
             Maximum simultaneous request workers.
@@ -227,7 +227,7 @@ export default function RateLimitConfig({
               adaptive_slowdown: false,
             })
           }
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-argus-magenta/10 text-[10px] font-black uppercase tracking-widest text-argus-magenta hover:bg-argus-magenta/20 transition-all border border-argus-magenta/10"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-pink-500/10 text-[10px] font-black uppercase tracking-widest text-pink-500 hover:bg-pink-500/20 transition-all border border-pink-500/10"
         >
           <AlertTriangle className="h-3 w-3" />
           Aggressive

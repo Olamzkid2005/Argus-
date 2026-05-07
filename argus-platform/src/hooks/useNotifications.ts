@@ -48,12 +48,7 @@ export interface UseNotificationsReturn {
 
 export function useNotifications(): UseNotificationsReturn {
   const [notifications, setNotifications] = useState<Notification[]>(loadNotifications);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    setNotifications(loadNotifications());
-  }, []);
+  const [mounted, setMounted] = useState(true);
 
   useEffect(() => {
     if (mounted) {

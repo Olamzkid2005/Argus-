@@ -198,11 +198,16 @@ class AIExplainer:
 
                 # Sanitize strings
                 if isinstance(value, str):
-                    # Remove potential prompt injection patterns
-                    value = re.sub(r'(ignore|disregard|forget).*(previous|above|prior)', '', value, flags=re.IGNORECASE)
-                    value = re.sub(r'(you are|act as|pretend)', '', value, flags=re.IGNORECASE)
+                    # Remove non-ASCII and control characters to prevent Unicode-based bypass
+                    value = re.sub(r'[^\x20-\x7E\s]', '', value)
+                    # Remove control characters (including null, backspace, etc.)
+                    value = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', value)
 
-                    # Limit length
+                    # Remove potential prompt injection patterns (with stricter boundaries)
+                    value = re.sub(r'\b(ignore|disregard|forget)\b.*?\b(previous|above|prior)\b', '', value, flags=re.IGNORECASE | re.DOTALL)
+                    value = re.sub(r'\b(you are|act as|pretend)\b', '', value, flags=re.IGNORECASE)
+
+                    # Aggressively truncate to prevent hidden injection in long strings
                     if len(value) > 500:
                         value = value[:500] + "..."
 

@@ -89,8 +89,8 @@ export default function ComplianceReportViewPage({
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-void">
-        <Loader2 className="h-8 w-8 animate-spin text-prism-cream" />
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <Loader2 className="h-8 w-8 animate-spin text-on-surface" />
       </div>
     );
   }
@@ -99,15 +99,15 @@ export default function ComplianceReportViewPage({
 
   if (!report) {
     return (
-      <div className="min-h-screen px-8 py-8 bg-void">
+      <div className="min-h-screen px-8 py-8 bg-surface">
         <button
           onClick={() => router.push("/reports/compliance")}
-          className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors mb-4 text-sm"
+          className="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors mb-4 text-sm"
         >
           <ArrowLeft size={14} />
           Back to Compliance Reports
         </button>
-        <div className="text-text-secondary">Report not found</div>
+        <div className="text-on-surface-variant">Report not found</div>
       </div>
     );
   }
@@ -119,12 +119,12 @@ export default function ComplianceReportViewPage({
   };
 
   return (
-    <div className="min-h-screen px-8 py-8 bg-void">
+    <div className="min-h-screen px-8 py-8 bg-surface">
       {/* Header */}
       <div className="mb-6">
         <button
           onClick={() => router.push("/reports/compliance")}
-          className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors mb-4 text-sm"
+          className="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors mb-4 text-sm"
         >
           <ArrowLeft size={14} />
           Back to Compliance Reports
@@ -133,15 +133,15 @@ export default function ComplianceReportViewPage({
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <ShieldCheck size={18} className="text-prism-cream" />
-              <span className="text-[11px] font-mono text-text-secondary tracking-widest uppercase">
+              <ShieldCheck size={18} className="text-on-surface" />
+              <span className="text-[11px] font-mono text-on-surface-variant tracking-widest uppercase">
                 {standardLabels[report.standard] || report.standard}
               </span>
             </div>
-            <h1 className="text-3xl font-semibold text-text-primary tracking-tight">
+            <h1 className="text-3xl font-semibold text-on-surface tracking-tight">
               {report.title}
             </h1>
-            <div className="flex items-center gap-4 mt-2 text-[11px] font-mono text-text-secondary">
+            <div className="flex items-center gap-4 mt-2 text-[11px] font-mono text-on-surface-variant">
               <span>Engagement: {report.engagement_id}</span>
               <span>Generated: {new Date(report.created_at).toLocaleDateString()}</span>
               <span
@@ -153,7 +153,7 @@ export default function ComplianceReportViewPage({
                       : report.status === "failed"
                         ? "#FF4444"
                         : "var(--prism-cyan)",
-                  borderColor: "var(--border-structural)",
+                  borderColor: "var(--border-outline-variant)",
                 }}
               >
                 {report.status.toUpperCase()}
@@ -164,7 +164,7 @@ export default function ComplianceReportViewPage({
           {report.status === "ready" && (
             <button
               onClick={handleDownload}
-              className="flex items-center gap-2 px-5 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow-cream"
+              className="flex items-center gap-2 px-5 py-2.5 bg-prism-cream text-void font-bold text-xs tracking-widest uppercase hover:opacity-90 transition-all shadow-glow"
             >
               <Download size={14} />
               DOWNLOAD HTML
@@ -175,9 +175,9 @@ export default function ComplianceReportViewPage({
 
       {/* Report Content */}
       {report.status === "generating" && (
-        <div className="border border-structural bg-surface/20 p-12 text-center">
+        <div className="border border-outline-variant bg-surface/20 p-12 text-center">
           <Loader2 className="h-8 w-8 animate-spin text-prism-cyan mx-auto mb-4" />
-          <p className="text-text-secondary text-sm tracking-widest uppercase">
+          <p className="text-on-surface-variant text-sm tracking-widest uppercase">
             Generating compliance report...
           </p>
         </div>
@@ -193,7 +193,7 @@ export default function ComplianceReportViewPage({
       )}
 
       {report.status === "ready" && report.html_content && (
-        <div className="border border-structural bg-surface/20 overflow-hidden">
+        <div className="border border-outline-variant bg-surface/20 overflow-hidden">
           <iframe
             srcDoc={report.html_content}
             className="w-full min-h-[800px] bg-white"
@@ -204,11 +204,11 @@ export default function ComplianceReportViewPage({
       )}
 
       {report.status === "ready" && !report.html_content && report.report_data && (
-        <div className="border border-structural bg-surface/20 p-6">
-          <h3 className="text-sm font-bold text-text-primary uppercase tracking-widest mb-4">
+        <div className="border border-outline-variant bg-surface/20 p-6">
+          <h3 className="text-sm font-bold text-on-surface uppercase tracking-widest mb-4">
             Report Data (JSON)
           </h3>
-          <pre className="text-[12px] font-mono text-text-secondary overflow-auto max-h-[600px] p-4 bg-void border border-structural">
+          <pre className="text-[12px] font-mono text-on-surface-variant overflow-auto max-h-[600px] p-4 bg-surface border border-outline-variant">
             {JSON.stringify(report.report_data, null, 2)}
           </pre>
         </div>

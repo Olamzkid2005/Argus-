@@ -108,7 +108,8 @@ class CircuitBreaker:
 
             try:
                 result = func(*args, **kwargs)
-                self.record_success()
+                if result:
+                    self.record_success()
                 return result
             except Exception:
                 self.record_failure()

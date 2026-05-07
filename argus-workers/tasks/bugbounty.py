@@ -8,6 +8,7 @@ HackerOne, Bugcrowd, Intigriti, and YesWeHack.
 import json
 import logging
 import os
+import random
 from pathlib import Path
 
 from celery_app import app
@@ -53,7 +54,9 @@ def generate_bugbounty_report(
         engagement = _fetch_engagement(engagement_id)
     except Exception as e:
         logger.error(f"Failed to fetch data for engagement {engagement_id}: {e}")
-        raise self.retry(exc=e, countdown=30)
+        # Exponential backoff with jitter to prevent retry storms
+        countdown = min(30 * (2 ** self.request.retries), 300) + random.uniform(0, 10)
+        raise self.retry(exc=e, countdown=countdown)
 
     if not findings:
         logger.warning(f"No findings found for engagement {engagement_id}")

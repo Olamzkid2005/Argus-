@@ -16,7 +16,7 @@ class ToolSchema:
     """JSON Schema definition for a tool parameter."""
     def __init__(self, name: str, type: str, description: str = "",
                  required: bool = False, enum: list[str] = None,
-                 default: Any = None, flag: str = None):
+                 default: Any = None, flag: str = None, **kwargs):
         self.name = name
         self.type = type
         self.description = description
@@ -24,6 +24,7 @@ class ToolSchema:
         self.enum = enum or []
         self.default = default
         self.flag = flag
+        # Ignore any extra keys from dict unpacking to avoid TypeError
 
 
 class ToolDefinition:

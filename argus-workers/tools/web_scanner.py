@@ -191,7 +191,7 @@ class WebScanner:
 
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
                  llm_payload_generator=None, session: requests.Session | None = None,
-                 tech_stack: list[str] | None = None):
+                 tech_stack: list[str] | None = None, verify: bool = True):
         """
         Initialize web scanner.
 
@@ -201,11 +201,13 @@ class WebScanner:
             llm_payload_generator: Optional LLMPayloadGenerator for context-aware payloads
             session: Optional pre-authenticated requests.Session
             tech_stack: Detected technology stack from recon (e.g. ["WordPress", "PHP", "jQuery"])
+            verify: Verify SSL certificates
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
         self.tech_stack = tech_stack or []
+        self.verify = verify
         self.session = session or requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -214,6 +216,7 @@ class WebScanner:
         })
         self.findings = []
         self.discovered_parameters = None  # Initialized before parameter_discovery()
+        self._last_request_time = 0.0  # For token-bucket rate limiting
 
     def scan(self, target_url: str) -> list[dict]:
         """
@@ -284,7 +287,7 @@ class WebScanner:
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
-            kwargs.setdefault("verify", True)  # Verify SSL certs by default
+            kwargs.setdefault("verify", self.verify)  # Verify SSL certs by default
             # Use thread-local session for thread safety during concurrent checks
             if not hasattr(self, "_thread_session"):
                 self._thread_session = threading.local()
@@ -296,8 +299,13 @@ class WebScanner:
                     "Accept": "*/*",
                 })
                 self._thread_session.session = thread_session
+            # Token-bucket rate limiting: only sleep for the remaining wait time
+            now = time.time()
+            wait_time = self._last_request_time + self.rate_limit - now
+            if wait_time > 0:
+                time.sleep(wait_time)
+            self._last_request_time = time.time()
             resp = thread_session.request(method, url, **kwargs)
-            time.sleep(self.rate_limit)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
             logger.debug(f"Request failed: {e}")

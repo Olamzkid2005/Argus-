@@ -42,7 +42,7 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
         return result
     
     try:
-        async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
+        async with httpx.AsyncClient(timeout=15.0, verify=True) as client:
             # Test with the original payload
             try:
                 original_resp = await client.get(endpoint, params={"q": payload} if "?" not in endpoint else None)
@@ -98,7 +98,7 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> d
         return result
     
     try:
-        async with httpx.AsyncClient(timeout=15.0, verify=False, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, verify=True, follow_redirects=True) as client:
             test_param = param or "q"
             
             # Test each payload
@@ -150,7 +150,7 @@ async def verify_open_redirect(endpoint: str) -> dict:
         return result
     
     try:
-        async with httpx.AsyncClient(timeout=15.0, verify=False, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, verify=True, follow_redirects=True) as client:
             resp = await client.get(endpoint)
             
             if resp.history:
