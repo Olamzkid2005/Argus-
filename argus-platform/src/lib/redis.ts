@@ -294,10 +294,6 @@ export async function pollJobStatus(
  */
 export async function cancelJob(jobId: string): Promise<boolean> {
   try {
-    // Revoke Celery task
-    const { spawn } = await import("child_process");
-    const path = await import("path");
-
     const workersRoot = path.join(process.cwd(), "..");
     const pythonPath = path.join(
       workersRoot,

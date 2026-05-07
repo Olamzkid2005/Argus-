@@ -27,11 +27,11 @@ export async function GET(req: NextRequest) {
         FROM findings f
         JOIN engagements e ON f.engagement_id = e.id
         WHERE e.org_id = $1
-          AND f.created_at >= CURRENT_DATE - INTERVAL '${days} days'
+          AND f.created_at >= CURRENT_DATE - INTERVAL '1 day' * $2
         GROUP BY DATE(f.created_at)
         ORDER BY DATE(f.created_at) ASC
         `,
-        [session.user.orgId],
+        [session.user.orgId, days],
       );
 
       // Engagement comparisons
@@ -63,11 +63,11 @@ export async function GET(req: NextRequest) {
         FROM findings f
         JOIN engagements e ON f.engagement_id = e.id
         WHERE e.org_id = $1
-          AND f.created_at >= CURRENT_DATE - INTERVAL '${days} days'
+          AND f.created_at >= CURRENT_DATE - INTERVAL '1 day' * $2
         GROUP BY f.source_tool
         ORDER BY finding_count DESC
         `,
-        [session.user.orgId],
+        [session.user.orgId, days],
       );
 
       // Monthly summary

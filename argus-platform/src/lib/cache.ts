@@ -19,14 +19,24 @@ const memoryCache = new Map<string, CacheEntry<any>>();
 
 /**
  * Check if Redis is connected and available.
+ * Result is cached for 5 seconds to avoid pinging Redis on every call.
  */
+let _redisAvailable: boolean | null = null;
+let _redisAvailableAt = 0;
+const REDIS_AVAILABLE_TTL = 5_000; // 5 seconds
+
 async function isRedisAvailable(): Promise<boolean> {
+  if (_redisAvailable !== null && Date.now() - _redisAvailableAt < REDIS_AVAILABLE_TTL) {
+    return _redisAvailable;
+  }
   try {
     await redis.ping();
-    return true;
+    _redisAvailable = true;
   } catch {
-    return false;
+    _redisAvailable = false;
   }
+  _redisAvailableAt = Date.now();
+  return _redisAvailable;
 }
 
 /**

@@ -63,7 +63,15 @@ export async function withQueryCache<T>(
 export async function invalidateCache(pattern: string): Promise<void> {
   try {
     if (redis) {
-      const keys = await redis.keys(pattern);
+      // Use SCAN instead of KEYS to avoid blocking Redis on production
+      const keys: string[] = [];
+      let cursor = "0";
+      do {
+        const result = await redis.scan(cursor, { match: pattern, count: 100 });
+        cursor = result[0];
+        keys.push(...result[1]);
+      } while (cursor !== "0");
+
       if (keys.length > 0) {
         await redis.del(...keys);
       }

@@ -178,7 +178,7 @@ export const authOptions: NextAuthOptions = {
           const result = await pool.query(
             `SELECT id, email, password_hash, org_id, role, two_factor_enabled, totp_secret 
              FROM users WHERE email = $1`,
-            [credentials.email],
+            [credentials.email.toLowerCase()],
           );
 
           if (result.rows.length === 0) {

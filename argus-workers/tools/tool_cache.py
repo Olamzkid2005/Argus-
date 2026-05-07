@@ -17,6 +17,34 @@ logger = logging.getLogger(__name__)
 TOOL_CACHE_DIR = Path("/tmp/argus_tool_cache")
 TOOL_CACHE_DIR.mkdir(exist_ok=True)
 
+# Strict allowlist of tool names that can be installed via pip.
+# Only known, vetted tool names are allowed to prevent supply-chain injection.
+PIP_ALLOWLIST = frozenset({
+    "semgrep",
+    "bandit",
+    "gitleaks",
+    "trufflehog",
+    "trivy",
+    "pip-audit",
+    "sqlmap",
+    "dalfox",
+    "commix",
+    "gospider",
+    "arjun",
+    "naabu",
+    "httpx",
+    "subfinder",
+    "katana",
+    "gau",
+    "waybackurls",
+    "whatweb",
+    "wpscan",
+    "alterx",
+    "nikto",
+    "jwt_tool",
+    "testssl",
+})
+
 # Tool versions for security
 TOOL_VERSIONS = {
     "nuclei": "3.2.0",
@@ -76,19 +104,22 @@ class ToolCache:
             logger.info(f"Tool {tool_name} already cached")
             return True
 
-        # Try to install via package manager first
-        try:
-            result = subprocess.run(
-                ["pip", "install", tool_name],
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            if result.returncode == 0:
-                logger.info(f"Installed {tool_name} via pip")
-                return True
-        except Exception as e:
-            logger.warning(f"Failed to install {tool_name} via pip: {e}")
+        # Only allow known tools to be installed via pip (supply-chain safety)
+        if tool_name in PIP_ALLOWLIST:
+            try:
+                result = subprocess.run(
+                    ["pip", "install", tool_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if result.returncode == 0:
+                    logger.info(f"Installed {tool_name} via pip")
+                    return True
+            except Exception as e:
+                logger.warning(f"Failed to install {tool_name} via pip: {e}")
+        else:
+            logger.warning(f"Tool {tool_name!r} is not in pip allowlist, skipping pip install")
 
         # Otherwise download
         if download_url:

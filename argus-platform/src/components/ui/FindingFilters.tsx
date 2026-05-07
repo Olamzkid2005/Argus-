@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, Filter, Download, Trash2, Eye, X } from "lucide-react";
 
 interface Finding {
@@ -84,9 +84,10 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
     return result;
   }, [findings, search, severity, tool, status, sortBy]);
 
-  const handleFilterChange = () => {
+  // Sync filtered data to parent via useEffect to ensure state updates have been applied
+  useEffect(() => {
     onFilter(filteredFindings);
-  };
+  }, [filteredFindings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const exportToCSV = () => {
     const headers = [
@@ -115,6 +116,7 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
     a.href = url;
     a.download = `findings-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const exportToJSON = () => {
@@ -125,6 +127,7 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
     a.href = url;
     a.download = `findings-${new Date().toISOString().split("T")[0]}.json`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
@@ -138,7 +141,6 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
-            handleFilterChange();
           }}
           className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none"
         />
@@ -151,7 +153,6 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
           value={severity}
           onChange={(e) => {
             setSeverity(e.target.value as SeverityFilter);
-            handleFilterChange();
           }}
           className="px-3 py-2 rounded-lg bg-background border border-border"
         >
@@ -168,7 +169,6 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
           value={tool}
           onChange={(e) => {
             setTool(e.target.value);
-            handleFilterChange();
           }}
           className="px-3 py-2 rounded-lg bg-background border border-border"
         >
@@ -184,7 +184,6 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
           value={status}
           onChange={(e) => {
             setStatus(e.target.value as StatusFilter);
-            handleFilterChange();
           }}
           className="px-3 py-2 rounded-lg bg-background border border-border"
         >
@@ -198,7 +197,6 @@ export function FindingFilters({ findings, onFilter }: FindingFiltersProps) {
           value={sortBy}
           onChange={(e) => {
             setSortBy(e.target.value as "severity" | "date");
-            handleFilterChange();
           }}
           className="px-3 py-2 rounded-lg bg-background border border-border"
         >

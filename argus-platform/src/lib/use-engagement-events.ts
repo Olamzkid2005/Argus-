@@ -214,10 +214,10 @@ export function useEngagementEvents(
   // Track consecutive errors for backoff
   const consecutiveErrorsRef = useRef(0);
   const maxErrorsBeforeStop = 5;
-  let _cleanupFns: Array<() => void> = [];
+  const cleanupFnsRef = useRef<Array<() => void>>([]);
 
   function _registerCleanup(fn: () => void) {
-    _cleanupFns.push(fn);
+    cleanupFnsRef.current.push(fn);
   }
 
   // ── Polling fallback ──
@@ -352,7 +352,7 @@ export function useEngagementEvents(
         eventSourceRef.current = null;
       }
       stopPolling();
-      _cleanupFns = [];
+      cleanupFnsRef.current = [];
     };
   }, [enabled, startSse, startPollingFallback, stopPolling]);
 

@@ -201,45 +201,44 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
     rules_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "semgrep_rules")
 
     temp_dir = tempfile.mkdtemp(prefix="argus_repo_scan_")
-
-    # Aggressiveness config for repo scans
-    clone_depth = ["--depth", "1"] if agg == "default" else ["--depth", "1"] if agg == "high" else []
-    semgrep_timeout = TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
-    custom_rule_limit = 3 if agg == "default" else 6 if agg == "high" else 999
-
-    # Common exclude patterns for noise reduction
-    exclude_args = [
-        "--exclude", "node_modules",
-        "--exclude", "vendor",
-        "--exclude", ".git",
-        "--exclude", "dist",
-        "--exclude", "build",
-        "--exclude", "*.min.js",
-        "--exclude", "*.map",
-        "--exclude", "coverage",
-        "--exclude", ".next",
-        "--exclude", ".nuxt",
-    ]
-
-    # Helper to deduplicate findings by endpoint + type
-    seen = set()
-    def add_finding(finding: dict):
-        key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{finding.get('evidence', {}).get('check_id', '') or finding.get('evidence', {}).get('cve_id', '')}"
-        if key not in seen:
-            seen.add(key)
-            all_findings.append(finding)
-
-    def _emit(tool: str, activity: str, status: str, items: int = None):
-        orchestrator.ws_publisher.publish_scanner_activity(
-            engagement_id=orchestrator.engagement_id,
-            tool_name=tool,
-            activity=activity,
-            status=status,
-            target=repo_url,
-            items_found=items,
-        )
-
     try:
+        # Aggressiveness config for repo scans
+        clone_depth = ["--depth", "1"] if agg == "default" else ["--depth", "1"] if agg == "high" else []
+        semgrep_timeout = TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
+        custom_rule_limit = 3 if agg == "default" else 6 if agg == "high" else 999
+
+        # Common exclude patterns for noise reduction
+        exclude_args = [
+            "--exclude", "node_modules",
+            "--exclude", "vendor",
+            "--exclude", ".git",
+            "--exclude", "dist",
+            "--exclude", "build",
+            "--exclude", "*.min.js",
+            "--exclude", "*.map",
+            "--exclude", "coverage",
+            "--exclude", ".next",
+            "--exclude", ".nuxt",
+        ]
+
+        # Helper to deduplicate findings by endpoint + type
+        seen = set()
+        def add_finding(finding: dict):
+            key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{finding.get('evidence', {}).get('check_id', '') or finding.get('evidence', {}).get('cve_id', '')}"
+            if key not in seen:
+                seen.add(key)
+                all_findings.append(finding)
+
+        def _emit(tool: str, activity: str, status: str, items: int = None):
+            orchestrator.ws_publisher.publish_scanner_activity(
+                engagement_id=orchestrator.engagement_id,
+                tool_name=tool,
+                activity=activity,
+                status=status,
+                target=repo_url,
+                items_found=items,
+            )
+
         # ── Clone repository ──
         clone_cmd = ["git", "clone"] + clone_depth + ["--", repo_url, temp_dir]
         clone_timeout = 120 if agg in ("default", "high") else TOOL_TIMEOUT_LONG
@@ -329,16 +328,19 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
         # ── 2. Trufflehog: parallel git history secret scanning ──
         _emit("trufflehog", "Scanning git history with trufflehog", "started")
         try:
+            # Build trufflehog args — only include --since-commit for default mode
+            trufflehog_args = [
+                "git", temp_dir,
+                "--json",
+                "--no-update",
+                "--fail",
+                "--max-depth", "1" if agg == "default" else "5" if agg == "high" else "50",
+            ]
+            if agg == "default":
+                trufflehog_args.extend(["--since-commit", "HEAD~100"])
             trufflehog_result = orchestrator.tool_runner.run(
                 "trufflehog",
-                [
-                    "git", temp_dir,
-                    "--json",
-                    "--no-update",
-                    "--fail",
-                    "--since-commit", "HEAD~100" if agg == "default" else "",
-                    "--max-depth", "1" if agg == "default" else "5" if agg == "high" else "50",
-                ],
+                trufflehog_args,
                 timeout=TOOL_TIMEOUT_LONG,
             )
             if trufflehog_result.success and trufflehog_result.stdout.strip():
@@ -384,6 +386,9 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             # Private keys in .pem / .key files
             for pattern in ("**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx", "**/*.asc"):
                 for fpath in glob.glob(os.path.join(temp_dir, pattern), recursive=True):
+                    # Guard against symlink escapes
+                    if not os.path.realpath(fpath).startswith(os.path.realpath(temp_dir)):
+                        continue
                     rel = os.path.relpath(fpath, temp_dir)
                     key_id = f"private_key:{rel}"
                     if key_id in seen_wt:
@@ -408,6 +413,9 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                         pass
             # .env files with populated values
             for fpath in glob.glob(os.path.join(temp_dir, ".env*"), recursive=False):
+                # Guard against symlink escapes
+                if not os.path.realpath(fpath).startswith(os.path.realpath(temp_dir)):
+                    continue
                 rel = os.path.relpath(fpath, temp_dir)
                 key_id = f"env_file:{rel}"
                 if key_id in seen_wt:
@@ -443,6 +451,9 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             # Config files with password/secret/private_key keys
             for pattern in ("**/*.yml", "**/*.yaml", "**/*.conf", "**/*.cfg", "**/*.ini", "**/*.toml"):
                 for fpath in glob.glob(os.path.join(temp_dir, pattern), recursive=True):
+                    # Guard against symlink escapes
+                    if not os.path.realpath(fpath).startswith(os.path.realpath(temp_dir)):
+                        continue
                     rel = os.path.relpath(fpath, temp_dir)
                     key_id = f"config_secret:{rel}"
                     if key_id in seen_wt:

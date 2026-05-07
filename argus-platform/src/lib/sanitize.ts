@@ -121,10 +121,10 @@ export function sanitizeFilename(input: string): string {
     return "";
   }
 
-  // Remove path traversal attempts
+  // Remove path traversal attempts — strip ".." but keep single dots (e.g., file extensions)
   const filename = input
-    .replace(/\./g, "")
-    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .replace(/\.\./g, "")
+    .replace(/[^a-zA-Z0-9_.-]/g, "_")
     .substring(0, 255);
 
   return filename;

@@ -1,14 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
 import { pushJob, checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
 import { pool } from "@/lib/db";
 import { log } from "@/lib/logger";
+import { createRateLimit } from "@/lib/rate-limiter";
 
-export async function POST(req: Request) {
+// Max 10 engagement creations per hour per user
+const engagementRateLimit = createRateLimit({
+  windowMs: 3600000, // 1 hour
+  maxRequests: 10,
+});
+
+export async function POST(req: NextRequest) {
   log.api('POST', '/api/engagement/create');
   try {
+    // Apply rate limiting before anything else
+    const rateLimitResponse = await engagementRateLimit(req);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const session = await requireAuth();
     const body = await req.json();
 

@@ -17,14 +17,16 @@ export async function GET(
     const client = await pool.connect();
     try {
       const result = await client.query(
-        `SELECT id, engagement_id, generated_by, executive_summary,
-                full_report_json, risk_level, total_findings,
-                critical_count, high_count, medium_count, low_count,
-                model_used, created_at
-         FROM reports
-         WHERE engagement_id = $1
+        `SELECT r.id, r.engagement_id, r.generated_by, r.executive_summary,
+                r.full_report_json, r.risk_level, r.total_findings,
+                r.critical_count, r.high_count, r.medium_count, r.low_count,
+                r.model_used, r.created_at
+         FROM reports r
+         JOIN engagements e ON r.engagement_id = e.id
+         WHERE r.engagement_id = $1
+           AND e.org_id = $2
          LIMIT 1`,
-        [id]
+        [id, session.user.orgId]
       );
 
       if (result.rows.length === 0) {

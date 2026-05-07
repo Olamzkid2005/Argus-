@@ -3,12 +3,6 @@
  * 
  * Implements RFC 6238 TOTP algorithm using Web Crypto API
  */
-import { Buffer } from 'buffer';
-
-// Global polyfill for Buffer if not available
-if (typeof globalThis.Buffer === 'undefined') {
-  (globalThis as any).Buffer = Buffer;
-}
 
 /**
  * Generate HMAC-SHA1 signature
