@@ -448,7 +448,6 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
     Injects the .md methodology file into the agent's context so the LLM
     knows exactly what payloads and techniques to use.
     """
-    from pathlib import Path
     
     # Bug-Reaper's priority-ordered hunting classes with their associated tools
     PRIORITY_ORDER = [
