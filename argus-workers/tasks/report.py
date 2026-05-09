@@ -24,12 +24,22 @@ from utils.validation import validate_uuid
 
 
 @app.task(bind=True, name="tasks.report.generate_report")
-def generate_report(self, engagement_id: str, trace_id: str = None):
+def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict | None = None):
     """
     Generate final report for an engagement
+
+    Args:
+        engagement_id: Engagement UUID
+        trace_id: Optional trace ID
+        budget: Optional budget dict (forwards prev_engagement_id for diff engine)
     """
+    job_extra = {}
+    if budget:
+        job_extra["budget"] = budget
     with task_context(
-        self, engagement_id, "report", trace_id=trace_id, current_state="reporting"
+        self, engagement_id, "report",
+        job_extra=job_extra,
+        trace_id=trace_id, current_state="reporting"
     ) as ctx:
         result = ctx.orchestrator.run_reporting(ctx.job)
         ctx.state.transition("complete", "Report generated")

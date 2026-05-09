@@ -185,6 +185,21 @@ def _spawn_engagement(
         cursor.close()
         raise
 
+    # Look up previous engagement for this schedule (for diff engine)
+    prev_engagement_id = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT last_engagement_id FROM scheduled_engagements WHERE id = %s",
+            (sched_id,),
+        )
+        row = cursor.fetchone()
+        if row and row[0]:
+            prev_engagement_id = str(row[0])
+        cursor.close()
+    except Exception:
+        prev_engagement_id = None
+
     # Dispatch Celery task asynchronously
     if scan_type == "repo":
         from tasks.repo_scan import run_repo_scan
@@ -202,6 +217,7 @@ def _spawn_engagement(
             budget={"max_cycles": 5, "max_depth": 3},
             trace_id=trace_id,
             agent_mode=agent_mode,
+            prev_engagement_id=prev_engagement_id,
         )
 
     logger.info(

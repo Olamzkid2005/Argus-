@@ -26,6 +26,6 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         else:
             ctx.state.transition("reporting", "Analysis complete")
             app.send_task('tasks.report.generate_report',
-                          args=[engagement_id, ctx.trace_id])
+                          args=[engagement_id, ctx.trace_id, budget])
 
         return result

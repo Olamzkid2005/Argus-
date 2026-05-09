@@ -17,10 +17,23 @@ logger = logging.getLogger(__name__)
     soft_time_limit=900,   # 15 minutes for long-running recon tools
     time_limit=1200,        # 20 minutes hard limit
 )
-def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None, agent_mode: bool = True):
+def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None,
+              agent_mode: bool = True, prev_engagement_id: str | None = None):
     """
     Execute reconnaissance phase for an engagement
+
+    Args:
+        engagement_id: Engagement UUID
+        target: Target URL
+        budget: Budget config dict
+        trace_id: Optional trace ID
+        agent_mode: Enable LLM agent mode
+        prev_engagement_id: Previous engagement ID for diff engine (scheduled scans)
     """
+    # Forward prev_engagement_id through the chain via budget
+    if prev_engagement_id:
+        budget["prev_engagement_id"] = prev_engagement_id
+
     with task_context(self, engagement_id, "recon",
                       job_extra={"target": target, "budget": budget, "agent_mode": agent_mode},
                       trace_id=trace_id, current_state="created") as ctx:

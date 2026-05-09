@@ -637,6 +637,7 @@ class Orchestrator:
                 logger.warning(f"LLM report generation failed (non-fatal): {e}")
 
         # ── Update target profile with findings from this engagement ──
+        _org_id = self._get_org_id()
         try:
             from database.repositories.target_profile_repository import (
                 TargetProfileRepository,
@@ -648,7 +649,6 @@ class Orchestrator:
 
             target_url = job.get("target", "")
             target_domain = urlparse(target_url).netloc
-            _org_id = self._get_org_id()
             if target_domain and _org_id:
                 profile_repo = TargetProfileRepository(
                     os.getenv("DATABASE_URL")
@@ -694,6 +694,22 @@ class Orchestrator:
         except Exception as e:
             logger.warning(
                 "Target profile update failed (non-fatal): %s", e
+            )
+
+        # ── Dispatch scan diff for scheduled engagements ──
+        try:
+            _budget = job.get("budget", {})
+            prev_id = _budget.get("prev_engagement_id") if _budget else None
+            if prev_id and _org_id:
+                from tasks.diff import run_scan_diff
+                run_scan_diff.delay(
+                    prev_engagement_id=prev_id,
+                    new_engagement_id=self.engagement_id,
+                    org_id=_org_id,
+                )
+        except Exception as e:
+            logger.warning(
+                "Scan diff dispatch failed (non-fatal): %s", e
             )
 
         self.ws_publisher.publish_state_transition(
