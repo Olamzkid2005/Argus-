@@ -52,6 +52,8 @@ interface Finding {
   repro_steps?: string[] | null;
   poc_generated?: Record<string, string> | null;
   poc_generated_at?: string | null;
+  remediation_fix?: Record<string, unknown> | null;
+  remediation_fix_at?: string | null;
   created_at: string;
 }
 
@@ -592,6 +594,115 @@ export default function FindingDetailPage() {
                   </div>
                 );
               })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ═══════════════════════════════════════
+           SECTION 2.75: DEVELOPER FIX
+           ═══════════════════════════════════════ */}
+        {finding.remediation_fix && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.09 }}
+            className="bg-surface-container rounded-2xl border border-outline/20 p-6 space-y-4"
+          >
+            <h2 className="text-sm font-bold font-headline flex items-center gap-2">
+              <FileCode size={16} className="text-green-500" />
+              Developer Fix
+            </h2>
+
+            <div className="space-y-4">
+              {/* Vulnerable Pattern */}
+              {finding.remediation_fix.vulnerable_pattern && (
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold text-red-500">
+                    ❌ Before — Vulnerable Pattern
+                  </h4>
+                  <pre className="overflow-x-auto rounded-lg border border-red-200
+                                  bg-red-50 p-3 text-xs font-mono
+                                  dark:border-red-900 dark:bg-red-950">
+                    <code>{String(finding.remediation_fix.vulnerable_pattern)}</code>
+                  </pre>
+                </div>
+              )}
+
+              {/* Fixed Pattern */}
+              {finding.remediation_fix.fixed_pattern && (
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold text-green-500">
+                    ✅ After — Fixed Pattern
+                  </h4>
+                  <pre className="overflow-x-auto rounded-lg border border-green-200
+                                  bg-green-50 p-3 text-xs font-mono
+                                  dark:border-green-900 dark:bg-green-950">
+                    <code>{String(finding.remediation_fix.fixed_pattern)}</code>
+                  </pre>
+                </div>
+              )}
+
+              {/* Explanation */}
+              {finding.remediation_fix.explanation && (
+                <div className="rounded-lg border bg-surface-container-high p-3">
+                  <h4 className="mb-1 text-xs font-semibold">Explanation</h4>
+                  <p className="text-xs text-on-surface">
+                    {String(finding.remediation_fix.explanation)}
+                  </p>
+                </div>
+              )}
+
+              {/* Unit Test */}
+              {finding.remediation_fix.unit_test && (
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <h4 className="text-xs font-semibold">🧪 Unit Test</h4>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(
+                        String(finding.remediation_fix!.unit_test)
+                      )}
+                      className="rounded px-2 py-0.5 text-[10px] text-on-surface-variant
+                                 hover:bg-surface-container-high transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <pre className="overflow-x-auto rounded-lg border bg-gray-950 p-3
+                                  text-xs text-cyan-300 font-mono">
+                    <code>{String(finding.remediation_fix.unit_test)}</code>
+                  </pre>
+                </div>
+              )}
+
+              {/* Library Recommendation */}
+              {finding.remediation_fix.library_recommendation && (
+                <div className="flex items-center gap-2 rounded-lg border
+                                border-blue-200 bg-blue-50 p-3
+                                dark:border-blue-900 dark:bg-blue-950">
+                  <span className="text-xs font-medium">📦 Recommendation:</span>
+                  <code className="rounded bg-blue-100 px-2 py-0.5 text-xs
+                                   font-mono dark:bg-blue-900">
+                    {String(finding.remediation_fix.library_recommendation)}
+                  </code>
+                </div>
+              )}
+
+              {/* Additional Contexts */}
+              {Array.isArray(finding.remediation_fix.additional_contexts) &&
+                finding.remediation_fix.additional_contexts.length > 0 && (
+                <div className="rounded-lg border bg-surface-container-high p-3">
+                  <h4 className="mb-2 text-xs font-semibold text-amber-500">
+                    🔍 May Also Affect
+                  </h4>
+                  <ul className="list-inside list-disc space-y-1 text-xs text-on-surface">
+                    {(finding.remediation_fix.additional_contexts as string[]).map(
+                      (ctx: string, i: number) => (
+                        <li key={i}>{ctx}</li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

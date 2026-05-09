@@ -440,6 +440,53 @@ class Orchestrator:
                 except Exception:
                     pass
 
+    def _save_remediation_fix(
+        self, finding_id: str, fix_data: dict
+    ) -> bool:
+        """Save remediation fix to findings.remediation_fix column.
+
+        Args:
+            finding_id: UUID of the finding
+            fix_data: Fix dict from DeveloperFixAssistant
+
+        Returns:
+            True if saved successfully
+        """
+        import json
+        from database.connection import connect
+
+        conn = None
+        try:
+            conn = connect(os.getenv("DATABASE_URL"))
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE findings
+                SET remediation_fix = %s::jsonb,
+                    remediation_fix_at = NOW()
+                WHERE id = %s
+                """,
+                (json.dumps(fix_data), finding_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            logger.warning(
+                "Failed to save remediation fix: %s", e
+            )
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return False
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None):
         from agent import AgentResult, create_phase_agent
@@ -671,6 +718,64 @@ class Orchestrator:
         except Exception as e:
             logger.warning(
                 "PoC generation batch failed (non-fatal): %s", e
+            )
+
+        # ── Developer Fix Generation for MEDIUM+ findings ──
+        try:
+            from developer_fix_assistant import (
+                DeveloperFixAssistant,
+            )
+
+            fix_assistant = DeveloperFixAssistant(
+                llm_client=self.llm_client
+            )
+
+            # Re-use cost_tracker and llm_svc from PoC section
+            if cost_tracker and llm_svc:
+                from concurrent.futures import (
+                    ThreadPoolExecutor,
+                    as_completed,
+                )
+
+                # Get tech stack from recon context
+                tech_stack: list[str] = []
+                recon_ctx = load_recon_context(self.engagement_id)
+                if recon_ctx:
+                    tech_stack = (
+                        recon_ctx.tech_stack
+                        if hasattr(recon_ctx, "tech_stack")
+                        else []
+                    ) or []
+
+                fix_futures = []
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    # Cap at 15 fixes per engagement
+                    for finding in scored[:15]:
+                        future = pool.submit(
+                            fix_assistant.generate,
+                            finding,
+                            tech_stack,
+                            llm_svc,
+                            cost_tracker,
+                        )
+                        fix_futures.append((finding, future))
+
+                    for finding, future in fix_futures:
+                        try:
+                            fix = future.result(timeout=45)
+                            if fix and finding.get("id"):
+                                self._save_remediation_fix(
+                                    finding["id"], fix
+                                )
+                        except Exception as e:
+                            logger.debug(
+                                "Fix for finding %s failed: %s",
+                                finding.get("id", "?"),
+                                e,
+                            )
+        except Exception as e:
+            logger.warning(
+                "Fix generation batch failed (non-fatal): %s", e
             )
 
         actions = evaluation.get("actions", [])
