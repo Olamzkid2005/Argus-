@@ -37,7 +37,7 @@ class IntelligenceEngine:
         self.logger = StructuredLogger(self.connection_string)
         self.span_recorder = ExecutionSpan(self.connection_string)
 
-    def evaluate(self, snapshot: dict) -> dict:
+    def evaluate(self, snapshot: dict, org_id: str | None = None) -> dict:
         """
         Evaluate snapshot and generate actions.
         Uses ONLY frozen snapshot data, never live DB reads.
@@ -48,6 +48,7 @@ class IntelligenceEngine:
                 - attack_graph: Attack graph data
                 - loop_budget: Current loop budget status
                 - engagement_state: Current engagement state
+            org_id: Optional org ID for loading learned tool FP rates
 
         Returns:
             Dictionary with:
@@ -62,8 +63,8 @@ class IntelligenceEngine:
             ExecutionSpan.SPAN_INTELLIGENCE_EVALUATION,
             {"findings_count": len(findings)}
         ):
-            # Assign confidence scores
-            scored_findings = self.assign_confidence_scores(findings)
+            # Assign confidence scores (with learned FP rates if org_id provided)
+            scored_findings = self.assign_confidence_scores(findings, org_id=org_id)
 
             # Generate actions based on intelligence
             actions = self.generate_actions(scored_findings, snapshot)
@@ -85,17 +86,41 @@ class IntelligenceEngine:
                 "trace_id": get_trace_id(),
             }
 
-    def assign_confidence_scores(self, findings: list[dict]) -> list[dict]:
+    def assign_confidence_scores(
+        self,
+        findings: list[dict],
+        org_id: str | None = None,
+    ) -> list[dict]:
         """
         Calculate confidence using formula:
         confidence = (tool_agreement × evidence_strength) / (1 + fp_likelihood)
 
+        When org_id is provided, loads per-tool FP rates from tool_accuracy table.
+        Uses a weighted blend: 60% historical + 40% current scanner metadata.
+        Falls back to 0.2 when no data exists.
+
         Args:
             findings: List of findings
+            org_id: Optional org ID for loading learned tool FP rates
 
         Returns:
             Findings with updated confidence scores
         """
+        # Load learned FP rates for this org (if available)
+        tool_fp_rates: dict[str, float] = {}
+        if org_id:
+            try:
+                from database.repositories.tool_accuracy_repository import (
+                    ToolAccuracyRepository,
+                )
+                repo = ToolAccuracyRepository(self.connection_string)
+                tool_fp_rates = repo.load_fp_rates(org_id)
+            except Exception as e:
+                logger.warning(
+                    "Could not load tool_accuracy for org %s: %s", org_id, e,
+                )
+                # Fallback: empty dict — every lookup falls through to default 0.2
+
         # Group findings by normalized vulnerability family for tool agreement
         finding_groups = self._group_findings_for_agreement(findings)
 
@@ -109,18 +134,28 @@ class IntelligenceEngine:
                 # Get evidence strength
                 evidence_strength = self._get_evidence_strength(finding)
 
-                # Get FP likelihood
-                fp_likelihood = finding.get("fp_likelihood", 0.2)
-                if fp_likelihood is None:
-                    fp_likelihood = 0.2
-                try:
-                    fp_likelihood = float(fp_likelihood)
-                except (TypeError, ValueError):
-                    fp_likelihood = 0.2
+                # --- Learned FP rate resolution ---
+                source_tool = finding.get("source_tool", "")
+                learned_fp = tool_fp_rates.get(source_tool)   # from tool_accuracy DB
+                stored_fp = finding.get("fp_likelihood")       # from scanner metadata
+
+                if learned_fp is not None and stored_fp is not None:
+                    # Weighted blend: 60% historical from tool_accuracy,
+                    # 40% current scan signal from scanner metadata
+                    fp_likelihood = 0.6 * learned_fp + 0.4 * float(stored_fp)
+                elif learned_fp is not None:
+                    fp_likelihood = learned_fp
+                elif stored_fp is not None:
+                    fp_likelihood = float(stored_fp)
+                else:
+                    fp_likelihood = 0.2  # unchanged default
+
+                # Clamp fp_likelihood to prevent division instability
+                fp_likelihood = max(0.001, min(1.0, fp_likelihood))
 
                 # Calculate confidence
                 confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
-                confidence = max(0.0, min(1.0, confidence))
+                confidence = max(0.0, min(1.0, round(confidence, 4)))
 
                 # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings
                 # Findings from bug bounty rules (requires_validation: true) remain "Theoretical"
@@ -132,6 +167,12 @@ class IntelligenceEngine:
                 scored_finding = finding.copy()
                 scored_finding["confidence"] = confidence
                 scored_finding["tool_agreement_level"] = self._get_agreement_level(len(group))
+                # Tag fp_rate source for auditability
+                scored_finding["fp_rate_source"] = (
+                    "learned" if learned_fp is not None
+                    else "scanner_metadata" if stored_fp is not None
+                    else "default_0.2"
+                )
 
                 # Propagate Bug-Reaper validation flag
                 if finding.get("requires_validation"):

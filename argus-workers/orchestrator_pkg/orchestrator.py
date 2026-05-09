@@ -555,7 +555,10 @@ class Orchestrator:
         engine = IntelligenceEngine(db_conn)
         snapshot["findings"] = findings
         snapshot["loop_budget"] = budget_mgr.to_dict()
-        evaluation = engine.evaluate(snapshot)
+        # Load org_id for learned FP rate lookups in IntelligenceEngine
+        org_id = self._get_org_id()
+        snapshot["org_id"] = org_id
+        evaluation = engine.evaluate(snapshot, org_id=org_id)
 
         synthesis = {}
         if self.llm_client and self.llm_client.is_available():
@@ -721,6 +724,20 @@ class Orchestrator:
         )
         return {"phase": "repo_scan", "status": "completed", "findings_count": findings_count,
                 "next_state": next_state, "trace_id": get_trace_id()}
+
+    def _get_org_id(self) -> str | None:
+        """Get the org_id for the current engagement.
+
+        Returns:
+            org_id string, or None if unavailable
+        """
+        if self.engagement_repo:
+            try:
+                eng = self.engagement_repo.get_engagement(self.engagement_id)
+                return str(eng.org_id) if eng else None
+            except Exception:
+                pass
+        return None
 
     def _check_timeout(self):
         if self.start_time is None:
