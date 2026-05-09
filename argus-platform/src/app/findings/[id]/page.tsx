@@ -50,6 +50,8 @@ interface Finding {
   fp_likelihood?: number | null;
   evidence: Record<string, unknown>;
   repro_steps?: string[] | null;
+  poc_generated?: Record<string, string> | null;
+  poc_generated_at?: string | null;
   created_at: string;
 }
 
@@ -522,6 +524,77 @@ export default function FindingDetailPage() {
             </>
           )}
         </motion.div>
+
+        {/* ═══════════════════════════════════════
+           SECTION 2.5: PROOF OF CONCEPT
+           ═══════════════════════════════════════ */}
+        {finding.poc_generated && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="bg-surface-container rounded-2xl border border-outline/20 p-6 space-y-4"
+          >
+            <h2 className="text-sm font-bold font-headline flex items-center gap-2">
+              <Bug size={16} className="text-orange-500" />
+              Proof of Concept
+            </h2>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3
+                            text-xs text-amber-800 dark:border-amber-800
+                            dark:bg-amber-950 dark:text-amber-200">
+              <strong>⚠️ Authorized testing only.</strong> Use these commands
+              only on systems you own or have written permission to test.
+            </div>
+
+            <div className="space-y-3">
+              {Object.entries(finding.poc_generated).map(([key, value]) => {
+                if (key === "generated_at" || key === "finding_type" ||
+                    key === "endpoint") return null;
+                if (typeof value !== "string" || !value) return null;
+
+                const label = key
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (l: string) => l.toUpperCase());
+                const isCode = key.endsWith("_command") ||
+                               key.endsWith("_payload") ||
+                               key.endsWith("_query") ||
+                               key.endsWith("_request") ||
+                               key.endsWith("_script") ||
+                               key.endsWith("_html") ||
+                               key === "browser_poc";
+
+                return (
+                  <div key={key}>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="text-xs font-medium text-on-surface">
+                        {label}
+                      </label>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(value)}
+                        className="rounded px-2 py-0.5 text-[10px] text-on-surface-variant
+                                   hover:bg-surface-container-high transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    {isCode ? (
+                      <pre className="overflow-x-auto rounded-lg border bg-gray-950
+                                      p-3 text-xs text-cyan-300 font-mono">
+                        <code>{value}</code>
+                      </pre>
+                    ) : (
+                      <p className="rounded-lg border bg-surface-container-high
+                                    p-3 text-xs text-on-surface">
+                        {value}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* ═══════════════════════════════════════
            SECTION 3: CLASSIFICATION & SCORING
