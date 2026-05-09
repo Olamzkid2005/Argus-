@@ -8,7 +8,6 @@ import math
 
 from models.finding import VulnerabilityFinding
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Bug-Reaper Chain Templates
 # ═══════════════════════════════════════════════════════════════════════════════

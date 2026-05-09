@@ -7,7 +7,6 @@ import json
 import logging
 import socket
 import sys
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config.constants import (
@@ -143,7 +142,9 @@ def execute_scan_tools(
         try:
             from feature_flags import is_enabled
             if is_enabled("nuclei_templates_auto_update"):
-                from tools.update_nuclei_templates import update_nuclei_templates as _update_templates
+                from tools.update_nuclei_templates import (
+                    update_nuclei_templates as _update_templates,
+                )
                 _update_templates(timeout=120)
         except Exception:
             pass  # Non-blocking — scan proceeds even if update fails
@@ -294,8 +295,8 @@ def execute_scan_tools(
         # Browser-based SPA scanner (subprocess approach to avoid event loop conflicts)
         if tech_stack:
             try:
-                from pathlib import Path
                 import subprocess
+                from pathlib import Path
                 worker_script = Path(__file__).parent.parent / 'tools' / '_browser_scan_worker.py'
                 if worker_script.exists():
                     SPA_TECHS = ['react', 'vue', 'angular', 'next', 'nuxt', 'svelte', 'gatsby']

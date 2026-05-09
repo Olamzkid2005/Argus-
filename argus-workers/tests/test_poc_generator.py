@@ -1,6 +1,5 @@
 """Tests for the PoC Generator."""
 
-import pytest
 from poc_generator import PoCGenerator
 
 

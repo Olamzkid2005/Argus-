@@ -9,7 +9,6 @@ Security model:
   3. target_url validated as proper http/https URL
 """
 
-import json
 import logging
 import re
 from typing import Any
@@ -122,14 +121,14 @@ def validate_output(data: dict) -> dict:
             validated[field] = defaults.get(field)
             continue
 
-        # Type checking
-        if expected_type == str and isinstance(value, str):
+        # Type checking — use `is` for type objects, not `==`
+        if expected_type is str and isinstance(value, str):
             validated[field] = value.strip()
-        elif expected_type == bool and isinstance(value, bool):
+        elif expected_type is bool and isinstance(value, bool):
             validated[field] = value
-        elif expected_type == list and isinstance(value, list):
+        elif expected_type is list and isinstance(value, list):
             validated[field] = [str(v)[:100] for v in value[:20]]
-        elif expected_type == dict and isinstance(value, dict):
+        elif expected_type is dict and isinstance(value, dict):
             validated[field] = {
                 str(k)[:50]: str(v)[:200] for k, v in value.items()
             }

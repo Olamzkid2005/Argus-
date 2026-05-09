@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from streaming import emit_agent_decision, emit_thinking
+from streaming import emit_thinking
 
 logger = logging.getLogger(__name__)
 

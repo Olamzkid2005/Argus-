@@ -1,7 +1,6 @@
 """
 Response analysis: WAF detection, time-based detection, response analysis, differential analysis.
 """
-import json
 import logging
 import re
 import time

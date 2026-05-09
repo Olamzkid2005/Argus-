@@ -13,7 +13,6 @@ from models.finding import (
     VulnerabilityFinding,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

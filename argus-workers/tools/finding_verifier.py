@@ -6,8 +6,10 @@ ARGUS_FF_FINDING_VERIFICATION feature flag.
 """
 import logging
 import urllib.parse
+from urllib.parse import urlparse
+
 import httpx
-from urllib.parse import urlparse, urljoin
+
 from feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
@@ -36,11 +38,11 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
     finding is likely a true positive.
     """
     result = {"verified": False, "confidence": "low", "reason": None}
-    
+
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
         return result
-    
+
     try:
         async with httpx.AsyncClient(timeout=15.0, verify=True) as client:
             # Test with the original payload
@@ -50,7 +52,7 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
             except Exception:
                 original_resp = await client.post(endpoint, data={"input": payload})
                 original_text = original_resp.text.lower()
-            
+
             # Test with benign variant
             benign = benign_variant or payload.replace("'", "").replace('"', "").replace(";", "")
             try:
@@ -59,11 +61,11 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
             except Exception:
                 benign_resp = await client.post(endpoint, data={"input": benign})
                 benign_text = benign_resp.text.lower()
-            
+
             # Differential analysis
             original_markers = [m for m in SQL_ERROR_MARKERS if m in original_text]
             benign_markers = [m for m in SQL_ERROR_MARKERS if m in benign_text]
-            
+
             if original_markers and not benign_markers:
                 result["verified"] = True
                 result["confidence"] = "high"
@@ -80,7 +82,7 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
     except Exception as e:
         logger.warning(f"SQLi verification failed for {endpoint}: {e}")
         result["reason"] = f"Verification error: {e}"
-    
+
     return result
 
 
@@ -92,26 +94,26 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> d
     instrumentation and won't be detected here.
     """
     result = {"verified": False, "confidence": "low", "reason": None}
-    
+
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
         return result
-    
+
     try:
         async with httpx.AsyncClient(timeout=15.0, verify=True, follow_redirects=True) as client:
             test_param = param or "q"
-            
+
             # Test each payload
             for test_payload in [payload] + XSS_TEST_PAYLOADS:
                 if "?" in endpoint:
                     test_url = f"{endpoint}&{test_param}={test_payload}"
                 else:
                     test_url = f"{endpoint}?{test_param}={test_payload}"
-                
+
                 try:
                     resp = await client.get(test_url)
                     text = resp.text
-                    
+
                     # Check if payload is reflected
                     if test_payload in text:
                         result["verified"] = True
@@ -127,13 +129,13 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> d
                         break
                 except Exception:
                     continue
-            
+
             if not result["verified"]:
                 result["reason"] = "No payload reflection detected in response"
     except Exception as e:
         logger.warning(f"XSS verification failed for {endpoint}: {e}")
         result["reason"] = f"Verification error: {e}"
-    
+
     return result
 
 
@@ -144,19 +146,19 @@ async def verify_open_redirect(endpoint: str) -> dict:
     Checks if the final destination is an external domain.
     """
     result = {"verified": False, "confidence": "low", "reason": None}
-    
+
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
         return result
-    
+
     try:
         async with httpx.AsyncClient(timeout=15.0, verify=True, follow_redirects=True) as client:
             resp = await client.get(endpoint)
-            
+
             if resp.history:
                 original_domain = urlparse(str(resp.history[0].url)).netloc
                 final_domain = urlparse(str(resp.url)).netloc
-                
+
                 if final_domain and final_domain != original_domain:
                     result["verified"] = True
                     result["confidence"] = "high"
@@ -172,7 +174,7 @@ async def verify_open_redirect(endpoint: str) -> dict:
     except Exception as e:
         logger.warning(f"Open redirect verification error: {e}")
         result["reason"] = f"Verification error: {e}"
-    
+
     return result
 
 
@@ -195,15 +197,15 @@ async def verify_finding(finding: dict) -> dict:
     """
     finding_type = (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
     verifier = VERIFIERS.get(finding_type)
-    
+
     if not verifier:
         finding["verification"] = {"verified": None, "reason": "No verifier for this finding type"}
         return finding
-    
+
     endpoint = finding.get("endpoint") or finding.get("url") or ""
     payload = finding.get("evidence", {}).get("payload") or finding.get("payload") or ""
-    
+
     result = await verifier(endpoint, payload)
     finding["verification"] = result
-    
+
     return finding

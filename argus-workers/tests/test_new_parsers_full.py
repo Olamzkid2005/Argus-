@@ -14,17 +14,17 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from parsers.parsers.dalfox import DalfoxParser
+from parsers.parsers.alterx import AlterxParser
+from parsers.parsers.amass import AmassParser
 from parsers.parsers.arjun import ArjunParser
+from parsers.parsers.commix import CommixParser
+from parsers.parsers.dalfox import DalfoxParser
+from parsers.parsers.jwt_tool import JwtToolParser
 from parsers.parsers.naabu import NaabuParser
 from parsers.parsers.nikto import NiktoParser
-from parsers.parsers.amass import AmassParser
 from parsers.parsers.subfinder import SubfinderParser
-from parsers.parsers.whatweb import WhatwebParser
-from parsers.parsers.jwt_tool import JwtToolParser
-from parsers.parsers.commix import CommixParser
 from parsers.parsers.testssl import TestsslParser
-from parsers.parsers.alterx import AlterxParser
+from parsers.parsers.whatweb import WhatwebParser
 
 # ── 11 New Parsers ──
 
@@ -237,13 +237,13 @@ class TestAlterxParser(unittest.TestCase):
 
 class TestAuthManager(unittest.TestCase):
     def test_cookie_auth(self):
-        from tools.auth_manager import AuthManager, AuthConfig
+        from tools.auth_manager import AuthConfig, AuthManager
         am = AuthManager(AuthConfig(cookie="sessionid=abc123"))
         session = am.authenticate("https://example.com")
         self.assertEqual(session.cookies.get("sessionid"), "abc123")
 
     def test_token_auth(self):
-        from tools.auth_manager import AuthManager, AuthConfig
+        from tools.auth_manager import AuthConfig, AuthManager
         am = AuthManager(AuthConfig(token="tok_xyz"))
         session = am.authenticate("https://example.com")
         self.assertEqual(session.headers.get("Authorization"), "Bearer tok_xyz")
@@ -255,14 +255,15 @@ class TestAuthManager(unittest.TestCase):
         self.assertIsNotNone(session)
 
     def test_api_key_auth(self):
-        from tools.auth_manager import AuthManager, AuthConfig
+        from tools.auth_manager import AuthConfig, AuthManager
         am = AuthManager(AuthConfig(token="key_abc", token_header="X-API-Key"))
         session = am.authenticate("https://example.com")
         self.assertIn("key_abc", session.headers.get("X-API-Key", ""))
 
     def test_attach_to_session(self):
-        from tools.auth_manager import AuthManager, AuthConfig
         import requests
+
+        from tools.auth_manager import AuthConfig, AuthManager
         am = AuthManager(AuthConfig(cookie="sess=val"))
         sess = requests.Session()
         am.attach_to_session(sess)
@@ -311,8 +312,9 @@ class TestBrowserScanner(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_scan_timeout(self, mock_run):
-        from tools.browser_scanner import scan
         import subprocess
+
+        from tools.browser_scanner import scan
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
         findings = scan("https://t.com", timeout=5)
         self.assertEqual(len(findings), 0)

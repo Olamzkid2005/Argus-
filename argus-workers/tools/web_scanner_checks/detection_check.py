@@ -2,10 +2,12 @@
 Detection of exposed debug endpoints, sensitive files, and verb tampering.
 """
 import logging
-import re
 from urllib.parse import urljoin
 
-from config.constants import LLM_MAX_GENERATED_PAYLOADS, RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
+from config.constants import (
+    RATE_LIMIT_DELAY_MS,
+    SSL_TIMEOUT,
+)
 
 from ._helpers import make_finding, safe_request
 

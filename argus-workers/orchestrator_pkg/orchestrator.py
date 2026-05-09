@@ -23,6 +23,7 @@ from mcp_server import get_mcp_server
 from models.recon_context import ReconContext
 from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser
+from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
 from streaming import (
     emit_state_change,
     emit_thinking,
@@ -41,9 +42,7 @@ from tracing import (
 )
 from websocket_events import get_websocket_publisher
 
-from pipeline_router import execute_recon_pipeline
 from .repo_scan import execute_repo_scan
-from pipeline_router import execute_scan_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -374,7 +373,9 @@ class Orchestrator:
                         emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
                         embedding = _get_embedding(emb_text)
                         if embedding:
-                            from database.repositories.pgvector_repository import PGVectorRepository
+                            from database.repositories.pgvector_repository import (
+                                PGVectorRepository,
+                            )
                             pg = PGVectorRepository()
                             pg.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
                     except Exception as e:
@@ -405,6 +406,7 @@ class Orchestrator:
             True if saved successfully
         """
         import json
+
         from database.connection import connect
 
         conn = None
@@ -453,6 +455,7 @@ class Orchestrator:
             True if saved successfully
         """
         import json
+
         from database.connection import connect
 
         conn = None
@@ -490,7 +493,9 @@ class Orchestrator:
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None):
         from agent import AgentResult, create_phase_agent
-        from database.repositories.agent_decision_repository import AgentDecisionRepository
+        from database.repositories.agent_decision_repository import (
+            AgentDecisionRepository,
+        )
         from tools.scope_validator import ScopeValidator, ScopeViolationError
 
         db_conn = os.getenv("DATABASE_URL")
@@ -581,11 +586,10 @@ class Orchestrator:
             )
 
             from agent.swarm import SwarmOrchestrator
-            from llm_service import LLMService
-
             from database.repositories.agent_decision_repository import (
                 AgentDecisionRepository,
             )
+            from llm_service import LLMService
             decision_repo = AgentDecisionRepository(
                 os.getenv("DATABASE_URL")
             ) if os.getenv("DATABASE_URL") else None
@@ -754,7 +758,7 @@ class Orchestrator:
                 )
 
             if cost_tracker and llm_svc:
-                from concurrent.futures import ThreadPoolExecutor, as_completed
+                from concurrent.futures import ThreadPoolExecutor
 
                 poc_futures = []
                 with ThreadPoolExecutor(max_workers=4) as pool:
@@ -797,7 +801,6 @@ class Orchestrator:
             if cost_tracker and llm_svc:
                 from concurrent.futures import (
                     ThreadPoolExecutor,
-                    as_completed,
                 )
 
                 # Get tech stack from recon context
@@ -883,7 +886,9 @@ class Orchestrator:
                 repo = ReportRepository()
                 sbom_json = None
                 try:
-                    from database.repositories.finding_repository import FindingRepository
+                    from database.repositories.finding_repository import (
+                        FindingRepository,
+                    )
                     from tools.sbom_generator import generate_sbom_from_findings
                     fr = FindingRepository()
                     all_findings, _ = fr.get_findings_by_engagement(self.engagement_id)
@@ -902,13 +907,14 @@ class Orchestrator:
         # ── Update target profile with findings from this engagement ──
         _org_id = self._get_org_id()
         try:
+            from urllib.parse import urlparse
+
             from database.repositories.target_profile_repository import (
                 TargetProfileRepository,
             )
             from database.repositories.tool_accuracy_repository import (
                 ToolAccuracyRepository,
             )
-            from urllib.parse import urlparse
 
             target_url = job.get("target", "")
             target_domain = urlparse(target_url).netloc

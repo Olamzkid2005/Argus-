@@ -19,16 +19,15 @@ Integrates advanced web scanning capabilities:
 - Debug endpoint detection
 - Sensitive file detection
 """
-import base64
 import json
 import logging
 import re
 import socket
+import threading
 import time
 from urllib.parse import urljoin, urlparse
 
 import requests
-import threading
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 

@@ -5,7 +5,6 @@ Keeps the Celery dependency out of dead_letter_queue.py,
 breaking the circular import between celery_app and dead_letter_queue.
 """
 
-import json
 import logging
 
 from celery_app import app

@@ -62,7 +62,7 @@ class SemgrepParser(BaseParser):
             lines = extra.get("lines", "")
 
             finding = {
-                "type": f"CODE_VULNERABILITY",
+                "type": "CODE_VULNERABILITY",
                 "severity": SEVERITY_MAP.get(severity, "MEDIUM"),
                 "endpoint": f"file:{path}:{line}",
                 "evidence": {

@@ -4,11 +4,14 @@ SQL injection, XSS, SSTI, LFI, XXE, and command injection testing.
 import logging
 import re
 import time
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
-from config.constants import LLM_MAX_GENERATED_PAYLOADS, RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
+from config.constants import (
+    RATE_LIMIT_DELAY_MS,
+    SSL_TIMEOUT,
+)
 
-from ._helpers import detect_framework, make_finding, safe_request
+from ._helpers import make_finding, safe_request
 
 logger = logging.getLogger(__name__)
 

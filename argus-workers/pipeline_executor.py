@@ -38,13 +38,12 @@ import logging
 import time
 from typing import Any
 
-from feature_flags import is_enabled
-from tools.models import ToolResult
-
 from error_classifier import (
     ErrorCode,
     tag_error,
 )
+from feature_flags import is_enabled
+from tools.models import ToolResult
 
 logger = logging.getLogger(__name__)
 

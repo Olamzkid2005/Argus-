@@ -1,7 +1,6 @@
 """Tests for the multi-agent swarm system."""
 
-import pytest
-from agent.swarm import IDORAgent, AuthAgent, APIAgent, SwarmOrchestrator
+from agent.swarm import APIAgent, AuthAgent, IDORAgent, SwarmOrchestrator
 from models.recon_context import ReconContext
 
 

@@ -1,6 +1,5 @@
 """Tests for Target Memory system."""
 
-import pytest
 from database.repositories.target_profile_repository import (
     TargetProfileRepository,
 )

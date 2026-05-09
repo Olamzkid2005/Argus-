@@ -11,7 +11,8 @@ Type-specific templates ensure structured, predictable output.
 
 import json
 import logging
-from typing import Any, Optional
+from datetime import UTC
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ class PoCGenerator:
         finding: dict,
         llm_service: Any = None,
         cost_tracker: Any = None,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Generate PoC for a single finding.
 
         Args:
@@ -182,7 +183,7 @@ class PoCGenerator:
         }, indent=2)
 
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             if llm_service:
                 result = llm_service.chat_json(
@@ -209,7 +210,7 @@ class PoCGenerator:
             if cost_tracker and "cost_usd" in result:
                 cost_tracker.record_llm_call(result.get("cost_usd", 0))
 
-            result["generated_at"] = datetime.now(timezone.utc).isoformat()
+            result["generated_at"] = datetime.now(UTC).isoformat()
             result["finding_type"] = vuln_type
             result["endpoint"] = finding.get("endpoint", "")
 

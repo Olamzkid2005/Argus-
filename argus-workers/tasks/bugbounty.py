@@ -108,6 +108,7 @@ def generate_bugbounty_report(
 def _fetch_findings(engagement_id: str) -> list[dict]:
     """Fetch findings for an engagement from PostgreSQL."""
     import psycopg2
+
     from config.constants import DATABASE_URL
 
     conn = psycopg2.connect(DATABASE_URL)
@@ -153,6 +154,7 @@ def _fetch_findings(engagement_id: str) -> list[dict]:
 def _fetch_engagement(engagement_id: str) -> dict | None:
     """Fetch engagement metadata from PostgreSQL."""
     import psycopg2
+
     from config.constants import DATABASE_URL
 
     conn = psycopg2.connect(DATABASE_URL)

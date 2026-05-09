@@ -5,10 +5,10 @@ Thread-safe: each method acquires its own connection from the pool.
 Pure-function reads: the profile is a snapshot, not a live cursor.
 """
 
+import contextlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -46,10 +46,10 @@ class TargetProfileRepository:
         org_id: str,
         target_url: str,
         engagement_id: str,
-        recon_context: Optional[dict],
+        recon_context: dict | None,
         findings: list[dict],
-        tool_accuracy_fp_rates: Optional[dict[str, float]] = None,
-    ) -> Optional[dict]:
+        tool_accuracy_fp_rates: dict[str, float] | None = None,
+    ) -> dict | None:
         """Create or update the target profile after a scan completes.
 
         Stats are pure functions of the scan output — no side effects,
@@ -100,7 +100,7 @@ class TargetProfileRepository:
         best_tools = sorted(tool_counts.items(), key=lambda x: -x[1])[:5]
         best_tools_list = [
             {"tool": t, "finding_count": c,
-             "last_seen": datetime.now(timezone.utc).isoformat()}
+             "last_seen": datetime.now(UTC).isoformat()}
             for t, c in best_tools
         ]
 
@@ -215,26 +215,22 @@ class TargetProfileRepository:
             )
             columns = [desc[0] for desc in cursor.description]
             row = cursor.fetchone()
-            return dict(zip(columns, row)) if row else None
+            return dict(zip(columns, row, strict=False)) if row else None
 
         except Exception as e:
             logger.error("Failed to upsert target profile for %s: %s", domain, e)
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.rollback()
-                except Exception:
-                    pass
             return None
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
     # ── Profile reading ─────────────────────────────────────────────
 
-    def get_profile(self, org_id: str, target_domain: str) -> Optional[dict]:
+    def get_profile(self, org_id: str, target_domain: str) -> dict | None:
         """Get profile dict or None (first scan or error). Never raises.
 
         Args:
@@ -259,16 +255,14 @@ class TargetProfileRepository:
             )
             columns = [desc[0] for desc in cursor.description]
             row = cursor.fetchone()
-            return dict(zip(columns, row)) if row else None
+            return dict(zip(columns, row, strict=False)) if row else None
         except Exception as e:
             logger.warning("Could not load target profile: %s", e)
             return None
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
     # ── LLM prompt section builder ──────────────────────────────────
 

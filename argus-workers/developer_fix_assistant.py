@@ -7,7 +7,8 @@ Budget-aware: respects per-engagement LLM cost limits via LlmCostTracker.
 
 import json
 import logging
-from typing import Any, Optional
+from datetime import UTC
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class DeveloperFixAssistant:
         tech_stack: list[str],
         llm_service: Any = None,
         cost_tracker: Any = None,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Generate developer fix for a single finding.
 
         Args:
@@ -109,7 +110,7 @@ class DeveloperFixAssistant:
         }, indent=2)
 
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             result = llm_service.chat_json(
                 system_prompt=FIX_SYSTEM_PROMPT,
@@ -125,7 +126,7 @@ class DeveloperFixAssistant:
                 cost_tracker.record_llm_call(result.get("cost_usd", 0))
 
             result["generated_at"] = datetime.now(
-                timezone.utc
+                UTC
             ).isoformat()
             result["tech_stack"] = tech_stack[:5]
 

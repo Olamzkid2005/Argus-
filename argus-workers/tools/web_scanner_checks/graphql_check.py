@@ -1,13 +1,9 @@
 """
 GraphQL introspection endpoint checking.
 """
-import json
 import logging
-from urllib.parse import urljoin
 
 from config.constants import RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
-
-from ._helpers import make_finding, safe_request
 
 logger = logging.getLogger(__name__)
 

@@ -540,8 +540,8 @@ class ArgusFindingAdapter:
             or evidence.get("steps")
             or [
                 f"Navigate to {argus_finding.get('endpoint', 'the vulnerable endpoint')}",
-                f"Send the request as shown in the PoC below",
-                f"Observe the vulnerability as described",
+                "Send the request as shown in the PoC below",
+                "Observe the vulnerability as described",
             ]
         )
 
@@ -760,11 +760,11 @@ def main():
             --output report.md
     """
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description="Generate Bug Bounty report from Argus findings"
     )
-    parser.add_argument("--findings", required=True, 
+    parser.add_argument("--findings", required=True,
                         help="Path to JSON file with findings array")
     parser.add_argument("--platform", required=True,
                         choices=list(GENERATORS.keys()),
@@ -775,30 +775,30 @@ def main():
                         help="Output file path (default: stdout)")
     parser.add_argument("--min-confidence", type=float, default=0.65,
                         help="Minimum confidence threshold (default: 0.65)")
-    
+
     args = parser.parse_args()
-    
+
     # Load findings
     findings_path = Path(args.findings)
     if not findings_path.exists():
         print(f"Error: Findings file not found: {args.findings}", file=sys.stderr)
         sys.exit(1)
-    
+
     try:
         with open(findings_path) as f:
             findings = json.load(f)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON in findings file: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     if not isinstance(findings, list):
         findings = [findings]
-    
+
     # Build engagement context
     engagement = {}
     if args.target_url:
         engagement["target_url"] = args.target_url
-    
+
     # Generate report
     generator = BugBountyReportGenerator()
     try:
@@ -811,7 +811,7 @@ def main():
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     # Output
     if args.output:
         output_path = Path(args.output)

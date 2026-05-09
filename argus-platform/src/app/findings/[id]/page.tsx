@@ -52,7 +52,16 @@ interface Finding {
   repro_steps?: string[] | null;
   poc_generated?: Record<string, string> | null;
   poc_generated_at?: string | null;
-  remediation_fix?: Record<string, unknown> | null;
+  remediation_fix?: {
+    vulnerable_pattern?: string;
+    fixed_pattern?: string;
+    explanation?: string;
+    unit_test?: string;
+    library_recommendation?: string | null;
+    additional_contexts?: string[];
+    tech_stack?: string[];
+    generated_at?: string;
+  } | null;
   remediation_fix_at?: string | null;
   created_at: string;
 }

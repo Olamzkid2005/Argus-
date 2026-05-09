@@ -3,6 +3,7 @@ Confidence scoring for findings using a weighted heuristic model.
 Replaces the naive (tool_agreement * evidence_strength) / (1 + fp_likelihood) formula.
 """
 import logging
+
 from feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)

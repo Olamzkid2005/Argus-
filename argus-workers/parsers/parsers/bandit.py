@@ -1,6 +1,7 @@
 """Parser for bandit JSON output (bandit -f json)."""
 import json
 import logging
+
 from parsers.parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)

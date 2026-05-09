@@ -448,7 +448,7 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
     Injects the .md methodology file into the agent's context so the LLM
     knows exactly what payloads and techniques to use.
     """
-    
+
     # Bug-Reaper's priority-ordered hunting classes with their associated tools
     PRIORITY_ORDER = [
         ("idor", ["arjun", "jwt_tool", "web_scanner"],
@@ -474,10 +474,10 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
         ("lfi", ["nuclei", "web_scanner"],
          "Test ?file=, ?page=, ?template= parameters for path traversal"),
     ]
-    
+
     # Find the first priority class where none of its tools have run yet
     kb_root = Path(__file__).parent / "bugbounty_knowledge"
-    
+
     for vuln_class, tools, quick_win in PRIORITY_ORDER:
         if not any(t in tried_tools for t in tools):
             ref_file = kb_root / "vulnerabilities" / f"{vuln_class}.md"
@@ -494,7 +494,7 @@ QUICK WIN: {quick_win}
 """
                 except Exception:
                     pass
-    
+
     return ""
 
 

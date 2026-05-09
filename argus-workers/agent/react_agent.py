@@ -33,8 +33,8 @@ from .agent_prompts import (
     REPO_TOOL_SELECTION_SYSTEM_PROMPT,
     TOOL_SELECTION_SYSTEM_PROMPT,
     _load_bugbounty_context,
-    build_tool_selection_prompt,
     build_observation_summary,
+    build_tool_selection_prompt,
 )
 from .agent_result import AgentResult
 from .tool_registry import ToolRegistry

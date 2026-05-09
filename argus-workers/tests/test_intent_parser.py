@@ -1,6 +1,5 @@
 """Tests for the Intent Parser."""
 
-import pytest
 from intent_parser import sanitize_input, validate_output, validate_url
 
 

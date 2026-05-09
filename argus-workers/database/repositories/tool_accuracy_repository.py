@@ -5,8 +5,8 @@ Thread-safe: each method acquires its own connection from the pool.
 Part of the Self-Calibrating Confidence feature (Steps 1-3).
 """
 
+import contextlib
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -89,17 +89,13 @@ class ToolAccuracyRepository:
         except Exception as e:
             logger.error("tool_accuracy record_verdict failed: %s", e)
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.rollback()
-                except Exception:
-                    pass
             return False
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
     # ── Read FP rates ───────────────────────────────────────────────
 
@@ -134,12 +130,10 @@ class ToolAccuracyRepository:
             return {}
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
-    def get_tool_fp_rate(self, org_id: str, source_tool: str) -> Optional[float]:
+    def get_tool_fp_rate(self, org_id: str, source_tool: str) -> float | None:
         """Get fp_rate for a single tool. Returns None if no row exists.
 
         Args:

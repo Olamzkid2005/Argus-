@@ -11,7 +11,6 @@ Usage:
     sbom = generate_sbom_from_findings(engagement_id, findings)
     # sbom is a CycloneDX 1.5 JSON dict ready for storage
 """
-import json
 import logging
 import uuid
 from datetime import UTC, datetime

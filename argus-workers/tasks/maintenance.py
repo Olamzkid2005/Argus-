@@ -238,8 +238,8 @@ def update_nuclei_templates(self):
     """
     logger.info("Starting daily nuclei templates update")
     try:
-        from tools.update_nuclei_templates import update_nuclei_templates as _do_update
         from tools.update_nuclei_templates import get_template_count
+        from tools.update_nuclei_templates import update_nuclei_templates as _do_update
 
         success = _do_update(timeout=300)
         count = get_template_count()

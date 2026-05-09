@@ -1,6 +1,7 @@
 """Parser for pip-audit JSON output (pip-audit --format json)."""
 import json
 import logging
+
 from parsers.parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)

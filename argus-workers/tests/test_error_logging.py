@@ -1,7 +1,5 @@
 """Tests that errors are logged instead of silently swallowed."""
-from unittest.mock import MagicMock, PropertyMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 class TestErrorLogging:

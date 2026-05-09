@@ -8,6 +8,7 @@ Handles the first-scan case (no previous engagement to diff against).
 Auto-closes fixed findings and fires webhooks for actionable changes.
 """
 
+import contextlib
 import logging
 import os
 
@@ -143,14 +144,12 @@ def _get_engagement_target(engagement_id: str) -> str | None:
         return None
     finally:
         if conn:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
 
 
 def _update_fixed_fingerprints(
-    profile_repo: "TargetProfileRepository",
+    profile_repo: "TargetProfileRepository",  # noqa: F821
     org_id: str,
     domain: str,
     fixed_findings: list[dict],
@@ -203,7 +202,5 @@ def _update_fixed_fingerprints(
         )
     finally:
         if conn:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass

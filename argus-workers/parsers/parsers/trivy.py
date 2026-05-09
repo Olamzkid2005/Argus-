@@ -1,6 +1,7 @@
 """Parser for trivy filesystem scan JSON output (trivy fs --format json)."""
 import json
 import logging
+
 from parsers.parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)

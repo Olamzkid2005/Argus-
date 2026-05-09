@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Standalone browser scan worker — runs Playwright in its own process."""
-import sys, json
+import json
+import sys
+
 from playwright.sync_api import sync_playwright
 
 

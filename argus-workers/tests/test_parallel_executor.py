@@ -1,7 +1,5 @@
 """Tests for parallel executor fallback behavior."""
-from unittest.mock import MagicMock, PropertyMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 class TestParallelExecutor:

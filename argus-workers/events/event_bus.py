@@ -99,7 +99,7 @@ class EventBus:
                     "timestamp": datetime.now(UTC).isoformat(),
                     "data": data,
                 }
-                publish_method = getattr(self._ws_publisher, "publish_event", None) or getattr(self._ws_publisher, "_publish_event")
+                publish_method = getattr(self._ws_publisher, "publish_event", None) or self._ws_publisher._publish_event
                 publish_method(ws_event)
                 published = True
             except AttributeError as e:

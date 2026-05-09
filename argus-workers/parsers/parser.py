@@ -4,26 +4,17 @@ Parser Layer - Converts CLI tool output to JSON
 Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 20.5, 21.1, 21.2
 """
 
-import json
 import logging
 import os
 import time
-from abc import ABC, abstractmethod
 from collections.abc import Generator
 from functools import lru_cache
-
-from tracing import ExecutionSpan, StructuredLogger
 
 # Import all parser classes from the extracted parsers/parsers/ package.
 # The inline definitions were moved to parsers/parsers/*.py to make the module
 # easier to navigate and test in isolation.
-from parsers.parsers.base import BaseParser, ParserError, _safe_get
-
-from parsers.parsers import (
-    FfufParser, GauParser, GospiderParser, HttpxParser,
-    KatanaParser, NucleiParser, SqlmapParser,
-    WaybackurlsParser, WpscanParser,
-)
+from parsers.parsers.base import ParserError
+from tracing import ExecutionSpan, StructuredLogger
 
 logger = logging.getLogger(__name__)
 

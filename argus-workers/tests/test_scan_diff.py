@@ -1,6 +1,5 @@
 """Tests for the ScanDiffEngine."""
 
-import pytest
 from scan_diff_engine import ScanDiffEngine
 
 

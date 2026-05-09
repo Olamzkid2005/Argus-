@@ -1,5 +1,6 @@
 import json
 import logging
+
 from parsers.parsers.base import BaseParser
 from parsers.schemas.nuclei_schema import validate_nuclei_finding
 

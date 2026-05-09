@@ -11,10 +11,10 @@ This means:
   - Missing evidence → falls back to type+endpoint only
 """
 
+import contextlib
 import hashlib
 import json
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class ScanDiffEngine:
         return hashlib.sha256(key.encode()).hexdigest()[:16]
 
     @staticmethod
-    def _load_fixed_fingerprints(profile: Optional[dict]) -> set[str]:
+    def _load_fixed_fingerprints(profile: dict | None) -> set[str]:
         """Load fingerprints of findings previously marked as fixed.
 
         Args:
@@ -116,7 +116,7 @@ class ScanDiffEngine:
             columns = [desc[0] for desc in cursor.description]
             findings: dict[str, dict] = {}
             for row in cursor.fetchall():
-                finding = dict(zip(columns, row))
+                finding = dict(zip(columns, row, strict=False))
                 fp = self._fingerprint(finding)
                 findings[fp] = finding
             return findings
@@ -127,10 +127,8 @@ class ScanDiffEngine:
             return {}
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
     # ── Core diff ──────────────────────────────────────────────────
 
@@ -138,7 +136,7 @@ class ScanDiffEngine:
         self,
         prev_id: str,
         curr_id: str,
-        profile: Optional[dict] = None,
+        profile: dict | None = None,
     ) -> dict:
         """Compare findings between two engagements.
 
@@ -246,17 +244,13 @@ class ScanDiffEngine:
                 finding_id, e,
             )
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.rollback()
-                except Exception:
-                    pass
             return False
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
     def store_diff_in_profile(
         self, org_id: str, domain: str, diff: dict
@@ -293,14 +287,10 @@ class ScanDiffEngine:
                 "Failed to store diff in profile: %s", e
             )
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.rollback()
-                except Exception:
-                    pass
             return False
         finally:
             if conn:
-                try:
+                with contextlib.suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass

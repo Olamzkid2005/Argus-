@@ -5,18 +5,15 @@ Reconnaissance execution logic extracted from Orchestrator.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
-    TOOL_TIMEOUT_DEFAULT,
-    TOOL_TIMEOUT_LONG,
-    TOOL_TIMEOUT_SHORT,
 )
 from streaming import emit_tool_start
 
 from .utils import get_wordlist_path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 if TYPE_CHECKING:
     from models.recon_context import ReconContext
@@ -258,10 +255,11 @@ def execute_recon_tools(
 
     # ── Load target profile for cross-scan learning ──
     try:
+        from urllib.parse import urlparse
+
         from database.repositories.target_profile_repository import (
             TargetProfileRepository,
         )
-        from urllib.parse import urlparse
 
         # Resolve org_id from ctx or scan_ctx
         _org_id = None

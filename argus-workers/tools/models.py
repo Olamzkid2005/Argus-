@@ -3,7 +3,7 @@ Formal types for the tool execution layer.
 Consolidates the implicit dict contract of ToolRunner.run() into a typed dataclass.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

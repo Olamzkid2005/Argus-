@@ -6,7 +6,7 @@ Gated behind ARGUS_FF_FEEDBACK_LOOP feature flag (checked via is_enabled("FEEDBA
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from database.connection import get_db
 from feature_flags import is_enabled
@@ -41,7 +41,9 @@ class FeedbackLearningLoop:
             connection_string: Database connection string for repository
         """
         self.connection_string = connection_string
-        from database.repositories.tool_accuracy_repository import ToolAccuracyRepository
+        from database.repositories.tool_accuracy_repository import (
+            ToolAccuracyRepository,
+        )
         self._accuracy_repo = ToolAccuracyRepository(connection_string)
 
     def on_feedback(self, feedback: FindingFeedback) -> dict | None:
@@ -103,7 +105,7 @@ class FeedbackLearningLoop:
                     feedback.is_true_positive,
                     feedback.analyst_notes,
                     feedback.corrected_severity,
-                    datetime.now(timezone.utc),
+                    datetime.now(UTC),
                 ),
             )
             conn.commit()

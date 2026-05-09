@@ -22,23 +22,23 @@ def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
     if not data.get("template-id") or not data.get("matched-at"):
         logger.warning("Nuclei finding missing required fields: template-id or matched-at")
         return None
-    
+
     info = data.get("info")
     if not info or not isinstance(info, dict):
         logger.warning("Nuclei finding missing 'info' field")
         return None
-    
+
     # Validate info sub-fields
     if not info.get("name"):
         logger.warning("Nuclei finding info missing 'name'")
         return None
-    
+
     severity = (info.get("severity") or "info").upper()
     valid_severities = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL", "UNKNOWN"}
     if severity not in valid_severities:
         logger.warning(f"Invalid severity '{severity}', defaulting to INFO")
         severity = "INFO"
-    
+
     # Build validated output
     validated = {
         "type": info.get("name", "UNKNOWN"),
@@ -53,5 +53,5 @@ def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
         },
         "raw_output": data,  # Store raw for debugging
     }
-    
+
     return validated

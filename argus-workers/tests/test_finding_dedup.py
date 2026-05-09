@@ -1,5 +1,5 @@
 """Tests for finding deduplication (ON CONFLICT DO NOTHING)."""
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
