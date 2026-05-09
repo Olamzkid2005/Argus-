@@ -394,6 +394,52 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"Failed to save findings: {e}")
 
+    def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
+        """Save PoC data to findings.poc_generated column.
+
+        Args:
+            finding_id: UUID of the finding
+            poc_data: PoC dict from PoCGenerator
+
+        Returns:
+            True if saved successfully
+        """
+        import json
+        from database.connection import connect
+
+        conn = None
+        try:
+            conn = connect(os.getenv("DATABASE_URL"))
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE findings
+                SET poc_generated = %s::jsonb,
+                    poc_generated_at = NOW()
+                WHERE id = %s
+                """,
+                (json.dumps(poc_data), finding_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            logger.warning(
+                "Failed to save PoC for finding %s: %s",
+                finding_id, e,
+            )
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return False
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None):
         from agent import AgentResult, create_phase_agent
@@ -577,6 +623,55 @@ class Orchestrator:
                               f"{synthesis.get('executive_summary', '')[:100]}...")
             except Exception as e:
                 logger.warning(f"LLM synthesis failed (non-fatal): {e}")
+
+        # ── PoC Generation for HIGH/CRITICAL findings ──
+        try:
+            from poc_generator import PoCGenerator
+            from tasks.utils import LlmCostTracker
+
+            poc_gen = PoCGenerator(llm_client=self.llm_client)
+            scored = evaluation.get("scored_findings", [])
+
+            cost_tracker = None
+            llm_svc = None
+            if self.llm_client and self.llm_client.is_available():
+                from llm_service import LLMService
+                llm_svc = LLMService(llm_client=self.llm_client)
+                from config.constants import LLM_MAX_COST_PER_ENGAGEMENT
+                cost_tracker = LlmCostTracker(
+                    engagement_id=self.engagement_id,
+                    max_cost=LLM_MAX_COST_PER_ENGAGEMENT,
+                )
+
+            if cost_tracker and llm_svc:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                poc_futures = []
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    # Cap at 10 PoCs per engagement to prevent cost blow-up
+                    for finding in scored[:10]:
+                        future = pool.submit(
+                            poc_gen.generate,
+                            finding, llm_svc, cost_tracker,
+                        )
+                        poc_futures.append((finding, future))
+
+                    for finding, future in poc_futures:
+                        try:
+                            poc = future.result(timeout=30)
+                            if poc and finding.get("id"):
+                                self._save_poc_to_finding(
+                                    finding["id"], poc
+                                )
+                        except Exception as e:
+                            logger.debug(
+                                "PoC for finding %s failed: %s",
+                                finding.get("id", "?"), e,
+                            )
+        except Exception as e:
+            logger.warning(
+                "PoC generation batch failed (non-fatal): %s", e
+            )
 
         actions = evaluation.get("actions", [])
         next_state = "reporting"
