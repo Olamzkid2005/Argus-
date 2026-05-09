@@ -25,9 +25,24 @@ class FindingFeedback:
 
 
 class FeedbackLearningLoop:
-    """Learn from analyst feedback to improve accuracy over time."""
+    """Learn from analyst feedback to improve accuracy over time.
+
+    Closes the feedback loop: every analyst verdict is persisted to the
+    tool_accuracy table, which is read by the Intelligence Engine on
+    subsequent scans to adjust confidence scores.
+    """
 
     FP_ALERT_THRESHOLD = 0.30
+
+    def __init__(self, connection_string: str | None = None):
+        """Initialize FeedbackLearningLoop.
+
+        Args:
+            connection_string: Database connection string for repository
+        """
+        self.connection_string = connection_string
+        from database.repositories.tool_accuracy_repository import ToolAccuracyRepository
+        self._accuracy_repo = ToolAccuracyRepository(connection_string)
 
     def on_feedback(self, feedback: FindingFeedback) -> dict | None:
         """Process analyst feedback — main entry point.
@@ -151,15 +166,38 @@ class FeedbackLearningLoop:
                 get_db().release_connection(conn)
 
     def _update_tool_accuracy(self, feedback: FindingFeedback) -> bool:
-        """Query feedback history for the finding's tool and log its accuracy.
+        """Persist analyst verdict to the tool_accuracy table.
 
-        Returns True if accuracy data was available, False otherwise.
+        This is what closes the feedback loop — every verdict shapes
+        future confidence scores for the entire org.
+
+        Returns True if the verdict was recorded, False otherwise.
         """
         source_tool = self._get_finding_source_tool(feedback.finding_id)
         if not source_tool:
             logger.warning("Cannot update tool accuracy: finding %s not found", feedback.finding_id)
             return False
 
+        org_id = self._get_finding_org_id(feedback.finding_id)
+        if not org_id:
+            logger.warning("Cannot update tool accuracy: org not found for finding %s", feedback.finding_id)
+            return False
+
+        return self._accuracy_repo.record_verdict(
+            org_id=org_id,
+            source_tool=source_tool,
+            is_true_positive=feedback.is_true_positive,
+        )
+
+    def _get_finding_org_id(self, finding_id: str) -> str | None:
+        """Get org_id from the finding's engagement chain.
+
+        Args:
+            finding_id: UUID of the finding
+
+        Returns:
+            org_id string, or None if not found
+        """
         conn = None
         cursor = None
         try:
@@ -167,29 +205,17 @@ class FeedbackLearningLoop:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN ff.is_true_positive THEN 1 ELSE 0 END) AS tp
-                FROM finding_feedback ff
-                INNER JOIN findings f ON ff.finding_id = f.id
-                WHERE f.source_tool = %s
+                SELECT e.org_id FROM findings f
+                JOIN engagements e ON f.engagement_id = e.id
+                WHERE f.id = %s
                 """,
-                (source_tool,),
+                (finding_id,),
             )
             row = cursor.fetchone()
-            if row and row[0] and row[0] > 0:
-                total, tp = row[0], row[1] or 0
-                accuracy = tp / total
-                logger.info(
-                    "Tool accuracy for %s: %d/%d = %.1f%%",
-                    source_tool, tp, total, accuracy * 100,
-                )
-                return True
-            return False
-        except Exception:
-            if conn:
-                conn.rollback()
-            raise
+            return str(row[0]) if row else None
+        except Exception as e:
+            logger.error("Failed to get org_id for finding %s: %s", finding_id, e)
+            return None
         finally:
             if cursor:
                 cursor.close()
