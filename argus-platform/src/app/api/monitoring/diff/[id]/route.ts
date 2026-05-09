@@ -10,8 +10,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await requireAuth();
-    const { id } = await params;
+    const [session, { id }] = await Promise.all([
+      requireAuth(),
+      params,
+    ]);
 
     const client = await pool.connect();
     try {

@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         user_id: session.user.id,
       }),
       signal: AbortSignal.timeout(15000),
+      cache: "no-store",
     });
 
     if (!response.ok) {
