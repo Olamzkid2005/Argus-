@@ -562,12 +562,73 @@ class Orchestrator:
             logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
+        scan_mode = job.get("scan_mode", "agent")
         recon_context = load_recon_context(self.engagement_id)
         agent_mode_enabled = job.get("agent_mode", True)
         auth_config = job.get("auth_config", {})
 
-        if (agent_mode_enabled and recon_context is not None and
-            self.llm_client is not None and self.llm_client.is_available()):
+        # ── Swarm mode: parallel specialist agents ──
+        if (
+            scan_mode == "swarm"
+            and recon_context is not None
+            and self.llm_client is not None
+            and self.llm_client.is_available()
+        ):
+            emit_thinking(
+                self.engagement_id,
+                "Multi-agent swarm mode active — "
+                "spawning specialist agents...",
+            )
+
+            from agent.swarm import SwarmOrchestrator
+            from llm_service import LLMService
+
+            from database.repositories.agent_decision_repository import (
+                AgentDecisionRepository,
+            )
+            decision_repo = AgentDecisionRepository(
+                os.getenv("DATABASE_URL")
+            ) if os.getenv("DATABASE_URL") else None
+
+            llm_svc = LLMService(llm_client=self.llm_client)
+            swarm = SwarmOrchestrator(
+                llm_service=llm_svc,
+                tool_runner=self.tool_runner,
+                recon_context=recon_context,
+                engagement_id=self.engagement_id,
+                decision_repo=decision_repo,
+            )
+
+            swarm_findings = swarm.run(timeout=1800)
+            logger.info(
+                "Swarm returned %d findings", len(swarm_findings)
+            )
+
+            # Safety net: run tools the swarm didn't cover
+            swarm_tools: set[str] = set()
+            for f in swarm_findings:
+                st = f.get("source_tool") or f.get("tool")
+                if st:
+                    swarm_tools.add(st)
+
+            tech_stack = (
+                recon_context.tech_stack if recon_context else None
+            )
+            safety_findings = execute_scan_pipeline(
+                self, targets, job.get("budget", {}),
+                scan_aggressiveness, auth_config, tech_stack,
+                skip_tools=swarm_tools,
+            )
+
+            findings = swarm_findings + safety_findings
+
+        # ── Agent mode: LLM-driven single agent ──
+        elif (
+            agent_mode_enabled
+            and recon_context is not None
+            and self.llm_client is not None
+            and self.llm_client.is_available()
+        ):
             emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
             findings = self.run_scan_with_agent(targets, recon_context, scan_aggressiveness, auth_config=auth_config)
             agent_tried = getattr(self, "_last_agent_tried_tools", set())
@@ -578,6 +639,8 @@ class Orchestrator:
                 auth_config, tech_stack, skip_tools=agent_tried,
             )
             findings.extend(deterministic_findings)
+
+        # ── Deterministic mode: no AI ──
         else:
             mode = "deterministic"
             if not recon_context: mode += " (no recon context)"

@@ -59,6 +59,10 @@ class EventType:
     REPORT_CHUNK = "report_chunk"
     REPORT_COMPLETE = "report_complete"
     AGENT_DECISION = "agent_decision"
+    SWARM_AGENT_STARTED = "swarm_agent_started"
+    SWARM_AGENT_ACTION = "swarm_agent_action"
+    SWARM_AGENT_COMPLETE = "swarm_agent_complete"
+    SWARM_MERGE_COMPLETE = "swarm_merge_complete"
 
 
 # ── EventBus Port (ABC) ──
@@ -94,6 +98,10 @@ class StreamEventType(Enum):
     COMPLETE = EventType.COMPLETE
     REPORT_CHUNK = EventType.REPORT_CHUNK
     REPORT_COMPLETE = EventType.REPORT_COMPLETE
+    SWARM_AGENT_STARTED = EventType.SWARM_AGENT_STARTED
+    SWARM_AGENT_ACTION = EventType.SWARM_AGENT_ACTION
+    SWARM_AGENT_COMPLETE = EventType.SWARM_AGENT_COMPLETE
+    SWARM_MERGE_COMPLETE = EventType.SWARM_MERGE_COMPLETE
 
 
 @dataclass
@@ -330,8 +338,24 @@ def emit_report_complete(engagement_id: str, summary: dict = None):
     ))
 
 
-def emit_agent_decision(engagement_id: str, iteration: int, tool: str, reasoning: str, was_fallback: bool = False):
-    """Emit an agent decision event for the frontend reasoning feed."""
+def emit_agent_decision(
+    engagement_id: str,
+    iteration: int,
+    tool: str,
+    reasoning: str,
+    was_fallback: bool = False,
+    agent_domain: str = "general",
+):
+    """Emit an agent decision event for the frontend reasoning feed.
+
+    Args:
+        engagement_id: Engagement UUID
+        iteration: Agent loop iteration
+        tool: Selected tool name
+        reasoning: LLM reasoning for tool selection
+        was_fallback: Whether deterministic fallback was used
+        agent_domain: Agent domain (general, idor, auth, api)
+    """
     get_stream_manager().publish(StreamEvent(
         event_type=StreamEventType.THINKING,
         data={
@@ -340,6 +364,68 @@ def emit_agent_decision(engagement_id: str, iteration: int, tool: str, reasoning
             "tool": tool,
             "reasoning": reasoning[:200] if reasoning else "",
             "was_fallback": was_fallback,
+            "agent_domain": agent_domain,
+        },
+        engagement_id=engagement_id,
+    ))
+
+
+def emit_swarm_agent_started(engagement_id: str, domain: str):
+    """Emit a swarm agent activation event."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.SWARM_AGENT_STARTED,
+        data={"domain": domain},
+        engagement_id=engagement_id,
+    ))
+
+
+def emit_swarm_agent_action(
+    engagement_id: str,
+    domain: str,
+    tool: str,
+    reasoning: str,
+    iteration: int,
+):
+    """Emit a swarm agent tool selection action."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.SWARM_AGENT_ACTION,
+        data={
+            "domain": domain,
+            "tool": tool,
+            "reasoning": reasoning[:200] if reasoning else "",
+            "iteration": iteration,
+        },
+        engagement_id=engagement_id,
+    ))
+
+
+def emit_swarm_agent_complete(
+    engagement_id: str,
+    domain: str,
+    findings_count: int,
+):
+    """Emit a swarm agent completion event."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.SWARM_AGENT_COMPLETE,
+        data={
+            "domain": domain,
+            "findings_count": findings_count,
+        },
+        engagement_id=engagement_id,
+    ))
+
+
+def emit_swarm_merge_complete(
+    engagement_id: str,
+    total_findings: int,
+    dedup_removed: int,
+):
+    """Emit a swarm merge complete event."""
+    get_stream_manager().publish(StreamEvent(
+        event_type=StreamEventType.SWARM_MERGE_COMPLETE,
+        data={
+            "total_findings": total_findings,
+            "dedup_removed": dedup_removed,
         },
         engagement_id=engagement_id,
     ))
