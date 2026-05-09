@@ -1,0 +1,129 @@
+# SQL Injection Rules — From Bug-Reaper SQLi Methodology
+# Priority 2 in bug bounty ROI — Data extraction and authentication bypass
+rules:
+  - id: br_sqli_param_injection
+    message: "SQL injection-susceptible parameter detected — common injection points in query parameters"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "injection", "bugbounty", "data-extraction"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(\\?|&)(id|user_id|account_id|order_id|invoice_id|customer_id|file_id|report_id|message_id|payment_id|transaction_id|resource_id|doc_id|ref_id|post_id|category_id|item_id|product_id|article_id)=[^&]+"
+      - regex: "(?i)(\\?|&)(search|query|q|keyword|filter|sort|order|by|limit|offset|page|per_page|rows)=[^&]+"
+      - regex: "(?i)(\\?|&)(email|username|name|first_name|last_name|phone|address|city|country|zipcode|postal)=[^&]+"
+    metadata:
+      category: sqli
+      confidence: 0.60
+      detection_method: "Test with ' OR 1=1-- and SQLMap for confirmation"
+
+  - id: br_sqli_error_fingerprint
+    message: "SQL error signature detected in response — confirms injectable vector"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "error-based", "bugbounty"]
+    requires_validation: true
+    patterns:
+      # MySQL errors
+      - regex: "(?i)mysql_fetch_array\\(\\)|mysql_num_rows\\(\\)|mysql_query\\(\\)|MySQLSyntaxErrorException"
+      - regex: "(?i)Warning.*mysql_.*|MySQLSyntaxError"
+      # PostgreSQL errors
+      - regex: "(?i)pg_query\\(\\)|pg_fetch_result\\(\\)|PostgreSQL.*ERROR|psql.*error"
+      - regex: "(?i)invalid input syntax for (type|integer)|syntax error at or near"
+      # SQL Server errors
+      - regex: "(?i)Microsoft SQL Server.*Error|ODBC.*Error|Unclosed quotation mark"
+      - regex: "(?i)Incorrect syntax near|Conversion failed|SQLServer JDBC Driver"
+      # Oracle errors
+      - regex: "(?i)ORA-\\d{5}:|Oracle.*Error|java\\.sql\\.SQLException"
+      # SQLite errors
+      - regex: "(?i)SQLite.*Error|near.*syntax error|unrecognized token"
+      # Generic SQL errors
+      - regex: "(?i)(sql|sqlite|mysql|postgres|postgresql|mssql|sqlserver|mariadb).*(error|exception|fail)"
+      - regex: "(?i)SQL syntax.*MySQL|Microsoft Database Engine"
+      # ODBC/JDBC errors
+      - regex: "(?i)ODBC.*SQL|SQLDriverConnect|SQLState"
+      - regex: "(?i)jdbc.*SQLException|SQLException.*ORA-"
+    metadata:
+      category: sqli
+      confidence: 0.75
+      detection_method: "Error confirms SQL parsing — use error-based extraction (UNION SELECT, etc.)"
+
+  - id: br_sqli_union_detection
+    message: "Potential UNION-based SQL injection pattern — UNION SELECT in parameter value"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "union", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(union.*select|union all select|UNION\\s+SELECT)"
+      - regex: "(?i)(select.*from|select.*where|select.*group|select.*order)"
+      - regex: "(?i)(concat\\(|char\\(|0x[0-9a-f]+)\\s*--"
+    metadata:
+      category: sqli
+      confidence: 0.80
+      detection_method: "UNION SELECT confirms injection — enumerate columns and extract data"
+
+  - id: br_sqli_time_based_indicator
+    message: "Time-based SQL injection pattern — SLEEP, WAITFOR, BENCHMARK in parameter"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "time-based", "blind-sqli", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(sleep\\s*\\(|benchmark\\(|pg_sleep\\(|waitfor\\s+delay)"
+      - regex: "(?i)(and\\s+\\d+\\s*=\\s*\\d+|or\\s+\\d+\\s*=\\s*\\d+).*\\d+"
+      - regex: "(?i)(if\\s*\\(|case\\s+when).*\\d+\\s*>\\s*\\d+"
+    metadata:
+      category: sqli
+      confidence: 0.65
+      detection_method: "Time-based blind injection — use time delays to infer data (1 second = true)"
+
+  - id: br_sqli_boolean_blind
+    message: "Boolean-based blind SQL injection pattern — conditional logic in parameter"
+    severity: MEDIUM
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "blind-sqli", "boolean", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(1=1|1=2|true|false|0|1)\\s*(--|#|/*)?"
+      - regex: "(?i)(and|or)\\s+\\w+\\s*=\\s*\\w+\\s*(--|#|/*)?"
+      - regex: "(?i)(order\\s+by\\s+\\d+|order\\s+by\\s+\\w+)"
+    metadata:
+      category: sqli
+      confidence: 0.50
+      detection_method: "Boolean-based blind — use (1=1) vs (1=2) to infer data via response differences"
+
+  - id: br_sqli_stored_procedure
+    message: "Stored procedure or database function call detected in parameter"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "stored-procedure", "exec", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)(xp_cmdshell|sp_executesql|exec\\s*\\(|execute\\s*\\(|call\\s*\\(|eval\\s*\\()"
+      - regex: "(?i)(@\\w+\\s*=|@@\\w+|nvarchar|int)\\s*--"
+      - regex: "(?i)(declare\\s+@|set\\s+@|exec\\s+@)"
+    metadata:
+      category: sqli
+      confidence: 0.70
+      detection_method: "Stored procedures can lead to RCE (xp_cmdshell) or data exfiltration"
+
+  - id: br_sqli_comment_injection
+    message: "SQL comment injection pattern — inline comment used to truncate query"
+    severity: HIGH
+    source: bugbounty
+    cwe: CWE-89
+    tags: ["sqli", "comment", "bypass", "bugbounty"]
+    requires_validation: true
+    patterns:
+      - regex: "(?i)--(\\s|$)|#(\\s|$)|/\\*(\\s|$)|%23"
+      - regex: "(?i)(\\*/|\\*\\/)"
+    metadata:
+      category: sqli
+      confidence: 0.55
+      detection_method: "Comment injection truncates query — bypasses WAF and modifies query logic"

@@ -1,9 +1,119 @@
 """
 Attack Graph Engine - Computes probabilistic risk scores with confidence decay
+
+Includes Bug-Reaper vulnerability chaining templates for detecting
+high-value attack chains that escalate individual findings to critical severity.
 """
 import math
 
 from models.finding import VulnerabilityFinding
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Bug-Reaper Chain Templates
+# ═══════════════════════════════════════════════════════════════════════════════
+# High-value chain templates that convert P3/P4 findings ($200-500) into
+# P1/P2 findings ($5,000-50,000). Source: agent/bugbounty_knowledge/chaining.md
+
+CHAIN_RULES = [
+    {
+        "id": "chain_1",
+        "name": "Open Redirect → OAuth Authorization Code Theft → ATO",
+        "severity": "CRITICAL",
+        "prerequisites": ["open_redirect"],
+        "chain": ["open_redirect", "auth"],
+        "correlation_factor": 1.5,
+        "description": "OAuth validates redirect_uri as prefix, enabling code theft via redirect parameter",
+    },
+    {
+        "id": "chain_2",
+        "name": "XSS + CSRF → Account Takeover",
+        "severity": "CRITICAL",
+        "prerequisites": ["xss"],
+        "chain": ["xss", "csrf"],
+        "correlation_factor": 1.4,
+        "description": "XSS reads CSRF token from DOM, enables authenticated actions as victim",
+    },
+    {
+        "id": "chain_3",
+        "name": "SSRF → Cloud Metadata → Full AWS Compromise",
+        "severity": "CRITICAL",
+        "prerequisites": ["ssrf"],
+        "chain": ["ssrf", "cloud_metadata"],
+        "correlation_factor": 1.5,
+        "description": "SSRF to IMDS (169.254.169.254) extracts AWS credentials for full account takeover",
+    },
+    {
+        "id": "chain_4",
+        "name": "LFI + File Upload → Remote Code Execution",
+        "severity": "CRITICAL",
+        "prerequisites": ["lfi"],
+        "chain": ["lfi", "rce"],
+        "correlation_factor": 1.5,
+        "description": "Upload PHP file, LFI includes it to achieve RCE",
+    },
+    {
+        "id": "chain_5",
+        "name": "Subdomain Takeover + CORS → Credential Theft",
+        "severity": "CRITICAL",
+        "prerequisites": ["subdomain_takeover"],
+        "chain": ["subdomain_takeover", "cors"],
+        "correlation_factor": 1.4,
+        "description": "Claim subdomain, use CORS (*.target.com + credentials: true) to read API responses",
+    },
+    {
+        "id": "chain_6",
+        "name": "XSS → Session Token Theft → ATO",
+        "severity": "HIGH",
+        "prerequisites": ["xss"],
+        "chain": ["xss", "session_theft"],
+        "correlation_factor": 1.4,
+        "description": "XSS steals non-HttpOnly cookie, attacker uses token to authenticate as victim",
+    },
+    {
+        "id": "chain_7",
+        "name": "IDOR + Mass Assignment → Privilege Escalation",
+        "severity": "HIGH",
+        "prerequisites": ["idor"],
+        "chain": ["idor", "privilege_escalation"],
+        "correlation_factor": 1.3,
+        "description": "IDOR on user update endpoint + mass assignment (server accepts role field) = admin access",
+    },
+    {
+        "id": "chain_8",
+        "name": "Open Redirect + Phishing",
+        "severity": "MEDIUM",
+        "prerequisites": ["open_redirect"],
+        "chain": ["open_redirect", "phishing"],
+        "correlation_factor": 1.1,
+        "description": "Open redirect to lookalike domain for credential harvesting (requires social engineering)",
+    },
+]
+
+# Mapping of Argus finding types to chain prerequisite types
+TYPE_TO_CHAIN_PREREQ = {
+    "XSS": "xss",
+    "REFLECTED_XSS": "xss",
+    "STORED_XSS": "xss",
+    "DOM_XSS": "xss",
+    "BLIND_XSS": "xss",
+    "SSRF": "ssrf",
+    "IDOR": "idor",
+    "BOLA": "idor",
+    "LFI": "lfi",
+    "PATH_TRAVERSAL": "lfi",
+    "DIRECTORY_TRAVERSAL": "lfi",
+    "OPEN_REDIRECT": "open_redirect",
+    "CORS": "cors",
+    "CORS_MISCONFIGURATION": "cors",
+    "SUBDOMAIN_TAKEOVER": "subdomain_takeover",
+    "CSRF": "csrf",
+    "RCE": "rce",
+    "COMMAND_INJECTION": "rce",
+    "AUTH_BYPASS": "auth",
+    "BROKEN_AUTH": "auth",
+    "BROKEN_AUTHENTICATION": "auth",
+}
 
 
 class Node:
@@ -161,6 +271,139 @@ class AttackGraph:
         )
         self.edges.append(edge)
 
+    def _get_chain_prereq(self, finding_type: str) -> str | None:
+        """Map finding type to chain prerequisite type."""
+        return TYPE_TO_CHAIN_PREREQ.get(finding_type.upper())
+
+    def find_chains(self) -> list[dict]:
+        """
+        Detect vulnerability chains in the graph.
+
+        When two findings share an engagement and their types match a chain template,
+        they form a chain that escalates severity.
+
+        Returns:
+            List of detected chain dictionaries with chain_id, severity, nodes, and multiplier
+        """
+        chains = []
+
+        # Get all vulnerability nodes
+        vuln_nodes = [
+            (node_id, node) for node_id, node in self.nodes.items()
+            if node.type == "vulnerability"
+        ]
+
+        for chain_rule in CHAIN_RULES:
+            prereq_type = chain_rule["prerequisites"][0]
+
+            # Find nodes matching prerequisite type
+            prereq_nodes = [
+                (node_id, node) for node_id, node in vuln_nodes
+                if self._get_chain_prereq(node.data.get("type", "")) == prereq_type
+            ]
+
+            for prereq_node_id, prereq_node in prereq_nodes:
+                # Look for second-stage vulnerabilities in the chain
+                for chain_type in chain_rule["chain"][1:]:
+                    # Find matching second node (on same or different endpoint)
+                    for node_id, node in vuln_nodes:
+                        if node_id == prereq_node_id:
+                            continue
+                        if self._get_chain_prereq(node.data.get("type", "")) == chain_type:
+                            # Chain detected
+                            chains.append({
+                                "chain_id": chain_rule["id"],
+                                "name": chain_rule["name"],
+                                "severity": chain_rule["severity"],
+                                "correlation_factor": chain_rule["correlation_factor"],
+                                "prereq_node": prereq_node,
+                                "chain_node": node,
+                                "description": chain_rule["description"],
+                            })
+
+        return chains
+
+    def get_all_paths_with_chains(self) -> list[Path]:
+        """
+        Get all attack paths including chain-enhanced paths.
+
+        When a chain is detected, the path includes both vulnerabilities
+        with the chain's correlation factor applied.
+
+        Returns:
+            List of attack paths including chain-enhanced paths
+        """
+        paths = []
+
+        # Get basic paths
+        for edge in self.edges:
+            from_node = self.nodes.get(edge.from_node)
+            to_node = self.nodes.get(edge.to_node)
+
+            if from_node and to_node:
+                path = Path(
+                    nodes=[from_node, to_node],
+                    edges=[edge]
+                )
+                paths.append(path)
+
+        # Add chain-enhanced paths
+        chains = self.find_chains()
+        for chain in chains:
+            # Create a chain path with both vulnerabilities
+            chain_path = Path(
+                nodes=[chain["prereq_node"], chain["chain_node"]],
+                edges=[]
+            )
+            paths.append(chain_path)
+
+        return paths
+
+    def get_highest_risk_paths(self, limit: int = 10) -> list[dict]:
+        """
+        Get highest risk paths including chain bonuses.
+
+        Chain paths receive elevated risk scores based on chain correlation factor.
+
+        Args:
+            limit: Maximum number of paths to return
+
+        Returns:
+            List of path dictionaries with risk scores
+        """
+        paths = self.get_all_paths_with_chains()
+
+        # Calculate risk for each path
+        path_risks = []
+        chains = self.find_chains()
+        chain_map = {c["prereq_node"].id: c for c in chains}
+
+        for path in paths:
+            risk = self.compute_risk(path)
+
+            # Apply chain bonus if this is a chain path
+            if len(path.nodes) >= 2 and path.nodes[0].id in chain_map:
+                chain = chain_map[path.nodes[0].id]
+                risk *= chain["correlation_factor"]
+
+            path_risks.append({
+                "path": path,
+                "risk_score": risk,
+                "nodes": [
+                    {
+                        "id": node.id,
+                        "type": node.type,
+                        "data": node.data,
+                    }
+                    for node in path.nodes
+                ],
+            })
+
+        # Sort by risk score descending
+        path_risks.sort(key=lambda x: x["risk_score"], reverse=True)
+
+        return path_risks[:limit]
+
     def compute_risk(self, path: Path, exposure: str = "public") -> float:
         """
         Compute risk using:
@@ -271,19 +514,6 @@ class AttackGraph:
 
         return severity_to_cvss.get(severity, 5.0)
 
-    def attack_surface_weight(self, path: Path, exposure: str = "public") -> float:
-        """
-        Weight based on endpoint exposure
-
-        Args:
-            path: Attack path
-            exposure: Exposure level
-
-        Returns:
-            Exposure factor
-        """
-        return self.EXPOSURE_FACTORS.get(exposure, 1.0)
-
     def get_all_paths(self) -> list[Path]:
         """
         Get all attack paths in the graph
@@ -306,37 +536,3 @@ class AttackGraph:
                 paths.append(path)
 
         return paths
-
-    def get_highest_risk_paths(self, limit: int = 10) -> list[dict]:
-        """
-        Get highest risk paths
-
-        Args:
-            limit: Maximum number of paths to return
-
-        Returns:
-            List of path dictionaries with risk scores
-        """
-        paths = self.get_all_paths()
-
-        # Calculate risk for each path
-        path_risks = []
-        for path in paths:
-            risk = self.compute_risk(path)
-            path_risks.append({
-                "path": path,
-                "risk_score": risk,
-                "nodes": [
-                    {
-                        "id": node.id,
-                        "type": node.type,
-                        "data": node.data,
-                    }
-                    for node in path.nodes
-                ],
-            })
-
-        # Sort by risk score descending
-        path_risks.sort(key=lambda x: x["risk_score"], reverse=True)
-
-        return path_risks[:limit]

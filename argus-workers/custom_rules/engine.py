@@ -42,18 +42,19 @@ class CustomRuleEngine:
         if not self.rules_dir:
             return
 
-        for rule_file in self.rules_dir.rglob("*.yml"):
-            try:
-                rule_data = yaml.safe_load(rule_file.read_text())
-                if isinstance(rule_data, dict) and "rules" in rule_data:
-                    for rule in rule_data["rules"]:
-                        rule["_source_file"] = str(rule_file.relative_to(self.rules_dir))
-                        self.rules.append(rule)
-                elif isinstance(rule_data, dict) and "id" in rule_data:
-                    rule_data["_source_file"] = str(rule_file.relative_to(self.rules_dir))
-                    self.rules.append(rule_data)
-            except Exception as e:
-                raise CustomRuleError(f"Failed to load rule {rule_file}: {e}") from e
+        for ext in ("*.yaml", "*.yml"):
+            for rule_file in self.rules_dir.rglob(ext):
+                try:
+                    rule_data = yaml.safe_load(rule_file.read_text())
+                    if isinstance(rule_data, dict) and "rules" in rule_data:
+                        for rule in rule_data["rules"]:
+                            rule["_source_file"] = str(rule_file.relative_to(self.rules_dir))
+                            self.rules.append(rule)
+                    elif isinstance(rule_data, dict) and "id" in rule_data:
+                        rule_data["_source_file"] = str(rule_file.relative_to(self.rules_dir))
+                        self.rules.append(rule_data)
+                except Exception as e:
+                    raise CustomRuleError(f"Failed to load rule {rule_file}: {e}") from e
 
     def add_rule(self, rule: dict):
         """Add a single rule to the engine."""
