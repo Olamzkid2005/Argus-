@@ -636,6 +636,66 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"LLM report generation failed (non-fatal): {e}")
 
+        # ── Update target profile with findings from this engagement ──
+        try:
+            from database.repositories.target_profile_repository import (
+                TargetProfileRepository,
+            )
+            from database.repositories.tool_accuracy_repository import (
+                ToolAccuracyRepository,
+            )
+            from urllib.parse import urlparse
+
+            target_url = job.get("target", "")
+            target_domain = urlparse(target_url).netloc
+            _org_id = self._get_org_id()
+            if target_domain and _org_id:
+                profile_repo = TargetProfileRepository(
+                    os.getenv("DATABASE_URL")
+                )
+
+                # Load findings from this engagement
+                all_findings, _ = (
+                    self.finding_repo.get_findings_by_engagement(
+                        self.engagement_id
+                    )
+                    if self.finding_repo
+                    else ([], None)
+                )
+
+                # Load recon context from Redis
+                recon_ctx = load_recon_context(self.engagement_id)
+                recon_ctx_dict = (
+                    recon_ctx.to_dict()
+                    if hasattr(recon_ctx, "to_dict")
+                    else {}
+                )
+
+                # Load tool accuracy for noisy-tool detection
+                acc_repo = ToolAccuracyRepository(
+                    os.getenv("DATABASE_URL")
+                )
+                fp_rates = acc_repo.load_fp_rates(_org_id)
+
+                profile_repo.upsert_from_engagement(
+                    org_id=_org_id,
+                    target_url=target_url,
+                    engagement_id=self.engagement_id,
+                    recon_context=recon_ctx_dict,
+                    findings=[
+                        f.to_dict() if hasattr(f, "to_dict") else dict(f)
+                        for f in (all_findings or [])
+                    ],
+                    tool_accuracy_fp_rates=fp_rates,
+                )
+                logger.info(
+                    "Target profile updated for %s", target_domain
+                )
+        except Exception as e:
+            logger.warning(
+                "Target profile update failed (non-fatal): %s", e
+            )
+
         self.ws_publisher.publish_state_transition(
             engagement_id=self.engagement_id, from_state="reporting", to_state="complete",
             reason="Reporting completed",

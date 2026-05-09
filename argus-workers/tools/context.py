@@ -7,6 +7,7 @@ only the dependencies they need.
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from tools.tool_runner import ToolRunner
@@ -113,3 +114,26 @@ class ToolContext:
             }
         except Exception:
             return None
+
+
+@dataclass(frozen=True)
+class ScanContext:
+    """Immutable context carried through the scan pipeline.
+
+    All fields are set once at creation and never mutated.
+    This eliminates the fragile practice of reaching into orchestrator
+    or tool_runner internals to find org_id or trace_id.
+
+    Replaces ad-hoc threading of org_id, trace_id, and DB connection info
+    through pipeline functions. Set once at creation, frozen thereafter.
+    """
+
+    engagement_id: str
+    org_id: str
+    trace_id: str = ""
+    target_url: str = ""
+    aggressiveness: str = "default"
+    db_connection_string: str = ""
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
