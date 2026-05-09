@@ -236,11 +236,19 @@ class ReActAgent:
         if self._mode == "bugbounty":
             bugbounty_context = _load_bugbounty_context(recon_context, tried_tools)
 
+        # Extract target_profile from recon_context if available
+        _target_profile = (
+            recon_context.target_profile
+            if hasattr(recon_context, "target_profile")
+            else None
+        )
+
         user_prompt = build_tool_selection_prompt(
             recon_section,
             self.registry.list_tools(),
             tried_tools,
-            context,  # observation history — now has real content
+            context,  # observation history
+            target_profile=_target_profile,
             bugbounty_context=bugbounty_context,
         )
 

@@ -255,6 +255,42 @@ def execute_recon_tools(
                 future.cancel()
 
     recon_context = summarize_recon_findings(target, all_findings)
+
+    # ── Load target profile for cross-scan learning ──
+    try:
+        from database.repositories.target_profile_repository import (
+            TargetProfileRepository,
+        )
+        from urllib.parse import urlparse
+
+        # Resolve org_id from ctx or scan_ctx
+        _org_id = None
+        _db_conn = None
+        if hasattr(ctx, "org_id"):
+            _org_id = ctx.org_id
+        if hasattr(ctx, "db_connection_string"):
+            _db_conn = ctx.db_connection_string
+        # Fallback: try getting org_id from orchestrator
+        if not _org_id and hasattr(ctx, "_get_org_id"):
+            try:
+                _org_id = ctx._get_org_id()
+            except Exception:
+                pass
+
+        domain = urlparse(target).netloc
+        if _org_id and domain:
+            profile_repo = TargetProfileRepository(_db_conn)
+            existing_profile = profile_repo.get_profile(_org_id, domain)
+            if existing_profile:
+                recon_context.target_profile = existing_profile
+                logger.info(
+                    "Loaded target profile for %s (%d prior scans)",
+                    domain,
+                    existing_profile.get("total_scans", 0),
+                )
+    except Exception as e:
+        logger.warning("Could not load target profile (non-fatal): %s", e)
+
     return all_findings, recon_context
 
 

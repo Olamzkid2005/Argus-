@@ -502,65 +502,150 @@ QUICK WIN: {quick_win}
 # USER PROMPT BUILDER
 # ---------------------------------------------------------------------------
 
+import re
+
+
+def _sanitize_for_prompt(value: str) -> str:
+    """Strip characters that could break prompt structure.
+
+    Applied to all dynamically-sourced data before prompt injection.
+    This is defense-in-depth — data sources are DB-backed structured JSON,
+    but we never trust data boundaries implicitly.
+
+    Args:
+        value: Raw string value to sanitize
+
+    Returns:
+        Sanitized string, max 200 chars
+    """
+    # Remove control characters
+    sanitized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', str(value))
+    # Escape prompt-injection markers
+    sanitized = sanitized.replace('```', '`"`')
+    sanitized = sanitized.replace('${', '{dollar}')
+    # Truncate to prevent context window abuse
+    return sanitized[:200]
+
+
 def build_tool_selection_prompt(
     recon_context: str,
     available_tools: list[dict],
     tried_tools: set,
     observation_history: str,
+    target_profile: dict | None = None,
+    mode: str | None = None,
     bugbounty_context: str = "",
+    priority_classes: list[str] | None = None,
 ) -> str:
     """
     Build the user prompt for tool selection.
     Passes full tool descriptions so the LLM can make informed decisions.
+
+    Token-budget-safe: sections ordered by importance, truncated from tail
+    when exceeding ~3400 tokens (13600 chars).
 
     Args:
         recon_context: Recon findings summary
         available_tools: List of available tool dicts
         tried_tools: Set of tool names already executed
         observation_history: Summary of what previous tools found
-        bugbounty_context: Optional Bug-Reaper methodology context for bug bounty mode
+        target_profile: Optional profile dict from target_profiles table
+        mode: Scan mode ('bugbounty', 'standard')
+        bugbounty_context: Bug-Reaper methodology context for bug bounty mode
+        priority_classes: Optional list of analyst-prioritized vulnerability classes
     """
-    tools_json = json.dumps(
-        [
-            {
-                "name": t.get("name", "unknown"),
-                "description": t.get("description", ""),
-                "parameters": [
-                    {
-                        "name": p.get("name", "") if isinstance(p, dict) else getattr(p, "name", ""),
-                        "description": p.get("description", "") if isinstance(p, dict) else getattr(p, "description", ""),
-                        "required": p.get("required", False) if isinstance(p, dict) else getattr(p, "required", False),
-                    }
-                    for p in t.get("parameters", [])
-                ],
-            }
-            for t in available_tools
-            if t.get("name") not in tried_tools
-        ],
-        indent=2,
+    prompt_parts = []
+
+    # ── Section 0: Target Memory (from cross-scan learning) ────────
+    if target_profile and target_profile.get("total_scans", 0) > 0:
+        p = target_profile
+        lines = [
+            f"=== WHAT WE KNOW ABOUT THIS TARGET"
+            f" ({p['total_scans']} prior scans) ===",
+        ]
+        best = p.get("best_tools", [])
+        if best:
+            tools_str = ", ".join(
+                f"{t['tool']} ({t['finding_count']} findings)"
+                for t in best[:4]
+            )
+            lines.append(
+                _sanitize_for_prompt(
+                    f"Tools that found real issues: {tools_str}"
+                )
+            )
+        noisy = p.get("noisy_tools", [])
+        if noisy:
+            lines.append(
+                f"Tools that were noisy/FP: {', '.join(noisy[:4])}"
+            )
+        finding_types = p.get("confirmed_finding_types", [])
+        if finding_types:
+            lines.append(
+                f"Confirmed vulnerability types:"
+                f" {', '.join(finding_types[:6])}"
+            )
+        hot = p.get("high_value_endpoints", [])
+        if hot:
+            lines.append("Previously vulnerable endpoints:")
+            lines.extend(f"  - {e}" for e in hot[:5])
+        lines.append(
+            "INSTRUCTION: Prioritise tools that worked before. "
+            "Skip tools marked noisy unless all better options are exhausted."
+        )
+        prompt_parts.append("\n".join(lines))
+
+    # ── Section 1: Analyst Priority (from natural language config) ─
+    if priority_classes:
+        priority_str = ", ".join(p.upper() for p in priority_classes[:6])
+        prompt_parts.append(
+            f"=== ANALYST PRIORITY ===\n"
+            f"The analyst specifically requested focus on: {priority_str}\n"
+            f"Run tools for these vulnerability classes before all others.\n"
+            f"Skip tools unrelated to these classes unless coverage is "
+            f"otherwise insufficient."
+        )
+
+    # ── Section 2: Bug-Reaper methodology context ──────────────────
+    if bugbounty_context:
+        prompt_parts.append(
+            f"=== BUG BOUNTY METHODOLOGY ===\n{bugbounty_context}"
+        )
+
+    # ── Section 3: Recon findings ──────────────────────────────────
+    prompt_parts.append(f"=== RECON FINDINGS ===\n{recon_context}")
+
+    # ── Section 4: Observation history ─────────────────────────────
+    obs = observation_history or "No tools have run yet."
+    prompt_parts.append(f"=== WHAT THOSE TOOLS FOUND ===\n{obs}")
+
+    # ── Section 5: Available tools (with sanitized descriptions) ───
+    tool_lines = []
+    for t in available_tools:
+        name = t.get("name", "unknown")
+        desc = _sanitize_for_prompt(t.get("description", ""))
+        tried = " (already tried)" if name in tried_tools else ""
+        tool_lines.append(f"  - {name}: {desc}{tried}")
+    prompt_parts.append(
+        "=== AVAILABLE TOOLS ===\n" + "\n".join(tool_lines)
     )
 
-    prompt = f"""
-=== RECON FINDINGS ===
-{recon_context}
+    # ── Combine ────────────────────────────────────────────────────
+    prompt = "\n\n".join(prompt_parts)
 
-=== TOOLS ALREADY RUN ===
-{', '.join(sorted(tried_tools)) if tried_tools else 'None yet — this is the first tool selection.'}
-
-=== WHAT THOSE TOOLS FOUND ===
-{observation_history or 'No tools have run yet.'}
-
-=== TOOLS STILL AVAILABLE ===
-{tools_json}
-
-Based on the recon findings above, select the single best next tool.
-Your reasoning must directly cite a specific signal from the recon summary.
-Return JSON only.
-"""
-
-    # Inject Bug-Reaper methodology context if available
-    if bugbounty_context:
-        prompt = bugbounty_context + "\n" + prompt
+    # ── Token budget enforcement (truncate from tail) ──────────────
+    # Approx 4 chars per token. Leave 100 tokens for response.
+    MAX_CHARS = 3400 * 4
+    if len(prompt) > MAX_CHARS:
+        # Find the observation history section and truncate it
+        obs_marker = "=== WHAT THOSE TOOLS FOUND ==="
+        mid = prompt.find(obs_marker)
+        if mid > 0:
+            prompt = prompt[:mid]
+            prompt += (
+                f"\n\n{obs_marker}\n"
+                f"[truncated — observations exceed token budget]"
+            )
 
     return prompt
 

@@ -36,27 +36,38 @@ class ReconContext:
     has_hardcoded_secrets: bool = False
     dependency_vulns_count: int = 0
     repo_clone_success: bool = False
+    target_profile: dict | None = None  # From target_profiles table, for cross-scan learning
 
     def to_llm_structured(self) -> str:
         """Return structured recon data as JSON for LLM tool selection."""
         import json
 
-        return json.dumps(
-            {
-                "target": self.target_url,
-                "live_endpoints_count": len(self.live_endpoints),
-                "parameter_bearing_urls": (self.parameter_bearing_urls or [])[:10],
-                "auth_endpoints": (self.auth_endpoints or [])[:5],
-                "api_endpoints": (self.api_endpoints or [])[:5],
-                "open_ports": [p.get("port") for p in (self.open_ports or [])[:5]],
-                "tech_stack": (self.tech_stack or [])[:10],
-                "has_login_page": self.has_login_page,
-                "has_api": self.has_api,
-                "has_file_upload": self.has_file_upload,
-                "findings_count": self.findings_count,
-            },
-            indent=2,
-        )
+        data = {
+            "target": self.target_url,
+            "live_endpoints_count": len(self.live_endpoints),
+            "parameter_bearing_urls": (self.parameter_bearing_urls or [])[:10],
+            "auth_endpoints": (self.auth_endpoints or [])[:5],
+            "api_endpoints": (self.api_endpoints or [])[:5],
+            "open_ports": [p.get("port") for p in (self.open_ports or [])[:5]],
+            "tech_stack": (self.tech_stack or [])[:10],
+            "has_login_page": self.has_login_page,
+            "has_api": self.has_api,
+            "has_file_upload": self.has_file_upload,
+            "findings_count": self.findings_count,
+        }
+
+        # Add target memory if available
+        if self.target_profile:
+            p = self.target_profile
+            data["target_memory"] = {
+                "prior_scans": p.get("total_scans", 0),
+                "best_tools": p.get("best_tools", [])[:5],
+                "noisy_tools": p.get("noisy_tools", [])[:5],
+                "confirmed_vulnerability_types": p.get("confirmed_finding_types", [])[:10],
+                "high_value_endpoints": p.get("high_value_endpoints", [])[:10],
+            }
+
+        return json.dumps(data, indent=2)
 
     def to_llm_summary(self) -> str:
         """Compact text summary for LLM context window. Max ~800 tokens."""
