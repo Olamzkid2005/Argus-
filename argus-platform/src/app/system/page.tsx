@@ -734,6 +734,37 @@ export default function SystemHealthPage() {
             </div>
           </motion.div>
 
+          {/* Agent Decisions Panel */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22 }}
+            className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-6"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-purple-500/10 border border-purple-500/20">
+                <Brain className="h-5 w-5 text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-on-surface uppercase tracking-widest font-headline">
+                  Agent Decisions
+                </h2>
+                <p className="text-[11px] text-on-surface-variant">LLM-driven scan decisions and tool selections</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="flex flex-col items-center justify-center py-8 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3">
+                <Brain size={28} />
+                <p className="text-[10px] font-mono uppercase tracking-widest text-center">
+                  Agent decisions will appear here during active scans
+                </p>
+                <p className="text-[9px] text-on-surface-variant/30 dark:text-[#8A8A9E]/30 text-center">
+                  Connect to an engagement to view LLM tool selections and reasoning
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
           {/* System Metrics */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}

@@ -14,8 +14,13 @@ interface ToolHealthData {
 }
 
 export async function GET() {
-  await requireAuth();
   log.api("GET", "/api/system/health");
+  try {
+    await requireAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     let dbStatus = { status: "healthy", detail: "Connected" };
     let redisStatus = { status: "healthy", detail: "Connected" };
@@ -39,6 +44,20 @@ export async function GET() {
       await redis.ping();
     } catch {
       redisStatus = { status: "degraded", detail: "Connection failed" };
+    }
+
+    // Check worker health via Redis queue inspection
+    try {
+      const redis = (await import("@/lib/redis")).default;
+      const queueLength = await redis.llen("argus:queue:celery");
+      const workerKeys = await redis.keys("argus:worker:*");
+      if (workerKeys.length === 0) {
+        workerStatus = { status: "degraded", detail: "No workers registered" };
+      } else {
+        workerStatus = { status: "healthy", detail: `${workerKeys.length} worker(s) online` };
+      }
+    } catch {
+      workerStatus = { status: "degraded", detail: "Worker check failed" };
     }
 
     // Tool health from tool_metrics table

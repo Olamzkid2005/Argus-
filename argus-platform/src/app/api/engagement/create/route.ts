@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
       scanType,
       scanAggressiveness,
       agentMode,
+      scanMode,
+      bugBounty,
     } = body;
 
     // Default to "url" scan type if not specified
@@ -115,8 +117,8 @@ export async function POST(req: NextRequest) {
       const effectiveAgentMode = agentMode === true;
       const engagementResult = await client.query(
         `INSERT INTO engagements 
-         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, agent_mode, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
          RETURNING *`,
         [
           engagementId,
@@ -130,6 +132,8 @@ export async function POST(req: NextRequest) {
           effectiveScanType,
           effectiveAggressiveness,
           effectiveAgentMode,
+          scanMode || "agent",
+          bugBounty === true,
         ],
       );
 
@@ -173,6 +177,8 @@ export async function POST(req: NextRequest) {
             },
             aggressiveness: effectiveAggressiveness,
             agent_mode: effectiveAgentMode,
+            scan_mode: scanMode || "agent",
+            bug_bounty_mode: bugBounty === true,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });
@@ -188,6 +194,8 @@ export async function POST(req: NextRequest) {
             },
             aggressiveness: effectiveAggressiveness,
             agent_mode: effectiveAgentMode,
+            scan_mode: scanMode || "agent",
+            bug_bounty_mode: bugBounty === true,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });

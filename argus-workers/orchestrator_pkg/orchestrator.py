@@ -219,6 +219,26 @@ class Orchestrator:
             logger.warning(f"Failed to normalize finding: {e}")
             return None
 
+    @staticmethod
+    def _classify_finding_type(finding_type: str) -> dict[str, str | None]:
+        """Map a finding type to OWASP category and CWE ID."""
+        CLASSIFICATION_MAP = {
+            "OPEN_PORT": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+            "HISTORICAL_URL": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+            "SQL_INJECTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-89"},
+            "XSS": {"owasp": "A03:2021-Injection", "cwe": "CWE-79"},
+            "IDOR": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-639"},
+            "COMMITTED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+            "REMOTE_CODE_EXECUTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-78"},
+            "SSRF": {"owasp": "A10:2021-Server-Side Request Forgery", "cwe": "CWE-918"},
+            "PATH_TRAVERSAL": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-22"},
+            "MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
+            "AUTH_BYPASS": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-287"},
+            "SENSITIVE_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
+            "CORS_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-942"},
+        }
+        return CLASSIFICATION_MAP.get(finding_type, {"owasp": None, "cwe": None})
+
     def _save_findings(self, findings: list[dict], source_tool_key: str = "source_tool"):
         if not self.finding_repo or not findings:
             return
@@ -318,6 +338,15 @@ class Orchestrator:
                     except Exception as cvss_err:
                         logger.warning(f"CVSS estimation failed (non-fatal): {cvss_err}")
 
+                # Classify finding with OWASP category and CWE ID if not already set
+                if not finding.get("owasp_category") or not finding.get("cwe_id"):
+                    ftype = finding.get("type", "")
+                    classification = self._classify_finding_type(ftype)
+                    if not finding.get("owasp_category"):
+                        finding["owasp_category"] = classification.get("owasp")
+                    if not finding.get("cwe_id"):
+                        finding["cwe_id"] = classification.get("cwe")
+
                 SECRET_TOOLS = {"gitleaks", "trufflehog", "secret-scan"}
                 st = finding.get("tool") or finding.get("source_tool") or "unknown"
                 if st in SECRET_TOOLS or finding.get("type", "").startswith("COMMITTED_SECRET"):
@@ -330,6 +359,8 @@ class Orchestrator:
                         confidence=finding.get("confidence", 0.5),
                         source_tool=st,
                         cvss_score=finding.get("cvss_score"),
+                        owasp_category=finding.get("owasp_category"),
+                        cwe_id=finding.get("cwe_id"),
                     )
                 else:
                     dedup_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
@@ -355,6 +386,8 @@ class Orchestrator:
                                 confidence=finding.get("confidence", 0.5),
                                 source_tool=st,
                                 cvss_score=finding.get("cvss_score"),
+                                owasp_category=finding.get("owasp_category"),
+                                cwe_id=finding.get("cwe_id"),
                             )
                     else:
                         saved_id = self.finding_repo.create_finding(
@@ -366,6 +399,8 @@ class Orchestrator:
                             confidence=finding.get("confidence", 0.5),
                             source_tool=st,
                             cvss_score=finding.get("cvss_score"),
+                            owasp_category=finding.get("owasp_category"),
+                            cwe_id=finding.get("cwe_id"),
                         )
 
                 if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint"):

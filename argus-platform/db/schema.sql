@@ -44,11 +44,15 @@ CREATE TABLE engagements (
     rate_limit_config JSONB, -- {requestsPerSecond, concurrentRequests, respectRobotsTxt, adaptiveSlowdown}
     scan_type VARCHAR(50) NOT NULL DEFAULT 'url', -- 'url' for web app scan, 'repo' for repository scan
     scan_aggressiveness VARCHAR(20) NOT NULL DEFAULT 'default', -- default, high, extreme
+    scan_mode VARCHAR(20) NOT NULL DEFAULT 'agent', -- agent, swarm
+    bug_bounty_mode BOOLEAN NOT NULL DEFAULT false,
+    agent_mode BOOLEAN NOT NULL DEFAULT false,
     auth_config JSONB DEFAULT '{}'::jsonb, -- {type: "form"|"bearer"|"cookie"|"api_key", username, password, token, cookie, login_url}
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP WITH TIME ZONE,
-    CONSTRAINT valid_status CHECK (status IN ('created', 'recon', 'awaiting_approval', 'scanning', 'analyzing', 'reporting', 'complete', 'failed', 'paused'))
+    CONSTRAINT valid_status CHECK (status IN ('created', 'recon', 'awaiting_approval', 'scanning', 'analyzing', 'reporting', 'complete', 'failed', 'paused')),
+    CONSTRAINT valid_scan_mode CHECK (scan_mode IN ('agent', 'swarm'))
 );
 
 -- Loop budgets table

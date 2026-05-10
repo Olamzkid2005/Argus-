@@ -154,6 +154,8 @@ export default function EngagementsPage() {
   const [target, setTarget] = useState("");
   const [scanAggressiveness, setScanAggressiveness] = useState("default");
   const [agentMode, setAgentMode] = useState(false);
+  const [scanMode, setScanMode] = useState<"agent" | "swarm">("agent");
+  const [bugBounty, setBugBounty] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progressStep, setProgressStep] = useState("");
   const [error, setError] = useState("");
@@ -294,6 +296,7 @@ export default function EngagementsPage() {
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: {},
           scanMode: "agent",
+          bugBounty: false,
         }),
       });
 
@@ -376,6 +379,8 @@ export default function EngagementsPage() {
           scanType: scanType,
           scanAggressiveness: scanAggressiveness,
           agentMode: agentMode,
+          scanMode: scanMode,
+          bugBounty: bugBounty,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: validatedScope,
         }),
@@ -942,6 +947,79 @@ Examples:
                   >
                     <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${
                       agentMode ? "left-[22px]" : "left-0.5"
+                    }`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scan Mode (Agent vs Swarm) — only visible when AI Agent Mode is ON */}
+              {agentMode && (
+                <div>
+                  <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
+                    Scan Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setScanMode("agent")}
+                      className={`flex flex-col items-center gap-2 p-4 border rounded-xl transition-all duration-300 ${
+                        scanMode === "agent"
+                          ? "border-primary bg-primary/5 shadow-glow"
+                          : "border-outline-variant dark:border-[#ffffff10] bg-surface-container dark:bg-[#1A1A24] hover:border-primary/30"
+                      }`}
+                    >
+                      <Brain size={20} className={scanMode === "agent" ? "text-primary" : "text-on-surface-variant dark:text-[#8A8A9E]"} />
+                      <span className={`text-[11px] font-bold uppercase tracking-widest font-body ${scanMode === "agent" ? "text-primary" : "text-on-surface-variant dark:text-[#8A8A9E]"}`}>Agent</span>
+                      <span className="text-[9px] text-on-surface-variant/50 dark:text-[#8A8A9E]/50 text-center">Single LLM agent runs all tools sequentially</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScanMode("swarm")}
+                      className={`flex flex-col items-center gap-2 p-4 border rounded-xl transition-all duration-300 ${
+                        scanMode === "swarm"
+                          ? "border-primary bg-primary/5 shadow-glow"
+                          : "border-outline-variant dark:border-[#ffffff10] bg-surface-container dark:bg-[#1A1A24] hover:border-primary/30"
+                      }`}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={scanMode === "swarm" ? "text-primary" : "text-on-surface-variant dark:text-[#8A8A9E]"}>
+                        <circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/>
+                        <line x1="6" y1="12" x2="15.5" y2="7"/><line x1="6" y1="12" x2="15.5" y2="17"/>
+                      </svg>
+                      <span className={`text-[11px] font-bold uppercase tracking-widest font-body ${scanMode === "swarm" ? "text-primary" : "text-on-surface-variant dark:text-[#8A8A9E]"}`}>Swarm</span>
+                      <span className="text-[9px] text-on-surface-variant/50 dark:text-[#8A8A9E]/50 text-center">Parallel specialist agents (IDOR, Auth, API)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Bug Bounty Mode Toggle */}
+              <div>
+                <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
+                  Bug Bounty Mode
+                </label>
+                <div className="flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Target size={18} className={bugBounty ? "text-green-500" : "text-on-surface-variant/40"} />
+                    <div>
+                      <div className="text-xs font-medium text-on-surface dark:text-[#F0F0F5]">
+                        Bug Bounty Optimized Scan
+                      </div>
+                      <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E]">
+                        {bugBounty
+                          ? "Prioritizes high-impact, reportable findings with PoC generation"
+                          : "Standard vulnerability assessment scan"}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBugBounty(!bugBounty)}
+                    className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
+                      bugBounty ? "bg-green-500" : "bg-surface-container-high dark:bg-[#2A2A35]"
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${
+                      bugBounty ? "left-[22px]" : "left-0.5"
                     }`} />
                   </button>
                 </div>
