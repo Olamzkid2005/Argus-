@@ -29,6 +29,10 @@ import {
   StopCircle,
   RefreshCw,
   Brain,
+  MessageSquare,
+  Edit3,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
 import {
@@ -158,6 +162,14 @@ export default function EngagementsPage() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
 
+  // Natural Language scan config state
+  const [configMode, setConfigMode] = useState<"standard" | "nl">("standard");
+  const [nlIntent, setNlIntent] = useState("");
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlResult, setNlResult] = useState<Record<string, string | boolean | string[]> | null>(null);
+  const [nlError, setNlError] = useState("");
+  const [nlIsFallback, setNlIsFallback] = useState(false);
+
   const { history, addToHistory, removeFromHistory, clearHistory } = useURLHistory();
 
   // Live engagements state
@@ -221,6 +233,113 @@ export default function EngagementsPage() {
   }
 
   if (!session) return null;
+
+  const handleParseIntent = async () => {
+    setNlError("");
+    setNlResult(null);
+    setNlIsFallback(false);
+
+    if (!nlIntent.trim()) {
+      setNlError("Please describe what you want to scan");
+      return;
+    }
+
+    setNlLoading(true);
+    try {
+      const response = await fetch("/api/engagements/parse-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: nlIntent.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to parse scan intent");
+      }
+
+      if (data.error) {
+        setNlError(data.error);
+        return;
+      }
+
+      if (data._fallback) {
+        setNlIsFallback(true);
+      }
+
+      setNlResult(data);
+    } catch (err) {
+      setNlError(err instanceof Error ? err.message : "Failed to parse intent");
+    } finally {
+      setNlLoading(false);
+    }
+  };
+
+  const handleNlStartScan = async () => {
+    if (!nlResult?.target_url) return;
+
+    setError("");
+    setIsLoading(true);
+    setProgressStep("Creating engagement from parsed config...");
+
+    try {
+      const response = await fetch("/api/engagement/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUrl: String(nlResult.target_url),
+          scanType: String(nlResult.scan_type || "url"),
+          scanAggressiveness: String(nlResult.aggressiveness || "default"),
+          agentMode: Boolean(nlResult.agent_mode),
+          authorization: "AUTHORIZED OPERATIONAL SCAN",
+          authorizedScope: {},
+          scanMode: "agent",
+        }),
+      });
+
+      if (response.status === 401) {
+        signIn();
+        return;
+      }
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to initiate engagement");
+      }
+
+      const engagementId = data.engagement?.id || data.engagement_id;
+      if (!engagementId) {
+        throw new Error("Invalid engagement response - no ID received");
+      }
+
+      setProgressStep("Redirecting to dashboard...");
+      showToast("success", "Engagement launched from natural language config");
+      addToHistory(String(nlResult.target_url), String(nlResult.scan_type || "url") as "url" | "repo");
+      router.push(`/dashboard?engagement=${engagementId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Launch failed");
+      showToast("error", err instanceof Error ? err.message : "System failure");
+    } finally {
+      setIsLoading(false);
+      setProgressStep("");
+    }
+  };
+
+  const handleNlEditDetails = () => {
+    if (nlResult?.target_url) {
+      setTarget(String(nlResult.target_url));
+    }
+    if (nlResult?.scan_type) {
+      setScanType(String(nlResult.scan_type) as "url" | "repo");
+    }
+    if (nlResult?.aggressiveness) {
+      setScanAggressiveness(String(nlResult.aggressiveness));
+    }
+    if (nlResult?.agent_mode !== undefined) {
+      setAgentMode(Boolean(nlResult.agent_mode));
+    }
+    setConfigMode("standard");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -422,6 +541,215 @@ export default function EngagementsPage() {
               <h2 className="text-lg font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">New Scan Engagement</h2>
             </div>
 
+            {/* Configuration Mode Toggle */}
+            <div className="flex gap-2 mb-6 p-1 bg-surface-container dark:bg-[#1A1A24] rounded-lg">
+              <button
+                type="button"
+                onClick={() => { setConfigMode("standard"); setNlResult(null); setNlError(""); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all duration-300 font-body ${
+                  configMode === "standard"
+                    ? "bg-primary text-on-primary shadow-glow"
+                    : "text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5]"
+                }`}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfigMode("nl")}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all duration-300 font-body flex items-center justify-center gap-1.5 ${
+                  configMode === "nl"
+                    ? "bg-primary text-on-primary shadow-glow"
+                    : "text-on-surface-variant dark:text-[#8A8A9E] hover:text-on-surface dark:hover:text-[#F0F0F5]"
+                }`}
+              >
+                <MessageSquare size={13} />
+                Natural Language
+              </button>
+            </div>
+
+            {/* Natural Language Mode */}
+            {configMode === "nl" ? (
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
+                    Describe Your Scan Intent
+                  </label>
+                  <textarea
+                    value={nlIntent}
+                    onChange={(e) => setNlIntent(e.target.value)}
+                    placeholder={`Describe what you want to scan in plain English...
+
+Examples:
+• "Scan https://example.com for IDOR and auth bypass vulnerabilities. Focus on high severity."
+• "Run a comprehensive scan of my Node.js API at https://api.example.com. Look for injection flaws."
+• "Quick security check of https://shop.example.com — prioritize XSS and CSRF."`}
+                    rows={5}
+                    maxLength={5000}
+                    className="w-full px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-sm font-body text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-300 placeholder:text-on-surface-variant/40 dark:placeholder:text-[#8A8A9E]/40 resize-none"
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] font-mono text-on-surface-variant/50 dark:text-[#8A8A9E]/50">
+                      {nlIntent.length}/5000
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleParseIntent}
+                  disabled={nlLoading || !nlIntent.trim()}
+                  className={`w-full flex items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-[0.2em] rounded-lg transition-all duration-300 font-body ${
+                    nlLoading
+                      ? "bg-transparent text-primary border border-primary/40"
+                      : "bg-primary text-on-primary hover:opacity-90 shadow-glow"
+                  } disabled:opacity-50`}
+                >
+                  {nlLoading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Parsing Intent...
+                    </>
+                  ) : (
+                    <>
+                      <Brain size={14} />
+                      Parse Intent
+                    </>
+                  )}
+                </button>
+
+                {/* NL Error */}
+                {nlError && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-error/10 border border-error/20">
+                    <AlertCircle size={16} className="text-error shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-error uppercase tracking-wider">Parsing Failed</p>
+                      <p className="text-xs text-error/80 mt-0.5">{nlError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* NL Fallback Warning */}
+                {nlIsFallback && nlResult && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-500 uppercase tracking-wider">AI Unavailable — Basic Detection Used</p>
+                      <p className="text-xs text-amber-400/80 mt-0.5">The scan config was generated using basic URL detection. Please verify the configuration below before proceeding.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* NL Result Preview */}
+                {nlResult && !nlError && (
+                  <div className="p-4 rounded-xl bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] space-y-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={16} className="text-green-500" />
+                      <span className="text-xs font-bold text-on-surface dark:text-[#F0F0F5] uppercase tracking-wider">Parsed Configuration</span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {/* Target URL */}
+                      {nlResult.target_url && (
+                        <div className="flex items-center gap-2">
+                          <Globe size={13} className="text-primary shrink-0" />
+                          <span className="text-xs font-mono text-on-surface dark:text-[#F0F0F5] break-all">{String(nlResult.target_url)}</span>
+                        </div>
+                      )}
+
+                      {/* Scan Type */}
+                      {nlResult.scan_type && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-on-surface-variant/50 uppercase tracking-wider">Type:</span>
+                          <span className="text-xs font-medium text-on-surface dark:text-[#F0F0F5] uppercase bg-surface-container-high dark:bg-[#2A2A35] px-2 py-0.5 rounded">
+                            {String(nlResult.scan_type)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Aggressiveness */}
+                      {nlResult.aggressiveness && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-on-surface-variant/50 uppercase tracking-wider">Aggressiveness:</span>
+                          <span className={`text-xs font-medium uppercase px-2 py-0.5 rounded ${
+                            nlResult.aggressiveness === "extreme"
+                              ? "text-error bg-error/10"
+                              : nlResult.aggressiveness === "high"
+                                ? "text-amber-500 bg-amber-500/10"
+                                : "text-primary bg-primary/10"
+                          }`}>
+                            {String(nlResult.aggressiveness)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Priority Classes */}
+                      {Array.isArray(nlResult.priority_classes) && (nlResult.priority_classes as string[]).length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-bold text-on-surface-variant/50 uppercase tracking-wider block mb-1.5">Priority Focus:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(nlResult.priority_classes as string[]).map((cls: string) => (
+                              <span key={cls} className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded uppercase">
+                                {cls}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tech Stack Hints */}
+                      {Array.isArray(nlResult.tech_stack_hints) && (nlResult.tech_stack_hints as string[]).length > 0 && (
+                        <div>
+                          <span className="text-[10px] font-bold text-on-surface-variant/50 uppercase tracking-wider block mb-1.5">Detected Stack:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(nlResult.tech_stack_hints as string[]).map((hint: string) => (
+                              <span key={hint} className="text-[10px] font-mono text-cyan-500 bg-cyan-500/10 px-2 py-0.5 rounded">
+                                {hint}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Auth Config */}
+                      {nlResult.auth_config && typeof nlResult.auth_config === "object" && Object.keys(nlResult.auth_config as unknown as Record<string, unknown>).length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <Shield size={13} className="text-green-500 shrink-0" />
+                          <span className="text-[10px] font-medium text-green-500 uppercase tracking-wider">Auth Credentials Detected</span>
+                        </div>
+                      )}
+
+                      {/* Intent Summary */}
+                      {nlResult.intent_summary && (
+                        <p className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E] italic border-t border-outline-variant dark:border-[#ffffff08] pt-2">
+                          {String(nlResult.intent_summary)}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={handleNlStartScan}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary text-on-primary text-xs font-bold uppercase tracking-wider rounded-lg hover:opacity-90 transition-all duration-300 shadow-glow font-body"
+                      >
+                        <CheckCircle size={14} />
+                        Looks Good, Start Scan
+                      </button>
+                      <button
+                        onClick={handleNlEditDetails}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 border border-outline-variant dark:border-[#ffffff10] text-on-surface-variant dark:text-[#8A8A9E] text-xs font-bold uppercase tracking-wider rounded-lg hover:border-primary/30 hover:text-primary transition-all duration-300 font-body"
+                      >
+                        <Edit3 size={14} />
+                        Edit Details
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Standard Configuration Mode */
+              <div className="space-y-5">
             {/* Scan Type */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <button
@@ -662,6 +990,8 @@ export default function EngagementsPage() {
               <AlertTriangle size={14} className="text-primary shrink-0" />
               Authorized operators only — system logging active
             </div>
+              </div>
+            )}
           </motion.div>
 
           {/* Live Engagements */}
