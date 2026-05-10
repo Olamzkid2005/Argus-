@@ -14,6 +14,7 @@ from functools import lru_cache
 # The inline definitions were moved to parsers/parsers/*.py to make the module
 # easier to navigate and test in isolation.
 from parsers.parsers.base import ParserError
+from feature_flags import is_enabled
 from tracing import ExecutionSpan, StructuredLogger
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,26 @@ class Parser:
                     parse_time_ms=duration_ms,
                 )
 
+                # ── LLM Parser Fallback on empty result ──
+                if not findings:
+                    llm_findings = self._try_llm_fallback(
+                        tool_name, raw_output
+                    )
+                    if llm_findings:
+                        logger.info(
+                            "LLM parser fallback recovered %d findings from "
+                            "%s output (%d chars)",
+                            len(llm_findings),
+                            tool_name,
+                            len(raw_output),
+                        )
+                        self.logger.log_parser_completed(
+                            tool_name=f"{tool_name}_llm_fallback",
+                            findings_count=len(llm_findings),
+                            parse_time_ms=duration_ms,
+                        )
+                        return llm_findings
+
                 return findings
 
             except Exception as e:
@@ -101,7 +122,48 @@ class Parser:
                     },
                 )
 
+                # ── LLM Parser Fallback on ParserError ──
+                findings = self._try_llm_fallback(tool_name, raw_output)
+                if findings:
+                    logger.info(
+                        "LLM parser fallback recovered %d findings from %s "
+                        "output after parser error: %s",
+                        len(findings), tool_name, str(e)[:120],
+                    )
+                    return findings
+
                 raise ParserError(f"Failed to parse {tool_name} output: {e}") from e
+
+    def _try_llm_fallback(self, tool_name: str, raw_output: str) -> list[dict]:
+        """Attempt LLM-powered fallback parsing when primary parser fails.
+
+        Only activates when:
+        - Feature flag "llm_parser_fallback" is enabled
+        - Raw output is non-empty and long enough (> 100 chars)
+
+        Args:
+            tool_name: Name of the tool that produced the output
+            raw_output: Raw tool output string
+
+        Returns:
+            List of findings if recovered, empty list otherwise.
+        """
+        if not is_enabled("llm_parser_fallback"):
+            return []
+
+        if not raw_output or len(raw_output.strip()) < 100:
+            return []
+
+        try:
+            from llm_parser_fallback import LLMParserFallback
+
+            fallback = LLMParserFallback()
+            return fallback.extract_findings(tool_name, raw_output)
+        except Exception as e:
+            logger.warning(
+                "LLM parser fallback failed for %s: %s", tool_name, e
+            )
+            return []
 
     def parse_stream(
         self, tool_name: str, raw_output: str, batch_size: int = 50
