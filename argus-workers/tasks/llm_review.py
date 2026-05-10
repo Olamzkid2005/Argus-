@@ -223,8 +223,8 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 logger.warning(f"Failed to store LLM evidence: {e}")
 
             # If LLM confirms with higher confidence, update the finding
-            if llm_confirmed and result.confidence > current_confidence:
-                new_confidence = min(1.0, current_confidence + result.confidence * 0.3)
+            if llm_confirmed and result.confidence > float(current_confidence):
+                new_confidence = min(1.0, float(current_confidence) + result.confidence * 0.3)
                 try:
                     repo.update_confidence(finding["id"], new_confidence)
                     confirmed_count += 1

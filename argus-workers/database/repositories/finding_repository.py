@@ -367,10 +367,10 @@ class FindingRepository(BaseRepository):
             cursor.execute(
                 """
                 UPDATE findings
-                SET confidence = %s, updated_at = NOW()
+                SET confidence = %s
                 WHERE id = %s
                 """,
-                (confidence, finding_id)
+                (float(confidence), finding_id)
             )
             conn.commit()
         except Exception:
@@ -397,8 +397,7 @@ class FindingRepository(BaseRepository):
                 """
                 UPDATE findings
                 SET llm_reviewed = TRUE,
-                    llm_analysis = %s,
-                    updated_at = NOW()
+                    llm_analysis = %s
                 WHERE id = %s
                 """,
                 (Json(llm_result), finding_id)
