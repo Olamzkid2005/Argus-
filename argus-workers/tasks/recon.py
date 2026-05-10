@@ -59,8 +59,15 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
     """
     valid_targets = [t for t in targets if t and isinstance(t, str)]
     if not valid_targets:
-        logger.warning(f"expand_recon called with empty/invalid targets for engagement {engagement_id}, skipping")
-        return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets"}
+        logger.warning(f"expand_recon called with empty/invalid targets for engagement {engagement_id}, transitioning to reporting")
+        from tasks.base import task_context
+        with task_context(self, engagement_id, "recon_expand",
+                          job_extra={"target": None, "targets": [], "budget": budget},
+                          trace_id=trace_id, current_state="recon") as ctx:
+            ctx.state.transition("reporting", "No additional targets — advancing to report")
+            app.send_task('tasks.report.generate_report',
+                          args=[engagement_id, ctx.trace_id, budget])
+        return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets", "next_state": "reporting"}
 
     with task_context(self, engagement_id, "recon_expand",
                       job_extra={"target": valid_targets[0], "targets": valid_targets, "budget": budget},

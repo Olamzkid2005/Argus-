@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch activity feed
     let activityQuery = `
-      SELECT af.id, af.activity_type, af.entity_type, af.entity_id, af.metadata, af.created_at,
+      SELECT af.id, af.activity_type, af.description, af.metadata, af.created_at,
              u.email as user_email, u.name as user_name
       FROM activity_feed af
       LEFT JOIN users u ON af.user_id = u.id

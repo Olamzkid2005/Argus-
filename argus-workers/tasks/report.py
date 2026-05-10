@@ -423,7 +423,7 @@ def generate_compliance_report(
 def generate_full_report(
     self,
     engagement_id: str,
-    report_id: str,
+    report_id: str = "",
     trace_id: str = None,
 ):
     """

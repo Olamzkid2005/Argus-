@@ -141,6 +141,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No findings provided" }, { status: 400 });
     }
 
+    // If findings only have IDs (no type/evidence), fetch full data from DB
+    const needsDbFetch = findings.some((f) => !f.type && !f.evidence);
+    if (needsDbFetch) {
+      const { pool: dbPool } = await import("@/lib/db");
+      const ids = findings.map((f) => f.id);
+      const idPlaceholders = ids.map((_, i) => `$${i + 1}`).join(",");
+      const result = await dbPool.query(
+        `SELECT id, type, severity, endpoint, evidence, confidence, source_tool
+         FROM findings WHERE id IN (${idPlaceholders})`,
+        ids
+      );
+      const dbMap = new Map(result.rows.map((r: Record<string, unknown>) => [r.id as string, r]));
+      findings = findings.map((f) => {
+        const db = dbMap.get(f.id);
+        if (db) {
+          return {
+            id: db.id as string,
+            type: (db.type as string) || f.type || "UNKNOWN",
+            severity: (db.severity as string) || f.severity || "MEDIUM",
+            endpoint: (db.endpoint as string) || f.endpoint || "",
+            evidence: db.evidence ?? f.evidence,
+            confidence: (db.confidence as number) ?? f.confidence ?? 0,
+            source_tool: (db.source_tool as string) || f.source_tool || "unknown",
+          };
+        }
+        return f;
+      });
+    }
+
     const findingsToExplain = findings.slice(0, 10);
 
     redis = getRedisClient();

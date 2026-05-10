@@ -229,15 +229,28 @@ class Orchestrator:
             "XSS": {"owasp": "A03:2021-Injection", "cwe": "CWE-79"},
             "IDOR": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-639"},
             "COMMITTED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+            "EXPOSED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
             "REMOTE_CODE_EXECUTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-78"},
             "SSRF": {"owasp": "A10:2021-Server-Side Request Forgery", "cwe": "CWE-918"},
             "PATH_TRAVERSAL": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-22"},
             "MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
+            "SECURITY_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
             "AUTH_BYPASS": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-287"},
             "SENSITIVE_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
+            "INFORMATION_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
+            "SERVER_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
             "CORS_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-942"},
+            "WEB_SERVER_VULNERABILITY": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
+            "DIFFERENTIAL_ANOMALY": {"owasp": "A06:2021-Vulnerable and Outdated Components", "cwe": "CWE-1104"},
+            "CRAWLED_ENDPOINT": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+            "HARDCODED_CREDENTIAL": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+            "MISSING_SECURITY_HEADERS": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-693"},
+            "WEAK_CRYPTO": {"owasp": "A02:2021-Cryptographic Failures", "cwe": "CWE-327"},
+            "FILE_UPLOAD_VULNERABILITY": {"owasp": "A03:2021-Injection", "cwe": "CWE-434"},
+            "RATE_LIMIT_MISSING": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-770"},
+            "LOG_FORGING": {"owasp": "A09:2021-Security Logging and Monitoring Failures", "cwe": "CWE-117"},
         }
-        return CLASSIFICATION_MAP.get(finding_type, {"owasp": None, "cwe": None})
+        return CLASSIFICATION_MAP.get(finding_type, {"owasp": "N/A", "cwe": "N/A"})
 
     def _save_findings(self, findings: list[dict], source_tool_key: str = "source_tool"):
         if not self.finding_repo or not findings:

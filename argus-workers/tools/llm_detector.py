@@ -220,12 +220,12 @@ If NOT vulnerable:
         Skip if:
         - Confidence is already high (> 0.7, doesn't need review)
         - Confidence is very low (< 0.3, too noisy, likely false positive)
-        - No payload or response evidence to analyze
+        - No response to analyze (replay failed)
         - Response is binary or empty
 
         Args:
             finding: Finding dictionary
-            response: HTTP response object
+            response: HTTP response object (fresh from _replay_request)
 
         Returns:
             True if this finding should be skipped
@@ -236,12 +236,9 @@ If NOT vulnerable:
         if confidence < 0.3:
             return True  # Too noisy, skip
 
-        evidence = finding.get("evidence", {})
-        if not evidence.get("payload") and not evidence.get("response"):
-            return True  # Nothing to analyze
-
         if not response:
             return True
+
         body = getattr(response, 'text', '')
         if not body:
             body = getattr(response, 'content', b'')

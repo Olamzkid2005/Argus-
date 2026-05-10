@@ -275,8 +275,8 @@ export PYTHONPATH="$PWD:$PYTHONPATH"
 export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())' 2>/dev/null || echo '')"
 # Remove stale env vars that might override Redis-stored settings
 # The LLMClient prefers env vars over Redis, so unset to force Redis lookup
-unset OPENAI_API_KEY 2>/dev/null || true
-unset LLM_API_KEY 2>/dev/null || true
+# OPENAI_API_KEY set from env.local for worker access 2>/dev/null || true
+# LLM_API_KEY set from env.local for worker access 2>/dev/null || true
 celery -A celery_app worker \
   --loglevel=info \
   --concurrency=8 \

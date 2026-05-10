@@ -43,7 +43,7 @@ def build_task_args(
         "report": [engagement_id],
         "repo_scan": [engagement_id, target, budget],
         "compliance_report": [engagement_id, kwargs.get("standard")],
-        "full_report": [engagement_id],
+        "full_report": [engagement_id, kwargs.get("report_id", "")],
         "asset_discovery": [engagement_id, target],
         "asset_risk_scoring": [engagement_id],
         "bugbounty_report": [

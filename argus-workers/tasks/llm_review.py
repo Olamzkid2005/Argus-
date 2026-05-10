@@ -46,7 +46,10 @@ def _get_llm_detector():
                     model=LLM_RESPONSE_ANALYSIS_MODEL,
                 )
         except ImportError as e:
-            logger.warning(f"LLMDetector not available: {e}")
+            logger.warning(f"LLMDetector not available (import error): {e}")
+            _llm_detector = None
+        except Exception as e:
+            logger.warning(f"LLMDetector not available: {type(e).__name__}: {e}")
             _llm_detector = None
     return _llm_detector
 
@@ -272,12 +275,12 @@ def _replay_request(endpoint: str, evidence: dict):
         timeout = 15
 
         payload = evidence.get("payload", "")
-        if payload:
-            # If there's a payload, send it as a query parameter
+        if payload and payload.strip():
             test_url = f"{endpoint}?q={payload}"
             resp = requests.get(test_url, headers=headers, timeout=timeout, allow_redirects=True)
         else:
-            # Simple GET
+            # No payload — still try to GET the endpoint for analysis
+            # This covers EXPOSED_SECRET, SERVER_INFO_DISCLOSURE, etc.
             resp = requests.get(endpoint, headers=headers, timeout=timeout, allow_redirects=True)
 
         return resp
