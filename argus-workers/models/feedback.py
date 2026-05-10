@@ -194,6 +194,10 @@ class FeedbackLearningLoop:
     def _get_finding_org_id(self, finding_id: str) -> str | None:
         """Get org_id from the finding's engagement chain.
 
+        Queries findings → engagements join. Returns None if the finding
+        or its engagement doesn't exist (e.g., race condition where verdict
+        arrives before the finding transaction commits).
+
         Args:
             finding_id: UUID of the finding
 
@@ -205,6 +209,17 @@ class FeedbackLearningLoop:
         try:
             conn = get_db().get_connection()
             cursor = conn.cursor()
+
+            # Verify finding exists first — fail fast with clear log
+            cursor.execute("SELECT 1 FROM findings WHERE id = %s", (finding_id,))
+            if cursor.fetchone() is None:
+                logger.warning(
+                    "Cannot update tool accuracy: finding %s does not exist "
+                    "(may not be committed yet)",
+                    finding_id,
+                )
+                return None
+
             cursor.execute(
                 """
                 SELECT e.org_id FROM findings f
@@ -214,7 +229,14 @@ class FeedbackLearningLoop:
                 (finding_id,),
             )
             row = cursor.fetchone()
-            return str(row[0]) if row else None
+            if row is None or row[0] is None:
+                logger.warning(
+                    "Cannot update tool accuracy: no org_id found for finding %s "
+                    "(engagement may not exist yet)",
+                    finding_id,
+                )
+                return None
+            return str(row[0])
         except Exception as e:
             logger.error("Failed to get org_id for finding %s: %s", finding_id, e)
             return None

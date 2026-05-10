@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from streaming import emit_thinking
+from streaming import emit_swarm_agent_started, emit_swarm_agent_action, emit_swarm_agent_complete, emit_swarm_merge_complete
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +83,7 @@ class IDORAgent(SpecialistAgent):
         )
 
     def run(self) -> list[dict]:
-        emit_thinking(
-            self.engagement_id,
-            "[IDOR] Activated — scanning for IDOR vulnerabilities",
-        )
+        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         # TODO: Implement IDOR-specific tool execution
         # 1. Arjun parameter discovery on API endpoints
         # 2. jwt_tool for token manipulation
@@ -112,10 +109,7 @@ class AuthAgent(SpecialistAgent):
         )
 
     def run(self) -> list[dict]:
-        emit_thinking(
-            self.engagement_id,
-            "[Auth] Activated — testing authentication mechanisms",
-        )
+        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         # TODO: Implement auth-specific tool execution
         # 1. jwt_tool checks on auth endpoints
         # 2. nuclei auth-related templates
@@ -140,10 +134,7 @@ class APIAgent(SpecialistAgent):
         )
 
     def run(self) -> list[dict]:
-        emit_thinking(
-            self.engagement_id,
-            "[API] Activated — scanning API endpoints",
-        )
+        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         # TODO: Implement API-specific tool execution
         # 1. arjun parameter discovery on API paths
         # 2. nuclei api-* tagged templates
@@ -202,11 +193,7 @@ class SwarmOrchestrator:
             [a.DOMAIN for a in active],
         )
 
-        emit_thinking(
-            active[0].engagement_id,
-            f"Multi-agent swarm activating: "
-            f"{', '.join(a.DOMAIN for a in active)}",
-        )
+        emit_swarm_agent_started(active[0].engagement_id, "swarm_orchestrator")
 
         all_findings: list[dict] = []
 
@@ -225,21 +212,33 @@ class SwarmOrchestrator:
                         domain,
                         len(findings),
                     )
+                    emit_swarm_agent_complete(
+                        active[0].engagement_id,
+                        domain,
+                        findings_count=len(findings),
+                    )
                     all_findings.extend(findings)
                 except Exception as e:
                     logger.error(
                         "Specialist %s failed: %s", domain, e
                     )
-                    emit_thinking(
+                    emit_swarm_agent_complete(
                         active[0].engagement_id,
-                        f"[{domain}] failed: {str(e)[:100]}",
+                        domain,
+                        findings_count=0,
                     )
 
         deduped = self._deduplicate(all_findings)
+        dedup_removed = len(all_findings) - len(deduped)
         logger.info(
             "Swarm: %d raw findings → %d after dedup",
             len(all_findings),
             len(deduped),
+        )
+        emit_swarm_merge_complete(
+            active[0].engagement_id,
+            total_findings=len(deduped),
+            dedup_removed=dedup_removed,
         )
 
         return deduped
