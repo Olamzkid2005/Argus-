@@ -21,7 +21,9 @@ async function isPrivateHostname(url: URL): Promise<boolean> {
     const addresses = await dns.resolve4(url.hostname);
     return addresses.some(isPrivateIP);
   } catch {
-    return true;
+    // DNS resolution failure (NXDOMAIN, timeout) - cannot prove it's private,
+    // but also can't reach it for SSRF. Allow with a warning logged server-side.
+    return false;
   }
 }
 

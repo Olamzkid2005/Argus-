@@ -80,8 +80,8 @@ from state_machine import EngagementStateMachine
 @app.task(
     bind=True,
     name="tasks.repo_scan.run_repo_scan",
-    soft_time_limit=600,
-    time_limit=1200,
+    soft_time_limit=2400,
+    time_limit=3600,
 )
 def run_repo_scan(
     self,

@@ -8,17 +8,12 @@ interface EnrichmentRequest {
   type: "url" | "domain" | "ip";
 }
 
-interface Finding {
-  type: string;
-  description: string;
-  severity: string;
-}
-
 /**
  * POST /api/system/enrichment
  *
  * Enriches an IOC (indicator of compromise) with threat intelligence.
- * Mock data — in production, proxy to Python backend enrichment service.
+ * NOTE: NVD/EPSS enrichment is not yet configured. This endpoint returns
+ * placeholder data while the backend enrichment service integration is pending.
  */
 export async function POST(req: Request) {
   await requireAuth();
@@ -41,25 +36,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const findings: Finding[] = [
-      {
-        type: "reputation",
-        description: `No known malicious activity for ${value}`,
-        severity: "info",
-      },
-    ];
-
-    const threat_level: "clean" | "low" | "medium" | "high" | "critical" = "clean";
-
     log.apiEnd("POST", "/api/system/enrichment", 200);
     return NextResponse.json({
       data: {
         ioc_value: value,
         ioc_type: type,
-        threat_level,
-        confidence: 0.95,
-        findings,
-        sources: ["virustotal", "abuseipdb", "shodan"],
+        status: "not_configured",
+        message: "NVD/EPSS enrichment service is not yet configured. Threat intelligence data will be available once the backend enrichment service is connected.",
+        findings: [],
+        sources: [],
+        available_sources: ["nvd", "epss", "virustotal", "abuseipdb", "shodan"],
       },
     });
   } catch (error) {

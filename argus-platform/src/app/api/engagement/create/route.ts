@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
       bugBounty,
     } = body;
 
+    // Default authorization proof if not provided (NOT NULL column)
+    const authorizationProof = authorization || "authorized_testing";
+
     // Default to "url" scan type if not specified
     const effectiveScanType = scanType || "url";
 
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest) {
           engagementId,
           session.user.orgId,
           targetUrl,
-          authorization,
+          authorizationProof,
           JSON.stringify(authorizedScope),
           "created",
           session.user.id,

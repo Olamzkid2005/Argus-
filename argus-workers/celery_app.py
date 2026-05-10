@@ -221,6 +221,28 @@ class BaseTask(app.Task):
             extra_context={"args": str(args), "kwargs": str(kwargs)},
         )
 
+        # Transition engagement to 'failed' when a task fails (catches SIGKILL/timeout too)
+        engagement_id = kwargs.get("engagement_id") if kwargs else None
+        if engagement_id:
+            try:
+                from database.connection import db_cursor
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT status FROM engagements WHERE id = %s",
+                        (engagement_id,),
+                    )
+                    row = cursor.fetchone()
+                    current_state = row[0] if row else "created"
+                if current_state not in ("complete", "failed"):
+                    from state_machine import EngagementStateMachine
+                    sm = EngagementStateMachine(
+                        engagement_id,
+                        current_state=current_state,
+                    )
+                    sm.safe_transition("failed", f"Task {self.name} failed: {exc}")
+            except Exception as e:
+                logger.warning("Failed to update engagement state on failure: %s", e)
+
         # Send to DLQ if not retryable
         if not classification.should_retry:
             try:
@@ -273,10 +295,11 @@ class BaseTask(app.Task):
         # Register with shutdown handler
         shutdown_handler.register_task(task_id)
 
-        # Update health metrics
+        # Update health metrics and send heartbeat
         try:
             monitor = get_health_monitor()
             monitor.increment_tasks()
+            monitor.send_heartbeat()
         except Exception as e:
             logger.warning("Failed to update health metrics: %s", e)
 

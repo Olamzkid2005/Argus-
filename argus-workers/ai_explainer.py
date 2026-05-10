@@ -471,7 +471,7 @@ Keep response under 500 tokens. Be factual and specific."""
 
     async def generate_embedding(self, text: str) -> list[float] | None:
         """
-        Generate embedding for text using OpenAI API.
+        Generate embedding for text using OpenAI API or OpenRouter.
 
         Args:
             text: Text to generate embedding for
@@ -504,6 +504,29 @@ Keep response under 500 tokens. Be factual and specific."""
                 pass
             except Exception as e:
                 logger.warning(f"LLM client embedding failed: {e}")
+
+        # Try OpenRouter embeddings endpoint (for sk-or- keys)
+        import os
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+        if api_key and api_key.startswith("sk-or-"):
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.post(
+                        "https://openrouter.ai/api/v1/embeddings",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+                            "X-Title": "Argus Pentest Platform",
+                        },
+                        json={"model": "openai/text-embedding-3-small", "input": text},
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["data"][0]["embedding"]
+            except Exception as e:
+                logger.warning(f"OpenRouter embedding failed: {e}")
 
         # Return placeholder embedding for testing
         logger.info("Using placeholder embedding (no API key configured)")

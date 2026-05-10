@@ -272,27 +272,43 @@ class Orchestrator:
         def _get_embedding(text: str) -> list[float] | None:
             nonlocal _llm_client
             api_key = None
+            model = "text-embedding-3-small"
             try:
                 if _llm_client is None:
                     from llm_client import LLMClient
                     _llm_client = LLMClient()
                 api_key = _llm_client.api_key
+                model = _llm_client.model if _llm_client else "text-embedding-3-small"
             except Exception:
                 pass
             if api_key:
                 try:
                     import httpx
+                    # Route through OpenRouter if using an OpenRouter key
+                    if api_key.startswith("sk-or-"):
+                        embedding_url = "https://openrouter.ai/api/v1/embeddings"
+                        embedding_model = "openai/text-embedding-3-small"
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+                            "X-Title": "Argus Pentest Platform",
+                        }
+                    else:
+                        embedding_url = "https://api.openai.com/v1/embeddings"
+                        embedding_model = "text-embedding-3-small"
+                        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                     resp = httpx.post(
-                        "https://api.openai.com/v1/embeddings",
-                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                        json={"model": "text-embedding-3-small", "input": text},
+                        embedding_url,
+                        headers=headers,
+                        json={"model": embedding_model, "input": text},
                         timeout=15,
                     )
                     if resp.status_code == 200:
                         data = resp.json()
                         return data["data"][0]["embedding"]
                 except Exception as e:
-                    logger.debug(f"OpenAI embedding API failed (non-fatal): {e}")
+                    logger.debug(f"Embedding API failed (non-fatal): {e}")
             from database.repositories.pgvector_repository import PGVectorRepository
             return PGVectorRepository()._generate_embedding_fallback(text)
 

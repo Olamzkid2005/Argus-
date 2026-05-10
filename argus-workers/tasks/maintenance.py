@@ -209,11 +209,12 @@ def refresh_views(self):
 
 @app.task(bind=True, name="tasks.maintenance.worker_health_check")
 def worker_health_check(self):
-    """Check worker health and cleanup dead workers"""
+    """Check worker health, send heartbeat, and cleanup dead workers"""
     from health_monitor import get_health_monitor
 
     try:
         monitor = get_health_monitor()
+        monitor.send_heartbeat()
         unhealthy = monitor.get_unhealthy_workers()
         cleaned = monitor.cleanup_dead_workers()
 

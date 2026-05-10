@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 @app.task(
     bind=True,
     name="tasks.recon.run_recon",
-    soft_time_limit=900,   # 15 minutes for long-running recon tools
-    time_limit=1200,        # 20 minutes hard limit
+    soft_time_limit=2400,   # 40 minutes for long-running recon tools
+    time_limit=3600,        # 60 minutes hard limit
 )
 def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None,
               agent_mode: bool = True, prev_engagement_id: str | None = None):

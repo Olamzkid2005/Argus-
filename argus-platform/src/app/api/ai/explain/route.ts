@@ -122,7 +122,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body: ExplainRequest = await request.json();
-    const { findings, model } = body;
+    let { findings, model } = body;
+
+    // Accept both finding_id (single string), finding_ids (array), and findings (array) formats
+    if (!findings || !Array.isArray(findings)) {
+      const rawBody = body as unknown as Record<string, unknown>;
+      const findingIds = rawBody.finding_ids || rawBody.finding_id;
+      if (findingIds) {
+        if (Array.isArray(findingIds)) {
+          findings = findingIds.map((id: string) => ({ id } as Finding));
+        } else if (typeof findingIds === "string") {
+          findings = [{ id: findingIds } as Finding];
+        }
+      }
+    }
 
     if (!findings || !Array.isArray(findings) || findings.length === 0) {
       return NextResponse.json({ error: "No findings provided" }, { status: 400 });

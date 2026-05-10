@@ -62,7 +62,8 @@ export async function GET(req: NextRequest) {
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json({ error: "Failed to fetch activity feed" }, { status: 500 });
+    const detail = process.env.NODE_ENV === "development" ? err.message : "Failed to fetch activity feed";
+    return NextResponse.json({ error: detail }, { status: 500 });
   }
 }
 

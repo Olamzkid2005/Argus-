@@ -46,11 +46,11 @@ export async function GET() {
       redisStatus = { status: "degraded", detail: "Connection failed" };
     }
 
-    // Check worker health via Redis queue inspection
+    // Check worker health via Redis heartbeat inspection
     try {
       const redis = (await import("@/lib/redis")).default;
       const queueLength = await redis.llen("argus:queue:celery");
-      const workerKeys = await redis.keys("argus:worker:*");
+      const workerKeys = await redis.keys("worker:health:*");
       if (workerKeys.length === 0) {
         workerStatus = { status: "degraded", detail: "No workers registered" };
       } else {
