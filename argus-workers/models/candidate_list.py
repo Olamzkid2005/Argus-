@@ -122,17 +122,42 @@ class CandidateList:
 def _map_tool_to_source(tool_name: str) -> CandidateSource:
     """Map a tool name to its CandidateSource enum value."""
     mapping = {
+        # Confirmed / high-reliability
         "nuclei": CandidateSource.NUCLEI_CVE,
+        "web_scanner": CandidateSource.WEB_SCANNER,
+        # Injection / SAST tools
         "dalfox": CandidateSource.DALFOX,
         "sqlmap": CandidateSource.SQLMAP,
-        "web_scanner": CandidateSource.WEB_SCANNER,
-        "custom_rule_engine": CandidateSource.CUSTOM_RULE,
+        "jwt_tool": CandidateSource.WEB_SCANNER,
+        "commix": CandidateSource.WEB_SCANNER,
+        # SAST tools
+        "semgrep": CandidateSource.CUSTOM_RULE,
+        "gitleaks": CandidateSource.CUSTOM_RULE,
+        "trufflehog": CandidateSource.CUSTOM_RULE,
+        "bandit": CandidateSource.CUSTOM_RULE,
+        "brakeman": CandidateSource.CUSTOM_RULE,
+        "gosec": CandidateSource.CUSTOM_RULE,
+        "eslint": CandidateSource.CUSTOM_RULE,
+        "phpcs": CandidateSource.CUSTOM_RULE,
+        "spotbugs": CandidateSource.CUSTOM_RULE,
+        "trivy": CandidateSource.CUSTOM_RULE,
+        # Misconfiguration / misc
+        "nikto": CandidateSource.NUCLEI_MISC,
+        # Recon tools
         "httpx": CandidateSource.RECON_ENDPOINT,
         "katana": CandidateSource.RECON_ENDPOINT,
         "ffuf": CandidateSource.RECON_ENDPOINT,
-        "nikto": CandidateSource.NUCLEI_MISC,
         "arjun": CandidateSource.RECON_ENDPOINT,
-        "jwt_tool": CandidateSource.WEB_SCANNER,
-        "commix": CandidateSource.WEB_SCANNER,
+        "whatweb": CandidateSource.RECON_ENDPOINT,
+        "naabu": CandidateSource.RECON_ENDPOINT,
+        "amass": CandidateSource.RECON_ENDPOINT,
+        "subfinder": CandidateSource.RECON_ENDPOINT,
+        "gospider": CandidateSource.RECON_ENDPOINT,
+        "gau": CandidateSource.RECON_ENDPOINT,
+        "waybackurls": CandidateSource.RECON_ENDPOINT,
+        "alterx": CandidateSource.RECON_ENDPOINT,
+        "wpscan": CandidateSource.NUCLEI_MISC,
+        "testssl": CandidateSource.NUCLEI_MISC,
+        "custom_rule_engine": CandidateSource.CUSTOM_RULE,
     }
     return mapping.get(tool_name, CandidateSource.RECON_ENDPOINT)

@@ -46,6 +46,9 @@ class IntelligenceEngine:
         When time is short, confirmed findings (nuclei CVE, web_scanner verified)
         get analysis budget first. Noisy candidates (nikto, ffuf) processed last.
         """
+        if not findings or not isinstance(findings, list):
+            return findings or []
+
         from tool_definitions import TOOLS, SignalQuality
 
         def priority(f: dict) -> int:

@@ -20,6 +20,7 @@ from streaming import emit_tool_start
 from tools.web_scanner import WebScanner
 
 from .utils import get_nuclei_templates_path
+from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +30,19 @@ def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] |
     Accepts either a ReconContext or raw tech_stack/target params.
     Returns True if tool should run, False if gate not satisfied.
     """
-    from tool_definitions import TOOLS
+    from tool_definitions import TOOLS, evaluate_gate
 
     tool_def = TOOLS.get(tool_name)
     if not tool_def or not tool_def.requires:
         return True  # no gate → always run
 
-    req = tool_def.requires
-
-    # Build a simple adapter object with the fields evaluate_gate checks
-    class _Ctx:
-        pass
-    ctx = _Ctx()
-    ctx.tech_stack = tech_stack or []
-    ctx.target_url = target
-    ctx.has_api = getattr(recon_context, "has_api", False) if recon_context else False
-    ctx.has_login_page = getattr(recon_context, "has_login_page", False) if recon_context else False
-    ctx.has_file_upload = getattr(recon_context, "has_file_upload", False) if recon_context else False
-
-    from tool_definitions import evaluate_gate
+    ctx = SimpleNamespace(
+        tech_stack=tech_stack or [],
+        target_url=target,
+        has_api=getattr(recon_context, "has_api", False) if recon_context else False,
+        has_login_page=getattr(recon_context, "has_login_page", False) if recon_context else False,
+        has_file_upload=getattr(recon_context, "has_file_upload", False) if recon_context else False,
+    )
     return evaluate_gate(tool_name, ctx)
 
 NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
@@ -349,15 +344,5 @@ def execute_scan_tools(
                     logger.debug("Browser scanner worker not found, skipping")
             except Exception as e:
                 logger.warning(f"Browser scanner outer error: {e}")
-
-    # Build structured CandidateList from raw findings
-    try:
-        from models.candidate_list import CandidateList
-        candidate_list = CandidateList.from_findings(targets[0] if targets else "", all_findings)
-        # Attach to findings for agent consumption
-        for f in all_findings:
-            f["_candidate_list"] = candidate_list
-    except Exception as e:
-        logger.warning(f"Failed to build CandidateList: {e}")
 
     return all_findings

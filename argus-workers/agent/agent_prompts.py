@@ -517,6 +517,9 @@ def build_tech_aware_system_prompt(recon_context) -> str:
     Called instead of the static TOOL_SELECTION_SYSTEM_PROMPT when a
     ReconContext with tech_stack is available.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     base = TOOL_SELECTION_SYSTEM_PROMPT
 
     if not recon_context or not recon_context.tech_stack:
@@ -535,11 +538,17 @@ def build_tech_aware_system_prompt(recon_context) -> str:
     tech_section += "\n".join(highlights[:3])  # max 3 highlights per prompt
     tech_section += "\n"
 
-    # Insert before the tool catalogue
-    return base.replace(
-        "TOOL CATALOGUE — WEB APPLICATION SCAN",
-        tech_section + "\nTOOL CATALOGUE — WEB APPLICATION SCAN"
+    catalogue_header = "TOOL CATALOGUE — WEB APPLICATION SCAN"
+    result = base.replace(
+        catalogue_header,
+        tech_section + "\n" + catalogue_header
     )
+    if result == base:
+        logger.warning(
+            "Tech threat section not injected — catalogue header mismatch "
+            "in TOOL_SELECTION_SYSTEM_PROMPT"
+        )
+    return result
 
 
 def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
@@ -643,31 +652,42 @@ def _build_target_context_paragraph(profile: dict) -> str:
     confirmed = profile.get("confirmed_finding_types", [])[:5]
     if confirmed:
         parts.append(
-            f"Past scans confirmed: {', '.join(confirmed)}. "
+            f"Past scans confirmed: "
+            f"{_sanitize_for_prompt(', '.join(confirmed))}. "
             f"Focus on these first."
         )
 
     hot = profile.get("high_value_endpoints", [])[:4]
     if hot:
         parts.append(
-            f"Endpoints that previously had findings: {', '.join(hot)}. "
+            f"Endpoints that previously had findings: "
+            f"{_sanitize_for_prompt(', '.join(hot))}. "
             f"Revisit these."
         )
 
-    best = [t["tool"] for t in profile.get("best_tools", [])[:3]]
+    best = [
+        t["tool"] for t in profile.get("best_tools", [])[:3]
+        if isinstance(t, dict) and "tool" in t
+    ]
     if best:
-        parts.append(f"Tools that found real issues: {', '.join(best)}.")
+        parts.append(
+            f"Tools that found real issues: "
+            f"{_sanitize_for_prompt(', '.join(best))}."
+        )
 
     noisy = profile.get("noisy_tools", [])[:3]
     if noisy:
         parts.append(
-            f"Tools that were noisy/FP on this target: {', '.join(noisy)}. "
+            f"Tools that were noisy/FP on this target: "
+            f"{_sanitize_for_prompt(', '.join(noisy))}. "
             f"Skip these unless nothing else works."
         )
 
     tech = profile.get("known_tech_stack", [])[:5]
     if tech:
-        parts.append(f"Detected stack: {', '.join(tech)}.")
+        parts.append(
+            f"Detected stack: {_sanitize_for_prompt(', '.join(tech))}."
+        )
 
     return "=== WHAT WE KNOW ABOUT THIS TARGET ===\n" + " ".join(parts)
 
