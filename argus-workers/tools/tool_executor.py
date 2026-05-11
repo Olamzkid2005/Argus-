@@ -146,7 +146,9 @@ class ToolExecutor:
 
         while attempt < max_retries:
             try:
-                result = self.tool_runner.run(tool_name, args, timeout)
+                # Use circuit-breaker-wrapped execution so repeatedly failing tools
+                # are short-circuited instead of wasting time on retries.
+                result = self.tool_runner.run_with_circuit_breaker(tool_name, args, timeout)
 
                 if result.success:
                     return result
