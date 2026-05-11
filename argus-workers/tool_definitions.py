@@ -730,10 +730,12 @@ def evaluate_gate(tool_name: str, recon_context) -> bool:
         for signal in req.recon_signals:
             attr_val = getattr(recon_context, signal, None)
             if attr_val is None:
-                return True  # context doesn't have this signal → don't gate
-            if attr_val:
-                return True  # any signal present = run
-        return False  # all signals checked and none present = skip
+                # Context doesn't have this signal — permissive: don't gate on it
+                continue
+            if not attr_val:
+                # All required signals must be truthy (AND logic)
+                return False
+        return True  # all present signals satisfied
 
     if req.target_scheme:
         target = getattr(recon_context, "target_url", "") or ""
