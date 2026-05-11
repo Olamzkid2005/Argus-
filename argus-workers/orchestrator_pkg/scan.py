@@ -22,6 +22,12 @@ from tools.web_scanner import WebScanner
 from .utils import get_nuclei_templates_path
 from types import SimpleNamespace
 
+# Module-level flag to avoid repeated import inside the per-target loop
+try:
+    from feature_flags import is_enabled as _feature_enabled
+except ImportError:
+    _feature_enabled = lambda name, default=False: False
+
 logger = logging.getLogger(__name__)
 
 def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] | None = None, target: str = "") -> bool:
@@ -29,6 +35,10 @@ def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] |
 
     Accepts either a ReconContext or raw tech_stack/target params.
     Returns True if tool should run, False if gate not satisfied.
+
+    For the gate check we build a context that includes all ReconContext
+    attributes (not just a hardcoded subset), so new recon_signals added
+    to tool definitions are automatically supported.
     """
     from tool_definitions import TOOLS, evaluate_gate
 
@@ -36,13 +46,22 @@ def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] |
     if not tool_def or not tool_def.requires:
         return True  # no gate → always run
 
-    ctx = SimpleNamespace(
-        tech_stack=tech_stack or [],
-        target_url=target,
-        has_api=getattr(recon_context, "has_api", False) if recon_context else False,
-        has_login_page=getattr(recon_context, "has_login_page", False) if recon_context else False,
-        has_file_upload=getattr(recon_context, "has_file_upload", False) if recon_context else False,
-    )
+    # Start with tech_stack and target_url
+    gate_ctx = {
+        "tech_stack": tech_stack or [],
+        "target_url": target,
+    }
+    # Dynamically copy all ReconContext attributes (supports any recon_signal)
+    if recon_context is not None:
+        for attr in dir(recon_context):
+            if not attr.startswith("_"):
+                gate_ctx[attr] = getattr(recon_context, attr)
+    # Ensure boolean signals default to False
+    for signal in tool_def.requires.recon_signals or []:
+        if signal not in gate_ctx:
+            gate_ctx[signal] = False
+
+    ctx = SimpleNamespace(**gate_ctx)
     return evaluate_gate(tool_name, ctx)
 
 NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
@@ -58,7 +77,9 @@ TECH_TAG_MAP = {
     'nginx': ['nginx'],
     'java': ['java', 'spring', 'tomcat'],
     'node': ['nodejs', 'express'],
-    'react': ['javascript'],
+    'react': ['javascript', 'react', 'reactjs'],
+    'angular': ['javascript', 'angular'],
+    'vue': ['javascript', 'vue'],
     'django': ['python', 'django'],
     'flask': ['python', 'flask'],
     'mysql': ['mysql'],
@@ -152,16 +173,20 @@ def execute_scan_tools(
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     _skip = set(skip_tools or [])
 
+    # Guard against None targets list
+    if not targets:
+        logger.warning("execute_scan_tools called with empty/None targets list")
+        return all_findings
+
     # Auto-update nuclei templates once before scanning (not per-target)
-    try:
-        from feature_flags import is_enabled
-        if is_enabled("nuclei_templates_auto_update"):
+    if _feature_enabled("nuclei_templates_auto_update"):
+        try:
             from tools.update_nuclei_templates import (
                 update_nuclei_templates as _update_templates,
             )
             _update_templates(timeout=120)
-    except Exception as e:
-        logger.warning(f"Nuclei template update failed (scan continues): {e}")
+        except Exception as e:
+            logger.warning(f"Nuclei template update failed (scan continues): {e}")
 
     # Cache nuclei templates path once before the loop
     nuclei_templates = get_nuclei_templates_path()
@@ -209,8 +234,21 @@ def execute_scan_tools(
 
             def _on_nuclei_line(line: str):
                 """Callback for streaming nuclei output."""
+                # Strip trailing whitespace but skip empty lines
+                line = line.strip()
+                if not line:
+                    return
+                if not line.startswith("{"):
+                    # Nuclei may output non-JSON progress lines — skip them silently
+                    return
                 try:
                     finding = json.loads(line)
+                except json.JSONDecodeError:
+                    # Malformed JSON line — skip, nuclei occasionally emits
+                    # partial lines during template compilation warnings
+                    logger.log(5, f"Nuclei skipped malformed JSON: {line[:200]}")
+                    return
+                try:
                     from parsers.schemas.nuclei_schema import validate_nuclei_finding
                     validated = validate_nuclei_finding(finding)
                     if validated:

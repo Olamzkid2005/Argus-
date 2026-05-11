@@ -121,6 +121,11 @@ PHASES: list[Phase] = [
 # State transitions
 # ═══════════════════════════════════════════════════════════════
 
+# NOTE: This dict MUST match state_machine.py EngagementStateMachine.TRANSITIONS.
+# If you add/remove a transition, update both files. They are intentionally
+# kept as separate declarations (not an import from state_machine) to avoid
+# circular imports — phases.py is imported by frontend build tooling that
+# does not import the full state machine module.
 TRANSITIONS: dict[str, list[str]] = {
     "created": ["recon", "failed"],
     "recon": ["scanning", "awaiting_approval", "failed", "paused"],

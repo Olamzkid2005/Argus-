@@ -677,12 +677,11 @@ class Orchestrator:
         self, targets: list[str], recon_context, findings: list[dict],
     ) -> list[dict]:
         tech_stack = recon_context.tech_stack if recon_context else []
-        tech_str = " ".join(tech_stack).lower()
-        spa_frameworks = {"react", "vue", "angular", "next", "nuxt", "svelte"}
-        if not any(f in tech_str for f in spa_frameworks):
+        # Use the shared SPA detection from browser_scanner module
+        from tools.browser_scanner import is_spa_target, scan as run_browser_scan
+        if not is_spa_target(tech_stack):
             return findings
         try:
-            from tools.browser_scanner import scan as run_browser_scan
             for target in targets:
                 emit_thinking(self.engagement_id, f"SPA detected — running browser scanner for {target}")
                 browser_findings = run_browser_scan(target, tech_stack=tech_stack)
@@ -1104,7 +1103,25 @@ class Orchestrator:
             )
 
     def _get_scan_state(self) -> str:
-        return "recon"
+        """Return the current engagement state by querying the state machine.
+
+        Called to determine the from_state for recon→scanning transitions.
+        Queries the database so it remains correct even if state evolves.
+        """
+        from database.connection import connect
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            return "recon"
+        try:
+            conn = connect(db_url)
+            cursor = conn.cursor()
+            cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
+            row = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return row[0] if row else "recon"
+        except Exception:
+            return "recon"
 
     def _log_timeout_event(self, elapsed_seconds: float):
         logger.warning(f"Engagement {self.engagement_id} exceeded hard timeout. "
