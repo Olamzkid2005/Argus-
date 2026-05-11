@@ -152,6 +152,23 @@ def execute_scan_tools(
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     _skip = set(skip_tools or [])
 
+    # Auto-update nuclei templates once before scanning (not per-target)
+    try:
+        from feature_flags import is_enabled
+        if is_enabled("nuclei_templates_auto_update"):
+            from tools.update_nuclei_templates import (
+                update_nuclei_templates as _update_templates,
+            )
+            _update_templates(timeout=120)
+    except Exception as e:
+        logger.warning(f"Nuclei template update failed (scan continues): {e}")
+
+    # Cache nuclei templates path once before the loop
+    nuclei_templates = get_nuclei_templates_path()
+    templates_exist = nuclei_templates.exists() and any(
+        nuclei_templates.rglob("*.yaml")
+    )
+
     for target in targets:
         # Skip None/empty targets
         if not target:
@@ -160,23 +177,6 @@ def execute_scan_tools(
         # Skip if target is unreachable (DNS NXDOMAIN/SERVFAIL only)
         if not _is_reachable(target):
             continue
-
-        # Auto-update nuclei templates if feature flag is enabled
-        try:
-            from feature_flags import is_enabled
-            if is_enabled("nuclei_templates_auto_update"):
-                from tools.update_nuclei_templates import (
-                    update_nuclei_templates as _update_templates,
-                )
-                _update_templates(timeout=120)
-        except Exception as e:
-            logger.warning(f"Nuclei template update failed (scan continues): {e}")
-
-        # Get local nuclei templates path
-        nuclei_templates = get_nuclei_templates_path()
-        templates_exist = nuclei_templates.exists() and any(
-            nuclei_templates.rglob("*.yaml")
-        )
 
         # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:
