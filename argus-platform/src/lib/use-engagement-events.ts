@@ -192,14 +192,6 @@ export function useEngagementEvents(
       };
 
       eventSourceRef.current = source;
-
-      // Handle abort (e.g., React strict mode double-mount)
-      _registerCleanup(() => {
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
-          eventSourceRef.current = null;
-        }
-      });
     } catch (err) {
       // EventSource constructor threw — fall back to polling
       log.wsError("SSE init failed, falling back to polling", {
@@ -214,11 +206,6 @@ export function useEngagementEvents(
   // Track consecutive errors for backoff
   const consecutiveErrorsRef = useRef(0);
   const maxErrorsBeforeStop = 5;
-  const cleanupFnsRef = useRef<Array<() => void>>([]);
-
-  function _registerCleanup(fn: () => void) {
-    cleanupFnsRef.current.push(fn);
-  }
 
   // ── Polling fallback ──
   const fetchEvents = useCallback(async () => {
@@ -354,7 +341,6 @@ export function useEngagementEvents(
         eventSourceRef.current = null;
       }
       stopPolling();
-      cleanupFnsRef.current = [];
     };
   }, [enabled, startSse, startPollingFallback, stopPolling]);
 

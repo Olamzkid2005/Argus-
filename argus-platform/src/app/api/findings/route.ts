@@ -155,10 +155,10 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      // Add cache headers forpublic caching (findings don't change often)
+      // Findings change frequently during active scanning — prevent caching of stale data
       response.headers.set(
         "Cache-Control",
-        "public, s-maxage=60, stale-while-revalidate=120",
+        "private, no-cache, no-store, must-revalidate",
       );
       response.headers.set("X-Hits", result.rows.length.toString());
 
