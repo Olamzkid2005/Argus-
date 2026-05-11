@@ -3,8 +3,13 @@ Celery tasks for scanning phase
 
 Requirements: 4.3, 4.4, 20.1, 20.2, 20.3
 """
+import os
+import logging
+
 from celery_app import app
 from tasks.base import task_context
+
+logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=2400, time_limit=3600)
@@ -13,12 +18,13 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
     Execute scanning phase for an engagement
     """
     # Load recon context from Redis for agent mode dispatch
-    redis_url = None  # resolved inside task_context
-    import os
-
     from tasks.utils import load_recon_context
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    recon_context = load_recon_context(engagement_id, redis_url)
+    try:
+        recon_context = load_recon_context(engagement_id, redis_url)
+    except Exception as e:
+        logger.error("Failed to load recon context for engagement=%s: %s", engagement_id, e, exc_info=True)
+        recon_context = None
 
     with task_context(self, engagement_id, "scan",
                       job_extra={"targets": targets, "budget": budget, "agent_mode": agent_mode,
@@ -29,11 +35,14 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
 
         ctx.state.transition("analyzing", "Scan complete")
 
-        analyze_task = app.send_task(
-            "tasks.analyze.run_analysis",
-            args=[engagement_id, budget, ctx.trace_id],
-        )
-        result["analysis_task_id"] = analyze_task.id
+        try:
+            analyze_task = app.send_task(
+                "tasks.analyze.run_analysis",
+                args=[engagement_id, budget, ctx.trace_id],
+            )
+            result["analysis_task_id"] = analyze_task.id
+        except Exception as e:
+            logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
 
         return result
 

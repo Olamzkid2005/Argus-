@@ -46,8 +46,11 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         except Exception as e:
             logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
-        app.send_task('tasks.scan.run_scan',
-                      args=[engagement_id, [target], budget, ctx.trace_id, agent_mode])
+        try:
+            app.send_task('tasks.scan.run_scan',
+                          args=[engagement_id, [target], budget, ctx.trace_id, agent_mode])
+        except Exception as e:
+            logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
 
         return result
 
@@ -64,9 +67,16 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         with task_context(self, engagement_id, "recon_expand",
                           job_extra={"target": None, "targets": [], "budget": budget},
                           trace_id=trace_id, current_state="recon") as ctx:
+            # Chain through valid transitions: recon → scanning → analyzing → reporting
+            # Direct recon → reporting is invalid; each step updates the state machine's current_state
+            ctx.state.transition("scanning", "No additional targets — advancing to scan")
+            ctx.state.transition("analyzing", "No additional targets — advancing to analyze")
             ctx.state.transition("reporting", "No additional targets — advancing to report")
-            app.send_task('tasks.report.generate_report',
-                          args=[engagement_id, ctx.trace_id, budget])
+            try:
+                app.send_task('tasks.report.generate_report',
+                              args=[engagement_id, ctx.trace_id, budget])
+            except Exception as e:
+                logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
         return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets", "next_state": "reporting"}
 
     with task_context(self, engagement_id, "recon_expand",
@@ -88,6 +98,9 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                 logger.warning("Failed to save expanded recon context: %s", e)
 
         ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
-        app.send_task('tasks.scan.run_scan', args=[engagement_id, valid_targets, budget, ctx.trace_id])
+        try:
+            app.send_task('tasks.scan.run_scan', args=[engagement_id, valid_targets, budget, ctx.trace_id])
+        except Exception as e:
+            logger.error("Failed to enqueue scan after expand for engagement=%s: %s", engagement_id, e, exc_info=True)
         return result
 
