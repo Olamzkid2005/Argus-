@@ -27,9 +27,6 @@ function logMsg(level: LogLevel, category: string, ...args: unknown[]): void {
   }
 
   switch (level) {
-    case 'error':
-      console.error(timestamp, message);
-      break;
     case 'warn':
       console.warn(timestamp, message);
       break;
@@ -46,42 +43,71 @@ function logMsg(level: LogLevel, category: string, ...args: unknown[]): void {
 // ============================================================
 const pageLog = {
   mount: (name: string) => logMsg('info', 'Page', `Mount: ${name}`),
+  pageMount: (name: string) => logMsg('info', 'Page', `Mount: ${name}`),
   unmount: (name: string) => logMsg('info', 'Page', `Unmount: ${name}`),
+  pageUnmount: (name: string) => logMsg('info', 'Page', `Unmount: ${name}`),
   error: (name: string, error: unknown) => logMsg('error', 'Page', `${name} error:`, error),
 };
 
 // ============================================================
 // API routes
 // ============================================================
-const apiLog = {
-  start: (method: string, path: string, params?: Record<string, unknown>) =>
-    logMsg('info', 'API', `${method} ${path}`, params ? `params=${JSON.stringify(params)}` : ''),
-  end: (method: string, path: string, status: number, durationMs?: number, details?: Record<string, unknown>) => {
-    const dur = durationMs !== undefined ? ` (${durationMs}ms)` : '';
-    logMsg(status >= 400 ? 'error' : 'info', 'API', `${method} ${path} -> ${status}${dur}`, details ?? '');
-  },
-  error: (method: string, path: string, error: unknown, durationMs?: number) => {
-    const dur = durationMs !== undefined ? ` (${durationMs}ms)` : '';
-    logMsg('error', 'API', `${method} ${path} -> ERROR${dur}:`, error);
-  },
+type ApiLogFn = {
+  (method: string, path: string, params?: Record<string, unknown>): void;
+  start: (method: string, path: string, params?: Record<string, unknown>) => void;
+  end: (method: string, path: string, status: number, durationMs?: number, details?: Record<string, unknown>) => void;
+  error: (method: string, path: string, error: unknown, durationMs?: number) => void;
 };
+
+const apiLog: ApiLogFn = Object.assign(
+  // Direct call: log.api(method, path, params) — shorthand for start
+  (method: string, path: string, params?: Record<string, unknown>) =>
+    logMsg('info', 'API', `${method} ${path}`, params ? `params=${JSON.stringify(params)}` : ''),
+  {
+    start: (method: string, path: string, params?: Record<string, unknown>) =>
+      logMsg('info', 'API', `${method} ${path}`, params ? `params=${JSON.stringify(params)}` : ''),
+    end: (method: string, path: string, status: number, durationMs?: number, details?: Record<string, unknown>) => {
+      const dur = durationMs !== undefined ? ` (${durationMs}ms)` : '';
+      logMsg(status >= 400 ? 'error' : 'info', 'API', `${method} ${path} -> ${status}${dur}`, details ?? '');
+    },
+    error: (method: string, path: string, error: unknown, durationMs?: number) => {
+      const dur = durationMs !== undefined ? ` (${durationMs}ms)` : '';
+      logMsg('error', 'API', `${method} ${path} -> ERROR${dur}:`, error);
+    },
+  },
+);
 
 // ============================================================
 // Auth
 // ============================================================
-const authLog = {
-  login: (provider: string, success: boolean, details?: Record<string, unknown>) =>
-    logMsg(success ? 'info' : 'error', 'Auth', `Login ${success ? 'OK' : 'FAILED'} via ${provider}`, details ?? ''),
-  signup: (success: boolean, details?: Record<string, unknown>) =>
-    logMsg(success ? 'info' : 'error', 'Auth', `Signup ${success ? 'OK' : 'FAILED'}`, details ?? ''),
-  logout: () => logMsg('info', 'Auth', 'Logout'),
-  tokenRefresh: (success: boolean) =>
-    logMsg(success ? 'debug' : 'warn', 'Auth', `Token refresh ${success ? 'OK' : 'FAILED'}`),
-  session: (event: string, details?: Record<string, unknown>) =>
-    logMsg('info', 'Auth', event, details ?? ''),
-  error: (context: string, error: unknown) =>
-    logMsg('error', 'Auth', `${context}:`, error),
+type AuthLogFn = {
+  (message: string, details?: Record<string, unknown>): void;
+  login: (provider: string, success: boolean, details?: Record<string, unknown>) => void;
+  signup: (success: boolean, details?: Record<string, unknown>) => void;
+  logout: () => void;
+  tokenRefresh: (success: boolean) => void;
+  session: (event: string, details?: Record<string, unknown>) => void;
+  error: (context: string, error: unknown) => void;
 };
+
+const authLog: AuthLogFn = Object.assign(
+  // Direct call: log.auth("message") — shorthand for session
+  (message: string, details?: Record<string, unknown>) =>
+    logMsg('info', 'Auth', message, details ?? ''),
+  {
+    login: (provider: string, success: boolean, details?: Record<string, unknown>) =>
+      logMsg(success ? 'info' : 'error', 'Auth', `Login ${success ? 'OK' : 'FAILED'} via ${provider}`, details ?? ''),
+    signup: (success: boolean, details?: Record<string, unknown>) =>
+      logMsg(success ? 'info' : 'error', 'Auth', `Signup ${success ? 'OK' : 'FAILED'}`, details ?? ''),
+    logout: () => logMsg('info', 'Auth', 'Logout'),
+    tokenRefresh: (success: boolean) =>
+      logMsg(success ? 'debug' : 'warn', 'Auth', `Token refresh ${success ? 'OK' : 'FAILED'}`),
+    session: (event: string, details?: Record<string, unknown>) =>
+      logMsg('info', 'Auth', event, details ?? ''),
+    error: (context: string, error: unknown) =>
+      logMsg('error', 'Auth', `${context}:`, error),
+  },
+);
 
 // ============================================================
 // Database
@@ -261,6 +287,22 @@ export const log = {
   error: genericLog.error,
   warn: genericLog.warn,
   info: genericLog.info,
+
+  // Backward compatibility — wrappers for old API
+  pageMount: (name: string) => pageLog.mount(name),
+  pageUnmount: (name: string) => pageLog.unmount(name),
+  apiEnd: (method: string, path: string, statusOrDetails?: number | Record<string, unknown>, details?: Record<string, unknown>) => {
+    if (typeof statusOrDetails === 'number') {
+      apiLog.end(method, path, statusOrDetails, undefined, details);
+    } else {
+      apiLog.end(method, path, 200, undefined, statusOrDetails);
+    }
+  },
+  wsEvent: (type: string, data?: Record<string, unknown>) => wsLog.event(type, data),
+  wsError: (error: string, details?: Record<string, unknown>) => logMsg('error', 'WS', error, details ?? ''),
+  wsConnect: (id?: string) => wsLog.connect(id),
+  wsDisconnect: (id?: string) => wsLog.disconnect(id),
+  authError: (error: string, details?: Record<string, unknown>) => logMsg('error', 'Auth', error, details ?? ''),
 } as const;
 
 export type Logger = typeof log;
