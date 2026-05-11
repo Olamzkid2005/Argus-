@@ -77,6 +77,10 @@ class PGVectorRepository:
             logger.warning("pgvector not available, skipping embedding storage")
             return False
 
+        if not isinstance(embedding, list) or not all(isinstance(v, (int, float)) for v in embedding):
+            logger.error("Invalid embedding: must be a list of numeric values")
+            return False
+
         if len(embedding) != self.EMBEDDING_DIMENSIONS:
             logger.error(
                 f"Invalid embedding dimensions: {len(embedding)} "

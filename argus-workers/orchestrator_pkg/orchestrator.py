@@ -282,6 +282,9 @@ class Orchestrator:
         _pgvector = None
         _llm_client = None
 
+        def _is_valid_embedding(emb: list) -> bool:
+            return isinstance(emb, list) and len(emb) > 0 and all(isinstance(v, (int, float)) for v in emb)
+
         def _get_embedding(text: str) -> list[float] | None:
             nonlocal _llm_client
             api_key = None
@@ -333,7 +336,7 @@ class Orchestrator:
             if not _pgvector.check_pgvector_available():
                 return None
             embedding = _get_embedding(text)
-            if not embedding:
+            if not embedding or not _is_valid_embedding(embedding):
                 return None
             try:
                 from database.connection import db_cursor
@@ -437,7 +440,7 @@ class Orchestrator:
                         try:
                             emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
                             embedding = _get_embedding(emb_text)
-                            if embedding:
+                            if embedding and _is_valid_embedding(embedding):
                                 from database.repositories.pgvector_repository import (
                                     PGVectorRepository,
                                 )
