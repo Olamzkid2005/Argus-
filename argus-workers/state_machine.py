@@ -67,6 +67,9 @@ class EngagementStateMachine:
         self._db_conn_string = db_connection_string
         self._external_conn = connection
         self.current_state = current_state
+        # Optional websocket publisher — when set, every transition() also emits
+        # a frontend event so the orchestrator doesn't need duplicate publish calls.
+        self._ws_publisher = None
 
         if current_state not in self.STATES:
             raise ValueError(f"Invalid state: {current_state}")
@@ -120,6 +123,20 @@ class EngagementStateMachine:
 
         # Update current state
         self.current_state = new_state
+
+        # Notify frontend via websocket publisher if configured.
+        # This ensures ALL state changes (even those from task context) are
+        # published, preventing the orchestrator ↔ state machine divergence.
+        if self._ws_publisher:
+            try:
+                self._ws_publisher.publish_state_transition(
+                    engagement_id=self.engagement_id,
+                    from_state=old_state,
+                    to_state=new_state,
+                    reason=reason or f"Transition to {new_state}",
+                )
+            except Exception:
+                logger.debug("Failed to publish state transition for %s", self.engagement_id)
 
     def _persist_state_and_budget(self, from_state: str, to_state: str, reason: str):
         """
@@ -296,6 +313,22 @@ class EngagementStateMachine:
             )
             conn.commit()
             self.current_state = final_state
+
+            # Notify frontend of all transitions in the chain
+            if self._ws_publisher:
+                current = self.current_state
+                for new_state, reason in reversed(states):
+                    from_state = states[states.index((new_state, reason)) - 1][0] if states.index((new_state, reason)) > 0 else "created"
+                    try:
+                        self._ws_publisher.publish_state_transition(
+                            engagement_id=self.engagement_id,
+                            from_state=from_state,
+                            to_state=new_state,
+                            reason=reason,
+                        )
+                    except Exception:
+                        logger.debug("Failed to publish chain transition for %s", self.engagement_id)
+
             return final_state
         except Exception:
             if conn:

@@ -114,6 +114,11 @@ def task_context(
                     db_connection_string=db_conn_string,
                     current_state=current_state or _get_engagement_state(engagement_id, db_conn_string),
                 )
+                # Wire the websocket publisher into the state machine so every
+                # transition() call also emits a frontend notification — this
+                # prevents the orchestrator ↔ state bypass where Redis and DB diverge.
+                from websocket_events import get_websocket_publisher
+                sm._ws_publisher = get_websocket_publisher()
                 ctx.state = sm
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
