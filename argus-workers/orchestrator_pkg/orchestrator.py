@@ -610,11 +610,14 @@ class Orchestrator:
                             norm = self._normalize_finding(p, r.tool)
                             if norm:
                                 all_findings.append(norm)
-            except Exception as e:
-                logger.warning(f"Agent scan failed for {target}: {e}. Falling back.")
+            except (TimeoutError, ConnectionError, OSError) as e:
+                logger.warning(f"Agent scan aborted for {target}: {e}. Falling back.")
                 fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config,
                                                   recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
+            except Exception:
+                logger.error(f"Agent scan failed for {target} — re-raising", exc_info=True)
+                raise
 
         return all_findings
 
