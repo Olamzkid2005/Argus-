@@ -232,11 +232,21 @@ class ReActAgent:
             else str(recon_context)
         )
 
+        # Sanitize recon context to prevent prompt injection from attacker-controlled data
+        # (e.g., reflected XSS payloads, crawled endpoints with injected content).
+        # Truncate to 5000 chars, strip control characters and backtick delimiters.
+        import re as _re
+        def _sanitize(text: str) -> str:
+            cleaned = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text[:5000])
+            # Remove backtick fences that could break prompt structure
+            cleaned = cleaned.replace('```', '` ` `')
+            return cleaned
+
         recon_section = f"""=== RECON FINDINGS (STRUCTURED) ===
-{recon_structured}
+{_sanitize(str(recon_structured))}
 
 === RECON SUMMARY (PROSE) ===
-{recon_summary}"""
+{_sanitize(str(recon_summary))}"""
 
         # Load Bug-Reaper methodology context in bug bounty mode
         bugbounty_context = ""

@@ -84,6 +84,11 @@ class LLMClient:
         # OpenAI SDK client (lazy init)
         self._openai_client = None
 
+        # Rate limiting: max 60 requests per minute per provider
+        self._rate_limit_max = 60
+        self._rate_limit_window = 60.0
+        self._request_timestamps: list[float] = []
+
     def _load_key_from_redis(self, redis_url: str | None = None) -> str | None:
         """
         Load API key from Redis, where the UI Settings page stores it.
@@ -146,6 +151,19 @@ class LLMClient:
             {"role": "user", "content": user_prompt},
         ]
 
+    def _check_rate_limit(self):
+        """Simple in-process rate limiter: max 60 requests/min."""
+        now = time.time()
+        window_start = now - self._rate_limit_window
+        # Remove timestamps outside the current window
+        self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
+        if len(self._request_timestamps) >= self._rate_limit_max:
+            sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
+            if sleep_time > 0:
+                logger.warning("LLM rate limit hit — sleeping %.1fs", sleep_time)
+                time.sleep(sleep_time)
+        self._request_timestamps.append(now)
+
     async def chat(
         self,
         messages: list[dict],
@@ -170,6 +188,9 @@ class LLMClient:
         """
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
+
+        # Rate limit: ensure we don't exceed 60 req/min per worker
+        self._check_rate_limit()
 
         last_error = None
         for attempt in range(self.max_retries + 1):
@@ -249,6 +270,9 @@ class LLMClient:
         """
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
+
+        # Rate limit: ensure we don't exceed 60 req/min per worker
+        self._check_rate_limit()
 
         req_timeout = timeout or 30
         last_error = None

@@ -305,6 +305,27 @@ class ToolRunner:
         tmp_dir = self.sandbox_dir / "tmp"
         tmp_dir.mkdir(exist_ok=True)
 
+        # Detect and redact sensitive arguments (API tokens, passwords) that would
+        # otherwise be visible in /proc/<pid>/cmdline. Instead of passing them as
+        # CLI flags, inject them as environment variables (TOOL_TOKEN, TOOL_SECRET).
+        sensitive_prefixes = ("--api-token", "--token", "--password", "--secret", "--key", "--auth")
+        sanitized_args = []
+        token_values = []
+        i = 0
+        while i < len(args):
+            if any(args[i].startswith(p) for p in sensitive_prefixes):
+                flag = args[i]
+                value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
+                if value:
+                    env[f"TOOL_{flag.lstrip('--').upper().replace('-', '_')}"] = value
+                    sanitized_args.append(flag)
+                    sanitized_args.append("__REDACTED__")
+                    i += 2
+                    continue
+            sanitized_args.append(args[i])
+            i += 1
+        args = sanitized_args
+
         # Record start time
         start_time = time.time()
 
@@ -471,6 +492,24 @@ class ToolRunner:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
         env = self._locked_env(tool)
+
+        # Redact sensitive args from command line (visible in /proc/pid/cmdline)
+        sensitive_prefixes = ("--api-token", "--token", "--password", "--secret", "--key", "--auth")
+        sanitized_args = []
+        i = 0
+        while i < len(args):
+            if any(args[i].startswith(p) for p in sensitive_prefixes):
+                flag = args[i]
+                value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
+                if value:
+                    env[f"TOOL_{flag.lstrip('--').upper().replace('-', '_')}"] = value
+                    sanitized_args.append(flag)
+                    sanitized_args.append("__REDACTED__")
+                    i += 2
+                    continue
+            sanitized_args.append(args[i])
+            i += 1
+        args = sanitized_args
 
         proc = subprocess.Popen(
             [tool_path] + args,
