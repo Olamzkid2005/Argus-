@@ -279,83 +279,8 @@ class Orchestrator:
         if not findings:
             return
 
-        _pgvector = None
-        _llm_client = None
-
-        def _is_valid_embedding(emb: list) -> bool:
-            return isinstance(emb, list) and len(emb) > 0 and all(isinstance(v, (int, float)) for v in emb)
-
-        def _get_embedding(text: str) -> list[float] | None:
-            nonlocal _llm_client
-            api_key = None
-            model = "text-embedding-3-small"
-            try:
-                if _llm_client is None:
-                    from llm_client import LLMClient
-                    _llm_client = LLMClient()
-                api_key = _llm_client.api_key
-                model = _llm_client.model if _llm_client else "text-embedding-3-small"
-            except Exception:
-                pass
-            if api_key:
-                try:
-                    import httpx
-                    # Route through OpenRouter if using an OpenRouter key
-                    if api_key.startswith("sk-or-"):
-                        embedding_url = "https://openrouter.ai/api/v1/embeddings"
-                        embedding_model = "openai/text-embedding-3-small"
-                        headers = {
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json",
-                            "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
-                            "X-Title": "Argus Pentest Platform",
-                        }
-                    else:
-                        embedding_url = "https://api.openai.com/v1/embeddings"
-                        embedding_model = "text-embedding-3-small"
-                        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                    resp = httpx.post(
-                        embedding_url,
-                        headers=headers,
-                        json={"model": embedding_model, "input": text},
-                        timeout=15,
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        return data["data"][0]["embedding"]
-                except Exception as e:
-                    logger.debug(f"Embedding API failed (non-fatal): {e}")
-            from database.repositories.pgvector_repository import PGVectorRepository
-            return PGVectorRepository()._generate_embedding_fallback(text)
-
-        def _find_existing_similar(text: str, threshold: float = 0.92) -> dict | None:
-            nonlocal _pgvector
-            if _pgvector is None:
-                from database.repositories.pgvector_repository import PGVectorRepository
-                _pgvector = PGVectorRepository()
-            if not _pgvector.check_pgvector_available():
-                return None
-            embedding = _get_embedding(text)
-            if not embedding or not _is_valid_embedding(embedding):
-                return None
-            try:
-                from database.connection import db_cursor
-                emb_str = "[" + ",".join(map(str, embedding)) + "]"
-                with db_cursor() as cursor:
-                    cursor.execute("""
-                        SELECT f.id, f.type, f.severity, f.endpoint,
-                               1 - (f.embedding <=> %s::vector) AS similarity
-                        FROM findings f
-                        WHERE f.engagement_id = %s AND f.embedding IS NOT NULL
-                          AND (f.embedding <=> %s::vector) <= (1 - %s)
-                        ORDER BY f.embedding <=> %s::vector LIMIT 1
-                    """, (emb_str, self.engagement_id, emb_str, threshold, emb_str))
-                    row = cursor.fetchone()
-                    if row and float(row[4]) >= threshold:
-                        return {"id": str(row[0]), "similarity": float(row[4])}
-            except Exception as e:
-                logger.debug(f"Similarity check failed (non-fatal): {e}")
-            return None
+        from database.services.embedding_service import EmbeddingService
+        emb_svc = EmbeddingService(self.engagement_id)
 
         try:
             for finding in findings:
@@ -396,7 +321,7 @@ class Orchestrator:
                     )
                 else:
                     dedup_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
-                    similar = _find_existing_similar(dedup_text)
+                    similar = emb_svc.find_existing_similar(dedup_text)
                     if similar:
                         try:
                             from database.connection import db_cursor
@@ -439,13 +364,9 @@ class Orchestrator:
                     if finding.get("severity", "").upper() not in ("INFO", "LOW", ""):
                         try:
                             emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
-                            embedding = _get_embedding(emb_text)
-                            if embedding and _is_valid_embedding(embedding):
-                                from database.repositories.pgvector_repository import (
-                                    PGVectorRepository,
-                                )
-                                pg = PGVectorRepository()
-                                pg.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
+                            embedding = emb_svc.get_embedding(emb_text)
+                            if embedding and EmbeddingService.is_valid_embedding(embedding):
+                                EmbeddingService.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
                         except Exception as e:
                             logger.debug(f"Embedding storage failed (non-fatal): {e}")
 
