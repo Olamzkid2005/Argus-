@@ -433,17 +433,18 @@ class Orchestrator:
                         )
 
                 if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint"):
-                    try:
-                        emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
-                        embedding = _get_embedding(emb_text)
-                        if embedding:
-                            from database.repositories.pgvector_repository import (
-                                PGVectorRepository,
-                            )
-                            pg = PGVectorRepository()
-                            pg.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
-                    except Exception as e:
-                        logger.debug(f"Embedding storage failed (non-fatal): {e}")
+                    if finding.get("severity", "").upper() not in ("INFO", "LOW", ""):
+                        try:
+                            emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
+                            embedding = _get_embedding(emb_text)
+                            if embedding:
+                                from database.repositories.pgvector_repository import (
+                                    PGVectorRepository,
+                                )
+                                pg = PGVectorRepository()
+                                pg.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
+                        except Exception as e:
+                            logger.debug(f"Embedding storage failed (non-fatal): {e}")
 
                 if saved_id and finding.get("severity", "").upper() in ("CRITICAL", "HIGH"):
                     try:
