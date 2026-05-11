@@ -74,7 +74,8 @@ class FindingRepository(BaseRepository):
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
                 )
-                ON CONFLICT (engagement_id, endpoint, type, source_tool) DO NOTHING
+                ON CONFLICT (engagement_id, endpoint, type, source_tool)
+                DO UPDATE SET id = findings.id  -- no-op update to force RETURNING
                 RETURNING id
                 """,
                 (
@@ -98,19 +99,9 @@ class FindingRepository(BaseRepository):
             if row:
                 finding_id = str(row[0])
             else:
-                cursor.execute(
-                    """
-                    SELECT id FROM findings
-                    WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s
-                    """,
-                    (engagement_id, endpoint, finding_type, source_tool)
-                )
-                existing = cursor.fetchone()
-                if existing:
-                    finding_id = str(existing[0])
-                else:
-                    logger.warning("ON CONFLICT DO NOTHING fired but SELECT returned no existing finding for engagement=%s endpoint=%s type=%s source_tool=%s", engagement_id, endpoint, finding_type, source_tool)
-                    return None
+                # Should not happen with DO UPDATE RETURNING, but handle gracefully
+                logger.warning("INSERT ... ON CONFLICT RETURNING returned no row for engagement=%s endpoint=%s type=%s source_tool=%s", engagement_id, endpoint, finding_type, source_tool)
+                return None
             conn.commit()
             return finding_id
         except Exception:

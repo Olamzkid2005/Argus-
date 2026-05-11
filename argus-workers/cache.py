@@ -19,16 +19,35 @@ logger = logging.getLogger(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 CACHE_DB = int(os.getenv("CACHE_REDIS_DB", "1"))
 
-# Try to import redis, but make it optional
-try:
-    import redis as redis_lib
+# Lazy Redis client with auto-reconnect on failure (not module-level)
+_redis_client_instance = None
+_redis_available = False
 
-    _redis_client = redis_lib.from_url(f"{REDIS_URL}/{CACHE_DB}")
-    _redis_available = True
-except Exception as e:
-    logger.warning(f"Redis not available for caching: {e}")
-    _redis_client = None
-    _redis_available = False
+
+def _get_redis():
+    """Lazy-init Redis client with automatic reconnect on failure."""
+    global _redis_client_instance, _redis_available
+    if _redis_client_instance is not None:
+        try:
+            _redis_client_instance.ping()
+            return _redis_client_instance
+        except Exception:
+            logger.warning("Redis connection lost — reconnecting")
+            _redis_client_instance = None
+            _redis_available = False
+    try:
+        import redis as redis_lib
+        _redis_client_instance = redis_lib.from_url(f"{REDIS_URL}/{CACHE_DB}", socket_connect_timeout=3, socket_timeout=3)
+        _redis_client_instance.ping()
+        _redis_available = True
+        return _redis_client_instance
+    except Exception as e:
+        if not _redis_available:
+            logger.debug("Redis still unavailable for caching: %s", e)
+        else:
+            logger.warning(f"Redis became unavailable for caching: {e}")
+        _redis_available = False
+        return None
 
 
 class WorkerCache:
@@ -39,17 +58,23 @@ class WorkerCache:
     TTL_MEDIUM = 300     # 5 minutes
     TTL_LONG = 3600      # 1 hour
     TTL_EXTENDED = 86400 # 24 hours
+    # Namespace prefix to avoid key collisions with other Redis users on same DB
+    KEY_PREFIX = "cache:"
 
     def __init__(self, ttl: int = 300):
         self.ttl = ttl
 
+    def _key(self, k: str) -> str:
+        return f"{self.KEY_PREFIX}{k}"
+
     def get(self, key: str) -> Any | None:
         """Get value from cache"""
-        if not _redis_available:
+        client = _get_redis()
+        if not client:
             return None
 
         try:
-            value = _redis_client.get(key)
+            value = client.get(self._key(key))
             if value:
                 return json.loads(value)
         except Exception as e:
@@ -59,12 +84,13 @@ class WorkerCache:
 
     def set(self, key: str, value: Any, ttl: int | None = None) -> bool:
         """Set value in cache"""
-        if not _redis_available:
+        client = _get_redis()
+        if not client:
             return False
 
         try:
             ttl = ttl or self.ttl
-            _redis_client.setex(key, ttl, json.dumps(value))
+            client.setex(self._key(key), ttl, json.dumps(value))
             return True
         except Exception as e:
             logger.error(f"Cache set error: {e}")
@@ -72,11 +98,12 @@ class WorkerCache:
 
     def delete(self, key: str) -> bool:
         """Delete value from cache"""
-        if not _redis_available:
+        client = _get_redis()
+        if not client:
             return False
 
         try:
-            _redis_client.delete(key)
+            client.delete(self._key(key))
             return True
         except Exception as e:
             logger.error(f"Cache delete error: {e}")
@@ -84,16 +111,18 @@ class WorkerCache:
 
     def clear_pattern(self, pattern: str) -> int:
         """Clear all keys matching pattern using SCAN to avoid blocking Redis"""
-        if not _redis_available:
+        client = _get_redis()
+        if not client:
             return 0
 
         try:
             deleted = 0
             cursor = 0
+            full_pattern = self._key(pattern)
             while True:
-                cursor, keys = _redis_client.scan(cursor, match=pattern, count=100)
+                cursor, keys = client.scan(cursor, match=full_pattern, count=100)
                 if keys:
-                    deleted += _redis_client.delete(*keys)
+                    deleted += client.delete(*keys)
                 if cursor == 0:
                     break
             return deleted
@@ -176,11 +205,12 @@ class WorkerCache:
 
     def get_stats(self) -> dict:
         """Get cache statistics"""
-        if not _redis_available:
+        client = _get_redis()
+        if not client:
             return {"status": "unavailable"}
 
         try:
-            info = _redis_client.info("keyspace")
+            info = client.info("keyspace")
             db_info = info.get(f"db{CACHE_DB}", {})
             return {
                 "status": "available",

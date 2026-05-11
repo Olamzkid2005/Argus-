@@ -229,6 +229,12 @@ def execute_recon_tools(
             "start_msg": "Retrieving historical URLs from Wayback Machine",
             "success_msg": "Historical URL retrieval complete",
         },
+        "gospider": {
+            "args": ["-s", target, "--json", "--depth=2", "--concurrent=5"],
+            "timeout": 90,
+            "start_msg": "Spidering website with gospider for endpoints",
+            "success_msg": "Gospider crawling complete — discovered {{}} endpoints",
+        },
     }
 
     with ThreadPoolExecutor(max_workers=8) as pool:
