@@ -1,41 +1,40 @@
-"use client";
+'use client';
 
-import { Component, ReactNode } from "react";
-import { log } from "@/lib/logger";
+import React from 'react';
+import { log } from '@/lib/logger';
 
-interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+  componentName?: string;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
-  error?: Error;
+  error: Error | null;
 }
 
-/**
- * Error Boundary Component
- *
- * Catches JavaScript errors in child components and displays a fallback UI
- * instead of crashing the entire application.
- */
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    log.error("ErrorBoundary", { message: error.message, componentStack: errorInfo.componentStack });
+    const componentName = this.props.componentName ?? 'UnknownComponent';
+    log.browser.error(
+      componentName,
+      error,
+      {
+        componentStack: errorInfo.componentStack ?? '(none)',
+        digest: (error as { digest?: string }).digest,
+      }
+    );
   }
-
-  handleRetry = () => {
-    this.setState({ hasError: false, error: undefined });
-  };
 
   render() {
     if (this.state.hasError) {
@@ -44,45 +43,38 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-[400px] flex items-center justify-center p-8 bg-[#0f172a]">
-          <div className="text-center max-w-md">
-            <div className="mb-4">
-              <svg
-                className="mx-auto h-12 w-12 text-red-500"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-slate-100 mb-2">
-              Something went wrong
-            </h2>
-            <p className="text-slate-400 mb-6">
-              An unexpected error occurred. Please try again or return to the
-              dashboard.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={this.handleRetry}
-                className="px-4 py-2 bg-cyan-500 text-slate-900 font-medium rounded-md hover:bg-cyan-400 transition-colors"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={() => (window.location.href = "/dashboard")}
-                className="px-4 py-2 border border-slate-600 text-slate-300 font-medium rounded-md hover:bg-slate-800 transition-colors"
-              >
-                Go to Dashboard
-              </button>
-            </div>
-          </div>
+        <div
+          style={{
+            padding: '2rem',
+            margin: '1rem',
+            border: '1px solid #fca5a5',
+            borderRadius: '8px',
+            background: '#fef2f2',
+            color: '#991b1b',
+            fontFamily: 'monospace',
+            fontSize: '0.875rem',
+          }}
+        >
+          <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>
+            Something went wrong
+          </h3>
+          <p style={{ margin: '0 0 0.5rem', opacity: 0.8 }}>
+            {this.props.componentName ? `[${this.props.componentName}] ` : ''}
+            {this.state.error?.message ?? 'Unknown error'}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{
+              padding: '0.25rem 0.75rem',
+              border: '1px solid #fca5a5',
+              borderRadius: '4px',
+              background: '#fff',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+            }}
+          >
+            Try again
+          </button>
         </div>
       );
     }
@@ -90,5 +82,3 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-
-export default ErrorBoundary;

@@ -6,6 +6,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import ClientLayout from "@/components/ClientLayout";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
@@ -52,9 +54,12 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body text-gray-900 antialiased`}>
-        <Providers>
-          {children}
-        </Providers>
+        <GlobalErrorHandler />
+        <ErrorBoundary>
+          <Providers>
+            {children}
+          </Providers>
+        </ErrorBoundary>
         <ServiceWorkerRegister />
       </body>
     </html>
