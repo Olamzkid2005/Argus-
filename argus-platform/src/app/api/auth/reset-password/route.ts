@@ -50,11 +50,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find users with non-expired tokens (need to check each with bcrypt)
+    // Find users with non-expired tokens.
+    // Tokens expire 1 hour after creation, so only recent tokens can be valid.
+    // We limit results and let bcrypt compare handle verification.
     const userResult = await pool.query(
       `SELECT id, reset_token FROM users 
        WHERE reset_token_expires_at > NOW()
-       AND reset_token IS NOT NULL`
+       AND reset_token IS NOT NULL
+       ORDER BY reset_token_expires_at DESC
+       LIMIT 200`
     );
 
     // Find matching token using bcrypt compare

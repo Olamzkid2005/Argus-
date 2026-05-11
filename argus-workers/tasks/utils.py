@@ -12,7 +12,7 @@ import os
 logger = logging.getLogger(__name__)
 
 RECON_CONTEXT_KEY = "recon_context:{engagement_id}"
-RECON_CONTEXT_TTL = 3600  # 1 hour
+RECON_CONTEXT_TTL = 7200  # 2 hours (was 1h — scan can take 60min to execute)
 LLM_COST_KEY = "llm_cost:{engagement_id}"
 
 

@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
       JOIN users u ON tm.user_id = u.id
       WHERE tm.org_id = $1
       ORDER BY tm.created_at DESC
+      LIMIT 200
       `,
       [session.user.orgId],
     );

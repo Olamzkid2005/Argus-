@@ -206,13 +206,17 @@ export async function POST(req: NextRequest) {
         jobPushed = true;
       } catch (jobError) {
         console.error("Failed to push job:", jobError);
-        // Rollback: delete the engagement if job push failed
+        // Rollback: delete engagement + related rows if job push failed
+        await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
+        await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
         await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
         throw new Error(`Job dispatch failed: ${jobError instanceof Error ? jobError.message : "unknown error"}`);
       }
 
       if (!jobPushed) {
         // Clean up if job wasn't pushed
+        await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
+        await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
         await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
         throw new Error("Failed to queue scan job");
       }

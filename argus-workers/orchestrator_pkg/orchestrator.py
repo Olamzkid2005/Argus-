@@ -719,6 +719,19 @@ class Orchestrator:
         snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
         budget_config = job.get("budget", {})
         budget_mgr = LoopBudgetManager(self.engagement_id, budget_config)
+        # Load current budget state from database so max_cycles cap is effective
+        try:
+            from database.connection import db_cursor
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT current_cycles, current_depth FROM loop_budgets WHERE engagement_id = %s",
+                    (self.engagement_id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    budget_mgr.load_from_db({"current_cycles": row[0], "current_depth": row[1]})
+        except Exception:
+            logger.debug("Could not load loop budget from DB for %s", self.engagement_id)
         engine = IntelligenceEngine(db_conn)
         snapshot["findings"] = findings
         snapshot["loop_budget"] = budget_mgr.to_dict()

@@ -36,7 +36,7 @@ def main():
         "-A", "celery_app",
         "worker",
         "--loglevel=info",
-        "--concurrency=4",
+        "--concurrency=8",  # Matches CELERY_CONCURRENCY default in celery_app.py
         "-Q", "celery,recon,scan,analyze,report,repo_scan",
     ]
 

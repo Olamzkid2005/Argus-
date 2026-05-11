@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       requestsParams.push(type);
     }
 
-    requestsQuery += ` ORDER BY ar.created_at DESC`;
+    requestsQuery += ` ORDER BY ar.created_at DESC LIMIT 200`;
 
     const requestsResult = await pool.query(requestsQuery, requestsParams);
 

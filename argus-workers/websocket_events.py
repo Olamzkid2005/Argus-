@@ -176,9 +176,10 @@ class WebSocketEventPublisher:
                 pipe.expire(events_key, self.EVENTS_TTL)
                 pipe.execute()
 
-                # Publish last event for notifications
-                if filtered:
-                    self.redis.publish(channel, json.dumps(filtered[-1]))
+                # Publish ALL events to the channel (not just the last one)
+                # so SSE subscribers don't miss batched findings.
+                for event in filtered:
+                    self.redis.publish(channel, json.dumps(event))
 
         self._batch_buffer.clear()
         self._last_flush = time.time()

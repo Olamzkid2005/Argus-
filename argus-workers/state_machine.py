@@ -245,6 +245,67 @@ class EngagementStateMachine:
         self.transition(new_state, reason)
         return True
 
+    def chain_transition(self, states: list[tuple[str, str]]) -> str:
+        """
+        Perform multiple state transitions in a single database transaction.
+        Each element of states is a (new_state, reason) tuple.
+
+        This avoids phantom intermediate states when fast-forwarding through
+        multiple phases (e.g., recon → scanning → analyzing → reporting).
+
+        Args:
+            states: List of (new_state, reason) tuples to chain through
+
+        Returns:
+            The final state after all transitions
+
+        Raises:
+            InvalidStateTransition: If any transition in the chain is invalid
+        """
+        if not states:
+            return self.current_state
+
+        conn = self._get_connection()
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            current = self.current_state
+            for new_state, reason in states:
+                if new_state not in self.STATES:
+                    raise ValueError(f"Invalid state: {new_state}")
+                if new_state not in self.TRANSITIONS.get(current, []):
+                    raise InvalidStateTransition(
+                        f"Invalid transition from {current} to {new_state}. "
+                        f"Valid transitions: {self.TRANSITIONS[current]}"
+                    )
+                # Insert into engagement_states history
+                cursor.execute(
+                    """
+                    INSERT INTO engagement_states (engagement_id, from_state, to_state, reason, created_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    """,
+                    (self.engagement_id, current, new_state, reason)
+                )
+                current = new_state
+
+            # Update the engagement's current status
+            final_state = states[-1][0]
+            cursor.execute(
+                "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s",
+                (final_state, self.engagement_id)
+            )
+            conn.commit()
+            self.current_state = final_state
+            return final_state
+        except Exception:
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            self._release_connection(conn)
+
     def can_transition_to(self, new_state: str) -> bool:
         """
         Check if transition to new_state is valid from current state

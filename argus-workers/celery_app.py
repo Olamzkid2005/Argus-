@@ -55,8 +55,10 @@ logger = setup_logging()
 # Get configuration from shared config (single source of truth)
 from config.redis import REDIS_URL  # noqa: E402
 
+# Use separate Redis DBs for broker (0) and result backend (1) to prevent
+# result data from evicting queued messages when Redis memory is constrained.
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", f"{REDIS_URL}/0")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", f"{REDIS_URL}/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", f"{REDIS_URL}/1")
 
 # Ensure required environment variables are set
 if not os.getenv("DATABASE_URL"):
@@ -201,7 +203,10 @@ app.conf.update(
 class BaseTask(app.Task):
     """Base task class with common functionality"""
 
-    autoretry_for = (Exception,)
+    # Only retry on transient infrastructure errors — not on validation,
+    # security, or permanent application errors. The error_classifier already
+    # handles DLQ dispatch for non-retryable failures in on_failure().
+    autoretry_for = (ConnectionError, TimeoutError, OSError, IOError)
     retry_kwargs = {"max_retries": 3}
     retry_backoff = True
 
@@ -233,24 +238,29 @@ class BaseTask(app.Task):
             if potential_id and '-' in potential_id and len(potential_id) == 36:
                 engagement_id = potential_id
         if engagement_id:
-            try:
-                from database.connection import db_cursor
-                with db_cursor() as cursor:
-                    cursor.execute(
-                        "SELECT status FROM engagements WHERE id = %s",
-                        (engagement_id,),
-                    )
-                    row = cursor.fetchone()
-                    current_state = row[0] if row else "created"
-                if current_state not in ("complete", "failed"):
-                    from state_machine import EngagementStateMachine
-                    sm = EngagementStateMachine(
-                        engagement_id,
-                        current_state=current_state,
-                    )
-                    sm.safe_transition("failed", f"Task {self.name} failed: {exc}")
-            except Exception as e:
-                logger.warning("Failed to update engagement state on failure: %s", e)
+            # Skip if the task's except handler already transitioned to failed
+            # (task_context in base.py sets this flag to prevent double-transition).
+            if getattr(self, '_failed_transition_done', False):
+                logger.debug("Failure transition already handled for engagement %s — skipping on_failure", engagement_id)
+            else:
+                try:
+                    from database.connection import db_cursor
+                    with db_cursor() as cursor:
+                        cursor.execute(
+                            "SELECT status FROM engagements WHERE id = %s",
+                            (engagement_id,),
+                        )
+                        row = cursor.fetchone()
+                        current_state = row[0] if row else "created"
+                    if current_state not in ("complete", "failed"):
+                        from state_machine import EngagementStateMachine
+                        sm = EngagementStateMachine(
+                            engagement_id,
+                            current_state=current_state,
+                        )
+                        sm.safe_transition("failed", f"Task {self.name} failed: {exc}")
+                except Exception as e:
+                    logger.warning("Failed to update engagement state on failure: %s", e)
 
         # Send to DLQ if not retryable
         if not classification.should_retry:

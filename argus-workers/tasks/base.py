@@ -25,6 +25,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+# Celery's SoftTimeLimitExceeded is raised when a task exceeds its soft time limit.
+# We catch it here to transition the engagement to 'failed' with a clear message,
+# rather than leaving it stuck in an intermediate state.
+try:
+    from billiard.exceptions import SoftTimeLimitExceeded
+except ImportError:
+    SoftTimeLimitExceeded = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,6 +120,23 @@ def task_context(
                 ctx.orchestrator = orchestrator
 
                 yield ctx
+        except SoftTimeLimitExceeded as ste:
+            logger.warning(
+                "Soft time limit exceeded for %s engagement %s — transitioning to failed",
+                job_type, engagement_id,
+            )
+            try:
+                current = _get_engagement_state(engagement_id, db_conn_string)
+                if current not in ("complete", "failed"):
+                    sm = EngagementStateMachine(
+                        engagement_id,
+                        db_connection_string=db_conn_string,
+                        current_state=current,
+                    )
+                    sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+            except Exception as st_error:
+                logger.error("Failed to transition on soft time limit: %s", st_error)
+            raise
         except Exception as e:
             current = _get_engagement_state(engagement_id, db_conn_string)
             if current not in ("complete", "failed"):
@@ -122,6 +147,9 @@ def task_context(
                         current_state=current,
                     )
                     sm.transition("failed", f"{job_type} failed: {e}")
+                    # Mark that failure transition was already handled,
+                    # so celery_app.on_failure can skip its redundant transition.
+                    self._failed_transition_done = True
                 except Exception as sm_error:
                     logger.error("State transition to failed error: %s", sm_error)
             raise

@@ -318,6 +318,8 @@ class ToolRunner:
 
             try:
                 # Execute with locked environment
+                # Limit captured output to prevent OOM from large tool output
+                MAX_OUTPUT_BYTES = 10 * 1024 * 1024  # 10MB
                 result = subprocess.run(
                     [tool_path] + args,
                     capture_output=True,
@@ -326,6 +328,13 @@ class ToolRunner:
                     cwd=str(self.sandbox_dir),
                     env=env,
                 )
+                # Truncate oversized output to prevent memory exhaustion
+                if len(result.stdout) > MAX_OUTPUT_BYTES:
+                    logger.warning("Truncating stdout for %s (%d bytes > %d limit)", tool, len(result.stdout), MAX_OUTPUT_BYTES)
+                    result.stdout = result.stdout[:MAX_OUTPUT_BYTES]
+                if len(result.stderr) > MAX_OUTPUT_BYTES:
+                    logger.warning("Truncating stderr for %s (%d bytes > %d limit)", tool, len(result.stderr), MAX_OUTPUT_BYTES)
+                    result.stderr = result.stderr[:MAX_OUTPUT_BYTES]
 
                 # Calculate duration
                 duration_ms = int((time.time() - start_time) * 1000)
@@ -503,6 +512,14 @@ class ToolRunner:
         except Exception as e:
             logger.warning("Streaming error for %s: %s", tool, e)
             proc.kill()
+
+        finally:
+            # Ensure process is waited on to prevent zombies
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                # If wait times out, the process is already a zombie we can't fix
+                logger.warning("Could not wait on %s process (pid=%d)", tool, proc.pid)
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1
