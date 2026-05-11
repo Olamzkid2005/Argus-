@@ -41,14 +41,21 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         result = ctx.orchestrator.run_recon(ctx.job)
 
         try:
-            app.send_task('tasks.asset_discovery.run_asset_discovery',
-                          args=[engagement_id, target, ctx.trace_id], countdown=5)
+            asset_task = app.send_task(
+                'tasks.asset_discovery.run_asset_discovery',
+                args=[engagement_id, target, ctx.trace_id],
+                countdown=5,
+                task_id=f"asset_discovery-{engagement_id}",
+            )
         except Exception as e:
             logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
         try:
-            app.send_task('tasks.scan.run_scan',
-                          args=[engagement_id, [target], budget, ctx.trace_id, agent_mode])
+            scan_task = app.send_task(
+                'tasks.scan.run_scan',
+                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode],
+                task_id=f"scan-{engagement_id}",
+            )
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
 

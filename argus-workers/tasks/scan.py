@@ -38,6 +38,7 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
             analyze_task = app.send_task(
                 "tasks.analyze.run_analysis",
                 args=[engagement_id, budget, ctx.trace_id],
+                task_id=f"analyze-{engagement_id}",
             )
             result["analysis_task_id"] = analyze_task.id
             ctx.state.transition("analyzing", "Scan complete")
