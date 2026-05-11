@@ -88,7 +88,8 @@ CREATE TABLE findings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT valid_severity CHECK (severity IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO')),
     CONSTRAINT valid_confidence CHECK (confidence >= 0 AND confidence <= 1),
-    CONSTRAINT valid_fp_likelihood CHECK (fp_likelihood IS NULL OR (fp_likelihood >= 0 AND fp_likelihood <= 1))
+    CONSTRAINT valid_fp_likelihood CHECK (fp_likelihood IS NULL OR (fp_likelihood >= 0 AND fp_likelihood <= 1)),
+    CONSTRAINT findings_dedup UNIQUE (engagement_id, endpoint, type, source_tool)
 );
 
 -- Attack paths table

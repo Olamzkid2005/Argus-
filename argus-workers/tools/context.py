@@ -40,6 +40,7 @@ class ToolContext:
     normalizer: NormalizerProtocol
     normalize_finding: Any = None  # optional wrapper: raw_finding, tool -> dict | None
     ws_publisher: Any = None  # WebSocket event publisher (optional)
+    llm_payload_generator: Any = None  # optional LLM payload generator
 
     @staticmethod
     def from_orchestrator(orchestrator) -> "ToolContext":
@@ -56,6 +57,7 @@ class ToolContext:
             normalizer=orchestrator.normalizer,
             normalize_finding=normalize,
             ws_publisher=orchestrator.ws_publisher,
+            llm_payload_generator=getattr(orchestrator, "llm_payload_generator", None),
         )
 
     def publish_activity(
