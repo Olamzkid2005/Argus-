@@ -23,6 +23,33 @@ from .utils import get_nuclei_templates_path
 
 logger = logging.getLogger(__name__)
 
+def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] | None = None, target: str = "") -> bool:
+    """Check if a tool should run based on requires gate.
+
+    Accepts either a ReconContext or raw tech_stack/target params.
+    Returns True if tool should run, False if gate not satisfied.
+    """
+    from tool_definitions import TOOLS
+
+    tool_def = TOOLS.get(tool_name)
+    if not tool_def or not tool_def.requires:
+        return True  # no gate → always run
+
+    req = tool_def.requires
+
+    # Build a simple adapter object with the fields evaluate_gate checks
+    class _Ctx:
+        pass
+    ctx = _Ctx()
+    ctx.tech_stack = tech_stack or []
+    ctx.target_url = target
+    ctx.has_api = getattr(recon_context, "has_api", False) if recon_context else False
+    ctx.has_login_page = getattr(recon_context, "has_login_page", False) if recon_context else False
+    ctx.has_file_upload = getattr(recon_context, "has_file_upload", False) if recon_context else False
+
+    from tool_definitions import evaluate_gate
+    return evaluate_gate(tool_name, ctx)
+
 NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
     'default': 'medium,high,critical',
     'high': 'low,medium,high,critical',
@@ -229,18 +256,18 @@ def execute_scan_tools(
             scan_jobs.append(("sqlmap", sqlmap_cmd, sqlmap_timeout))
 
         # Build jwt_tool command
-        if "jwt_tool" not in _skip:
+        if "jwt_tool" not in _skip and _should_run_tool("jwt_tool", tech_stack=tech_stack):
             scan_jobs.append(("jwt_tool", ["-u", target, "-C", "-d"], 120))
 
         # Build commix command
-        if "commix" not in _skip:
+        if "commix" not in _skip and _should_run_tool("commix", tech_stack=tech_stack):
             commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
             scan_jobs.append(("commix",
                 ["--url", target, "--batch", "--json-output", commix_out],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
         # Build testssl command
-        if "testssl" not in _skip:
+        if "testssl" not in _skip and _should_run_tool("testssl", target=target):
             testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
             scan_jobs.append(("testssl",
                 ["--jsonfile", testssl_out, target],

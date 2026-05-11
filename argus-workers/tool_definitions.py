@@ -31,6 +31,20 @@ class SignalQuality(str, Enum):
     PROBABLE   = "probable"    # dalfox/sqlmap — tool confirmed the vuln
     CANDIDATE  = "candidate"   # nikto, ffuf, naabu — needs investigation
 
+# ── Tool activation conditions ──
+
+@final
+@dataclass(frozen=True)
+class ToolRequires:
+    """Activation condition for a tool — mirrors DeepSec's MatcherGate.
+
+    A tool only runs if all conditions in its `requires` block are met.
+    Tools with no `requires` always run.
+    """
+    tech_contains: list[str] = field(default_factory=list)
+    recon_signals: list[str] = field(default_factory=list)
+    target_scheme: str | None = None
+
 # ── Phase names ──
 
 #: Ordered list of phases (also serves as the type via 'in' checks)
@@ -101,6 +115,9 @@ class ToolDefinition:
 
     #: Signal quality tier for findings prioritization
     signal_quality: SignalQuality = SignalQuality.CANDIDATE
+
+    #: Activation gate — tool only runs when these conditions are met
+    requires: ToolRequires | None = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -353,7 +370,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", flag="-u", required=True),
     ],
     timeout=120,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(recon_signals=["has_api", "has_login_page"])
 ))
 
 _register(ToolDefinition(
@@ -365,7 +383,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", flag="--url", required=True),
     ],
     timeout=300,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(recon_signals=["has_file_upload"])
 ))
 
 _register(ToolDefinition(
@@ -377,7 +396,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Target host:port", required=True),
     ],
     timeout=300,
-        signal_quality=SignalQuality.CANDIDATE
+        signal_quality=SignalQuality.CANDIDATE,
+        requires=ToolRequires(target_scheme="https")
 ))
 
 
@@ -448,7 +468,8 @@ _register(ToolDefinition(
         ToolParameter("severity", "Severity filter", flag="-ll"),
     ],
     timeout=300,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["python"])
 ))
 
 _register(ToolDefinition(
@@ -461,7 +482,8 @@ _register(ToolDefinition(
         ToolParameter("confidence", "Confidence level", flag="--confidence-level", default="2"),
     ],
     timeout=600,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["ruby"])
 ))
 
 _register(ToolDefinition(
@@ -473,7 +495,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Target path", required=True),
     ],
     timeout=600,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["go"])
 ))
 
 _register(ToolDefinition(
@@ -486,7 +509,8 @@ _register(ToolDefinition(
         ToolParameter("ext", "File extensions", flag="--ext", default=".js,.jsx,.ts,.tsx"),
     ],
     timeout=600,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["javascript", "typescript"])
 ))
 
 _register(ToolDefinition(
@@ -498,7 +522,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Target path", required=True),
     ],
     timeout=600,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["php"])
 ))
 
 _register(ToolDefinition(
@@ -510,7 +535,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Target path (JAR/WAR/class directory)", required=True),
     ],
     timeout=600,
-        signal_quality=SignalQuality.PROBABLE
+        signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["java", "kotlin"])
 ))
 
 
@@ -526,7 +552,8 @@ _register(ToolDefinition(
         ToolParameter("api_token", "WPScan API token", flag="--api-token"),
     ],
     timeout=600,
-        signal_quality=SignalQuality.CANDIDATE
+        signal_quality=SignalQuality.CANDIDATE,
+        requires=ToolRequires(tech_contains=["wordpress", "wp-"])
 ))
 
 _register(ToolDefinition(
@@ -538,7 +565,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Audit target path"),
     ],
     timeout=300,
-        signal_quality=SignalQuality.CANDIDATE
+        signal_quality=SignalQuality.CANDIDATE,
+        requires=ToolRequires(tech_contains=["python"])
 ))
 
 _register(ToolDefinition(
@@ -550,7 +578,8 @@ _register(ToolDefinition(
         ToolParameter("target", "Audit target path"),
     ],
     timeout=300,
-        signal_quality=SignalQuality.CANDIDATE
+        signal_quality=SignalQuality.CANDIDATE,
+        requires=ToolRequires(tech_contains=["javascript", "typescript"])
 ))
 
 # ── Analysis / intelligence phase ──
@@ -669,6 +698,49 @@ def build_phase_tools_dict() -> dict[str, list[str]]:
         phase: get_phase_tool_names(phase)
         for phase in ALL_PHASES
     }
+
+
+def evaluate_gate(tool_name: str, recon_context) -> bool:
+    """Check if a tool's requires gate is satisfied.
+
+    Called before dispatching a tool in the scan phase. Returns True
+    if the tool should run, False if it should be skipped.
+
+    Args:
+        tool_name: Tool name (e.g. 'wpscan', 'jwt_tool')
+        recon_context: ReconContext dataclass with target_url, tech_stack, etc.
+
+    Returns:
+        True if tool should run, False to skip.
+    """
+    tool_def = TOOLS.get(tool_name)
+    if not tool_def or not tool_def.requires:
+        return True  # no gate → always run
+
+    req = tool_def.requires
+
+    if req.tech_contains:
+        stack = " ".join(
+            getattr(recon_context, "tech_stack", []) or []
+        ).lower()
+        if not any(t in stack for t in req.tech_contains):
+            return False
+
+    if req.recon_signals:
+        for signal in req.recon_signals:
+            attr_val = getattr(recon_context, signal, None)
+            if attr_val is None:
+                return True  # context doesn't have this signal → don't gate
+            if attr_val:
+                return True  # any signal present = run
+        return False  # all signals checked and none present = skip
+
+    if req.target_scheme:
+        target = getattr(recon_context, "target_url", "") or ""
+        if not target.startswith(req.target_scheme):
+            return False
+
+    return True
 
 
 def build_mcp_tool_definitions() -> list:
