@@ -76,7 +76,7 @@ class LLMService:
         *,
         max_tokens: int = 500,
         temperature: float | None = None,
-    ) -> dict:
+    ) -> dict | list:
         """
         Call LLM and return parsed JSON dict.
 

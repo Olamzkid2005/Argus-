@@ -503,6 +503,7 @@ class FindingRepository(BaseRepository):
                   AND (evidence->>'payload' IS NOT NULL OR evidence->>'response' IS NOT NULL)
                 ORDER BY confidence DESC
                 LIMIT %s
+                FOR UPDATE SKIP LOCKED
                 """,
                 (engagement_id, min_confidence, threshold, limit)
             )
