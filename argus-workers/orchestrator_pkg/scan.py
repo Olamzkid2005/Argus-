@@ -350,4 +350,14 @@ def execute_scan_tools(
             except Exception as e:
                 logger.warning(f"Browser scanner outer error: {e}")
 
+    # Build structured CandidateList from raw findings
+    try:
+        from models.candidate_list import CandidateList
+        candidate_list = CandidateList.from_findings(targets[0] if targets else "", all_findings)
+        # Attach to findings for agent consumption
+        for f in all_findings:
+            f["_candidate_list"] = candidate_list
+    except Exception as e:
+        logger.warning(f"Failed to build CandidateList: {e}")
+
     return all_findings

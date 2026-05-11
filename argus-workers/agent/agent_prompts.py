@@ -681,6 +681,7 @@ def build_tool_selection_prompt(
     mode: str | None = None,
     bugbounty_context: str = "",
     priority_classes: list[str] | None = None,
+    candidate_list = None,
 ) -> str:
     """
     Build the user prompt for tool selection.
@@ -706,6 +707,12 @@ def build_tool_selection_prompt(
         paragraph = _build_target_context_paragraph(target_profile)
         if paragraph:
             prompt_parts.append(paragraph)
+
+    # ── Section 0.5: Scan Candidates (structured, from Idea 6) ──────
+    if candidate_list and hasattr(candidate_list, "to_llm_summary"):
+        summary = candidate_list.to_llm_summary()
+        if summary:
+            prompt_parts.append(summary)
 
     # ── Section 1: Analyst Priority (from natural language config) ─
     if priority_classes:

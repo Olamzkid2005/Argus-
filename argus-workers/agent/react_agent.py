@@ -93,6 +93,11 @@ class ReActAgent:
         self.history: list[dict] = []
         self._phase = phase
         self._mode = mode  # None = standard, "bugbounty" = Bug-Reaper methodology
+        self._candidate_list = None  # Set during scan phase from CandidateList
+
+    def set_candidate_list(self, candidate_list) -> None:
+        """Accept a CandidateList from the scan phase for agent reasoning."""
+        self._candidate_list = candidate_list
 
     def add_to_history(self, role: str, content: str, data: dict = None):
         """Add an entry to the agent's history/context."""
@@ -252,6 +257,7 @@ class ReActAgent:
             context,  # observation history
             target_profile=_target_profile,
             bugbounty_context=bugbounty_context,
+            candidate_list=self._candidate_list,
         )
 
         system_prompt = self._get_system_prompt(recon_context)
