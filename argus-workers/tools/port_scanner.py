@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from feature_flags import is_enabled
+from tools.tool_runner import ToolRunner
 
 logger = logging.getLogger(__name__)
 
@@ -89,41 +90,27 @@ class PortScanResult:
 
 
 class PortScanner:
-    """Comprehensive port scanning with service detection via subprocess."""
+    """Comprehensive port scanning with service detection via ToolRunner."""
 
     NAABU_TIMEOUT = 600
     NMAP_TIMEOUT = 900
 
-    @staticmethod
-    def _check_tool(name: str) -> bool:
-        try:
-            result = subprocess.run(
-                ["which", name],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return result.returncode == 0
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return False
-
-    @staticmethod
-    def _check_tools_available() -> dict[str, bool]:
-        return {
-            "naabu": PortScanner._check_tool("naabu"),
-            "nmap": PortScanner._check_tool("nmap"),
-        }
+    def __init__(self):
+        # ToolRunner handles locked environment, dangerous command detection,
+        # circuit breaker, and output size limits (unlike raw subprocess.run).
+        self._tool_runner = ToolRunner()
 
     def scan(self, target: str, ports: str = "1-10000") -> PortScanResult:
         """
-        Run port scan with naabu + nmap service detection.
+        Run port scan with naabu + nmap service detection via ToolRunner.
 
         1. Feature-gated by ARGUS_FF_PORT_SCANNER.
         2. Fast SYN scan via naabu with JSONL output.
         3. Service detection via nmap -sV -sC on live ports.
         4. Returns structured PortScanResult.
 
-        Gracefully returns empty result if tools missing.
+        All subprocess calls go through ToolRunner which provides safety checks,
+        environment locking, circuit breaker, and output size enforcement.
         """
         result = PortScanResult(target=target)
         start = time.time()
@@ -132,49 +119,19 @@ class PortScanner:
             logger.info("Port scanner disabled (ARGUS_FF_PORT_SCANNER not set)")
             return result
 
-        available = self._check_tools_available()
-        if not available.get("naabu"):
-            logger.warning("naabu not found on PATH — skipping port scan")
-            return result
-        if not available.get("nmap"):
-            logger.warning("nmap not found on PATH — skipping service detection")
-
         live_ports: list[dict] = []
 
-        # --- Phase 1: naabu SYN scan ---
+        # --- Phase 1: naabu SYN scan via ToolRunner ---
         try:
-            naabu_cmd = ["naabu", "-host", target, "-ports", ports, "-json"]
-            logger.info("Running naabu: %s", " ".join(naabu_cmd))
-            naabu_proc = subprocess.run(
-                naabu_cmd,
-                capture_output=True,
-                text=True,
+            naabu_result = self._tool_runner.run(
+                "naabu", ["-host", target, "-ports", ports, "-json"],
                 timeout=self.NAABU_TIMEOUT,
             )
-            if naabu_proc.returncode != 0:
-                logger.warning("naabu exited with code %d: %s", naabu_proc.returncode, naabu_proc.stderr.strip())
-            live_ports = self._parse_naabu_ports(naabu_proc.stdout)
-            logger.info("naabu found %d live ports", len(live_ports))
-        except subprocess.TimeoutExpired as e:
-            logger.warning("naabu timed out after %ds", self.NAABU_TIMEOUT)
-            # Parse any partial results from naabu's stdout captured before timeout
-            if e.stdout:
-                live_ports = self._parse_naabu_ports(e.stdout)
-                logger.info("naabu partial results: %d live ports", len(live_ports))
-            # Return early with partial results instead of continuing to nmap
-            for p in live_ports:
-                op = OpenPort(
-                    port=p.get("port", 0),
-                    protocol=p.get("protocol", "tcp"),
-                    state="open",
-                )
-                result.open_ports.append(op)
-                result.service_map[op.port] = op
-            result.scan_duration = time.time() - start
-            return result
-        except FileNotFoundError:
-            logger.warning("naabu binary not found")
-            return result
+            if naabu_result.success:
+                live_ports = self._parse_naabu_ports(naabu_result.stdout)
+                logger.info("naabu found %d live ports", len(live_ports))
+            else:
+                logger.warning("naabu failed: %s", naabu_result.error or naabu_result.stderr[:200])
         except Exception as e:
             logger.warning("naabu scan failed: %s", e)
             return result
@@ -183,42 +140,35 @@ class PortScanner:
             result.scan_duration = time.time() - start
             return result
 
-        # --- Phase 2: nmap service detection ---
-        if not available.get("nmap"):
-            # Build result from naabu data only
-            for p in live_ports:
-                op = OpenPort(
-                    port=p.get("port", 0),
-                    protocol=p.get("protocol", "tcp"),
-                    state="open",
-                )
-                result.open_ports.append(op)
-                result.service_map[op.port] = op
-            result.scan_duration = time.time() - start
-            return result
-
+        # --- Phase 2: nmap service detection via ToolRunner ---
         port_list = ",".join(str(p.get("port")) for p in live_ports if p.get("port"))
         if not port_list:
-            logger.warning(f"No live ports found for {target}")
+            logger.warning("No live ports found for %s", target)
             result.scan_duration = time.time() - start
             return result
 
         try:
-            nmap_cmd = ["nmap", "-sV", "-sC", "-p", port_list, target, "-oX", "-"]
-            logger.info("Running nmap: %s", " ".join(nmap_cmd))
-            nmap_proc = subprocess.run(
-                nmap_cmd,
-                capture_output=True,
-                text=True,
+            nmap_result = self._tool_runner.run(
+                "nmap", ["-sV", "-sC", "-p", port_list, target, "-oX", "-"],
                 timeout=self.NMAP_TIMEOUT,
             )
-            result = self._parse_nmap_services(nmap_proc.stdout, result)
-        except subprocess.TimeoutExpired:
-            logger.warning("nmap timed out after %ds", self.NMAP_TIMEOUT)
-        except FileNotFoundError:
-            logger.warning("nmap binary not found")
+            if nmap_result.success:
+                result = self._parse_nmap_services(nmap_result.stdout, result)
+            else:
+                logger.warning("nmap service detection failed: %s", nmap_result.error or nmap_result.stderr[:200])
         except Exception as e:
             logger.warning("nmap service detection failed: %s", e)
+
+        # Build result from naabu data even if nmap failed
+        for p in live_ports:
+            op = OpenPort(
+                port=p.get("port", 0),
+                protocol=p.get("protocol", "tcp"),
+                state="open",
+            )
+            if op.port not in result.service_map:
+                result.open_ports.append(op)
+                result.service_map[op.port] = op
 
         result.scan_duration = time.time() - start
         return result
