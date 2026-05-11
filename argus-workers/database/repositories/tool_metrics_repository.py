@@ -208,4 +208,5 @@ class ToolMetricsRepository(BaseRepository):
             raise e
         finally:
             cursor.close()
-            conn.close()
+            if not self._external_conn:
+                self._release_connection(conn)

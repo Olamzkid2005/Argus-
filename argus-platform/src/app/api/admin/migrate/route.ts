@@ -10,7 +10,12 @@ import { pool } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+
+    // Require admin role for migration operations
+    if (session.user?.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
+    }
 
     const body = await request.json();
     const migration = body.migration;

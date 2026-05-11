@@ -100,8 +100,6 @@ class FindingNormalizer:
         # pip-audit
         "dependency_vulnerability": "DEPENDENCY_VULNERABILITY",
         "pip_audit": "DEPENDENCY_VULNERABILITY",
-        # bandit
-        "bandit_*": "CODE_VULNERABILITY",
         # subfinder
         "subdomain_discovery": "SUBDOMAIN_DISCOVERY",
         "subdomain_permutation": "SUBDOMAIN_PERMUTATION",
@@ -179,7 +177,6 @@ class FindingNormalizer:
     TOOL_FP_RATES = {
         "nuclei": 0.15,
         "sqlmap": 0.10,
-        "burp": 0.05,
         "httpx": 0.30,
         "ffuf": 0.40,
         # New tools
@@ -302,10 +299,6 @@ class FindingNormalizer:
                 if not cwe.startswith("CWE-"):
                     cwe = f"CWE-{cwe}"
 
-                # Also try without prefix
-                cwe_key = cwe.replace("CWE-", "")
-                if cwe_key in self.CWE_TYPE_MAPPINGS:
-                    return self.CWE_TYPE_MAPPINGS[cwe_key]
                 if cwe in self.CWE_TYPE_MAPPINGS:
                     return self.CWE_TYPE_MAPPINGS[cwe]
 

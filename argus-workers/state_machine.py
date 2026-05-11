@@ -44,8 +44,8 @@ class EngagementStateMachine:
         "recon": ["scanning", "awaiting_approval", "failed", "paused"],
         "awaiting_approval": ["scanning", "paused", "failed"],
         "scanning": ["analyzing", "failed", "paused"],
-        "analyzing": ["reporting", "recon", "failed"],  # Can loop back to recon
-        "reporting": ["complete", "failed"],
+        "analyzing": ["reporting", "recon", "failed", "paused"],  # Can loop back to recon
+        "reporting": ["complete", "failed", "paused"],
         "paused": ["recon", "scanning", "analyzing"],
         "failed": [],
         "complete": [],

@@ -16,7 +16,7 @@ class PipAuditParser(BaseParser):
             data = json.loads(raw_output)
         except json.JSONDecodeError:
             return findings
-        items = data if isinstance(data, list) else []
+        items = data if isinstance(data, list) else data.get("dependencies", []) if isinstance(data, dict) else []
         for vuln in items:
             severity = vuln.get("severity", "MEDIUM").upper()
             severity = severity if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "MEDIUM"

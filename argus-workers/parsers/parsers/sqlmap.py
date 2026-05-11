@@ -116,10 +116,14 @@ class SqlmapParser(BaseParser):
         findings = []
 
         if "sqlmap identified the following injection point" in raw_output.lower():
+            # Extract target URL from text output if possible
+            import re
+            url_match = re.search(r"(https?://[^\s]+)", raw_output)
+            endpoint = url_match.group(1) if url_match else "unknown_target"
             finding = {
                 "type": "SQL_INJECTION",
                 "severity": "CRITICAL",
-                "endpoint": "",
+                "endpoint": endpoint,
                 "evidence": {
                     "raw_output": raw_output[:1000],
                 },
