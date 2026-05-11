@@ -100,15 +100,23 @@ class ReActAgent:
         self._candidate_list = candidate_list
 
     def add_to_history(self, role: str, content: str, data: dict = None):
-        """Add an entry to the agent's history/context."""
+        """Add an entry to the agent's history/context.
+        
+        Content is truncated to 2000 chars to prevent unbounded token growth
+        from large tool outputs (nuclei can produce thousands of JSON lines).
+        """
+        MAX_HISTORY_ENTRY = 2000
         self.history.append(
             {
                 "role": role,
-                "content": content,
+                "content": content[:MAX_HISTORY_ENTRY],
                 "data": data or {},
                 "timestamp": time.time(),
             }
         )
+        # Cap history to last 50 entries to prevent memory growth
+        if len(self.history) > 50:
+            self.history = self.history[-50:]
 
     def get_context(self, max_tokens: int = LLM_AGENT_CONTEXT_MAX_TOKENS) -> str:
         """

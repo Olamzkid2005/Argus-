@@ -108,7 +108,12 @@ class LLMService:
                 return self._fallback("Cost cap exceeded")
 
             try:
-                return json.loads(response_text)
+                parsed = json.loads(response_text)
+                # Validate that the response is a dict or list (callers expect structured data)
+                if not isinstance(parsed, (dict, list)):
+                    logger.warning("LLM returned unexpected type %s, using fallback", type(parsed).__name__)
+                    return self._fallback("Unexpected response type (expected dict or list)")
+                return parsed
             except json.JSONDecodeError as e:
                 logger.warning("LLM returned non-JSON response (%.200r...), using fallback: %s", response_text, e)
                 return self._fallback(f"JSON parse error: {e}")

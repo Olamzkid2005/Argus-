@@ -25,7 +25,6 @@ from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
 from streaming import (
-    emit_state_change,
     emit_thinking,
     emit_tool_complete,
     emit_tool_start,
@@ -178,7 +177,8 @@ class Orchestrator:
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="recon", target=target)
         self.logger.log_job_started(job_type="recon", engagement_id=self.engagement_id, target=target)
         emit_thinking(self.engagement_id, f"Starting reconnaissance against {target}")
-        emit_state_change(self.engagement_id, "created", "recon", "Starting reconnaissance")
+        # State change published via state machine _ws_publisher in transition()
+        logger.debug("Recon starting for engagement %s", self.engagement_id)
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         findings, recon_context = execute_recon_pipeline(self, target, job.get("budget", {}), aggressiveness)

@@ -84,6 +84,12 @@ ON audit_logs(org_id, action, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_logs_engagement_event 
 ON execution_logs(engagement_id, event_type, created_at DESC);
 
+-- Index for trace_id lookups on execution logs and spans
+CREATE INDEX IF NOT EXISTS idx_execution_logs_trace_id 
+ON execution_logs(trace_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_execution_spans_trace_id 
+ON execution_spans(trace_id, created_at ASC);
+
 -- ============================================================================
 -- BRIN INDEXES FOR TIME-SERIES DATA (large tables)
 -- ============================================================================
