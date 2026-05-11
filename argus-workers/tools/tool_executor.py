@@ -3,6 +3,7 @@ Tool Executor - End-to-end tool execution flow
 Wires together: Tool Runner → Parser → Normalizer → PostgreSQL
 """
 
+import logging
 import time
 import uuid
 
@@ -15,6 +16,8 @@ from parsers.parser import Parser, ParserError
 from tools.models import ToolResult
 from tools.scope_validator import ScopeValidator, ScopeViolationError
 from tools.tool_runner import SecurityException, ToolRunner
+
+logger = logging.getLogger(__name__)
 
 
 class ToolExecutor:
@@ -209,7 +212,7 @@ class ToolExecutor:
                     time.sleep(backoff_seconds)
                     backoff_seconds += 1  # Linear backoff
                 else:
-                    print(f"Parser failed after {max_retries} attempts: {e}")
+                    logger.error(f"Parser failed for {tool_name} after {max_retries} attempts: {e}", exc_info=True)
                     return None
 
         return None
@@ -280,7 +283,7 @@ class ToolExecutor:
 
         except Exception as e:
             conn.rollback()
-            print(f"Failed to store findings: {e}")
+            logger.error(f"Failed to store findings for engagement={engagement_id}: {e}", exc_info=True)
             return 0
         finally:
             cursor.close()
@@ -319,7 +322,7 @@ class ToolExecutor:
 
         except Exception as e:
             conn.rollback()
-            print(f"Failed to store raw output: {e}")
+            logger.error(f"Failed to store raw output for {tool_name} engagement={engagement_id}: {e}", exc_info=True)
         finally:
             cursor.close()
             conn.close()
