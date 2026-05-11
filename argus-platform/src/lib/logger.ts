@@ -18,11 +18,7 @@ function logMsg(level: LogLevel, category: string, ...args: unknown[]): void {
   // Always capture stack for errors
   if (level === 'error') {
     const stack = new Error().stack?.split('\n').slice(2).join('\n') ?? '';
-    switch (level) {
-      case 'error':
-        console.error(timestamp, message, `\n  trace:\n  ${stack.replace(/\n/g, '\n  ')}`);
-        break;
-    }
+    console.error(timestamp, message, `\n  trace:\n  ${stack.replace(/\n/g, '\n  ')}`);
     return;
   }
 
@@ -43,9 +39,7 @@ function logMsg(level: LogLevel, category: string, ...args: unknown[]): void {
 // ============================================================
 const pageLog = {
   mount: (name: string) => logMsg('info', 'Page', `Mount: ${name}`),
-  pageMount: (name: string) => logMsg('info', 'Page', `Mount: ${name}`),
   unmount: (name: string) => logMsg('info', 'Page', `Unmount: ${name}`),
-  pageUnmount: (name: string) => logMsg('info', 'Page', `Unmount: ${name}`),
   error: (name: string, error: unknown) => logMsg('error', 'Page', `${name} error:`, error),
 };
 

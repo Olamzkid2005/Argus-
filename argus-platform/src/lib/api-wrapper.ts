@@ -13,8 +13,8 @@ export function withApiLogging(method: string, path: string, handler: RouteHandl
     let params: Record<string, string> = {};
     try {
       params = await ctx.params;
-    } catch {
-      // params may not be available for all routes
+    } catch (error) {
+      log.warn("API", `Params resolution failed for ${method} ${path}: ${error}`);
     }
 
     log.api.start(method, path, params);

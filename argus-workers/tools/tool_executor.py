@@ -158,7 +158,7 @@ class ToolExecutor:
                     backoff_seconds *= 2  # Exponential backoff
 
             except SecurityException as e:
-                # Don't retry security exceptions
+                logger.warning("Security violation for %s (non-retryable): %s", tool_name, e)
                 return ToolResult(
                     success=False,
                     stderr=str(e),
@@ -171,6 +171,7 @@ class ToolExecutor:
                     time.sleep(backoff_seconds)
                     backoff_seconds *= 2
                 else:
+                    logger.error("Tool %s failed after %d attempts: %s", tool_name, max_retries, e, exc_info=True)
                     return ToolResult(
                         success=False,
                         stderr=str(e),
