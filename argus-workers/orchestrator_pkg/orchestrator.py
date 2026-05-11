@@ -678,7 +678,11 @@ class Orchestrator:
     ) -> list[dict]:
         tech_stack = recon_context.tech_stack if recon_context else []
         # Use the shared SPA detection from browser_scanner module
-        from tools.browser_scanner import is_spa_target, scan as run_browser_scan
+        try:
+            from tools.browser_scanner import is_spa_target, scan as run_browser_scan
+        except ImportError:
+            logger.debug("Browser scanner module not available — skipping browser scan")
+            return findings
         if not is_spa_target(tech_stack):
             return findings
         try:
@@ -689,8 +693,6 @@ class Orchestrator:
                     norm = self._normalize_finding(bf, "browser_scanner")
                     if norm:
                         findings.append(norm)
-        except ImportError:
-            logger.debug("Browser scanner module not available — skipping browser scan")
         except Exception as e:
             logger.warning(f"Browser scanner failed (non-fatal): {e}")
         return findings

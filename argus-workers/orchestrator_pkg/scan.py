@@ -6,7 +6,6 @@ import ipaddress
 import json
 import logging
 import socket
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config.constants import (
@@ -194,6 +193,29 @@ def execute_scan_tools(
         nuclei_templates.rglob("*.yaml")
     )
 
+    # Hoisted callback for streaming nuclei output (defined once, not per-target)
+    def _on_nuclei_line(line: str):
+        """Callback for streaming nuclei output."""
+        line = line.strip()
+        if not line:
+            return
+        if not line.startswith("{"):
+            return  # skip non-JSON progress lines
+        try:
+            finding = json.loads(line)
+        except json.JSONDecodeError:
+            logger.log(5, f"Nuclei skipped malformed JSON: {line[:200]}")
+            return
+        try:
+            from parsers.schemas.nuclei_schema import validate_nuclei_finding
+            validated = validate_nuclei_finding(finding)
+            if validated:
+                normalized = ctx._normalize_finding(validated, "nuclei")
+                if normalized:
+                    all_findings.append(normalized)
+        except Exception as e:
+            logger.debug(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
+
     for target in targets:
         # Skip None/empty targets
         if not target:
@@ -231,32 +253,6 @@ def execute_scan_tools(
                 nuclei_timeout = 600
             elif agg == "extreme":
                 nuclei_timeout = 1200
-
-            def _on_nuclei_line(line: str):
-                """Callback for streaming nuclei output."""
-                # Strip trailing whitespace but skip empty lines
-                line = line.strip()
-                if not line:
-                    return
-                if not line.startswith("{"):
-                    # Nuclei may output non-JSON progress lines — skip them silently
-                    return
-                try:
-                    finding = json.loads(line)
-                except json.JSONDecodeError:
-                    # Malformed JSON line — skip, nuclei occasionally emits
-                    # partial lines during template compilation warnings
-                    logger.log(5, f"Nuclei skipped malformed JSON: {line[:200]}")
-                    return
-                try:
-                    from parsers.schemas.nuclei_schema import validate_nuclei_finding
-                    validated = validate_nuclei_finding(finding)
-                    if validated:
-                        normalized = ctx._normalize_finding(validated, "nuclei")
-                        if normalized:
-                            all_findings.append(normalized)
-                except Exception as e:
-                    logger.debug(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 
             try:
                 emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
