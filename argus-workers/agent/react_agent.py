@@ -34,6 +34,7 @@ from .agent_prompts import (
     TOOL_SELECTION_SYSTEM_PROMPT,
     _load_bugbounty_context,
     build_observation_summary,
+    build_tech_aware_system_prompt,
     build_tool_selection_prompt,
 )
 from .agent_result import AgentResult
@@ -188,7 +189,7 @@ class ReActAgent:
         Return the correct system prompt based on scan type and mode.
         - bugbounty mode → Bug-Reaper ROI-ordered methodology
         - repo scans → SAST-focused prompt
-        - default → standard webapp scanning prompt
+        - default → standard webapp scanning prompt with tech-stack highlights
         """
         # Bug-Reaper mode takes priority
         if self._mode == "bugbounty":
@@ -197,7 +198,8 @@ class ReActAgent:
         if recon_context and hasattr(recon_context, "scan_type"):
             if recon_context.scan_type == "repo":
                 return REPO_TOOL_SELECTION_SYSTEM_PROMPT
-        return TOOL_SELECTION_SYSTEM_PROMPT
+
+        return build_tech_aware_system_prompt(recon_context)
 
     def _call_llm_for_action(
         self,

@@ -305,6 +305,75 @@ you haven't found anything yet. Continue debugging the full attack surface.
 """
 
 # ---------------------------------------------------------------------------
+# TECH THREAT HIGHLIGHTS
+# Tech-stack-specific threat guidance injected into system prompts.
+# When recon_context.tech_stack is available, the relevant block is
+# appended to the system prompt so the LLM knows where to look.
+# ---------------------------------------------------------------------------
+
+TECH_THREAT_HIGHLIGHTS = {
+    "wordpress": """
+### WordPress-specific threats
+- Plugin CVEs: test /wp-json/wp/v2/users for user enumeration, xmlrpc.php for
+  brute force, /wp-admin/admin-ajax.php for unauthenticated actions
+- wp-config.php exposure via path traversal or backup file (.bak, ~, .old)
+- Shortcode injection in custom post types that render unsanitized HTML
+- wp-includes/ms-files.php SSRF on multisite installs
+""",
+    "react": """
+### React/Next.js-specific threats
+- dangerouslySetInnerHTML with user-controlled data → stored XSS
+- Server Actions without authentication checks → auth bypass
+- catch-all routes ([...slug]) without middleware auth → IDOR
+- getServerSideProps fetching user-supplied URLs → SSRF
+- next.config.js rewrites that expose internal services
+""",
+    "django": """
+### Django-specific threats
+- CSRF exemption (@csrf_exempt) on state-changing views
+- Raw SQL in .raw() or .extra() with format strings
+- Template {{ variable|safe }} disabling auto-escaping
+- DEBUG=True leaking settings and stack traces in production
+- Missing @login_required on class-based views (CBV)
+""",
+    "laravel": """
+### Laravel-specific threats
+- Mass assignment via $fillable omission or $guarded = []
+- SQL injection in whereRaw(), selectRaw(), orderByRaw() with user input
+- Unvalidated redirects in redirect()->to($request->input('url'))
+- Deserialization gadgets in queue jobs with user-controlled payloads
+""",
+    "express": """
+### Express.js-specific threats
+- Missing helmet() → no security headers
+- res.redirect(req.query.next) without allowlist → open redirect
+- CORS misconfiguration with credentials: true + wildcard origin
+- prototype pollution via lodash.merge with user-controlled objects
+""",
+    "go": """
+### Go-specific threats
+- os/exec.Command() with string concatenation → RCE
+- http.Get(userInput) without URL validation → SSRF
+- sql.Query() with fmt.Sprintf → SQLi
+- goroutine leak from context not cancelled in HTTP handlers
+""",
+    "java": """
+### Java/Spring-specific threats
+- @RequestMapping without @PreAuthorize → missing auth
+- Runtime.exec() with user-controlled args → RCE
+- ObjectInputStream.readObject() on untrusted data → deserialization RCE
+- Spring SpEL injection in @Value annotations
+""",
+    "php": """
+### PHP-specific threats
+- include/require with user-controlled path → LFI/RFI
+- system()/exec()/shell_exec() with user input → RCE
+- unserialize() on user data → object injection
+- extract($_REQUEST) or $$variable → variable variable injection
+""",
+}
+
+# ---------------------------------------------------------------------------
 # STOPPING RULES — prevents the agent from stopping too early
 # ---------------------------------------------------------------------------
 
@@ -441,6 +510,37 @@ Return ONLY valid JSON. No markdown, no explanation outside the JSON.
   "reasoning": "<1-3 sentences citing the specific bug bounty priority and recon signal>"
 }}
 """
+
+def build_tech_aware_system_prompt(recon_context) -> str:
+    """
+    Builds a system prompt enriched with tech-stack-specific threat guidance.
+    Called instead of the static TOOL_SELECTION_SYSTEM_PROMPT when a
+    ReconContext with tech_stack is available.
+    """
+    base = TOOL_SELECTION_SYSTEM_PROMPT
+
+    if not recon_context or not recon_context.tech_stack:
+        return base
+
+    tech_stack_lower = " ".join(recon_context.tech_stack).lower()
+    highlights = []
+    for tech_key, highlight in TECH_THREAT_HIGHLIGHTS.items():
+        if tech_key in tech_stack_lower:
+            highlights.append(highlight)
+
+    if not highlights:
+        return base
+
+    tech_section = "\n## Threat highlights for this target's tech stack\n"
+    tech_section += "\n".join(highlights[:3])  # max 3 highlights per prompt
+    tech_section += "\n"
+
+    # Insert before the tool catalogue
+    return base.replace(
+        "TOOL CATALOGUE — WEB APPLICATION SCAN",
+        tech_section + "\nTOOL CATALOGUE — WEB APPLICATION SCAN"
+    )
+
 
 def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
     """
