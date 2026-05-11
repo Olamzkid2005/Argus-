@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       params.push(status);
     }
 
-    query += ` ORDER BY fa.created_at DESC`;
+    query += ` ORDER BY fa.created_at DESC LIMIT 200`;
 
     const result = await pool.query(query, params);
     log.apiEnd('GET', '/api/collaboration/assignments', 200, { count: result.rows.length });

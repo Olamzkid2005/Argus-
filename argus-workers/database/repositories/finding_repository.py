@@ -231,6 +231,7 @@ class FindingRepository(BaseRepository):
                 SELECT * FROM findings
                 WHERE engagement_id = %s AND confidence >= %s
                 ORDER BY confidence DESC
+                LIMIT 500
                 """,
                 (engagement_id, threshold)
             )

@@ -40,103 +40,118 @@ class SnapshotManager:
         """
         conn = None
         cursor = None
+        max_retries = 3
+        import time
 
-        try:
-            conn = connect(self.db_conn_string)
-            # Set SERIALIZABLE isolation level
-            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
+        for attempt in range(max_retries):
+            try:
+                conn = connect(self.db_conn_string)
+                # Set SERIALIZABLE isolation level
+                conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
 
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-            # Capture findings
-            cursor.execute(
-                """
-                SELECT
-                    id, type, severity, confidence, endpoint,
-                    evidence, source_tool, cvss_score, evidence_strength,
-                    tool_agreement_level, fp_likelihood, created_at
-                FROM findings
-                WHERE engagement_id = %s
-                ORDER BY created_at DESC
-                """,
-                (engagement_id,)
-            )
-            findings = [dict(row) for row in cursor.fetchall()]
+                # Capture findings
+                cursor.execute(
+                    """
+                    SELECT
+                        id, type, severity, confidence, endpoint,
+                        evidence, source_tool, cvss_score, evidence_strength,
+                        tool_agreement_level, fp_likelihood, created_at
+                    FROM findings
+                    WHERE engagement_id = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (engagement_id,)
+                )
+                findings = [dict(row) for row in cursor.fetchall()]
 
-            # Capture attack graph (attack_paths)
-            cursor.execute(
-                """
-                SELECT
-                    id, path_nodes, risk_score, normalized_severity, created_at
-                FROM attack_paths
-                WHERE engagement_id = %s
-                ORDER BY risk_score DESC
-                """,
-                (engagement_id,)
-            )
-            attack_paths = [dict(row) for row in cursor.fetchall()]
+                # Capture attack graph (attack_paths)
+                cursor.execute(
+                    """
+                    SELECT
+                        id, path_nodes, risk_score, normalized_severity, created_at
+                    FROM attack_paths
+                    WHERE engagement_id = %s
+                    ORDER BY risk_score DESC
+                    """,
+                    (engagement_id,)
+                )
+                attack_paths = [dict(row) for row in cursor.fetchall()]
 
-            # Capture loop budget
-            cursor.execute(
-                """
-                SELECT
-                    max_cycles, max_depth,
-                    current_cycles, current_depth
-                FROM loop_budgets
-                WHERE engagement_id = %s
-                """,
-                (engagement_id,)
-            )
-            loop_budget_row = cursor.fetchone()
-            loop_budget = dict(loop_budget_row) if loop_budget_row else {}
+                # Capture loop budget
+                cursor.execute(
+                    """
+                    SELECT
+                        max_cycles, max_depth,
+                        current_cycles, current_depth
+                    FROM loop_budgets
+                    WHERE engagement_id = %s
+                    """,
+                    (engagement_id,)
+                )
+                loop_budget_row = cursor.fetchone()
+                loop_budget = dict(loop_budget_row) if loop_budget_row else {}
 
-            # Capture engagement state
-            cursor.execute(
-                """
-                SELECT status, target_url, authorized_scope, rate_limit_config
-                FROM engagements
-                WHERE id = %s
-                """,
-                (engagement_id,)
-            )
-            engagement_row = cursor.fetchone()
-            engagement_state = dict(engagement_row) if engagement_row else {}
+                # Capture engagement state
+                cursor.execute(
+                    """
+                    SELECT status, target_url, authorized_scope, rate_limit_config
+                    FROM engagements
+                    WHERE id = %s
+                    """,
+                    (engagement_id,)
+                )
+                engagement_row = cursor.fetchone()
+                engagement_state = dict(engagement_row) if engagement_row else {}
 
-            # Create snapshot data
-            snapshot_data = {
-                "engagement_id": engagement_id,
-                "findings": findings,
-                "attack_graph": {
-                    "paths": attack_paths,
-                },
-                "loop_budget": loop_budget,
-                "engagement_state": engagement_state,
-                "snapshot_timestamp": datetime.now(UTC).isoformat(),
-            }
+                # Create snapshot data
+                snapshot_data = {
+                    "engagement_id": engagement_id,
+                    "findings": findings,
+                    "attack_graph": {
+                        "paths": attack_paths,
+                    },
+                    "loop_budget": loop_budget,
+                    "engagement_state": engagement_state,
+                    "snapshot_timestamp": datetime.now(UTC).isoformat(),
+                }
 
-            # Convert DB-native types (e.g. Decimal) into JSON-safe values
-            # before persisting and returning snapshot data.
-            snapshot_data = self._to_jsonable(snapshot_data)
+                # Convert DB-native types (e.g. Decimal) into JSON-safe values
+                snapshot_data = self._to_jsonable(snapshot_data)
 
-            # Store snapshot in database
-            snapshot_id = self._store_snapshot(engagement_id, snapshot_data, cursor)
+                # Store snapshot in database
+                snapshot_id = self._store_snapshot(engagement_id, snapshot_data, cursor)
 
-            conn.commit()
+                conn.commit()
 
-            # Add snapshot ID to data
-            snapshot_data["snapshot_id"] = snapshot_id
+                # Add snapshot ID to data
+                snapshot_data["snapshot_id"] = snapshot_id
 
-            return snapshot_data
+                return snapshot_data
 
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            raise Exception(f"Failed to create snapshot: {e}") from e
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+            except Exception as e:
+                if conn:
+                    conn.rollback()
+                # Retry on serialization failures (40001) — concurrent modification
+                if conn and hasattr(conn, 'get_dsn_parameters'):
+                    try:
+                        from psycopg2.errorcodes import SERIALIZATION_FAILURE
+                        pgcode = getattr(e, 'pgcode', None)
+                        if pgcode == SERIALIZATION_FAILURE and attempt < max_retries - 1:
+                            time.sleep(retry_delay * (2 ** attempt))
+                            continue
+                    except Exception:
+                        pass
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to create snapshot after {max_retries} attempts: {e}") from e
+            finally:
+                if cursor:
+                    cursor.close()
+                    cursor = None
+                if conn:
+                    conn.close()
+                    conn = None
 
     def _to_jsonable(self, value):
         """Recursively convert values to JSON-safe types."""

@@ -1,10 +1,9 @@
 """
-ReAct Agent Loop - LLM-driven tool selection and execution.
+Re-exports from the agent package for backward compatibility.
 
-DEPRECATED: This module now re-exports from the agent package.
-New code should import directly from agent.* modules.
+DEPRECATED: Import directly from the agent package instead.
 """
-import logging
-
-logger = logging.getLogger(__name__)
-
+from agent.agent_result import AgentResult  # noqa: F401
+from agent.tool_registry import ToolRegistry  # noqa: F401
+from agent.react_agent import ReActAgent  # noqa: F401
+from agent.coordinator import CoordinatorAgent, create_phase_agent  # noqa: F401
