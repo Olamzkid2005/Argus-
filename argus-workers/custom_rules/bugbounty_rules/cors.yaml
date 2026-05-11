@@ -1,46 +1,73 @@
-# CORS Misconfiguration Rules — From Bug-Reaper CORS Methodology
-# Priority 7 in bug bounty ROI
 rules:
-  - id: br_cors_origin_reflection
-    message: "CORS Access-Control-Allow-Origin reflects arbitrary Origin with Allow-Credentials — attacker can read authenticated API responses cross-origin"
-    severity: CRITICAL
-    source: bugbounty
-    cwe: CWE-942
-    tags: ["cors", "misconfiguration", "bugbounty", "credentials"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)Access-Control-Allow-Origin:\\s*\\*"
-      - regex: "(?i)Access-Control-Allow-Origin:\\s*(https?:)?//"
-      - regex: "(?i)Access-Control-Allow-Credentials:\\s*true"
-    metadata:
-      category: cors
-      confidence: 0.70
-      detection_method: "Send Origin: https://evil.com — if ACAO reflects evil.com + ACAC:true = Critical"
-
-  - id: br_cors_null_origin
-    message: "CORS allows null origin with Allow-Credentials — exploitable via sandboxed iframe"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-942
-    tags: ["cors", "null-origin", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)Access-Control-Allow-Origin:\\s*null"
-    metadata:
-      category: cors
-      confidence: 0.65
-      detection_method: "Send Origin: null — if ACAO: null + ACAC: true = exploitable via sandboxed iframe"
-
-  - id: br_cors_wildcard_trust
-    message: "CORS policy trusts subdomain wildcard — potential takeover chaining"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-942
-    tags: ["cors", "wildcard", "bugbounty", "subdomain-takeover"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)Access-Control-Allow-Origin:\\s*https?://\\*\\.\\w+\\.\\w+"
-    metadata:
-      category: cors
-      confidence: 0.60
-      detection_method: "If subdomain takeover possible, this CORS wildcard allows credential theft"
+- id: br_cors_origin_reflection
+  message: CORS Access-Control-Allow-Origin reflects arbitrary Origin with Allow-Credentials
+    — attacker can read authenticated API responses cross-origin
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-942
+  tags:
+  - cors
+  - misconfiguration
+  - bugbounty
+  - credentials
+  requires_validation: true
+  patterns:
+  - regex: (?i)Access-Control-Allow-Origin:\s*\*
+  - regex: (?i)Access-Control-Allow-Origin:\s*(https?:)?//
+  - regex: (?i)Access-Control-Allow-Credentials:\s*true
+  test_patterns:
+  - 'Access-Control-Allow-Origin: *'
+  - 'Access-Control-Allow-Origin: https://evil.com'
+  - 'Access-Control-Allow-Credentials: true'
+  non_matching_patterns:
+  - 'Access-Control-Allow-Origin: example.com'
+  - 'X-Access-Control-Credentials: true'
+  metadata:
+    category: cors
+    confidence: 0.7
+    detection_method: 'Send Origin: https://evil.com — if ACAO reflects evil.com +
+      ACAC:true = Critical'
+- id: br_cors_null_origin
+  message: CORS allows null origin with Allow-Credentials — exploitable via sandboxed
+    iframe
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-942
+  tags:
+  - cors
+  - null-origin
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)Access-Control-Allow-Origin:\s*null
+  test_patterns:
+  - 'Access-Control-Allow-Origin: null'
+  non_matching_patterns:
+  - 'Access-Control-Allow-Origin: https://null.example.com'
+  metadata:
+    category: cors
+    confidence: 0.65
+    detection_method: 'Send Origin: null — if ACAO: null + ACAC: true = exploitable
+      via sandboxed iframe'
+- id: br_cors_wildcard_trust
+  message: CORS policy trusts subdomain wildcard — potential takeover chaining
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-942
+  tags:
+  - cors
+  - wildcard
+  - bugbounty
+  - subdomain-takeover
+  requires_validation: true
+  patterns:
+  - regex: (?i)Access-Control-Allow-Origin:\s*https?://\*\.\w+\.\w+
+  test_patterns:
+  - 'Access-Control-Allow-Origin: https://*.example.com'
+  non_matching_patterns:
+  - 'Access-Control-Allow-Origin: https://example.com'
+  metadata:
+    category: cors
+    confidence: 0.6
+    detection_method: If subdomain takeover possible, this CORS wildcard allows credential
+      theft

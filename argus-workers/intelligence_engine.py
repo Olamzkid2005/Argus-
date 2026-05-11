@@ -37,6 +37,25 @@ class IntelligenceEngine:
         self.logger = StructuredLogger(self.connection_string)
         self.span_recorder = ExecutionSpan(self.connection_string)
 
+    QUALITY_ORDER = {"confirmed": 0, "probable": 1, "candidate": 2}
+
+    @staticmethod
+    def _sort_findings_by_signal_quality(findings: list[dict]) -> list[dict]:
+        """Sort findings so confirmed → probable → candidate.
+
+        When time is short, confirmed findings (nuclei CVE, web_scanner verified)
+        get analysis budget first. Noisy candidates (nikto, ffuf) processed last.
+        """
+        from tool_definitions import TOOLS, SignalQuality
+
+        def priority(f: dict) -> int:
+            tool_name = f.get("source_tool", "")
+            tool_def = TOOLS.get(tool_name)
+            quality = tool_def.signal_quality if tool_def else SignalQuality.CANDIDATE
+            return IntelligenceEngine.QUALITY_ORDER.get(quality, 2)
+
+        return sorted(findings, key=priority)
+
     def evaluate(self, snapshot: dict, org_id: str | None = None) -> dict:
         """
         Evaluate snapshot and generate actions.
@@ -57,6 +76,10 @@ class IntelligenceEngine:
                 - reasoning: Explanation of decisions
         """
         findings = snapshot.get("findings", [])
+
+        # Sort findings by signal quality so confirmed findings get analysis
+        # budget first — candidates get processed last when time is short.
+        findings = self._sort_findings_by_signal_quality(findings)
 
         # Execute with span tracing
         with self.span_recorder.span(

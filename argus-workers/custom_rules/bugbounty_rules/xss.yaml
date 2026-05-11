@@ -1,47 +1,81 @@
-# XSS Rules — From Bug-Reaper XSS Methodology
-# Priority 5 in bug bounty ROI (after IDOR, Auth, API, SSRF)
 rules:
-  - id: br_xss_dangerous_sink
-    message: "Potential XSS sink detected — JavaScript dangerous function or property assigned with user-controllable input"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-79
-    tags: ["xss", "injection", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(innerHTML|outerHTML|insertAdjacentHTML|document\\.write|document\\.writeln)\\s*[=+]?\\s*[\\\"']?\\s*(<|%3C|\\\\u003C)"
-      - regex: "(?i)(location\\.href|location\\.replace|location\\.assign|window\\.open)\\s*\\(\\s*[\\\"']?\\s*(https?:|javascript:|data:|vbscript:)"
-      - regex: "(?i)(eval|setTimeout|setInterval|new\\s+Function)\\s*\\(\\s*[\\\"']"
-    metadata:
-      category: xss
-      confidence: 0.60
-      detection_method: "Confirm framework does NOT auto-escape in this context — check React JSX, Django/Jinja2 auto-escape"
-
-  - id: br_xss_reflected_input
-    message: "User input reflected in response — potential reflected XSS target"
-    severity: MEDIUM
-    source: bugbounty
-    cwe: CWE-79
-    tags: ["xss", "reflected", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(<script|<img\\s+src|<svg/onload|<iframe\\s+src|<input\\s+onfocus|<body\\s+onload|<details\\s+ontoggle)"
-    metadata:
-      category: xss
-      confidence: 0.55
-      detection_method: "Inject <script>alert(1)</script> and verify JS execution in browser context"
-
-  - id: br_xss_dom_source_sink
-    message: "DOM XSS pattern — attacker-controllable DOM source flows to dangerous sink"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-79
-    tags: ["xss", "dom-xss", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(location\\.hash|location\\.search|document\\.referrer|document\\.URL|postMessage|window\\.name)"
-      - regex: "(?i)\\.innerHTML\\s*=|\\s*innerHTML\\s*\\+=|insertAdjacentHTML|document\\.write\\("
-    metadata:
-      category: xss
-      confidence: 0.50
-      detection_method: "Trace DOM source to sink — confirm no sanitization in between (DOMPurify, sanitize-html)"
+- id: br_xss_dangerous_sink
+  message: Potential XSS sink detected — JavaScript dangerous function or property
+    assigned with user-controllable input
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-79
+  tags:
+  - xss
+  - injection
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)(innerHTML|outerHTML|insertAdjacentHTML|document\.write|document\.writeln)\s*[=+]?\s*[\"']?\s*(<|%3C|\\u003C)
+  - regex: (?i)(location\.href|location\.replace|location\.assign|window\.open)\s*\(\s*[\"']?\s*(https?:|javascript:|data:|vbscript:)
+  - regex: (?i)(eval|setTimeout|setInterval|new\s+Function)\s*\(\s*[\"']
+  metadata:
+    category: xss
+    confidence: 0.6
+    detection_method: Confirm framework does NOT auto-escape in this context — check
+      React JSX, Django/Jinja2 auto-escape
+  test_patterns:
+  - element.innerHTML = '<img src=x onerror=alert(1)>'
+  - window.open('javascript:alert(document.cookie)')
+  - eval('alert(1)')
+  non_matching_patterns:
+  - element.textContent = userInput
+  - const url = new URL(userInput); window.open(url)
+- id: br_xss_reflected_input
+  message: User input reflected in response — potential reflected XSS target
+  severity: MEDIUM
+  source: bugbounty
+  cwe: CWE-79
+  tags:
+  - xss
+  - reflected
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)(<script|<img\s+src|<svg/onload|<iframe\s+src|<input\s+onfocus|<body\s+onload|<details\s+ontoggle)
+  metadata:
+    category: xss
+    confidence: 0.55
+    detection_method: Inject <script>alert(1)</script> and verify JS execution in
+      browser context
+  test_patterns:
+  - <script>alert(1)</script>
+  - <img src=x onerror=alert(1)>
+  - <svg/onload=alert(1)>
+  - <iframe src=javascript:alert(1)>
+  - <input onfocus=alert(1) autofocus>
+  - <body onload=alert(1)>
+  - <details ontoggle=alert(1) open>
+  non_matching_patterns:
+  - script type=text/javascript
+  - images/logo.png
+- id: br_xss_dom_source_sink
+  message: DOM XSS pattern — attacker-controllable DOM source flows to dangerous sink
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-79
+  tags:
+  - xss
+  - dom-xss
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)(location\.hash|location\.search|document\.referrer|document\.URL|postMessage|window\.name)
+  - regex: (?i)\.innerHTML\s*=|\s*innerHTML\s*\+=|insertAdjacentHTML|document\.write\(
+  test_patterns:
+  - const hash = location.hash;
+  - elem.innerHTML = decodeURIComponent(location.search);
+  - document.write(postMessage.data);
+  non_matching_patterns:
+  - const url = 'https://example.com'
+  - element.textContent = sanitized
+  metadata:
+    category: xss
+    confidence: 0.5
+    detection_method: Trace DOM source to sink — confirm no sanitization in between
+      (DOMPurify, sanitize-html)

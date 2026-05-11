@@ -20,7 +20,16 @@ Pattern: Declarative agent registry with derived types and phase maps.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import final
+
+# ── Signal quality tiers for findings prioritization ──
+
+class SignalQuality(str, Enum):
+    """Signal quality tier for a tool's findings reliability."""
+    CONFIRMED  = "confirmed"   # nuclei CVE hit — nearly always real
+    PROBABLE   = "probable"    # dalfox/sqlmap — tool confirmed the vuln
+    CANDIDATE  = "candidate"   # nikto, ffuf, naabu — needs investigation
 
 # ── Phase names ──
 
@@ -90,6 +99,9 @@ class ToolDefinition:
     #: Model tier hint (for LLM-integrated tools)
     model_tier: str | None = None
 
+    #: Signal quality tier for findings prioritization
+    signal_quality: SignalQuality = SignalQuality.CANDIDATE
+
 
 # ═══════════════════════════════════════════════════════════════
 # Registry — single source of truth for all tool definitions
@@ -116,6 +128,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", required=True),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -128,6 +141,7 @@ _register(ToolDefinition(
         ToolParameter("depth", "Crawl depth", flag="-d", default=3),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -141,6 +155,7 @@ _register(ToolDefinition(
         ToolParameter("threads", "Thread count", flag="-t", default=40),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -153,6 +168,7 @@ _register(ToolDefinition(
         ToolParameter("brute", "Enable brute forcing", flag="-brute"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -166,6 +182,7 @@ _register(ToolDefinition(
         ToolParameter("port_range", "Port range", flag="-p"),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -177,6 +194,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", required=True),
     ],
     timeout=120,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -188,6 +206,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", flag="-h", required=True),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -199,6 +218,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target domain", required=True),
     ],
     timeout=180,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -210,6 +230,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target domain", required=True),
     ],
     timeout=120,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -234,6 +255,7 @@ _register(ToolDefinition(
         ToolParameter("depth", "Crawl depth", flag="-d", default=3),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -246,6 +268,7 @@ _register(ToolDefinition(
         ToolParameter("all", "Use all sources", flag="-all"),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -258,6 +281,7 @@ _register(ToolDefinition(
         ToolParameter("domain", "Root domain", flag="-d"),
     ],
     timeout=120,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 
@@ -276,6 +300,7 @@ _register(ToolDefinition(
         ToolParameter("tags", "Template tags to run", flag="-tags"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.CONFIRMED
 ))
 
 _register(ToolDefinition(
@@ -289,6 +314,7 @@ _register(ToolDefinition(
         ToolParameter("deep_dom", "Deep DOM scanning", flag="--deep-dom"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -302,6 +328,7 @@ _register(ToolDefinition(
         ToolParameter("risk", "Risk level (1-3)", flag="--risk", default=1),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -314,6 +341,7 @@ _register(ToolDefinition(
         ToolParameter("threads", "Thread count", flag="-t", default=10),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -325,6 +353,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", flag="-u", required=True),
     ],
     timeout=120,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -336,6 +365,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target URL", flag="--url", required=True),
     ],
     timeout=300,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -347,6 +377,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target host:port", required=True),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 
@@ -362,6 +393,7 @@ _register(ToolDefinition(
         ToolParameter("config", "Rule config path", flag="--config"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.CONFIRMED
 ))
 
 _register(ToolDefinition(
@@ -375,6 +407,7 @@ _register(ToolDefinition(
         ToolParameter("max_target_mb", "Max target size", flag="--max-target-megabytes"),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CONFIRMED
 ))
 
 _register(ToolDefinition(
@@ -388,6 +421,7 @@ _register(ToolDefinition(
         ToolParameter("max_depth", "Max commit depth", flag="--max-depth"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -414,6 +448,7 @@ _register(ToolDefinition(
         ToolParameter("severity", "Severity filter", flag="-ll"),
     ],
     timeout=300,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -426,6 +461,7 @@ _register(ToolDefinition(
         ToolParameter("confidence", "Confidence level", flag="--confidence-level", default="2"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -437,6 +473,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target path", required=True),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -449,6 +486,7 @@ _register(ToolDefinition(
         ToolParameter("ext", "File extensions", flag="--ext", default=".js,.jsx,.ts,.tsx"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -460,6 +498,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target path", required=True),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 _register(ToolDefinition(
@@ -471,6 +510,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Target path (JAR/WAR/class directory)", required=True),
     ],
     timeout=600,
+        signal_quality=SignalQuality.PROBABLE
 ))
 
 
@@ -486,6 +526,7 @@ _register(ToolDefinition(
         ToolParameter("api_token", "WPScan API token", flag="--api-token"),
     ],
     timeout=600,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -497,6 +538,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Audit target path"),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 _register(ToolDefinition(
@@ -508,6 +550,7 @@ _register(ToolDefinition(
         ToolParameter("target", "Audit target path"),
     ],
     timeout=300,
+        signal_quality=SignalQuality.CANDIDATE
 ))
 
 # ── Analysis / intelligence phase ──

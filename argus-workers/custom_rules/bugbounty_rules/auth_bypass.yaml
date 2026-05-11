@@ -1,74 +1,125 @@
-# Authentication Bypass Rules — From Bug-Reaper Auth Bypass Methodology
-# Priority 2 in bug bounty ROI
 rules:
-  - id: br_auth_jwt_alg_none
-    message: "Potential JWT algorithm none attack detected — backend may accept unsigned tokens"
-    severity: CRITICAL
-    source: bugbounty
-    cwe: CWE-345
-    tags: ["jwt", "auth-bypass", "bugbounty", "authentication"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)\"alg\"\\s*:\\s*\"none\""
-      - regex: "(?i)alg:\\s*none"
-    metadata:
-      category: authentication
-      confidence: 0.60
-      detection_method: "Change JWT header to {\"alg\":\"none\"}, remove signature — if accepted = Critical auth bypass"
-
-  - id: br_auth_jwt_kid_injection
-    message: "Potential JWT kid header injection detected — /../../dev/null or SQL injection in key ID"
-    severity: CRITICAL
-    source: bugbounty
-    cwe: CWE-345
-    tags: ["jwt", "auth-bypass", "bugbounty", "injection"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(\\.\\./|\\/dev\\/null|UNION\\s+SELECT|exec\\s+xp_cmdshell)"
-    metadata:
-      category: authentication
-      confidence: 0.55
-      detection_method: "Inject kid: ../../dev/null — if server fetches key from filesystem = path traversal"
-
-  - id: br_auth_password_reset_reuse
-    message: "Password reset endpoint detected — test token reuse and Host header injection"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-640
-    tags: ["auth-bypass", "password-reset", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(reset-password|forgot-password|password/reset|reset_password|forgot_password|recover-password)"
-      - regex: "(?i)(\\?|&)(token|reset_token|resetToken|password_token|code)="
-    metadata:
-      category: authentication
-      confidence: 0.60
-      detection_method: "Use reset token, then use it again — if still valid = no invalidation"
-
-  - id: br_auth_mfa_response_manip
-    message: "Potential MFA bypass via response manipulation — 2FA verification status in response body"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-287
-    tags: ["mfa", "2fa", "auth-bypass", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(\"verified\"\\s*:\\s*(false|true)|two_factor|2fa|mfa|otp|totp|multi_factor)"
-    metadata:
-      category: authentication
-      confidence: 0.50
-      detection_method: "Send wrong OTP, intercept response, change verified:false to verified:true"
-
-  - id: br_auth_role_escalation
-    message: "Potential privilege escalation — role/permission parameter in authenticated API response"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-269
-    tags: ["privilege-escalation", "auth-bypass", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)\"(role|permissions|scopes|groups|teams|roles|isAdmin|is_admin)\"\\s*:\\s*\"(admin|user|moderator|owner)"
-    metadata:
-      category: authentication
-      confidence: 0.65
-      detection_method: "Capture JWT, decode payload, modify role claim — re-encode and test if accepted"
+- id: br_auth_jwt_alg_none
+  message: Potential JWT algorithm none attack detected — backend may accept unsigned
+    tokens
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-345
+  tags:
+  - jwt
+  - auth-bypass
+  - bugbounty
+  - authentication
+  requires_validation: true
+  patterns:
+  - regex: (?i)"alg"\s*:\s*"none"
+  - regex: (?i)alg:\s*none
+  test_patterns:
+  - '{"alg": "none", "typ": "JWT"}'
+  - 'alg: none'
+  non_matching_patterns:
+  - '{"alg": "HS256", "typ": "JWT"}'
+  - 'alg: RS256'
+  metadata:
+    category: authentication
+    confidence: 0.6
+    detection_method: Change JWT header to {"alg":"none"}, remove signature — if accepted
+      = Critical auth bypass
+- id: br_auth_jwt_kid_injection
+  message: Potential JWT kid header injection detected — /../../dev/null or SQL injection
+    in key ID
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-345
+  tags:
+  - jwt
+  - auth-bypass
+  - bugbounty
+  - injection
+  requires_validation: true
+  patterns:
+  - regex: (?i)(\.\./|\/dev\/null|UNION\s+SELECT|exec\s+xp_cmdshell)
+  metadata:
+    category: authentication
+    confidence: 0.55
+    detection_method: 'Inject kid: ../../dev/null — if server fetches key from filesystem
+      = path traversal'
+  test_patterns:
+  - ../../dev/null
+  - UNION SELECT 1,2,3
+  - exec xp_cmdshell
+  non_matching_patterns:
+  - relative/path/here
+  - union workers select committee
+- id: br_auth_password_reset_reuse
+  message: Password reset endpoint detected — test token reuse and Host header injection
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-640
+  tags:
+  - auth-bypass
+  - password-reset
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)(reset-password|forgot-password|password/reset|reset_password|forgot_password|recover-password)
+  - regex: (?i)(\?|&)(token|reset_token|resetToken|password_token|code)=
+  metadata:
+    category: authentication
+    confidence: 0.6
+    detection_method: Use reset token, then use it again — if still valid = no invalidation
+  test_patterns:
+  - /reset-password?token=abc123
+  - /api/v1/password/reset?reset_token=xyz789
+  non_matching_patterns:
+  - /settings/reset-preference
+  - token=standard-refresh
+- id: br_auth_mfa_response_manip
+  message: Potential MFA bypass via response manipulation — 2FA verification status
+    in response body
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-287
+  tags:
+  - mfa
+  - 2fa
+  - auth-bypass
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)("verified"\s*:\s*(false|true)|two_factor|2fa|mfa|otp|totp|multi_factor)
+  metadata:
+    category: authentication
+    confidence: 0.5
+    detection_method: Send wrong OTP, intercept response, change verified:false to
+      verified:true
+  test_patterns:
+  - '{"verified": false, "two_factor": true}'
+  - 'mfa_enabled: true, otp_sent: true'
+  non_matching_patterns:
+  - '{"email_verified": true}'
+  - factor authentication enabled
+- id: br_auth_role_escalation
+  message: Potential privilege escalation — role/permission parameter in authenticated
+    API response
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-269
+  tags:
+  - privilege-escalation
+  - auth-bypass
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)"(role|permissions|scopes|groups|teams|roles|isAdmin|is_admin)"\s*:\s*"(admin|user|moderator|owner)
+  test_patterns:
+  - '{"role": "user", "permissions": "read"}'
+  - '"isAdmin": "moderator"'
+  non_matching_patterns:
+  - '{"role_description": "admin"}'
+  - '"is_admin_dashboard": true'
+  metadata:
+    category: authentication
+    confidence: 0.65
+    detection_method: Capture JWT, decode payload, modify role claim — re-encode and
+      test if accepted

@@ -1,48 +1,85 @@
-# SSRF Rules — From Bug-Reaper SSRF Methodology
-# Priority 4 in bug bounty ROI — Cloud credential exposure is Critical
 rules:
-  - id: br_ssrf_url_param_webhook
-    message: "SSRF-susceptible parameter detected — webhook, callback, or fetch URL in endpoint"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-918
-    tags: ["ssrf", "server-side", "bugbounty", "cloud"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(callback_url|webhook_url|notify_url|notification_url|return_url|redirect_url|redirect_uri|success_url|fail_url)"
-      - regex: "(?i)(\\?|&)(url|file_url|image_url|avatar_url|preview_url|thumbnail_url|fetch_url|import_url|proxy_url|endpoint|destination|target_url)="
-      - regex: "(?i)(\\?|&)(host|hostname|server|server_name|api_endpoint|slack_webhook|github_webhook|gitlab_webhook)=https?://"
-    metadata:
-      category: ssrf
-      confidence: 0.70
-      detection_method: "Test with collaborator URL (interactsh/webhook.site) — check for DNS/HTTP callback"
-
-  - id: br_ssrf_imds_pattern
-    message: "Potential SSRF to cloud metadata service (IMDS) — internal/link-local IP or cloud metadata endpoint detected"
-    severity: CRITICAL
-    source: bugbounty
-    cwe: CWE-918
-    tags: ["ssrf", "imds", "cloud", "bugbounty", "aws", "gcp", "azure"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(169\\.254\\.169\\.254|metadata\\.google\\.internal|metadata\\.google\\.compute|instance-data|instance-metadata|cloud-metadata)"
-      - regex: "(?i)(/latest/meta-data/|/computeMetadata/v1/|/metadata/instance\\?|/metadata/identity/oauth2/)"
-    metadata:
-      category: ssrf
-      confidence: 0.75
-      detection_method: "If SSRF confirmed, test IMDS endpoint — AWS/GCP/Azure credential exposure"
-
-  - id: br_ssrf_localhost_ref
-    message: "SSRF target pointing to localhost/internal services — potential internal network access"
-    severity: HIGH
-    source: bugbounty
-    cwe: CWE-918
-    tags: ["ssrf", "internal", "bugbounty"]
-    requires_validation: true
-    patterns:
-      - regex: "(?i)(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|172\\.(1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3})"
-      - regex: "(?i)(internal\\s*(admin|network|api|service|dashboard|panel|portal))"
-    metadata:
-      category: ssrf
-      confidence: 0.65
-      detection_method: "Test internal ports (6379=Redis, 27017=MongoDB, 9200=Elasticsearch) via SSRF"
+- id: br_ssrf_url_param_webhook
+  message: SSRF-susceptible parameter detected — webhook, callback, or fetch URL in
+    endpoint
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-918
+  tags:
+  - ssrf
+  - server-side
+  - bugbounty
+  - cloud
+  requires_validation: true
+  patterns:
+  - regex: (?i)(callback_url|webhook_url|notify_url|notification_url|return_url|redirect_url|redirect_uri|success_url|fail_url)
+  - regex: (?i)(\?|&)(url|file_url|image_url|avatar_url|preview_url|thumbnail_url|fetch_url|import_url|proxy_url|endpoint|destination|target_url)=
+  - regex: (?i)(\?|&)(host|hostname|server|server_name|api_endpoint|slack_webhook|github_webhook|gitlab_webhook)=https?://
+  metadata:
+    category: ssrf
+    confidence: 0.7
+    detection_method: Test with collaborator URL (interactsh/webhook.site) — check
+      for DNS/HTTP callback
+  test_patterns:
+  - callback_url=https://evil.com
+  - GET /import?url=http://internal:8080/admin
+  - POST /notify?slack_webhook=https://hooks.slack.com/services/xxx
+  non_matching_patterns:
+  - urlencoded_data
+  - GET /items?name=test
+- id: br_ssrf_imds_pattern
+  message: Potential SSRF to cloud metadata service (IMDS) — internal/link-local IP
+    or cloud metadata endpoint detected
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-918
+  tags:
+  - ssrf
+  - imds
+  - cloud
+  - bugbounty
+  - aws
+  - gcp
+  - azure
+  requires_validation: true
+  patterns:
+  - regex: (?i)(169\.254\.169\.254|metadata\.google\.internal|metadata\.google\.compute|instance-data|instance-metadata|cloud-metadata)
+  - regex: (?i)(/latest/meta-data/|/computeMetadata/v1/|/metadata/instance\?|/metadata/identity/oauth2/)
+  test_patterns:
+  - http://169.254.169.254/latest/meta-data/iam/security-credentials/
+  - http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/
+  non_matching_patterns:
+  - http://example.com/metadata/user
+  - instance configuration data
+  metadata:
+    category: ssrf
+    confidence: 0.75
+    detection_method: If SSRF confirmed, test IMDS endpoint — AWS/GCP/Azure credential
+      exposure
+- id: br_ssrf_localhost_ref
+  message: SSRF target pointing to localhost/internal services — potential internal
+    network access
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-918
+  tags:
+  - ssrf
+  - internal
+  - bugbounty
+  requires_validation: true
+  patterns:
+  - regex: (?i)(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})
+  - regex: (?i)(internal\s*(admin|network|api|service|dashboard|panel|portal))
+  metadata:
+    category: ssrf
+    confidence: 0.65
+    detection_method: Test internal ports (6379=Redis, 27017=MongoDB, 9200=Elasticsearch)
+      via SSRF
+  test_patterns:
+  - http://localhost:8080/admin
+  - http://10.0.0.1:6379/
+  - http://192.168.1.1/dashboard
+  - internal admin dashboard
+  non_matching_patterns:
+  - http://example.com:8080
+  - local-host reference
