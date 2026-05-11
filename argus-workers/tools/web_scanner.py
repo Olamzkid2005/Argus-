@@ -216,6 +216,25 @@ class WebScanner:
         self.findings = []
         self.discovered_parameters = None  # Initialized before parameter_discovery()
         self._last_request_time = 0.0  # For token-bucket rate limiting
+        self._rate_lock = threading.Lock()  # Thread safety for rate limiting
+
+    @staticmethod
+    def _redact_for_llm(text: str) -> str:
+        """Redact sensitive data before sending to LLM provider.
+        
+        Strips potential secrets (tokens, passwords, keys, internal URLs)
+        from HTTP response snippets to prevent data exfiltration.
+        """
+        import re as _re
+        # Redact common credential patterns
+        text = _re.sub(r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', text)
+        # Redact bearer tokens
+        text = _re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', text)
+        # Redact AWS keys
+        text = _re.sub(r'(?i)(AKIA[0-9A-Z]{16})', '__AWS_KEY_REDACTED__', text)
+        # Redact internal IPs
+        text = _re.sub(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', 'INTERNAL_IP_REDACTED', text)
+        return text[:500]
 
     def scan(self, target_url: str) -> list[dict]:
         """
@@ -298,12 +317,13 @@ class WebScanner:
                     "Accept": "*/*",
                 })
                 self._thread_session.session = thread_session
-            # Token-bucket rate limiting: only sleep for the remaining wait time
-            now = time.time()
-            wait_time = self._last_request_time + self.rate_limit - now
-            if wait_time > 0:
-                time.sleep(wait_time)
-            self._last_request_time = time.time()
+            # Token-bucket rate limiting with thread-safe lock
+            with self._rate_lock:
+                now = time.time()
+                wait_time = self._last_request_time + self.rate_limit - now
+                if wait_time > 0:
+                    time.sleep(wait_time)
+                self._last_request_time = time.time()
             resp = thread_session.request(method, url, **kwargs)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
@@ -1138,7 +1158,7 @@ class WebScanner:
                 llm_payloads = self.llm_payload_generator.generate_sync(
                     vuln_class="XSS",
                     param_name=param,
-                    response_snippet=resp.text[:500] if resp else "",
+                    response_snippet=self._redact_for_llm(resp.text) if resp else "",
                     framework_hints=self._tech_hints(resp),
                 )
 
@@ -1201,7 +1221,7 @@ class WebScanner:
                 llm_payloads = self.llm_payload_generator.generate_sync(
                     vuln_class="SSTI",
                     param_name=param,
-                    response_snippet=resp.text[:500] if resp else "",
+                    response_snippet=self._redact_for_llm(resp.text) if resp else "",
                     framework_hints=self._tech_hints(resp),
                 )
 
@@ -1251,7 +1271,7 @@ class WebScanner:
                 llm_payloads = self.llm_payload_generator.generate_sync(
                     vuln_class="LFI",
                     param_name=param,
-                    response_snippet=resp.text[:500] if resp else "",
+                    response_snippet=self._redact_for_llm(resp.text) if resp else "",
                     framework_hints=self._tech_hints(resp),
                 )
 
@@ -1469,7 +1489,7 @@ class WebScanner:
             llm_payloads = self.llm_payload_generator.generate_sync(
                 vuln_class="DOM_XSS",
                 param_name="q",
-                response_snippet=resp.text[:500] if resp else "",
+                response_snippet=self._redact_for_llm(resp.text) if resp else "",
                 framework_hints=self._tech_hints(resp),
             )
 

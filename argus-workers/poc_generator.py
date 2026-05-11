@@ -169,14 +169,19 @@ class PoCGenerator:
             except (json.JSONDecodeError, TypeError):
                 evidence = {"raw": evidence[:500]}
 
+        # Redact sensitive data from evidence before sending to LLM provider
+        import re as _redact_re
+        def _redact(t: str) -> str:
+            t = _redact_re.sub(r'(?i)(api[_-]?key|secret|token|password|auth)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', t[:400])
+            return _redact_re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', t)
         user_prompt = json.dumps({
             "finding_type": vuln_type,
             "endpoint": finding.get("endpoint", ""),
             "severity": finding.get("severity", ""),
             "evidence": {
-                "request": str(evidence.get("request", ""))[:400],
-                "response": str(evidence.get("response", ""))[:300],
-                "payload": str(evidence.get("payload", ""))[:200],
+                "request": _redact(str(evidence.get("request", ""))[:400]),
+                "response": _redact(str(evidence.get("response", ""))[:300]),
+                "payload": _redact(str(evidence.get("payload", ""))[:200]),
             },
             "instruction": template["instruction"],
             "required_fields": template["fields"],
