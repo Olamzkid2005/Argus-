@@ -44,8 +44,10 @@ ALLOWED_COLUMNS = {
     ],
 }
 
-# Cache for schema columns to avoid repeated introspection
+# Cache for schema columns with TTL (300s) — auto-renews after migrations
 _schema_cache: dict[str, list[str]] = {}
+_schema_cache_timestamps: dict[str, float] = {}
+_SCHEMA_CACHE_TTL = 300.0  # 5 minutes
 
 
 def _get_table_columns(table_name: str) -> list[str]:
@@ -59,8 +61,13 @@ def _get_table_columns(table_name: str) -> list[str]:
     Returns:
         List of column names
     """
+    import time as _time
     if table_name in _schema_cache:
-        return _schema_cache[table_name]
+        # Check TTL to pick up schema changes from migrations
+        cached_at = _schema_cache_timestamps.get(table_name, 0)
+        if _time.time() - cached_at < _SCHEMA_CACHE_TTL:
+            return _schema_cache[table_name]
+        # TTL expired — fall through to re-fetch
 
     try:
         conn = get_db().get_connection()
@@ -80,6 +87,7 @@ def _get_table_columns(table_name: str) -> list[str]:
 
             columns = [row[0] for row in cursor.fetchall()]
             _schema_cache[table_name] = columns
+            _schema_cache_timestamps[table_name] = _time.time()
             return columns
         finally:
             cursor.close()

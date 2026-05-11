@@ -309,6 +309,7 @@ class SnapshotManager:
                 FROM decision_snapshots
                 WHERE engagement_id = %s
                 ORDER BY version DESC
+                LIMIT 100
                 """,
                 (engagement_id,)
             )

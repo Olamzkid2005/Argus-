@@ -119,7 +119,18 @@ export async function pushJob(job: JobMessage): Promise<string> {
 
   // If wasSet is null, another process already set this key - job is duplicate
   if (!wasSet) {
-    return traceId; // Return jobId but don't push duplicate to queue
+    // Check if key is stuck in "processing" — if older than 10min, allow retry
+    const existing = await redis.get(key);
+    if (existing === "processing") {
+      const ttl = await redis.ttl(key);
+      if (ttl !== -1 && ttl > 3500) {
+        // Freshly set (within last 100s) — genuine duplicate, return traceId
+        return traceId;
+      }
+      // Key is old (>100s) and still processing — likely stuck. Delete and retry.
+      await redis.del(key);
+    }
+    return traceId;
   }
 
   // Execute the Python dispatch script
@@ -237,6 +248,8 @@ export async function pollJobStatus(
 
           if (progress.status === "completed") {
             onComplete?.(progress.result);
+            // Clean up progress key to prevent memory growth
+            redis.del(progressKey).catch(() => {});
             resolve(progress.result);
             return;
           }
@@ -244,6 +257,8 @@ export async function pollJobStatus(
           if (progress.status === "failed") {
             const error = progress.error_message || "Task failed";
             onError?.(error);
+            // Clean up progress key to prevent memory growth
+            redis.del(progressKey).catch(() => {});
             reject(new Error(error));
             return;
           }
