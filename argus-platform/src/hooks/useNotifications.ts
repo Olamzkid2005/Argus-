@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { log } from "@/lib/logger";
 
 export interface Notification {
   id: string;
@@ -22,7 +23,8 @@ function loadNotifications(): Notification[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Notification[];
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (error) {
+    log.browser.error("useNotifications.loadNotifications", error);
     return [];
   }
 }
@@ -31,8 +33,8 @@ function saveNotifications(notifications: Notification[]) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
-  } catch {
-    // ignore storage errors
+  } catch (error) {
+    log.browser.error("useNotifications.saveNotifications", error);
   }
 }
 

@@ -1,4 +1,5 @@
 import { Pool, PoolConfig } from "pg";
+import { log } from "@/lib/logger";
 
 /**
  * Database connection pool configuration
@@ -61,11 +62,11 @@ const MAX_N1_ALERTS = 50;
 let lastN1Detected: { queryText: string; timestamp: number } | null = null;
 
 pool.on("error", (err) => {
-  console.error("Unexpected database pool error:", err);
+  log.db.poolError(err);
 });
 
 pool.on("connect", () => {
-  console.log("Database client connected");
+  log.db.query("Pool client connected");
 });
 
 /**
@@ -139,9 +140,7 @@ function detectN1Query(
       n1AlertBuffer.shift();
     }
 
-    console.warn(
-      `N+1 query pattern detected (${similarCount} similar queries in ${N1_DETECTION_WINDOW_MS}ms): ${queryText.substring(0, 100)}`
-    );
+    log.warn("DB", `N+1 query pattern detected (${similarCount} similar queries in ${N1_DETECTION_WINDOW_MS}ms): ${queryText.substring(0, 100)}`);
 
     if (onN1Detected) {
       onN1Detected(alert);
@@ -162,14 +161,20 @@ export async function query<T = unknown>(
 ): Promise<{ rows: T[]; rowCount: number }> {
   const start = performance.now();
 
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (error) {
+    log.db.connectionError(error);
+    throw error;
+  }
   try {
     // Set tenant context if orgId provided and not in PgBouncer transaction mode
     if (options?.orgId && process.env.PGBOUNCER_MODE !== "transaction") {
       try {
         await client.query("SELECT set_tenant_context($1)", [options.orgId]);
-      } catch {
-        // Function may not exist yet
+      } catch (error) {
+        log.db.queryError("set_tenant_context", error);
       }
     }
 
@@ -184,7 +189,7 @@ export async function query<T = unknown>(
 
     if (duration > 500) {
       queryMetrics.slowQueries++;
-      console.warn(`Slow query (${duration.toFixed(1)}ms): ${text.substring(0, 200)}`);
+      log.db.slowQuery(text, duration);
     }
 
     if (!options?.skipN1Detection) {
@@ -201,13 +206,19 @@ export async function withClient<T>(
   callback: (client: Pool) => Promise<T>,
   options?: { orgId?: string }
 ): Promise<T> {
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (error) {
+    log.db.connectionError(error);
+    throw error;
+  }
   try {
     if (options?.orgId && process.env.PGBOUNCER_MODE !== "transaction") {
       try {
         await client.query("SELECT set_tenant_context($1)", [options.orgId]);
-      } catch {
-        // Function may not exist yet
+      } catch (error) {
+        log.db.queryError("set_tenant_context", error);
       }
     }
     return await callback(client as unknown as Pool);
@@ -226,8 +237,8 @@ export async function setTenantContext(
   if (process.env.PGBOUNCER_MODE === "transaction") return;
   try {
     await client.query("SELECT set_tenant_context($1)", [orgId]);
-  } catch {
-    // Function may not exist yet
+  } catch (error) {
+    log.db.queryError("set_tenant_context", error);
   }
 }
 
@@ -240,7 +251,7 @@ export async function resetTenantContext(
   if (process.env.PGBOUNCER_MODE === "transaction") return;
   try {
     await client.query("SELECT reset_tenant_context()");
-  } catch {
-    // Function may not exist yet
+  } catch (error) {
+    log.db.queryError("reset_tenant_context", error);
   }
 }
