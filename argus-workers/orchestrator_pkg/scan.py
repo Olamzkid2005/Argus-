@@ -312,7 +312,7 @@ def execute_scan_tools(
                 try:
                     for future in as_completed(futures, timeout=TOOL_TIMEOUT_LONG + 60):
                         try:
-                            future.result()
+                            future.result(timeout=30)
                         except Exception as e:
                             logger.warning(f"Scan tool {futures[future]} error: {e}")
                 except TimeoutError:

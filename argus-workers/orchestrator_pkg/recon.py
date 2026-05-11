@@ -244,7 +244,7 @@ def execute_recon_tools(
         }
         try:
             for future in as_completed(futures, timeout=150):
-                tool_name, success, parsed_count, error = future.result()
+                tool_name, success, parsed_count, error = future.result(timeout=15)
                 if success:
                     success_msg = recon_tools[tool_name]["success_msg"]
                     formatted_msg = success_msg.replace("{{}}", str(parsed_count)) if "{{}}" in success_msg else success_msg

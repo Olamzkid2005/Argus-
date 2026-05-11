@@ -339,7 +339,7 @@ class ReActAgent:
         return None
 
     def _validate_arguments(self, action: AgentAction) -> bool:
-        """Validate tool arguments against schema."""
+        """Validate tool arguments against schema, including target scope."""
         tool_meta = None
         for t in self.registry.list_tools():
             if t.get("name") == action.tool:
@@ -356,6 +356,32 @@ class ReActAgent:
                 if param_name not in action.arguments:
                     logger.warning(f"Missing required param '{param_name}' for {action.tool}")
                     return False
+
+        # Validate target is not internal/private if present
+        target = action.arguments.get("target", "")
+        if target:
+            try:
+                from urllib.parse import urlparse
+                import ipaddress
+                hostname = urlparse(target).hostname
+                if hostname:
+                    try:
+                        ip = ipaddress.ip_address(hostname)
+                        if ip.is_private or ip.is_loopback or ip.is_link_local:
+                            logger.warning(
+                                "Blocked internal target '%s' for tool '%s'",
+                                target, action.tool,
+                            )
+                            return False
+                    except ValueError:
+                        if hostname.lower() in {"localhost", "169.254.169.254"}:
+                            logger.warning(
+                                "Blocked internal hostname '%s' for tool '%s'",
+                                hostname, action.tool,
+                            )
+                            return False
+            except Exception:
+                pass
 
         return True
 

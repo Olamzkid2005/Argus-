@@ -119,6 +119,14 @@ class MCPServer:
             logger.info("Created tools definitions directory: %s", tools_path)
             return
 
+        # Blocklist of dangerous command patterns for YAML-defined tools
+        BLOCKED_COMMAND_PATTERNS = {
+            "sh", "bash", "zsh", "dash", "/bin/sh", "/bin/bash",
+            "rm", "mv", "cp", "dd", "mkfs", "chmod", "chown",
+            "nc", "netcat", "curl", "wget", "telnet", "ssh",
+            "python", "python3", "ruby", "perl", "node", "php",
+        }
+
         try:
             import yaml
             for yaml_file in tools_path.glob("*.yaml"):
@@ -126,9 +134,24 @@ class MCPServer:
                     with open(yaml_file) as f:
                         data = yaml.safe_load(f)
                     if data and "name" in data:
+                        command = data.get("command", data["name"])
+                        # Validate command: no path traversal, no shell injection
+                        cmd_basename = os.path.basename(command)
+                        if ".." in command or "/" not in command and command in BLOCKED_COMMAND_PATTERNS:
+                            logger.warning(
+                                "Blocked potentially dangerous tool command in %s: %s",
+                                yaml_file, command,
+                            )
+                            continue
+                        if cmd_basename.lower() in BLOCKED_COMMAND_PATTERNS or cmd_basename.lower() in {"sh", "bash", "zsh", "dash"}:
+                            logger.warning(
+                                "Blocked shell interpreter command in %s: %s",
+                                yaml_file, command,
+                            )
+                            continue
                         tool = ToolDefinition(
                             name=data["name"],
-                            command=data.get("command", data["name"]),
+                            command=command,
                             description=data.get("description", ""),
                             args=data.get("args", []),
                             parameters=data.get("parameters", []),

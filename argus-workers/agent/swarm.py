@@ -482,7 +482,7 @@ class SwarmOrchestrator:
                 for future in as_completed(futures_map, timeout=timeout):
                     domain = futures_map[future]
                     try:
-                        findings = future.result()
+                        findings = future.result(timeout=30)
                         logger.info(
                             "Specialist %s returned %d findings",
                             domain,

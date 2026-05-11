@@ -16,6 +16,19 @@ interface CacheOptions {
 }
 
 const memoryCache = new Map<string, CacheEntry<any>>();
+const MEMORY_CACHE_MAX_SIZE = 10_000;
+
+function evictMemoryCacheIfNeeded(): void {
+  if (memoryCache.size <= MEMORY_CACHE_MAX_SIZE) return;
+  // LRU: delete oldest entries (insertion order in Map)
+  const excess = memoryCache.size - MEMORY_CACHE_MAX_SIZE;
+  let deleted = 0;
+  for (const key of memoryCache.keys()) {
+    memoryCache.delete(key);
+    deleted++;
+    if (deleted >= excess) break;
+  }
+}
 
 /**
  * Check if Redis is connected and available.
@@ -77,6 +90,7 @@ async function setCache<T>(key: string, value: T, ttlSeconds: number): Promise<v
     // Redis error — fall through to in-memory
   }
 
+  evictMemoryCacheIfNeeded();
   memoryCache.set(key, {
     data: value,
     expiresAt: Date.now() + ttlSeconds * 1000,

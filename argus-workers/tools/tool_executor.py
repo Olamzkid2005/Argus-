@@ -236,7 +236,8 @@ class ToolExecutor:
         if not findings:
             return 0
 
-        conn = connect(self.db_conn_string)
+        from database.connection import get_db
+        conn = get_db().get_connection()
         cursor = conn.cursor()
 
         try:
@@ -298,7 +299,7 @@ class ToolExecutor:
             return 0
         finally:
             cursor.close()
-            conn.close()
+            get_db().release_connection(conn)
 
     def _store_raw_output(
         self, engagement_id: str, tool_name: str, raw_output: str, error_message: str

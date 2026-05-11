@@ -44,4 +44,7 @@ class LLMSynthesizer:
             SYNTHESIS_SYSTEM_PROMPT, prompt,
             max_tokens=LLM_AGENT_MAX_TOKENS_SYNTH,
         )
+        if result.get("_fallback"):
+            logger.warning("LLM synthesis returned fallback — findings will lack LLM analysis")
+            result["_synthesis_fallback"] = True
         return result

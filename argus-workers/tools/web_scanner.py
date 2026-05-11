@@ -291,7 +291,7 @@ class WebScanner:
             try:
                 for future in as_completed(futures, timeout=120):
                     try:
-                        future.result()
+                        future.result(timeout=10)
                     except Exception as e:
                         logger.warning(f'{futures[future]} failed: {e}')
             except TimeoutError:

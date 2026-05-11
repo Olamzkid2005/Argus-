@@ -45,6 +45,10 @@ class LLMReportGenerator:
             REPORT_SYSTEM_PROMPT, prompt,
             max_tokens=LLM_AGENT_MAX_TOKENS_REPORT,
         )
+        if result.get("_fallback"):
+            logger.warning("LLM report generation failed — using fallback report for %s",
+                           engagement.get("target_url", "unknown"))
+            return self._fallback_report(engagement, scored_findings)
         return result
 
     def stream_report(

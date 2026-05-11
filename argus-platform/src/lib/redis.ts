@@ -112,24 +112,38 @@ export async function pushJob(job: JobMessage): Promise<string> {
     job.target,
   );
 
-  // Use atomic SET NX (SET if Not eXists) for idempotency check-and-set
-  // This prevents race conditions where two requests could both pass the check
+  // Use atomic Lua script for idempotency check-and-set.
+  // Prevents race condition between redis.del() and the next redis.set()
+  // where two concurrent processes could both observe a stuck key, delete it,
+  // and each proceed to enqueue a job.
   const key = `idempotency:${idempotencyKey}`;
-  const wasSet = await redis.set(key, "processing", "EX", 3600, "NX");
+  const luaScript = `
+    local current = redis.call('GET', KEYS[1])
+    if current == false then
+      redis.call('SET', KEYS[1], 'processing', 'EX', ARGV[1])
+      return 1
+    end
+    if current == 'processing' then
+      local ttl = redis.call('TTL', KEYS[1])
+      if ttl > tonumber(ARGV[2]) then
+        return 0  -- genuine duplicate
+      end
+      redis.call('DEL', KEYS[1])
+      redis.call('SET', KEYS[1], 'processing', 'EX', ARGV[1])
+      return 2  -- recovered stuck key
+    end
+    return 3  -- already complete
+  `;
+  const result = await redis.eval(
+    luaScript,
+    1,
+    key,
+    "3600",
+    "3500",
+  ) as number;
 
-  // If wasSet is null, another process already set this key - job is duplicate
-  if (!wasSet) {
-    // Check if key is stuck in "processing" — if older than 10min, allow retry
-    const existing = await redis.get(key);
-    if (existing === "processing") {
-      const ttl = await redis.ttl(key);
-      if (ttl !== -1 && ttl > 3500) {
-        // Freshly set (within last 100s) — genuine duplicate, return traceId
-        return traceId;
-      }
-      // Key is old (>100s) and still processing — likely stuck. Delete and retry.
-      await redis.del(key);
-    }
+  if (result === 0) {
+    // Genuine duplicate — job already being processed by another request
     return traceId;
   }
 

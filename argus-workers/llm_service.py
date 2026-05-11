@@ -124,11 +124,14 @@ class LLMService:
 
     def _fallback(self, reason: str) -> dict:
         """Single fallback response for all callers."""
+        logger.warning("LLM service using FALLBACK response — reason: %s. "
+                       "All downstream analysis will be placeholder data.", reason)
         return {
             "_fallback": True,
             "_reason": reason,
-            "executive_summary": f"Analysis unavailable ({reason}).",
-            "risk_level": "medium",
+            "_error": True,  # signal to callers that this is NOT real analysis
+            "executive_summary": f"Analysis unavailable ({reason}). This is an automated fallback — do not treat as real analysis.",
+            "risk_level": "unknown",  # unknown, not medium — don't mask failures
             "priority_findings": [],
             "attack_chains": [],
             "fp_candidates": [],

@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+import logging
+
+logger = logging.getLogger(__name__)
 
 JOB_TYPES = [
     "recon",
@@ -76,6 +79,14 @@ class JobMessage:
 
     @classmethod
     def from_dict(cls, data: dict) -> "JobMessage":
+        known_fields = set(cls.__dataclass_fields__.keys())
+        unknown = {k for k in data if k not in known_fields}
+        if unknown:
+            logger.warning(
+                "JobMessage received %d unknown field(s): %s — silently dropped. "
+                "This may indicate a schema version mismatch between frontend and workers.",
+                len(unknown), sorted(unknown),
+            )
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def to_celery_args(self) -> list:

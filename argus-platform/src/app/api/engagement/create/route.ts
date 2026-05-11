@@ -206,10 +206,18 @@ export async function POST(req: NextRequest) {
         jobPushed = true;
       } catch (jobError) {
         console.error("Failed to push job:", jobError);
-        // Rollback: delete engagement + related rows if job push failed
-        await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
-        await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
-        await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+        // Rollback: delete engagement + related rows if job push failed.
+        // Wrap cleanup in a new transaction to ensure atomicity.
+        try {
+          await client.query("BEGIN");
+          await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
+          await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
+          await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+          await client.query("COMMIT");
+        } catch (cleanupErr) {
+          console.error("Cleanup after job push failure also failed:", cleanupErr);
+          await client.query("ROLLBACK").catch(() => {});
+        }
         throw new Error(`Job dispatch failed: ${jobError instanceof Error ? jobError.message : "unknown error"}`);
       }
 

@@ -81,18 +81,42 @@ def sanitize_input(text: str) -> str:
     Returns:
         Sanitized text safe for LLM prompt injection
     """
-    # Strip control characters
-    sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+    # Strip control characters (including Unicode control chars)
+    sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\u200b-\u200f\u202a-\u202e]", "", text)
     # Strip LLM prompt-escape delimiters
     sanitized = strip_delimiters(sanitized)
-    # Strip common prompt injection patterns
-    sanitized = re.sub(
+    # Normalize leetspeak characters to detect obfuscated injection attempts
+    leet_map = str.maketrans({
+        '0': 'o', '1': 'l', '3': 'e', '4': 'a', '5': 's',
+        '6': 'g', '7': 't', '8': 'b', '9': 'g', '@': 'a',
+        '$': 's',
+    })
+    normalized = sanitized.lower().translate(leet_map)
+    # Strip common prompt injection patterns (check on normalized text)
+    injection_present = re.search(
         r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
         r"system\s+prompt|you\s+are\s+now|"
-        r"new\s+instructions|override)",
-        "[REDACTED]",
-        sanitized,
+        r"new\s+instructions|override\s+.*instructions|"
+        r"disregard\s+.*previous|bypass\s+.*restrictions|"
+        r"act\s+as\s+.*now|pretend\s+you\s+are|"
+        r"from\s+now\s+on\s+you\s+are)",
+        normalized,
     )
+    if injection_present:
+        logger.warning(
+            "Prompt injection pattern detected in input (%d chars): %s...",
+            len(sanitized), sanitized[:80],
+        )
+        sanitized = re.sub(
+            r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
+            r"system\s+prompt|you\s+are\s+now|"
+            r"new\s+instructions|override|"
+            r"disregard\s+.*previous|bypass\s+.*restrictions|"
+            r"act\s+as|pretend\s+you\s+are|"
+            r"from\s+now\s+on\s+you\s+are)",
+            "[REDACTED]",
+            sanitized,
+        )
     return sanitized[:2000]
 
 
