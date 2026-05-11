@@ -195,7 +195,7 @@ def generate_scheduled_reports(self):
                 conn.commit()
             except Exception as e:
                 conn.rollback()
-                print(f"Failed to generate scheduled report {report['id']}: {e}")
+                logger.error("Failed to generate scheduled report %s: %s", report["id"], e, exc_info=True)
                 continue
 
         return {"processed": len(due_reports)}

@@ -333,7 +333,8 @@ class Orchestrator:
                                 )
                             saved_id = similar["id"]
                             logger.debug(f"Updated existing finding {similar['id']} (similarity={similar['similarity']:.3f})")
-                        except Exception:
+                        except Exception as e:
+                            logger.warning(f"Failed to update existing finding {similar['id']} — creating new instead: {e}")
                             saved_id = self.finding_repo.create_finding(
                                 engagement_id=self.engagement_id,
                                 finding_type=finding.get("type", "UNKNOWN"),
@@ -421,15 +422,15 @@ class Orchestrator:
             if conn:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as rollback_err:
+                    logger.warning(f"Rollback failed saving PoC for finding {finding_id}: {rollback_err}")
             return False
         finally:
             if conn:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as close_err:
+                    logger.warning(f"Connection close failed after saving PoC for finding {finding_id}: {close_err}")
 
     def _save_remediation_fix(
         self, finding_id: str, fix_data: dict
@@ -469,15 +470,15 @@ class Orchestrator:
             if conn:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as rollback_err:
+                    logger.warning(f"Rollback failed saving remediation fix for finding {finding_id}: {rollback_err}")
             return False
         finally:
             if conn:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as close_err:
+                    logger.warning(f"Connection close failed after saving remediation fix for finding {finding_id}: {close_err}")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None):
@@ -690,7 +691,7 @@ class Orchestrator:
                     if norm:
                         findings.append(norm)
         except ImportError:
-            pass
+            logger.debug("Browser scanner module not available — skipping browser scan")
         except Exception as e:
             logger.warning(f"Browser scanner failed (non-fatal): {e}")
         return findings
@@ -1068,8 +1069,10 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"Failed to build repo recon context (non-fatal): {e}")
 
+        # The task handler already transitioned the DB from 'created' to 'recon'
+        # before calling this method, so use 'recon' as the from_state
         self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id, from_state="created", to_state=next_state,
+            engagement_id=self.engagement_id, from_state="recon", to_state=next_state,
             reason="Repository scan completed — auto-advancing to web scan",
         )
         return {"phase": "repo_scan", "status": "completed", "findings_count": findings_count,
@@ -1085,8 +1088,8 @@ class Orchestrator:
             try:
                 eng = self.engagement_repo.get_engagement(self.engagement_id)
                 return str(eng.org_id) if eng else None
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to get org_id for engagement {self.engagement_id}: {e}")
         return None
 
     def _check_timeout(self):

@@ -46,7 +46,7 @@ def setup_logging():
 
         setup_redaction()
     except ImportError:
-        pass  # Redaction not available, continue without it
+        logging.getLogger(__name__).debug("Logging redaction not available — continuing without it")
     return logging.getLogger(__name__)
 
 
@@ -66,14 +66,17 @@ if not os.getenv("DATABASE_URL"):
         os.path.dirname(platform_root), "argus-platform", ".env.local"
     )
     if os.path.exists(platform_env):
-        with open(platform_env) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    if key == "DATABASE_URL":
-                        os.environ[key] = value.strip()
-                        break
+        try:
+            with open(platform_env) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        if key == "DATABASE_URL":
+                            os.environ[key] = value.strip()
+                            break
+        except OSError as e:
+            logger.warning("Failed to read DATABASE_URL from %s: %s", platform_env, e)
 
 # Create Celery application
 app = Celery(
@@ -222,7 +225,13 @@ class BaseTask(app.Task):
         )
 
         # Transition engagement to 'failed' when a task fails (catches SIGKILL/timeout too)
+        # Check kwargs first (for send_task with keyword args), then args[0] (for positional calls)
         engagement_id = kwargs.get("engagement_id") if kwargs else None
+        if not engagement_id and args and len(args) > 0:
+            # Most Argus tasks take engagement_id as the first positional argument
+            potential_id = str(args[0]) if args[0] else None
+            if potential_id and '-' in potential_id and len(potential_id) == 36:
+                engagement_id = potential_id
         if engagement_id:
             try:
                 from database.connection import db_cursor

@@ -488,8 +488,8 @@ class ToolRunner:
                         stdout_lines.append(line)
                         try:
                             on_line(line.rstrip("\n\r"))
-                        except Exception:
-                            pass
+                        except Exception as line_err:
+                            logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
 
             remaining, _ = proc.communicate(timeout=5)
             if remaining:
@@ -497,8 +497,8 @@ class ToolRunner:
                     stdout_lines.append(line)
                     try:
                         on_line(line.rstrip("\n\r"))
-                    except Exception:
-                        pass
+                    except Exception as line_err:
+                        logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
 
         except Exception as e:
             logger.warning("Streaming error for %s: %s", tool, e)

@@ -101,7 +101,8 @@ def _is_reachable(target: str) -> bool:
             logger.warning(f'DNS: {hostname} not found — skipping')
             return False
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning(f"DNS resolution for {hostname} failed with unexpected error — assuming reachable: {e}")
         return True
 
 
@@ -168,8 +169,8 @@ def execute_scan_tools(
                     update_nuclei_templates as _update_templates,
                 )
                 _update_templates(timeout=120)
-        except Exception:
-            pass  # Non-blocking — scan proceeds even if update fails
+        except Exception as e:
+            logger.warning(f"Nuclei template update failed (scan continues): {e}")
 
         # Get local nuclei templates path
         nuclei_templates = get_nuclei_templates_path()
@@ -216,8 +217,8 @@ def execute_scan_tools(
                         normalized = ctx._normalize_finding(validated, "nuclei")
                         if normalized:
                             all_findings.append(normalized)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 
             try:
                 emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
