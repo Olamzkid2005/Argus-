@@ -117,6 +117,20 @@ class SpecialistAgent(ABC):
             targets = [rc.target_url]
         return targets
 
+    @staticmethod
+    def _has_dynamic_surface(rc) -> bool:
+        """Check if recon context shows a dynamic webapp with actionable attack surface.
+
+        Returns True when the target has parameter-bearing URLs, auth endpoints,
+        or API endpoints — signals that the app processes user input and has
+        meaningful attack surface. Raw page count alone is not enough.
+        """
+        return (
+            (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+            or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
+            or (hasattr(rc, "has_api") and rc.has_api)
+        )
+
     def _tag_findings(self, findings: list[dict]) -> list[dict]:
         """Tag all findings with this agent's domain for traceability."""
         for f in findings:
@@ -141,9 +155,7 @@ class IDORAgent(SpecialistAgent):
         )
         if specific:
             return True
-        # Fallback: if the target is a real web app with content (>10 crawled paths),
-        # it likely has API features worth scanning
-        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10:
+        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc):
             return True
         return False
 
@@ -219,8 +231,7 @@ class AuthAgent(SpecialistAgent):
         )
         if specific:
             return True
-        # Fallback: web app with content likely has auth mechanisms
-        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10:
+        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc):
             return True
         return False
 
@@ -317,8 +328,7 @@ class APIAgent(SpecialistAgent):
         )
         if specific:
             return True
-        # Fallback: any web app with sufficient content likely has API endpoints
-        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10:
+        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc):
             return True
         return False
 
