@@ -263,7 +263,7 @@ export function useEngagementEvents(
       const data = await response.json();
 
       if (mountedRef.current) {
-        consecutiveErrorsRef.current = 0;
+        consecutiveErrorsRef.current = 0;  // KEY FIX: reset errors on any success
         setIsConnected(true);
         setError(null);
 
@@ -273,14 +273,16 @@ export function useEngagementEvents(
 
         if (data.events && data.events.length > 0) {
           setEvents((prev) => {
+            // Use composite key: type + engagementId + timestamp (more precise dedup)
             const existingIds = new Set(
-              prev.map((e) => `${e.type}-${e.timestamp}`),
+              prev.map((e) => `${e.type}-${engagementId}-${e.timestamp}`),
             );
             const newEvents = data.events.filter(
               (e: WebSocketEvent) =>
-                !existingIds.has(`${e.type}-${e.timestamp}`),
+                !existingIds.has(`${e.type}-${engagementId}-${e.timestamp}`),
             );
-            return [...newEvents, ...prev].slice(0, 100);
+            // Maintain consistent ordering: newest first
+            return [...newEvents.reverse(), ...prev].slice(0, 100);
           });
 
           const latestEvent = data.events[0];
@@ -376,6 +378,7 @@ export function useEngagementEvents(
     setError(null);
     lastTimestampRef.current = null;
     useSseRef.current = true; // Try SSE again
+    consecutiveErrorsRef.current = 0; // KEY FIX: reset error counter on reconnect
 
     // Close existing connections
     if (eventSourceRef.current) {

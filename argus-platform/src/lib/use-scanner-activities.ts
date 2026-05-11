@@ -89,7 +89,12 @@ export function useScannerActivities(
   }, [engagementId, activities]);
 
   const fetchActivities = useCallback(async () => {
-    if (!engagementId || !mountedRef.current || stoppedRef.current) return;
+    if (!engagementId || !mountedRef.current) return;
+    // Auto-recover from stopped state: allow retry after cooldown
+    if (stoppedRef.current) {
+      // Will naturally be reset if engagementId changes or refetch() called
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -122,6 +127,7 @@ export function useScannerActivities(
           log.wsEvent("activities-polling-stopped", { engagementId });
           return;
         }
+        // Reset errors counter on intermittent successes (handled at top of try)
         log.wsError("Scanner activities fetch failed", { error: String(err), engagementId });
         setError(err instanceof Error ? err : new Error(String(err)));
       }

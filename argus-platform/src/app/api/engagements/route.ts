@@ -86,19 +86,22 @@ export async function GET(req: NextRequest) {
       const countResult = await client.query(countQuery, params);
       const total = parseInt(countResult.rows[0].count);
 
-      // Build dynamic ORDER BY clause
-      const validSortFields = [
-        "created_at",
-        "updated_at",
-        "target_url",
-        "status",
-      ];
-      const validSortOrders = ["asc", "desc"];
+      // Build dynamic ORDER BY clause using a mapping dict (safe, not string interpolation)
+      const sortFieldMap: Record<string, string> = {
+        "created_at": "e.created_at",
+        "updated_at": "e.updated_at",
+        "target_url": "e.target_url",
+        "status": "e.status",
+      };
+      const sortOrderMap: Record<string, string> = {
+        "asc": "ASC",
+        "desc": "DESC",
+      };
 
-      const field = validSortFields.includes(sortBy) ? sortBy : "created_at";
-      const order = validSortOrders.includes(sortOrder) ? sortOrder : "desc";
+      const field = sortFieldMap[sortBy] || "e.created_at";
+      const order = sortOrderMap[sortOrder] || "DESC";
 
-      const orderClause = ` ORDER BY e.${field} ${order.toUpperCase()}`;
+      const orderClause = ` ORDER BY ${field} ${order}`;
 
       // Add ordering and pagination
       query += orderClause + ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
