@@ -315,35 +315,4 @@ def execute_scan_tools(
         except Exception as e:
             logger.warning(f"WebScanner failed for {target}: {e}")
 
-        # Browser-based SPA scanner (subprocess approach to avoid event loop conflicts)
-        if tech_stack:
-            try:
-                import subprocess
-                from pathlib import Path
-                worker_script = Path(__file__).parent.parent / 'tools' / '_browser_scan_worker.py'
-                if worker_script.exists():
-                    SPA_TECHS = ['react', 'vue', 'angular', 'next', 'nuxt', 'svelte', 'gatsby']
-                    if any(t.lower() in ' '.join(tech_stack).lower() for t in SPA_TECHS):
-                        emit_tool_start(ctx.engagement_id, "browser_scanner", [target])
-                        logger.info(f"SPA detected — running browser scanner for {target}")
-                        try:
-                            result = subprocess.run(
-                                [sys.executable, str(worker_script), target, json.dumps(tech_stack)],
-                                capture_output=True, text=True, timeout=120
-                            )
-                            if result.returncode == 0 and result.stdout.strip():
-                                browser_findings = json.loads(result.stdout)
-                                for bf in browser_findings:
-                                    normalized = ctx._normalize_finding(bf, "browser_scanner")
-                                    if normalized:
-                                        all_findings.append(normalized)
-                        except subprocess.TimeoutExpired:
-                            logger.warning(f"Browser scanner timed out for {target}")
-                        except Exception as e:
-                            logger.warning(f"Browser scanner failed for {target}: {e}")
-                else:
-                    logger.debug("Browser scanner worker not found, skipping")
-            except Exception as e:
-                logger.warning(f"Browser scanner outer error: {e}")
-
     return all_findings
