@@ -14,7 +14,11 @@ Bug-Reaper Integration:
   - _load_bugbounty_context(): Loads Bug-Reaper methodology .md files into agent context
 """
 import json
+import logging
+import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # TOOL CAPABILITY CATALOGUE
@@ -517,9 +521,6 @@ def build_tech_aware_system_prompt(recon_context) -> str:
     Called instead of the static TOOL_SELECTION_SYSTEM_PROMPT when a
     ReconContext with tech_stack is available.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     base = TOOL_SELECTION_SYSTEM_PROMPT
 
     if not recon_context or not recon_context.tech_stack:

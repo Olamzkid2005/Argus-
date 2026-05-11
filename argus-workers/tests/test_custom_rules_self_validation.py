@@ -59,8 +59,6 @@ def test_all_bugbounty_rules_match_their_examples():
             non_matches = rule.get("non_matching_patterns", [])
             for i, test_str in enumerate(non_matches):
                 for pe in patterns:
-                    if isinstance(pe, str):
-                        pe = {"regex": pe}
                     regex = pe.get("regex", "") or pe.get("pattern", "")
                     if regex:
                         try:
