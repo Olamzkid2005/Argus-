@@ -43,6 +43,10 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
 
 
 if __name__ == '__main__':
-    target, tech_json = sys.argv[1], sys.argv[2]
-    results = scan(target, json.loads(tech_json))
+    if len(sys.argv) < 2:
+        print(json.dumps([]), file=sys.stderr)
+        sys.exit(1)
+    target = sys.argv[1]
+    tech_stack = json.loads(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else []
+    results = scan(target, tech_stack)
     print(json.dumps(results))

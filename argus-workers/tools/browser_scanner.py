@@ -41,8 +41,12 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
         return []
 
     try:
+        # Pass tech_stack as second argument (worker expects argv[1]=target, argv[2]=tech_json)
+        subprocess_args = [sys.executable, str(worker), target_url]
+        if tech_stack:
+            subprocess_args.append(json.dumps(tech_stack))
         result = subprocess.run(
-            [sys.executable, str(worker), target_url],
+            subprocess_args,
             capture_output=True,
             text=True,
             timeout=timeout,
