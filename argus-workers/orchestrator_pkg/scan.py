@@ -84,7 +84,6 @@ TECH_TAG_MAP = {
     'mysql': ['mysql'],
     'postgresql': ['postgresql'],
     'redis': ['redis'],
-    'docker': ['docker'],
 }
 
 ALWAYS_INCLUDE_TAGS = ['cve', 'rce', 'sqli', 'xss', 'ssrf', 'lfi',
