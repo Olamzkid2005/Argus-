@@ -218,13 +218,20 @@ export async function middleware(request: NextRequest) {
   );
 
   // Enhanced Content Security Policy
+  // In production, Next.js inline scripts need hashes; we use 'unsafe-inline'
+  // as a transitional measure. 'unsafe-eval' is removed for production builds.
+  const isDev = process.env.NODE_ENV === "development";
+  const scriptSrc = isDev
+    ? "'self' 'unsafe-inline' 'unsafe-eval'"
+    : "'self' 'unsafe-inline'";
+
   response.headers.set(
     "Content-Security-Policy",
     "default-src 'self' data:; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+      `script-src ${scriptSrc}; ` +
       "style-src 'self' 'unsafe-inline'; " +
       "img-src 'self' data: https: blob:; " +
-      "font-src 'self' data:; " +
+      "font-src 'self' data: https://fonts.gstatic.com; " +
       "connect-src 'self' https: wss:; " +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
@@ -233,10 +240,12 @@ export async function middleware(request: NextRequest) {
   );
 
   // Additional security headers
+  // Use credentialless instead of require-corp to allow CDN resources
+  // (fonts.gstatic.com) without requiring CORS headers on every resource.
   response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
-  response.headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  response.headers.set("Cross-Origin-Embedder-Policy", "credentialless");
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  response.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
 
   return response;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useGlobalShortcuts } from "@/lib/useKeyboardShortcuts";
+import { useGlobalShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 export function GlobalShortcuts() {
   useGlobalShortcuts();

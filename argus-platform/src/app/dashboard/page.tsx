@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
-import { useMobileDetect } from "@/hooks/useMobileDetect";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { log } from "@/lib/logger";
 import {
@@ -129,7 +129,7 @@ export default function DashboardPage() {
   const timelinePollStoppedRef = useRef(false);
   const statePollStoppedRef = useRef(false);
   
-  const isMobile = useMobileDetect();
+  const isMobile = useIsMobile();
 
   // Persist active engagement to localStorage + URL so it survives navigation
   const connectEngagement = useCallback((id: string) => {

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
-import { useMobileDetect } from "@/hooks/useMobileDetect";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { motion, AnimatePresence } from "framer-motion";
 import { log } from "@/lib/logger";
 import {
@@ -241,7 +241,7 @@ export default function FindingsPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
-  const isMobile = useMobileDetect();
+  const isMobile = useIsMobile();
 
   const [findings, setFindings] = useState<Finding[]>([]);
   const [isLoading, setIsLoading] = useState(true);

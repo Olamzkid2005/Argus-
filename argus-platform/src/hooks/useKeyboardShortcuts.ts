@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export interface UseKeyboardShortcutsOptions {
@@ -8,6 +8,16 @@ export interface UseKeyboardShortcutsOptions {
   onExplainFinding?: () => void;
   onVerifyFinding?: () => void;
   onClose?: () => void;
+}
+
+/** Generic shortcut descriptor used by useGlobalShortcuts */
+interface Shortcut {
+  key: string;
+  ctrl?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  action: () => void;
+  description: string;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -99,4 +109,61 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
   }, [router]);
 
   return { showHelp, setShowHelp };
+}
+
+// ── Generic array-based shortcut registration (used by GlobalShortcuts) ──
+
+/**
+ * Register arbitrary keyboard shortcuts from an array of Shortcut descriptors.
+ * Use `useGlobalShortcuts()` for the default set of navigation shortcuts.
+ */
+export function useShortcutList(shortcuts: Shortcut[]) {
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+
+      for (const shortcut of shortcuts) {
+        const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
+        const ctrlMatch = shortcut.ctrl
+          ? event.ctrlKey || event.metaKey
+          : !event.ctrlKey && !event.metaKey;
+        const shiftMatch = shortcut.shift ? event.shiftKey : !event.shiftKey;
+        const altMatch = shortcut.alt ? event.altKey : !event.altKey;
+
+        if (keyMatch && ctrlMatch && shiftMatch && altMatch) {
+          event.preventDefault();
+          shortcut.action();
+          break;
+        }
+      }
+    },
+    [shortcuts],
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+}
+
+/**
+ * Predefined global navigation shortcuts:
+ *   Ctrl+D → Dashboard
+ *   Ctrl+E → Engagements
+ *   Ctrl+F → Findings
+ *   Ctrl+Shift+N → New Engagement
+ *   /       → Focus search input
+ */
+export function useGlobalShortcuts() {
+  const router = useRouter();
+
+  const shortcuts: Shortcut[] = [
+    { key: "d", ctrl: true, action: () => router.push("/dashboard"), description: "Go to Dashboard" },
+    { key: "e", ctrl: true, action: () => router.push("/engagements"), description: "Go to Engagements" },
+    { key: "f", ctrl: true, action: () => router.push("/findings"), description: "Go to Findings" },
+    { key: "n", ctrl: true, shift: true, action: () => router.push("/engagements"), description: "New Engagement" },
+    { key: "/", action: () => document.querySelector<HTMLInputElement>("input")?.focus(), description: "Search" },
+  ];
+
+  useShortcutList(shortcuts);
 }
