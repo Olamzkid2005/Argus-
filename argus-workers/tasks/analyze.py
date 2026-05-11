@@ -24,12 +24,26 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         actions = result.get("actions", [])
         result.get("next_state", "reporting")
         if actions:
-            ctx.state.transition("recon", "Additional targets discovered")
+            # Extract targets from analysis actions so expand_recon receives real targets
+            action_targets = []
+            for action in actions:
+                target = None
+                if isinstance(action, dict):
+                    target = action.get("target") or action.get("arguments", {}).get("target")
+                if target and isinstance(target, str):
+                    action_targets.append(target)
+            if not action_targets:
+                logger.warning("Analysis actions found but no valid targets extracted for engagement=%s", engagement_id)
+            # Dispatch the downstream task BEFORE transitioning state
             try:
-                app.send_task('tasks.recon.expand_recon',
-                              args=[engagement_id, [], budget, ctx.trace_id])
+                expand_task = app.send_task('tasks.recon.expand_recon',
+                              args=[engagement_id, action_targets, budget, ctx.trace_id])
+                ctx.state.transition("recon", "Additional targets discovered")
+                logger.info("Dispatched expand_recon for engagement=%s with %d targets (task=%s)",
+                           engagement_id, len(action_targets), expand_task.id)
             except Exception as e:
                 logger.error("Failed to enqueue expand_recon for engagement=%s: %s", engagement_id, e, exc_info=True)
+                ctx.state.transition("failed", f"Failed to dispatch expand_recon: {e}")
         else:
             ctx.state.transition("reporting", "Analysis complete")
             try:

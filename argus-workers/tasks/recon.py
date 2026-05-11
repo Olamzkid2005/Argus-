@@ -97,10 +97,13 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
             except Exception as e:
                 logger.warning("Failed to save expanded recon context: %s", e)
 
-        ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
+        # Dispatch downstream task BEFORE transitioning state
         try:
-            app.send_task('tasks.scan.run_scan', args=[engagement_id, valid_targets, budget, ctx.trace_id])
+            scan_task = app.send_task('tasks.scan.run_scan', args=[engagement_id, valid_targets, budget, ctx.trace_id])
+            ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
+            logger.info("Dispatched scan after expand for engagement=%s (task=%s)", engagement_id, scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan after expand for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.transition("failed", f"Failed to dispatch scan: {e}")
         return result
 

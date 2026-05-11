@@ -12,8 +12,8 @@ class DistributedLock:
     Redis-based distributed lock with heartbeat mechanism
     """
 
-    # Lock TTL: 300 seconds (5 minutes)
-    LOCK_TTL_SECONDS = 300
+    # Lock TTL: 3600 seconds (1 hour) to match maximum task timeout
+    LOCK_TTL_SECONDS = 3600
 
     # Heartbeat interval: 60 seconds
     HEARTBEAT_INTERVAL_SECONDS = 60

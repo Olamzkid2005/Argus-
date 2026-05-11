@@ -33,16 +33,17 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
         ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
 
-        ctx.state.transition("analyzing", "Scan complete")
-
+        # Dispatch downstream task BEFORE transitioning state to avoid stuck engagements
         try:
             analyze_task = app.send_task(
                 "tasks.analyze.run_analysis",
                 args=[engagement_id, budget, ctx.trace_id],
             )
             result["analysis_task_id"] = analyze_task.id
+            ctx.state.transition("analyzing", "Scan complete")
         except Exception as e:
             logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.transition("failed", f"Failed to dispatch analysis: {e}")
 
         return result
 
