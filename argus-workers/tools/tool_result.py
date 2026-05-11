@@ -43,12 +43,16 @@ class ToolStatus(StrEnum):
 
 
 @dataclass
-class ToolResult:
+class StructuredToolResult:
     """
     Single-source-of-truth for everything that happened during one tool run.
 
     Every field is populated regardless of success/failure so callers never
     have to guard against AttributeError or parse empty strings for clues.
+
+    NOTE: This is the richer replacement for tools.models.ToolResult.
+    Import as: from tools.tool_result import StructuredToolResult
+    Do NOT import the legacy ToolResult from tools.models.
     """
 
     # ── Identity ──────────────────────────────────────────────────────────────
@@ -175,7 +179,7 @@ class ToolResult:
         return result
 
     @classmethod
-    def skipped(cls, tool_name: str, reason: str, target: str = "") -> ToolResult:
+    def skipped(cls, tool_name: str, reason: str, target: str = "") -> StructuredToolResult:
         return cls(
             tool_name=tool_name,
             target=target,

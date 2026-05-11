@@ -274,7 +274,7 @@ def execute_scan_tools(
         # Build sqlmap command
         if "sqlmap" not in _skip:
             sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
-            sqlmap_cmd = ["-u", target, "--batch", "--json-output", sqlmap_out]
+            sqlmap_cmd = ["-u", target, "--json-output", sqlmap_out]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 sqlmap_cmd.extend(["--level", "3", "--risk", "2"])

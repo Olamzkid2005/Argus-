@@ -108,19 +108,30 @@ class ToolCache:
         if tool_name in PIP_ALLOWLIST:
             try:
                 version = TOOL_VERSIONS.get(tool_name)
+                pip_cmd = ["pip", "install"]
+                hashes_env = os.getenv("PIP_REQUIRE_HASHES", "")
+                if hashes_env:
+                    pip_cmd.extend(["--require-hashes", f"--hash={hashes_env}"])
                 if version:
-                    result = subprocess.run(
-                        ["pip", "install", f"{tool_name}=={version}"],
-                        capture_output=True, text=True, timeout=300
-                    )
+                    pip_cmd.append(f"{tool_name}=={version}")
                 else:
-                    result = subprocess.run(
-                        ["pip", "install", tool_name],
-                        capture_output=True, text=True, timeout=300
-                    )
+                    pip_cmd.append(tool_name)
+                result = subprocess.run(
+                    pip_cmd,
+                    capture_output=True, text=True, timeout=300
+                )
                 if result.returncode == 0:
-                    logger.info(f"Installed {tool_name} via pip (version={version or 'latest'})")
+                    logger.info("Installed %s via pip (version=%s, hashes=%s)",
+                                tool_name, version or 'latest', 'enabled' if hashes_env else 'disabled')
+                    # Verify installation succeeded by checking --version
+                    verify = subprocess.run(
+                        [tool_name, "--version"],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    logger.info("Installed %s version: %s", tool_name, verify.stdout.strip())
                     return True
+                else:
+                    logger.error("pip install %s failed: %s", tool_name, result.stderr[:500])
             except Exception as e:
                 logger.warning(f"Failed to install {tool_name} via pip: {e}")
         else:

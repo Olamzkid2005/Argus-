@@ -123,11 +123,15 @@ class ConnectionManager:
 
         return metrics
 
-    def get_connection(self):
+    def get_connection(self, timeout: int = 30):
         """
         Get a connection from the pool (thread-safe).
 
-        Yields:
+        Args:
+            timeout: Maximum seconds to wait for a connection (0 = block indefinitely).
+                     Default 30s to prevent worker process stalls.
+
+        Returns:
             A database connection
 
         Note: Always release the connection back using conn.putconn() or use the
@@ -136,7 +140,20 @@ class ConnectionManager:
         wait_start = time.time()
         pool_instance = self._ensure_pool()
         try:
-            conn = pool_instance.getconn()
+            # Use a wait-loop with timeout to avoid stalling worker processes
+            deadline = wait_start + timeout if timeout > 0 else None
+            while True:
+                try:
+                    conn = pool_instance.getconn()
+                    break
+                except pool.PoolError:
+                    if deadline and time.time() >= deadline:
+                        raise DatabaseConnectionError(
+                            f"Timed out waiting for database connection "
+                            f"after {timeout}s (pool max={self._max_connections})"
+                        )
+                    time.sleep(0.1)
+                    continue
             wait_time = (time.time() - wait_start) * 1000
 
             with self._metrics_lock:

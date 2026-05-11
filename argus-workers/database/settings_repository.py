@@ -1,9 +1,12 @@
 """
 Settings Repository - Retrieve user API keys and settings
 """
+import logging
 import os
 
 from database.connection import connect
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsRepository:
@@ -136,7 +139,7 @@ class SettingsRepository:
 
             return True
         except Exception as e:
-            print(f"Failed to delete user setting: {e}")
+            logger.error("Failed to delete user setting: %s", e)
             return False
         finally:
             if conn:

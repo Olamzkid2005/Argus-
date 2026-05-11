@@ -33,6 +33,10 @@ def _get_redis():
             return _redis_client_instance
         except Exception:
             logger.warning("Redis connection lost — reconnecting")
+            try:
+                _redis_client_instance.close()
+            except Exception:
+                pass
             _redis_client_instance = None
             _redis_available = False
     try:

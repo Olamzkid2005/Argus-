@@ -190,9 +190,13 @@ class AuthManager:
         try:
             method = self._config.login_method.upper()
             if method == "GET":
-                resp = session.get(url, params=data, headers=headers, timeout=30)
-            else:
-                resp = session.post(url, data=data, headers=headers, timeout=30)
+                logger.warning(
+                    "Auth config specifies GET login method for %s — "
+                    "credentials would be exposed in URL query params. "
+                    "Falling back to POST for security.",
+                    url,
+                )
+            resp = session.post(url, data=data, headers=headers, timeout=30)
 
             new_cookies = dict(session.cookies)
 

@@ -143,11 +143,37 @@ class LLMParserFallback:
 
             findings = result if isinstance(result, list) else []
 
+            validated_count = 0
             for finding in findings:
                 if not isinstance(finding, dict):
                     continue
+                # Mark as AI-generated so human reviewers know this came from an LLM
                 finding.setdefault("source_tool", tool_name)
                 finding.setdefault("parser_source", "llm_fallback")
+                finding["ai_generated"] = True
+                # Post-hoc validation: discard findings with empty type, missing endpoint,
+                # or severity outside the allowed set
+                VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                ftype = str(finding.get("type", "")).strip()
+                fseverity = str(finding.get("severity", "")).strip().upper()
+                fendpoint = str(finding.get("endpoint", "")).strip()
+                if not ftype or fseverity not in VALID_SEVERITIES or not fendpoint:
+                    logger.debug(
+                        "LLMParserFallback: discarded hallucinated/invalid finding "
+                        "type=%r severity=%r endpoint=%r",
+                        ftype, fseverity, fendpoint,
+                    )
+                    continue
+                validated_count += 1
+
+            if validated_count < len(findings):
+                logger.warning(
+                    "LLMParserFallback: %d/%d findings discarded by post-validation for %s",
+                    len(findings) - validated_count, len(findings), tool_name,
+                )
+                findings = [f for f in findings if f.get("ai_generated") and str(f.get("type", "")).strip()
+                           and str(f.get("severity", "")).strip().upper() in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                           and str(f.get("endpoint", "")).strip()]
 
             return findings
 

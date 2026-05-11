@@ -255,6 +255,14 @@ class ToolExecutor:
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
                     )
+                    ON CONFLICT (engagement_id, endpoint, type, source_tool)
+                    DO UPDATE SET
+                        severity = EXCLUDED.severity,
+                        confidence = EXCLUDED.confidence,
+                        evidence = EXCLUDED.evidence,
+                        cvss_score = EXCLUDED.cvss_score,
+                        fp_likelihood = EXCLUDED.fp_likelihood,
+                        updated_at = NOW()
                     """,
                     (
                         finding_id,

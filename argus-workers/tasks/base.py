@@ -189,6 +189,24 @@ def task_error_boundary(
     """
     try:
         yield
+    except SoftTimeLimitExceeded as ste:
+        logger.warning(
+            "Soft time limit exceeded in %s for engagement %s — transitioning to failed",
+            phase_name, engagement_id,
+        )
+        try:
+            from database.connection import db_cursor
+            with db_cursor() as cursor:
+                cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+                row = cursor.fetchone()
+                current_state = row[0] if row else "created"
+            if current_state not in ("complete", "failed"):
+                from state_machine import EngagementStateMachine
+                sm = EngagementStateMachine(engagement_id, current_state=current_state)
+                sm.transition("failed", f"{phase_name} timed out (soft time limit exceeded)")
+        except Exception as state_error:
+            logger.error("Failed to update engagement state on soft time limit: %s", state_error)
+        raise
     except Exception as e:
         from error_classifier import classify_error_with_code, log_classified_error
 

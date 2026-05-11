@@ -14,6 +14,7 @@ Gated behind ARGUS_FF_API_SCANNER feature flag.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import re
 from typing import Any
@@ -76,6 +77,29 @@ class APISecurityScanner:
                 "httpx library is required. Install with: pip install httpx"
             )
 
+    @staticmethod
+    def _validate_external_url(url: str) -> None:
+        """Raise ValueError if the URL resolves to an internal/private host."""
+        hostname = urlparse(url).hostname
+        if not hostname:
+            raise ValueError(f"Could not parse hostname from URL: {url}")
+        # Block internal/reserved IPs and localhost variants
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+                raise ValueError(f"Blocked internal IP: {hostname}")
+        except ValueError:
+            pass  # not an IP literal — check hostname patterns
+        blocked_hostnames = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"}
+        hostname_lower = hostname.lower()
+        if hostname_lower in blocked_hostnames:
+            raise ValueError(f"Blocked localhost address: {hostname}")
+        # Block cloud metadata endpoints
+        if hostname_lower == "169.254.169.254":
+            raise ValueError(f"Blocked cloud metadata endpoint: {hostname}")
+        if hostname_lower.endswith(".metadata.google.internal"):
+            raise ValueError(f"Blocked GCP metadata endpoint: {hostname}")
+
     async def scan(
         self,
         base_url: str,
@@ -95,6 +119,8 @@ class APISecurityScanner:
         if not is_enabled("API_SCANNER", default=False):
             logger.info("API security scanner disabled (ARGUS_FF_API_SCANNER not set)")
             return []
+
+        self._validate_external_url(base_url)
 
         if not endpoints:
             logger.info("No endpoints provided, running discovery...")
@@ -454,6 +480,8 @@ class APISecurityScanner:
             Deduplicated list of discovered endpoint paths.
         """
         discovered: set[str] = set()
+
+        APISecurityScanner._validate_external_url(base_url)
 
         # 1. Try common OpenAPI / API doc paths
         doc_paths = [

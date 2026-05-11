@@ -33,12 +33,14 @@ def update_nuclei_templates(timeout: int = 120) -> bool:
     logger.info(f"Updating nuclei templates: {' '.join(cmd)}")
 
     try:
+        env = os.environ.copy()
+        env["HOME"] = str(Path.home())
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
-            env={"HOME": str(Path.home())},
+            env=env,
         )
 
         if result.returncode == 0:

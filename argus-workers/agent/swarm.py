@@ -400,11 +400,12 @@ class APIAgent(SpecialistAgent):
 
             # 4. sqlmap injection testing on API params
             logger.info(f"[API] Running sqlmap on {target}")
+            logger.warning("[API] sqlmap executing against %s — verify target is in authorized scope", target)
             try:
                 sqlmap_out = str(self.tool_runner.sandbox_dir / "tmp" / f"sqlmap_api.json")
                 sqlmap_findings = self._run_tool(
                     "sqlmap",
-                    ["-u", target, "--batch", "--json-output", sqlmap_out],
+                    ["-u", target, "--json-output", sqlmap_out],
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(sqlmap_findings)

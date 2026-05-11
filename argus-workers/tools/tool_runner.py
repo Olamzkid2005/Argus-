@@ -521,6 +521,8 @@ class ToolRunner:
         )
 
         stdout_lines = []
+        MAX_STREAMING_BYTES = 50 * 1024 * 1024  # 50MB — stop reading after this
+        total_bytes = 0
         start = time.time()
 
         try:
@@ -533,6 +535,14 @@ class ToolRunner:
                 if ready:
                     line = proc.stdout.readline()
                     if line:
+                        total_bytes += len(line.encode("utf-8"))
+                        if total_bytes > MAX_STREAMING_BYTES:
+                            logger.warning(
+                                "Streaming output for %s exceeded %d byte limit — killing process",
+                                tool, MAX_STREAMING_BYTES,
+                            )
+                            proc.kill()
+                            break
                         stdout_lines.append(line)
                         try:
                             on_line(line.rstrip("\n\r"))
@@ -553,12 +563,26 @@ class ToolRunner:
             proc.kill()
 
         finally:
-            # Ensure process is waited on to prevent zombies
+            # Ensure process is waited on to prevent zombies.
+            # Use os.waitpid with WNOHANG in a retry loop after kill signals.
             try:
                 proc.wait(timeout=5)
             except Exception:
-                # If wait times out, the process is already a zombie we can't fix
-                logger.warning("Could not wait on %s process (pid=%d)", tool, proc.pid)
+                logger.warning("Could not wait on %s process (pid=%d) — force-reaping", tool, proc.pid)
+                try:
+                    import signal
+                    os.kill(proc.pid, signal.SIGKILL)
+                    # Poll until reaped or give up after 3 attempts
+                    for _ in range(3):
+                        try:
+                            wpid, _ = os.waitpid(proc.pid, os.WNOHANG)
+                            if wpid != 0:
+                                break
+                            time.sleep(0.5)
+                        except ChildProcessError:
+                            break
+                except Exception:
+                    logger.error("Failed to force-reap PID %d for %s", proc.pid, tool)
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1

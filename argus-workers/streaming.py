@@ -218,6 +218,26 @@ class StreamManager(EventBus):
             self._queues.pop(engagement_id, None)
             self._history.pop(engagement_id, None)
 
+    def evict_stale_engagements(self, max_engagement_age_seconds: int = 86400):
+        """Evict history for engagements older than the given age."""
+        import time as _time
+        with self._lock:
+            cutoff = datetime.now(UTC).timestamp() - max_engagement_age_seconds
+            stale = []
+            for eid, events in self._history.items():
+                if events and events[-1].timestamp:
+                    try:
+                        ts = datetime.fromisoformat(events[-1].timestamp).timestamp()
+                        if ts < cutoff:
+                            stale.append(eid)
+                    except (ValueError, OSError):
+                        pass
+            for eid in stale:
+                self._queues.pop(eid, None)
+                self._history.pop(eid, None)
+            if stale:
+                logger.debug("Evicted %d stale engagement histories", len(stale))
+
 
 # Convenience functions for publishing common events
 

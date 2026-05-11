@@ -47,7 +47,7 @@ export async function GET(
       let sqlParams: (string | number | null)[];
 
       if (clusterId) {
-        // Get trace for specific cluster
+        // Get trace for specific cluster, scoped to engagement's org
         query = `
           SELECT 
             t.id,
@@ -59,15 +59,13 @@ export async function GET(
             e.severity
           FROM ai_explainability_traces t
           LEFT JOIN findings e ON e.id = t.cluster_id
-          WHERE t.cluster_id = $1
+          WHERE t.cluster_id = $1 AND e.engagement_id = $2
           ORDER BY t.created_at DESC
           LIMIT 1
         `;
-        sqlParams = [clusterId];
+        sqlParams = [clusterId, engagementId];
       } else {
-        // Get all traces for engagement
-        // Note: This requires a way to link clusters to engagements
-        // For now, we'll return all traces (in production, add engagement_id to clusters)
+        // Get all traces for this engagement's org only
         query = `
           SELECT 
             t.id,
@@ -79,10 +77,12 @@ export async function GET(
             e.token_count
           FROM ai_explainability_traces t
           LEFT JOIN ai_explanations e ON e.cluster_id = t.cluster_id
+          INNER JOIN findings f ON f.id = t.cluster_id
+          WHERE f.engagement_id = $1
           ORDER BY t.created_at DESC
           LIMIT 100
         `;
-        sqlParams = [];
+        sqlParams = [engagementId];
       }
 
       const result = await client.query(query, sqlParams);

@@ -8,16 +8,45 @@ from playwright.sync_api import sync_playwright
 
 def _validate_url(url: str) -> str:
     """Prevent SSRF: only allow http/https URLs, block file://, internal IPs."""
+    import ipaddress as _ipaddress
     import re as _re
+    from urllib.parse import urlparse as _urlparse
+
     if not url.startswith(("http://", "https://")):
         raise ValueError(f"Blocked non-HTTP URL (SSRF prevention): {url[:80]}")
-    # Block common internal addresses
+
+    parsed = _urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"Could not parse hostname from URL: {url[:80]}")
+
+    # Resolve hostname to IP and check it's not internal (prevents DNS rebinding)
+    try:
+        import socket as _socket
+        resolved_ip = _socket.gethostbyname(hostname)
+        ip = _ipaddress.ip_address(resolved_ip)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+            raise ValueError(
+                f"Blocked internal IP (resolved {hostname} → {resolved_ip}): {url[:80]}"
+            )
+        # Block cloud metadata endpoint
+        if resolved_ip == "169.254.169.254":
+            raise ValueError(
+                f"Blocked cloud metadata endpoint ({hostname} → {resolved_ip})"
+            )
+    except _socket.gaierror:
+        raise ValueError(f"DNS resolution failed for {hostname}: {url[:80]}")
+    except ValueError:
+        raise  # re-raise our own ValueError
+
+    # Static block for common internal patterns (belt and suspenders)
     blocked = _re.compile(
-        r"(127\.0\.0\.1|localhost|0\.0\.0\.0|10\.|172\.(1[6-9]|2[0-9]|3[01])|192\.168\.|169\.254\.|::1|fc00:|fe80:)", 
+        r"(127\.0\.0\.1|localhost|0\.0\.0\.0|10\.|172\.(1[6-9]|2[0-9]|3[01])\."
+        r"|192\.168\.|169\.254\.|::1|fc00:|fe80:|metadata\.google\.internal)",
         _re.IGNORECASE,
     )
-    if blocked.search(url):
-        raise ValueError(f"Blocked internal URL (SSRF prevention): {url[:80]}")
+    if blocked.search(hostname):
+        raise ValueError(f"Blocked internal hostname (SSRF prevention): {hostname}")
     return url
 
 

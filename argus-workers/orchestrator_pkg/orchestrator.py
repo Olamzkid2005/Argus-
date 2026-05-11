@@ -171,8 +171,15 @@ class Orchestrator:
             target = targets_list[0] if targets_list else None
         if not target:
             logger.warning(f"run_recon called with no target for engagement {self.engagement_id}, skipping")
-            return {"phase": "recon", "status": "skipped", "findings_count": 0,
-                    "next_state": "scanning", "trace_id": get_trace_id()}
+            self.ws_publisher.publish_state_transition(
+                engagement_id=self.engagement_id,
+                from_state=self._get_scan_state(),
+                to_state="failed",
+                reason="Recon skipped — no target URL configured",
+            )
+            return {"phase": "recon", "status": "failed", "findings_count": 0,
+                    "next_state": "failed", "trace_id": get_trace_id(),
+                    "error": "No target URL configured for engagement"}
 
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="recon", target=target)
         self.logger.log_job_started(job_type="recon", engagement_id=self.engagement_id, target=target)
@@ -185,11 +192,6 @@ class Orchestrator:
 
         findings_count = len(findings)
         self._save_findings(findings, "tool")
-
-        self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id, from_state=self._get_scan_state(),
-            to_state="scanning", reason="Reconnaissance completed — auto-advancing to scan",
-        )
 
         if recon_context:
             try:
@@ -320,8 +322,14 @@ class Orchestrator:
                         cwe_id=finding.get("cwe_id"),
                     )
                 else:
-                    dedup_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
-                    similar = emb_svc.find_existing_similar(dedup_text)
+                    payload = finding.get('evidence', {}).get('payload', '')
+                    # Skip embedding-based dedup when payload is redacted —
+                    # the __REDACTED__ placeholder would cause false matches
+                    if payload and '__REDACTED__' not in str(payload):
+                        dedup_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {payload}"
+                        similar = emb_svc.find_existing_similar(dedup_text)
+                    else:
+                        similar = None
                     if similar:
                         try:
                             from database.connection import db_cursor
@@ -589,9 +597,6 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"Failed to enqueue LLM review (non-fatal): {e}")
 
-        self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id, from_state="scanning", to_state="analyzing", reason="Scanning completed",
-        )
         return {"phase": "scan", "status": "completed", "findings_count": findings_count,
                 "next_state": "analyzing", "trace_id": get_trace_id()}
 
@@ -874,10 +879,6 @@ class Orchestrator:
             else:
                 logger.info(f"Budget exhausted: {reason}")
 
-        self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id, from_state="analyzing", to_state=next_state,
-            reason="Analysis completed" if next_state == "reporting" else "Additional targets discovered",
-        )
         return {"phase": "analyze", "status": "completed", "actions": actions,
                 "scored_findings": evaluation.get("scored_findings", []),
                 "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
@@ -910,7 +911,10 @@ class Orchestrator:
                         FindingRepository,
                     )
                     from tools.sbom_generator import generate_sbom_from_findings
-                    fr = FindingRepository()
+                    db_url = os.getenv("DATABASE_URL")
+                    if not db_url:
+                        raise OSError("DATABASE_URL not set — cannot query findings for SBOM")
+                    fr = FindingRepository(db_url)
                     all_findings, _ = fr.get_findings_by_engagement(self.engagement_id)
                     sbom_json = generate_sbom_from_findings(
                         engagement_id=self.engagement_id, findings=all_findings,
@@ -1001,10 +1005,6 @@ class Orchestrator:
                 "Scan diff dispatch failed (non-fatal): %s", e
             )
 
-        self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id, from_state="reporting", to_state="complete",
-            reason="Reporting completed",
-        )
         return {"phase": "report", "status": "completed", "next_state": "complete",
                 "report": report_data, "trace_id": get_trace_id()}
 
