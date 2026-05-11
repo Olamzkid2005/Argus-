@@ -127,7 +127,7 @@ PHASES: list[Phase] = [
 # circular imports — phases.py is imported by frontend build tooling that
 # does not import the full state machine module.
 TRANSITIONS: dict[str, list[str]] = {
-    "created": ["recon", "failed"],
+    "created": ["recon", "failed", "paused"],
     "recon": ["scanning", "awaiting_approval", "failed", "paused"],
     "awaiting_approval": ["scanning", "paused", "failed"],
     "scanning": ["analyzing", "failed", "paused"],

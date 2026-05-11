@@ -40,7 +40,7 @@ class EngagementStateMachine:
 
     # Valid state transitions
     TRANSITIONS = {
-        "created": ["recon", "failed"],
+        "created": ["recon", "failed", "paused"],
         "recon": ["scanning", "awaiting_approval", "failed", "paused"],
         "awaiting_approval": ["scanning", "paused", "failed"],
         "scanning": ["analyzing", "failed", "paused"],
