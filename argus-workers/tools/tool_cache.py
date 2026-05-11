@@ -107,14 +107,19 @@ class ToolCache:
         # Only allow known tools to be installed via pip (supply-chain safety)
         if tool_name in PIP_ALLOWLIST:
             try:
-                result = subprocess.run(
-                    ["pip", "install", tool_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
+                version = TOOL_VERSIONS.get(tool_name)
+                if version:
+                    result = subprocess.run(
+                        ["pip", "install", f"{tool_name}=={version}"],
+                        capture_output=True, text=True, timeout=300
+                    )
+                else:
+                    result = subprocess.run(
+                        ["pip", "install", tool_name],
+                        capture_output=True, text=True, timeout=300
+                    )
                 if result.returncode == 0:
-                    logger.info(f"Installed {tool_name} via pip")
+                    logger.info(f"Installed {tool_name} via pip (version={version or 'latest'})")
                     return True
             except Exception as e:
                 logger.warning(f"Failed to install {tool_name} via pip: {e}")
