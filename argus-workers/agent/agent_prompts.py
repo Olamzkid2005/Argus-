@@ -627,6 +627,51 @@ def _sanitize_for_prompt(value: str) -> str:
     return sanitized[:200]
 
 
+def _build_target_context_paragraph(profile: dict) -> str:
+    """Build a prose paragraph from target profile data for LLM consumption.
+
+    Follows DeepSec's INFO.md pattern — contextual prose the LLM can
+    reason from naturally, not a raw data dump.
+    """
+    if not profile or profile.get("total_scans", 0) == 0:
+        return ""
+
+    parts = []
+    scans = profile.get("total_scans", 0)
+    parts.append(f"You have scanned this target {scans} time(s) before.")
+
+    confirmed = profile.get("confirmed_finding_types", [])[:5]
+    if confirmed:
+        parts.append(
+            f"Past scans confirmed: {', '.join(confirmed)}. "
+            f"Focus on these first."
+        )
+
+    hot = profile.get("high_value_endpoints", [])[:4]
+    if hot:
+        parts.append(
+            f"Endpoints that previously had findings: {', '.join(hot)}. "
+            f"Revisit these."
+        )
+
+    best = [t["tool"] for t in profile.get("best_tools", [])[:3]]
+    if best:
+        parts.append(f"Tools that found real issues: {', '.join(best)}.")
+
+    noisy = profile.get("noisy_tools", [])[:3]
+    if noisy:
+        parts.append(
+            f"Tools that were noisy/FP on this target: {', '.join(noisy)}. "
+            f"Skip these unless nothing else works."
+        )
+
+    tech = profile.get("known_tech_stack", [])[:5]
+    if tech:
+        parts.append(f"Detected stack: {', '.join(tech)}.")
+
+    return "=== WHAT WE KNOW ABOUT THIS TARGET ===\n" + " ".join(parts)
+
+
 def build_tool_selection_prompt(
     recon_context: str,
     available_tools: list[dict],
@@ -658,42 +703,9 @@ def build_tool_selection_prompt(
 
     # ── Section 0: Target Memory (from cross-scan learning) ────────
     if target_profile and target_profile.get("total_scans", 0) > 0:
-        p = target_profile
-        lines = [
-            f"=== WHAT WE KNOW ABOUT THIS TARGET"
-            f" ({p['total_scans']} prior scans) ===",
-        ]
-        best = p.get("best_tools", [])
-        if best:
-            tools_str = ", ".join(
-                f"{t['tool']} ({t['finding_count']} findings)"
-                for t in best[:4]
-            )
-            lines.append(
-                _sanitize_for_prompt(
-                    f"Tools that found real issues: {tools_str}"
-                )
-            )
-        noisy = p.get("noisy_tools", [])
-        if noisy:
-            lines.append(
-                f"Tools that were noisy/FP: {', '.join(noisy[:4])}"
-            )
-        finding_types = p.get("confirmed_finding_types", [])
-        if finding_types:
-            lines.append(
-                f"Confirmed vulnerability types:"
-                f" {', '.join(finding_types[:6])}"
-            )
-        hot = p.get("high_value_endpoints", [])
-        if hot:
-            lines.append("Previously vulnerable endpoints:")
-            lines.extend(f"  - {e}" for e in hot[:5])
-        lines.append(
-            "INSTRUCTION: Prioritise tools that worked before. "
-            "Skip tools marked noisy unless all better options are exhausted."
-        )
-        prompt_parts.append("\n".join(lines))
+        paragraph = _build_target_context_paragraph(target_profile)
+        if paragraph:
+            prompt_parts.append(paragraph)
 
     # ── Section 1: Analyst Priority (from natural language config) ─
     if priority_classes:

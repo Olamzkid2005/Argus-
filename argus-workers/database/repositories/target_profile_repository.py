@@ -266,6 +266,50 @@ class TargetProfileRepository:
 
     # ── LLM prompt section builder ──────────────────────────────────
 
+    def to_llm_context_paragraph(self, profile: dict) -> str:
+        """
+        Generates a prose paragraph from target profile data for injection into
+        the agent prompt. Follows DeepSec's INFO.md pattern — contextual prose
+        the LLM can reason from, not a raw data dump.
+        """
+        if not profile or profile.get("total_scans", 0) == 0:
+            return ""
+
+        parts = []
+        scans = profile["total_scans"]
+        parts.append(f"This target has been scanned {scans} time(s) before.")
+
+        confirmed = profile.get("confirmed_finding_types", [])[:5]
+        if confirmed:
+            parts.append(
+                f"Confirmed vulnerability types in past scans: {', '.join(confirmed)}. "
+                f"These warrant immediate focus."
+            )
+
+        hot = profile.get("high_value_endpoints", [])[:4]
+        if hot:
+            parts.append(
+                f"Endpoints that produced findings in past scans: {', '.join(hot)}. "
+                f"Revisit these first."
+            )
+
+        best = [t["tool"] for t in profile.get("best_tools", [])[:3]]
+        if best:
+            parts.append(f"Tools with confirmed findings on this target: {', '.join(best)}.")
+
+        noisy = profile.get("noisy_tools", [])[:3]
+        if noisy:
+            parts.append(
+                f"Tools that produced only false positives here: {', '.join(noisy)}. "
+                f"Run these last."
+            )
+
+        tech = profile.get("known_tech_stack", [])[:5]
+        if tech:
+            parts.append(f"Detected tech stack: {', '.join(tech)}.")
+
+        return " ".join(parts)
+
     def to_llm_context(self, profile: dict) -> str:
         """Convert a profile to a compact prompt section (<800 tokens).
 
