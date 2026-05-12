@@ -50,13 +50,10 @@ export interface UseNotificationsReturn {
 
 export function useNotifications(): UseNotificationsReturn {
   const [notifications, setNotifications] = useState<Notification[]>(loadNotifications);
-  const [mounted, setMounted] = useState(true);
 
   useEffect(() => {
-    if (mounted) {
-      saveNotifications(notifications);
-    }
-  }, [notifications, mounted]);
+    saveNotifications(notifications);
+  }, [notifications]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,

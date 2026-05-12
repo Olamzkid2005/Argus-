@@ -116,7 +116,13 @@ export function useScannerActivities(
 
       if (mountedRef.current) {
         consecutiveErrorsRef.current = 0;
-        setActivities(data.activities || []);
+        const incoming = data.activities || [];
+        setActivities((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const newItems = incoming.filter((a: ScannerActivity) => !existingIds.has(a.id));
+          if (newItems.length === 0) return prev;
+          return [...newItems, ...prev].slice(0, 100);
+        });
         setError(null);
       }
     } catch (err) {
