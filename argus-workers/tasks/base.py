@@ -139,6 +139,7 @@ def task_context(
                             current_state=current,
                         )
                         sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                        task._failed_transition_done = True
                 except Exception as st_error:
                     logger.error("Failed to transition on soft time limit: %s", st_error)
             raise

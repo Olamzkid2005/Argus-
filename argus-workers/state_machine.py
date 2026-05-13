@@ -323,6 +323,7 @@ class EngagementStateMachine:
                         """,
                         (self.engagement_id,)
                     )
+                    break
 
             conn.commit()
 

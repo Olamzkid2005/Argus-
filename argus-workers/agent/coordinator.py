@@ -15,9 +15,6 @@ class CoordinatorAgent:
     PHASE_AGENTS = {}
     _phase_agents_loaded = False
 
-    analyze_cycle_count: int = 0
-    max_analyze_cycles: int = 3
-
     VALID_TRANSITIONS = {
         "recon": ["scan"],
         "scan": ["analyze", "deep_scan"],
@@ -26,18 +23,19 @@ class CoordinatorAgent:
         "analyze": ["report", "recon"],
         "report": [],
     }
+
+    @classmethod
+    def _ensure_phase_agents(cls):
+        if not cls._phase_agents_loaded:
+            from tool_definitions import get_tools_for_phase
+            cls.PHASE_AGENTS = {
+                phase: {
+                    "description": f"{phase.capitalize().replace('_', ' ')}",
+                    "tools": [t.name for t in get_tools_for_phase(phase)],
+                }
                 for phase in ["recon", "scan", "deep_scan", "repo_scan", "analyze", "report"]
             }
             cls._phase_agents_loaded = True
-
-    VALID_TRANSITIONS = {
-        "recon": ["scan"],
-        "scan": ["analyze", "deep_scan"],
-        "deep_scan": ["analyze"],
-        "repo_scan": ["scan"],
-        "analyze": ["report", "recon"],
-        "report": [],
-    }
 
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id

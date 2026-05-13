@@ -195,6 +195,17 @@ class LLMClient:
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
 
+        # Circuit breaker: skip if too many recent failures
+        import time as _time
+        if self._circuit_failures >= self._circuit_threshold:
+            if _time.time() < self._circuit_open_until:
+                raise LLMUnavailableError(
+                    f"LLM circuit breaker open — skipping call for "
+                    f"{self._circuit_open_until - _time.time():.0f}s "
+                    f"({self._circuit_failures} consecutive failures)"
+                )
+            self._circuit_failures = 0
+
         # Rate limit: ensure we don't exceed 60 req/min per worker
         self._check_rate_limit()
 
@@ -216,6 +227,7 @@ class LLMClient:
                         self._async_openai_client.chat.completions.create(**kwargs),
                         timeout=30
                     )
+                    self._circuit_failures = 0
                     return response.choices[0].message.content
                 else:
                     # Generic HTTP API
@@ -238,6 +250,7 @@ class LLMClient:
                         resp = await client.post(self.api_url, json=payload, headers=headers)
                         resp.raise_for_status()
                         data = resp.json()
+                        self._circuit_failures = 0
 
                         # Try common response formats
                         if "choices" in data and len(data["choices"]) > 0:
@@ -249,6 +262,13 @@ class LLMClient:
 
             except Exception as e:
                 last_error = e
+                self._circuit_failures += 1
+                if self._circuit_failures >= self._circuit_threshold:
+                    self._circuit_open_until = _time.time() + self._circuit_cooldown
+                    logger.warning(
+                        "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
+                        self._circuit_failures, self._circuit_cooldown,
+                    )
                 logger.warning(f"LLM chat attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
                     import asyncio
