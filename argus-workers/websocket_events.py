@@ -13,9 +13,9 @@ Requirements: 31.2, 31.3, 31.4
 import json
 import logging
 import os
+import threading
 import time
 from datetime import UTC, datetime
-from typing import Any
 
 import redis
 
@@ -60,16 +60,12 @@ class WebSocketEventPublisher:
     BATCH_INTERVAL_MS = 100
 
     def __init__(self, redis_url: str = None):
-        """
-        Initialize the WebSocket event publisher.
-
-        Args:
-            redis_url: Redis connection URL (defaults to REDIS_URL env var)
-        """
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self._redis = None
         self._batch_buffer: dict[str, list[dict[str, Any]]] = {}
         self._last_flush = time.time()
+        self._flush_timer: threading.Timer | None = None
+        self._flush_lock = threading.Lock()
 
     @property
     def redis(self) -> redis.Redis:
@@ -141,11 +137,22 @@ class WebSocketEventPublisher:
         self.redis.publish(channel, json.dumps(event))
 
     def _add_to_batch(self, event: dict[str, Any]) -> None:
-        """Add event to batch buffer"""
         engagement_id = event.get("engagement_id")
         if engagement_id not in self._batch_buffer:
             self._batch_buffer[engagement_id] = []
         self._batch_buffer[engagement_id].append(event)
+        self._schedule_auto_flush()
+
+    def _schedule_auto_flush(self) -> None:
+        with self._flush_lock:
+            if self._flush_timer is not None and self._flush_timer.is_alive():
+                return
+            self._flush_timer = threading.Timer(
+                self.BATCH_INTERVAL_MS / 1000.0,
+                self.flush_batches,
+            )
+            self._flush_timer.daemon = True
+            self._flush_timer.start()
 
     def flush_batches(self, min_severity: str | None = None) -> None:
         """
