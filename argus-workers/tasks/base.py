@@ -107,16 +107,15 @@ def task_context(
 
     with tracing_manager.trace_execution(engagement_id, job_type, trace_id):
         lock = DistributedLock(redis_url)
+        _lock_acquired = False
         try:
             with LockContext(lock, engagement_id):
+                _lock_acquired = True
                 sm = EngagementStateMachine(
                     engagement_id,
                     db_connection_string=db_conn_string,
                     current_state=current_state or _get_engagement_state(engagement_id, db_conn_string),
                 )
-                # Wire the websocket publisher into the state machine so every
-                # transition() call also emits a frontend notification — this
-                # prevents the orchestrator ↔ state bypass where Redis and DB diverge.
                 from websocket_events import get_websocket_publisher
                 sm._ws_publisher = get_websocket_publisher()
                 ctx.state = sm
@@ -130,33 +129,33 @@ def task_context(
                 "Soft time limit exceeded for %s engagement %s — transitioning to failed",
                 job_type, engagement_id,
             )
-            try:
-                current = _get_engagement_state(engagement_id, db_conn_string)
-                if current not in ("complete", "failed"):
-                    sm = EngagementStateMachine(
-                        engagement_id,
-                        db_connection_string=db_conn_string,
-                        current_state=current,
-                    )
-                    sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
-            except Exception as st_error:
-                logger.error("Failed to transition on soft time limit: %s", st_error)
+            if _lock_acquired:
+                try:
+                    current = _get_engagement_state(engagement_id, db_conn_string)
+                    if current not in ("complete", "failed"):
+                        sm = EngagementStateMachine(
+                            engagement_id,
+                            db_connection_string=db_conn_string,
+                            current_state=current,
+                        )
+                        sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                except Exception as st_error:
+                    logger.error("Failed to transition on soft time limit: %s", st_error)
             raise
         except Exception as e:
-            current = _get_engagement_state(engagement_id, db_conn_string)
-            if current not in ("complete", "failed"):
-                try:
-                    sm = EngagementStateMachine(
-                        engagement_id,
-                        db_connection_string=db_conn_string,
-                        current_state=current,
-                    )
-                    sm.transition("failed", f"{job_type} failed: {e}")
-                    # Mark that failure transition was already handled,
-                    # so celery_app.on_failure can skip its redundant transition.
-                    self._failed_transition_done = True
-                except Exception as sm_error:
-                    logger.error("State transition to failed error: %s", sm_error)
+            if _lock_acquired:
+                current = _get_engagement_state(engagement_id, db_conn_string)
+                if current not in ("complete", "failed"):
+                    try:
+                        sm = EngagementStateMachine(
+                            engagement_id,
+                            db_connection_string=db_conn_string,
+                            current_state=current,
+                        )
+                        sm.transition("failed", f"{job_type} failed: {e}")
+                        task._failed_transition_done = True
+                    except Exception as sm_error:
+                        logger.error("State transition to failed error: %s", sm_error)
             raise
 
 

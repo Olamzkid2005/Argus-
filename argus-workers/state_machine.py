@@ -311,14 +311,27 @@ class EngagementStateMachine:
                 "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s",
                 (final_state, self.engagement_id)
             )
-            conn.commit()
-            self.current_state = final_state
 
-            # Notify frontend of all transitions in the chain
+            # If looping through analyze→recon in the chain, increment budget
+            for from_s, to_s in states:
+                if from_s == "analyzing" and to_s == "recon":
+                    cursor.execute(
+                        """
+                        UPDATE loop_budgets
+                        SET current_cycles = current_cycles + 1, updated_at = NOW()
+                        WHERE engagement_id = %s
+                        """,
+                        (self.engagement_id,)
+                    )
+
+            conn.commit()
+
+            # Notify frontend of all transitions in the chain.
+            # Use the state BEFORE the chain started for the first entry.
+            original_state = states[0][0] if len(states) > 1 else self.current_state
             if self._ws_publisher:
-                current = self.current_state
-                for new_state, reason in reversed(states):
-                    from_state = states[states.index((new_state, reason)) - 1][0] if states.index((new_state, reason)) > 0 else "created"
+                for i, (new_state, reason) in enumerate(states):
+                    from_state = states[i - 1][0] if i > 0 else self.current_state
                     try:
                         self._ws_publisher.publish_state_transition(
                             engagement_id=self.engagement_id,
@@ -329,6 +342,7 @@ class EngagementStateMachine:
                     except Exception:
                         logger.debug("Failed to publish chain transition for %s", self.engagement_id)
 
+            self.current_state = final_state
             return final_state
         except Exception:
             if conn:
