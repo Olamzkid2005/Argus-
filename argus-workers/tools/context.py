@@ -80,7 +80,6 @@ class ToolContext:
             )
 
     def _normalize_finding(self, raw_finding: dict, tool: str) -> dict | None:
-        """Delegate to normalize_finding if available, else use normalizer directly."""
         if self.normalize_finding is not None:
             return self.normalize_finding(raw_finding, tool)
         if self.normalizer is not None:
@@ -99,23 +98,7 @@ class ToolContext:
         return raw_finding
 
     def normalize(self, raw_finding: dict, tool: str) -> dict | None:
-        """Normalize a raw finding. Uses normalize_finding wrapper if set."""
-        if self.normalize_finding is not None:
-            return self.normalize_finding(raw_finding, tool)
-        try:
-            finding = self.normalizer.normalize(raw_finding, tool)
-            return {
-                "type": finding.type,
-                "severity": finding.severity.value
-                if hasattr(finding.severity, "value")
-                else finding.severity,
-                "endpoint": finding.endpoint,
-                "evidence": finding.evidence,
-                "confidence": finding.confidence,
-                "source_tool": tool,
-            }
-        except Exception:
-            return None
+        return self._normalize_finding(raw_finding, tool)
 
 
 @dataclass(frozen=True)
