@@ -14,14 +14,7 @@ class WhatwebParser(BaseParser):
         if isinstance(items, list):
             entries = items
         elif isinstance(items, dict):
-            entries = []
-            for line in raw_output.split("\n"):
-                if not line.strip():
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+            entries = [items]
         else:
             entries = []
             for line in raw_output.split("\n"):

@@ -14,7 +14,7 @@ class CommixParser(BaseParser):
         finding = {
             "type": "COMMAND_INJECTION",
             "severity": "CRITICAL",
-            "endpoint": "",
+            "endpoint": "commix://detected",
             "evidence": {
                 "raw_output": raw_output[:1000],
             },

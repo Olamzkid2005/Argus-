@@ -23,7 +23,7 @@ class GitleaksParser(BaseParser):
             finding = {
                 "type": "SECRET_LEAK",
                 "severity": (item.get("Severity") or "high").upper(),
-                "endpoint": item.get("File", ""),
+                "endpoint": item.get("File") or item.get("Commit") or f"gitleaks:{item.get('RuleID', 'unknown')}",
                 "evidence": {
                     "description": item.get("Description", ""),
                     "file": item.get("File"),
