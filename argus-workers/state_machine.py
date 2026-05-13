@@ -326,9 +326,6 @@ class EngagementStateMachine:
 
             conn.commit()
 
-            # Notify frontend of all transitions in the chain.
-            # Use the state BEFORE the chain started for the first entry.
-            original_state = states[0][0] if len(states) > 1 else self.current_state
             if self._ws_publisher:
                 for i, (new_state, reason) in enumerate(states):
                     from_state = states[i - 1][0] if i > 0 else self.current_state

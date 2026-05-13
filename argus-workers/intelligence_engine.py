@@ -179,18 +179,9 @@ class IntelligenceEngine:
                 # Clamp fp_likelihood to prevent division instability
                 fp_likelihood = max(0.001, min(1.0, fp_likelihood))
 
-                # Calculate confidence using unified scorer
+                # Calculate confidence using shared formula
                 from models.confidence_scorer import ConfidenceScorer
-                scorer = ConfidenceScorer()
-                confidence = scorer.score({
-                    "type": finding.get("type", ""),
-                    "source_tool": finding.get("source_tool", ""),
-                    "tool": finding.get("tool", ""),
-                    "evidence": finding.get("evidence", {}),
-                    "cvss_score": finding.get("cvss_score"),
-                })
-                # Blend with group-level tool agreement from intelligence engine
-                confidence = (confidence + tool_agreement) / 2
+                confidence = ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
 
                 # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings
                 # Findings from bug bounty rules (requires_validation: true) remain "Theoretical"

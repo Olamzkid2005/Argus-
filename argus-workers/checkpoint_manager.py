@@ -15,13 +15,7 @@ class CheckpointManager:
     Manages checkpoints for engagement recovery after worker crashes
     """
 
-    def __init__(self, db_connection_string: str):
-        """
-        Initialize Checkpoint Manager
-
-        Args:
-            db_connection_string: PostgreSQL connection string
-        """
+    def __init__(self, db_connection_string: str = ""):
         self.db_conn_string = db_connection_string
 
     def save_checkpoint(self, engagement_id: str, phase: str, data: dict) -> str:

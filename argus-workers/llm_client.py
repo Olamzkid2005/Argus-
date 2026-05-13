@@ -377,8 +377,7 @@ class LLMClient:
                     )
                 logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
-                    import time
-                    time.sleep(2 ** attempt)
+                    _time.sleep(2 ** attempt)
 
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 

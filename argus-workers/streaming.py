@@ -163,6 +163,9 @@ class StreamManager(EventBus):
                     self._queues[engagement_id].remove(q)
 
     def publish(self, event: Event | StreamEvent) -> None:
+        """Publish an event to all subscribers.
+        Non-blocking — drops events for slow consumers (backpressure).
+        Accepts both Event and legacy StreamEvent objects."""
         if isinstance(event, StreamEvent):
             event = Event(
                 type=event.event_type.value,
@@ -170,10 +173,6 @@ class StreamManager(EventBus):
                 data=event.data,
                 timestamp=event.timestamp,
             )
-        """
-        Publish an event to all subscribers of the engagement.
-        Non-blocking - drops events for slow consumers (backpressure).
-        """
         with self._lock:
             engagement_id = event.engagement_id
             if not engagement_id:
@@ -244,6 +243,7 @@ class StreamManager(EventBus):
 # Convenience functions for publishing common events
 
 def emit_thinking(engagement_id: str, message: str, details: dict = None):
+    """Emit a thinking/reasoning event."""
     get_stream_manager().publish(Event(
         type=EventType.THINKING,
         engagement_id=engagement_id,
@@ -252,6 +252,7 @@ def emit_thinking(engagement_id: str, message: str, details: dict = None):
 
 
 def emit_tool_start(engagement_id: str, tool: str, args: list[str] = None):
+    """Emit a tool execution start event."""
     get_stream_manager().publish(Event(
         type=EventType.TOOL_START,
         engagement_id=engagement_id,
@@ -260,6 +261,7 @@ def emit_tool_start(engagement_id: str, tool: str, args: list[str] = None):
 
 
 def emit_tool_output(engagement_id: str, tool: str, output: str, is_stderr: bool = False):
+    """Emit a tool output chunk event."""
     get_stream_manager().publish(Event(
         type=EventType.TOOL_OUTPUT,
         engagement_id=engagement_id,
@@ -268,6 +270,7 @@ def emit_tool_output(engagement_id: str, tool: str, output: str, is_stderr: bool
 
 
 def emit_tool_complete(engagement_id: str, tool: str, success: bool, duration_ms: int, finding_count: int = 0):
+    """Emit a tool execution complete event."""
     get_stream_manager().publish(Event(
         type=EventType.TOOL_COMPLETE,
         engagement_id=engagement_id,
@@ -281,6 +284,7 @@ def emit_tool_complete(engagement_id: str, tool: str, success: bool, duration_ms
 
 
 def emit_finding(engagement_id: str, finding_type: str, severity: str, endpoint: str, title: str):
+    """Emit a finding discovered event."""
     get_stream_manager().publish(Event(
         type=EventType.FINDING,
         engagement_id=engagement_id,
@@ -294,6 +298,7 @@ def emit_finding(engagement_id: str, finding_type: str, severity: str, endpoint:
 
 
 def emit_state_change(engagement_id: str, from_state: str, to_state: str, reason: str = ""):
+    """Emit a state transition event."""
     get_stream_manager().publish(Event(
         type=EventType.STATE_CHANGE,
         engagement_id=engagement_id,
@@ -306,6 +311,7 @@ def emit_state_change(engagement_id: str, from_state: str, to_state: str, reason
 
 
 def emit_progress(engagement_id: str, phase: str, progress: float, message: str = ""):
+    """Emit a progress update (0.0 to 1.0)."""
     get_stream_manager().publish(Event(
         type=EventType.PROGRESS,
         engagement_id=engagement_id,
@@ -318,6 +324,7 @@ def emit_progress(engagement_id: str, phase: str, progress: float, message: str 
 
 
 def emit_error(engagement_id: str, error: str, phase: str = ""):
+    """Emit an error event."""
     get_stream_manager().publish(Event(
         type=EventType.ERROR,
         engagement_id=engagement_id,
@@ -326,6 +333,7 @@ def emit_error(engagement_id: str, error: str, phase: str = ""):
 
 
 def emit_complete(engagement_id: str, phase: str, summary: dict = None):
+    """Emit a phase complete event."""
     get_stream_manager().publish(Event(
         type=EventType.COMPLETE,
         engagement_id=engagement_id,
@@ -334,6 +342,7 @@ def emit_complete(engagement_id: str, phase: str, summary: dict = None):
 
 
 def emit_report_chunk(engagement_id: str, text: str):
+    """Emit an incremental report chunk."""
     get_stream_manager().publish(Event(
         type=EventType.REPORT_CHUNK,
         engagement_id=engagement_id,
@@ -342,6 +351,7 @@ def emit_report_chunk(engagement_id: str, text: str):
 
 
 def emit_report_complete(engagement_id: str, summary: dict = None):
+    """Emit a report complete event."""
     get_stream_manager().publish(Event(
         type=EventType.REPORT_COMPLETE,
         engagement_id=engagement_id,
@@ -357,6 +367,7 @@ def emit_agent_decision(
     was_fallback: bool = False,
     agent_domain: str = "general",
 ):
+    """Emit an agent decision event for the frontend reasoning feed."""
     get_stream_manager().publish(Event(
         type=EventType.THINKING,
         engagement_id=engagement_id,
@@ -372,6 +383,7 @@ def emit_agent_decision(
 
 
 def emit_swarm_agent_started(engagement_id: str, domain: str):
+    """Emit a swarm agent activation event."""
     get_stream_manager().publish(Event(
         type=EventType.SWARM_AGENT_STARTED,
         engagement_id=engagement_id,
@@ -386,6 +398,7 @@ def emit_swarm_agent_action(
     reasoning: str,
     iteration: int,
 ):
+    """Emit a swarm agent tool selection action."""
     get_stream_manager().publish(Event(
         type=EventType.SWARM_AGENT_ACTION,
         engagement_id=engagement_id,
@@ -403,6 +416,7 @@ def emit_swarm_agent_complete(
     domain: str,
     findings_count: int,
 ):
+    """Emit a swarm agent completion event."""
     get_stream_manager().publish(Event(
         type=EventType.SWARM_AGENT_COMPLETE,
         engagement_id=engagement_id,
@@ -418,6 +432,7 @@ def emit_swarm_merge_complete(
     total_findings: int,
     dedup_removed: int,
 ):
+    """Emit a swarm merge complete event."""
     get_stream_manager().publish(Event(
         type=EventType.SWARM_MERGE_COMPLETE,
         engagement_id=engagement_id,

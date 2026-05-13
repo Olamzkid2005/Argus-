@@ -437,11 +437,9 @@ class FindingNormalizer:
 
     def _calculate_confidence(self, raw_finding: dict, source_tool: str) -> float:
         from models.confidence_scorer import ConfidenceScorer
-        return ConfidenceScorer._legacy_score(ConfidenceScorer(), {
-            "tool_agreement_level": 0.7,
-            "evidence_strength": self._get_evidence_strength_score(raw_finding),
-            "fp_likelihood": self._estimate_fp_likelihood(raw_finding, source_tool),
-        })
+        evidence_strength = self._get_evidence_strength_score(raw_finding)
+        fp_likelihood = self._estimate_fp_likelihood(raw_finding, source_tool)
+        return ConfidenceScorer.compute(0.7, evidence_strength, fp_likelihood)
 
     def _assess_evidence_strength(self, raw_finding: dict) -> EvidenceStrength:
         """

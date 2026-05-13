@@ -16,6 +16,7 @@ import os
 import threading
 import time
 from datetime import UTC, datetime
+from typing import Any
 
 import redis
 
@@ -155,36 +156,30 @@ class WebSocketEventPublisher:
             self._flush_timer.start()
 
     def flush_batches(self, min_severity: str | None = None) -> None:
-        """
-        Flush all batched events to Redis.
-
-        Args:
-            min_severity: Optional minimum severity filter
-        """
         if not self._batch_buffer:
             return
 
-        for engagement_id, events in self._batch_buffer.items():
-            if not events:
-                continue
+        with self._flush_lock:
+            for engagement_id, events in self._batch_buffer.items():
+                if not events:
+                    continue
 
-            events_key = self._get_events_key(engagement_id)
-            channel = self._get_channel(engagement_id)
+                events_key = self._get_events_key(engagement_id)
+                channel = self._get_channel(engagement_id)
 
-            # Filter by severity
-            filtered = [e for e in events if self._should_publish(e, min_severity)]
+                filtered = [e for e in events if self._should_publish(e, min_severity)]
 
-            if filtered:
-                pipe = self.redis.pipeline()
-                for event in filtered:
-                    pipe.lpush(events_key, json.dumps(event))
-                    pipe.publish(channel, json.dumps(event))
-                pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
-                pipe.expire(events_key, self.EVENTS_TTL)
-                pipe.execute()
+                if filtered:
+                    pipe = self.redis.pipeline()
+                    for event in filtered:
+                        pipe.lpush(events_key, json.dumps(event))
+                        pipe.publish(channel, json.dumps(event))
+                    pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
+                    pipe.expire(events_key, self.EVENTS_TTL)
+                    pipe.execute()
 
-        self._batch_buffer.clear()
-        self._last_flush = time.time()
+            self._batch_buffer.clear()
+            self._last_flush = time.time()
 
     def publish_finding(
         self,

@@ -144,7 +144,6 @@ class ConfidenceScorer:
         return max(0.0, min(1.0, score_value))
 
     def _legacy_score(self, finding: dict) -> float:
-        """Legacy naive confidence formula."""
         tool_agreement_raw = finding.get("tool_agreement_level", 0.7)
         if isinstance(tool_agreement_raw, str):
             agreement_map = {"high": 1.0, "medium": 0.85, "single_tool": 0.7, "low": 0.5}
@@ -153,5 +152,8 @@ class ConfidenceScorer:
             tool_agreement = float(tool_agreement_raw)
         evidence_strength = float(finding.get("evidence_strength", 0.7) or 0.7)
         fp_likelihood = float(finding.get("fp_likelihood", 0.2) or 0.2)
-        confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
-        return max(0.0, min(1.0, confidence))
+        return ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
+
+    @staticmethod
+    def compute(tool_agreement: float, evidence_strength: float, fp_likelihood: float) -> float:
+        return max(0.0, min(1.0, (tool_agreement * evidence_strength) / (1 + fp_likelihood)))
