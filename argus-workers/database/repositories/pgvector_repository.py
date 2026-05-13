@@ -91,7 +91,7 @@ class PGVectorRepository:
         try:
             with db_cursor() as cursor:
                 # Convert list to PostgreSQL array format
-                embedding_array = "[" + ",".join(map(str, embedding)) + "]"
+                embedding_array = "[" + ",".join(f"{v:.10f}" for v in embedding) + "]"
 
                 cursor.execute(
                     """
@@ -231,7 +231,7 @@ class PGVectorRepository:
 
         try:
             with db_cursor() as cursor:
-                embedding_array = "[" + ",".join(map(str, embedding)) + "]"
+                embedding_array = "[" + ",".join(f"{v:.10f}" for v in embedding) + "]"
 
                 cursor.execute(
                     """

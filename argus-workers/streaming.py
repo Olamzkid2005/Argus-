@@ -142,24 +142,21 @@ class StreamManager(EventBus):
 
     def __init__(self):
         self._lock = threading.RLock()
-        self._queues: dict[str, list[queue.Queue]] = {}  # engagement_id -> [queues]
-        self._history: dict[str, list[StreamEvent]] = {}  # engagement_id -> last N events
+        self._queues: dict[str, list[queue.Queue]] = {}
+        self._history: dict[str, list[StreamEvent]] = {}
+        self._dropped_count: dict[str, int] = {}
 
     def subscribe(self, engagement_id: str) -> queue.Queue:
-        """
-        Subscribe to events for an engagement.
-        Returns a queue that the subscriber can poll.
-        """
-        q = queue.Queue(maxsize=1000)  # Backpressure limit
+        q = queue.Queue(maxsize=1000)
         with self._lock:
             if engagement_id not in self._queues:
                 self._queues[engagement_id] = []
                 self._history[engagement_id] = []
+                self._dropped_count[engagement_id] = 0
             self._queues[engagement_id].append(q)
         return q
 
     def unsubscribe(self, engagement_id: str, q: queue.Queue):
-        """Remove a subscriber queue."""
         with self._lock:
             if engagement_id in self._queues:
                 with contextlib.suppress(ValueError):
@@ -188,6 +185,7 @@ class StreamManager(EventBus):
                     try:
                         q.put_nowait(event)
                     except queue.Full:
+                        self._dropped_count[engagement_id] = self._dropped_count.get(engagement_id, 0) + 1
                         dead_queues.append(q)
 
                 for q in dead_queues:
@@ -213,10 +211,14 @@ class StreamManager(EventBus):
             return [e.to_dict() for e in events]
 
     def clear_engagement(self, engagement_id: str):
-        """Clear all subscribers and history for an engagement."""
         with self._lock:
             self._queues.pop(engagement_id, None)
             self._history.pop(engagement_id, None)
+            self._dropped_count.pop(engagement_id, None)
+
+    def get_dropped_count(self, engagement_id: str) -> int:
+        with self._lock:
+            return self._dropped_count.get(engagement_id, 0)
 
     def evict_stale_engagements(self, max_engagement_age_seconds: int = 86400):
         """Evict history for engagements older than the given age."""
@@ -235,6 +237,7 @@ class StreamManager(EventBus):
             for eid in stale:
                 self._queues.pop(eid, None)
                 self._history.pop(eid, None)
+                self._dropped_count.pop(eid, None)
             if stale:
                 logger.debug("Evicted %d stale engagement histories", len(stale))
 
