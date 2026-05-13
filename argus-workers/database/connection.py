@@ -181,32 +181,39 @@ class ConnectionManager:
                 )
 
     @contextmanager
-    def connection(self, org_id: str | None = None):
+    def connection(self, commit: bool = True, org_id: str | None = None):
         """
         Context manager for automatic connection lifecycle.
 
         Args:
+            commit: Whether to commit on success (default: True).
+                    Set to False if you manage transactions manually.
             org_id: Optional organization ID for tenant context setting
 
         Usage:
             with db.connection() as conn:
                 cursor = conn.cursor()
                 ...
+
+            with db.connection(commit=False) as conn:
+                conn.execute(...)
+                conn.commit()  # manual control
         """
         conn = self.get_connection()
         try:
-            # Set tenant context if org_id provided and not in transaction pooling mode
             if org_id and self._pgbouncer_mode != "transaction":
                 try:
                     with conn.cursor() as cursor:
                         cursor.execute("SELECT set_tenant_context(%s)", (org_id,))
                 except Exception:
-                    pass  # Function may not exist yet
+                    pass
 
             yield conn
-            conn.commit()
+            if commit:
+                conn.commit()
         except Exception:
-            conn.rollback()
+            if commit:
+                conn.rollback()
             raise
         finally:
             self.release_connection(conn)

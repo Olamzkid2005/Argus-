@@ -92,12 +92,17 @@ class ReActAgent:
         self.engagement_id = engagement_id
         self.history: list[dict] = []
         self._phase = phase
-        self._mode = mode  # None = standard, "bugbounty" = Bug-Reaper methodology
-        self._candidate_list = None  # Set during scan phase from CandidateList
+        self._mode = mode
+        self._candidate_list = None
+        self._cancelled = False
 
     def set_candidate_list(self, candidate_list) -> None:
         """Accept a CandidateList from the scan phase for agent reasoning."""
         self._candidate_list = candidate_list
+
+    def cancel(self) -> None:
+        """Signal the agent to stop after the current iteration."""
+        self._cancelled = True
 
     def add_to_history(self, role: str, content: str, data: dict = None):
         """Add an entry to the agent's history/context.
@@ -446,6 +451,9 @@ class ReActAgent:
         initial_target = task.split(":")[-1].strip() if ":" in task else task
 
         for iteration in range(self.max_iterations):
+            if self._cancelled:
+                logger.info("Agent: cancelled at iteration %d", iteration)
+                break
             plan_kwargs = {"tried_tools": tried_tools}
             if recon_context is not None:
                 plan_kwargs["recon_context"] = recon_context

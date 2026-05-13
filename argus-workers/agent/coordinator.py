@@ -15,15 +15,17 @@ class CoordinatorAgent:
     PHASE_AGENTS = {}
     _phase_agents_loaded = False
 
-    @classmethod
-    def _ensure_phase_agents(cls):
-        if not cls._phase_agents_loaded:
-            from tool_definitions import get_tools_for_phase
-            cls.PHASE_AGENTS = {
-                phase: {
-                    "description": f"{phase.capitalize().replace('_', ' ')}",
-                    "tools": [t.name for t in get_tools_for_phase(phase)],
-                }
+    analyze_cycle_count: int = 0
+    max_analyze_cycles: int = 3
+
+    VALID_TRANSITIONS = {
+        "recon": ["scan"],
+        "scan": ["analyze", "deep_scan"],
+        "deep_scan": ["analyze"],
+        "repo_scan": ["scan"],
+        "analyze": ["report", "recon"],
+        "report": [],
+    }
                 for phase in ["recon", "scan", "deep_scan", "repo_scan", "analyze", "report"]
             }
             cls._phase_agents_loaded = True

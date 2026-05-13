@@ -89,6 +89,12 @@ class LLMClient:
         self._rate_limit_window = 60.0
         self._request_timestamps: list[float] = []
 
+        # Circuit breaker: after N consecutive failures, skip calls for cooldown
+        self._circuit_failures = 0
+        self._circuit_open_until = 0.0
+        self._circuit_threshold = 3
+        self._circuit_cooldown = 60.0
+
     def _load_key_from_redis(self, redis_url: str | None = None) -> str | None:
         """
         Load API key from Redis, where the UI Settings page stores it.
@@ -271,6 +277,17 @@ class LLMClient:
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
 
+        # Circuit breaker: skip if too many recent failures
+        import time as _time
+        if self._circuit_failures >= self._circuit_threshold:
+            if _time.time() < self._circuit_open_until:
+                raise LLMUnavailableError(
+                    f"LLM circuit breaker open — skipping call for "
+                    f"{self._circuit_open_until - _time.time():.0f}s "
+                    f"({self._circuit_failures} consecutive failures)"
+                )
+            self._circuit_failures = 0
+
         # Rate limit: ensure we don't exceed 60 req/min per worker
         self._check_rate_limit()
 
@@ -290,6 +307,7 @@ class LLMClient:
                         kwargs["response_format"] = response_format
 
                     response = self._openai_client.chat.completions.create(**kwargs)
+                    self._circuit_failures = 0  # reset on success
                     usage = response.usage
                     input_tokens = usage.prompt_tokens if usage else 0
                     output_tokens = usage.completion_tokens if usage else 0
@@ -350,6 +368,13 @@ class LLMClient:
 
             except Exception as e:
                 last_error = e
+                self._circuit_failures += 1
+                if self._circuit_failures >= self._circuit_threshold:
+                    self._circuit_open_until = _time.time() + self._circuit_cooldown
+                    logger.warning(
+                        "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
+                        self._circuit_failures, self._circuit_cooldown,
+                    )
                 logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
                     import time
