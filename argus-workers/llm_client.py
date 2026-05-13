@@ -361,6 +361,7 @@ class LLMClient:
                         resp = client.post(self.api_url, json=payload, headers=headers)
                         resp.raise_for_status()
                         data = resp.json()
+                        self._circuit_failures = 0
 
                         input_tokens = 0
                         output_tokens = 0

@@ -155,5 +155,6 @@ class ConfidenceScorer:
         return ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
 
     @staticmethod
+    @staticmethod
     def compute(tool_agreement: float, evidence_strength: float, fp_likelihood: float) -> float:
         return max(0.0, min(1.0, (tool_agreement * evidence_strength) / (1 + fp_likelihood)))
