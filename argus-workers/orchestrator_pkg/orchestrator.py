@@ -1118,22 +1118,14 @@ class Orchestrator:
             )
 
     def _get_scan_state(self) -> str:
-        """Return the current engagement state by querying the state machine.
-
-        Called to determine the from_state for recon→scanning transitions.
-        Queries the database so it remains correct even if state evolves.
-        """
-        from database.connection import connect
-        db_url = os.getenv("DATABASE_URL")
-        if not db_url:
-            return "recon"
+        from database.connection import get_db
         try:
-            conn = connect(db_url)
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
             row = cursor.fetchone()
             cursor.close()
-            conn.close()
+            get_db().release_connection(conn)
             return row[0] if row else "recon"
         except Exception:
             return "recon"

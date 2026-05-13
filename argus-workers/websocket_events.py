@@ -168,18 +168,13 @@ class WebSocketEventPublisher:
             filtered = [e for e in events if self._should_publish(e, min_severity)]
 
             if filtered:
-                # Use pipeline for batch operations
                 pipe = self.redis.pipeline()
                 for event in filtered:
                     pipe.lpush(events_key, json.dumps(event))
+                    pipe.publish(channel, json.dumps(event))
                 pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
                 pipe.expire(events_key, self.EVENTS_TTL)
                 pipe.execute()
-
-                # Publish ALL events to the channel (not just the last one)
-                # so SSE subscribers don't miss batched findings.
-                for event in filtered:
-                    self.redis.publish(channel, json.dumps(event))
 
         self._batch_buffer.clear()
         self._last_flush = time.time()
