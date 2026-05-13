@@ -436,32 +436,12 @@ class FindingNormalizer:
         return structured
 
     def _calculate_confidence(self, raw_finding: dict, source_tool: str) -> float:
-        """
-        Calculate confidence score
-
-        Formula: (tool_agreement × evidence_strength) / (1 + fp_likelihood)
-
-        Args:
-            raw_finding: Raw finding dictionary
-            source_tool: Source tool name
-
-        Returns:
-            Confidence score (0.0-1.0)
-        """
-        # For single tool, tool_agreement = 0.7
-        tool_agreement = 0.7
-
-        # Assess evidence strength
-        evidence_strength = self._get_evidence_strength_score(raw_finding)
-
-        # Get FP likelihood
-        fp_likelihood = self._estimate_fp_likelihood(raw_finding, source_tool)
-
-        # Calculate confidence
-        confidence = (tool_agreement * evidence_strength) / (1 + fp_likelihood)
-
-        # Clamp to [0.0, 1.0]
-        return max(0.0, min(1.0, confidence))
+        from models.confidence_scorer import ConfidenceScorer
+        return ConfidenceScorer._legacy_score(ConfidenceScorer(), {
+            "tool_agreement_level": 0.7,
+            "evidence_strength": self._get_evidence_strength_score(raw_finding),
+            "fp_likelihood": self._estimate_fp_likelihood(raw_finding, source_tool),
+        })
 
     def _assess_evidence_strength(self, raw_finding: dict) -> EvidenceStrength:
         """
