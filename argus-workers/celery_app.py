@@ -258,7 +258,11 @@ class BaseTask(app.Task):
                             engagement_id,
                             current_state=current_state,
                         )
-                        sm.safe_transition("failed", f"Task {self.name} failed: {exc}")
+                        if not sm.safe_transition("failed", f"Task {self.name} failed: {exc}"):
+                            logger.debug(
+                                "safe_transition skipped for engagement %s (already in terminal state)",
+                                engagement_id,
+                            )
                 except Exception as e:
                     logger.warning("Failed to update engagement state on failure: %s", e)
 

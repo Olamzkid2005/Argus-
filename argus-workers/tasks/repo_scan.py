@@ -194,7 +194,11 @@ def run_repo_scan(
                 db_connection_string=db_conn_string,
                 current_state=current_state,
             )
-            state_machine.safe_transition("failed", f"Repository scan failed: {str(e)}")
+            if not state_machine.safe_transition("failed", f"Repository scan failed: {str(e)}"):
+                logger.debug(
+                    "safe_transition skipped for engagement %s (already in terminal state)",
+                    engagement_id,
+                )
             raise
 
 
