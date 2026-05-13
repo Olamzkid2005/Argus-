@@ -405,11 +405,11 @@ class Orchestrator:
         """
         import json
 
-        from database.connection import connect
+        from database.connection import get_db
 
         conn = None
         try:
-            conn = connect(os.getenv("DATABASE_URL"))
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -436,9 +436,9 @@ class Orchestrator:
         finally:
             if conn:
                 try:
-                    conn.close()
+                    get_db().release_connection(conn)
                 except Exception as close_err:
-                    logger.warning(f"Connection close failed after saving PoC for finding {finding_id}: {close_err}")
+                    logger.warning(f"Connection release failed after saving PoC for finding {finding_id}: {close_err}")
 
     def _save_remediation_fix(
         self, finding_id: str, fix_data: dict
@@ -454,11 +454,11 @@ class Orchestrator:
         """
         import json
 
-        from database.connection import connect
+        from database.connection import get_db
 
         conn = None
         try:
-            conn = connect(os.getenv("DATABASE_URL"))
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -484,9 +484,9 @@ class Orchestrator:
         finally:
             if conn:
                 try:
-                    conn.close()
+                    get_db().release_connection(conn)
                 except Exception as close_err:
-                    logger.warning(f"Connection close failed after saving remediation fix for finding {finding_id}: {close_err}")
+                    logger.warning(f"Connection release failed after saving remediation fix for finding {finding_id}: {close_err}")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None):

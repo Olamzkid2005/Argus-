@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from psycopg2.extras import Json, RealDictCursor
 
-from database.connection import connect
+from database.connection import get_db
 
 
 class CheckpointManager:
@@ -40,7 +40,7 @@ class CheckpointManager:
         cursor = None
 
         try:
-            conn = connect(self.db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             checkpoint_id = str(uuid.uuid4())
 
@@ -67,7 +67,7 @@ class CheckpointManager:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
     def load_checkpoint(self, engagement_id: str) -> dict | None:
         """
@@ -83,7 +83,7 @@ class CheckpointManager:
         cursor = None
 
         try:
-            conn = connect(self.db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
@@ -107,7 +107,7 @@ class CheckpointManager:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
     def has_checkpoint(self, engagement_id: str) -> bool:
         """
@@ -123,7 +123,7 @@ class CheckpointManager:
         cursor = None
 
         try:
-            conn = connect(self.db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -140,7 +140,7 @@ class CheckpointManager:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
     def list_checkpoints(self, engagement_id: str) -> list[dict]:
         """
@@ -156,7 +156,7 @@ class CheckpointManager:
         cursor = None
 
         try:
-            conn = connect(self.db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(
                 """
@@ -174,7 +174,7 @@ class CheckpointManager:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
     def delete_checkpoints(self, engagement_id: str):
         """
@@ -187,7 +187,7 @@ class CheckpointManager:
         cursor = None
 
         try:
-            conn = connect(self.db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -207,7 +207,7 @@ class CheckpointManager:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
     def resume_from_checkpoint(self, engagement_id: str) -> dict | None:
         """
@@ -290,7 +290,7 @@ class CheckpointManager:
         cursor = None
 
         try:
-            conn = connect(self.db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor()
             cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
 
@@ -313,7 +313,7 @@ class CheckpointManager:
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
 
 class CheckpointContext:

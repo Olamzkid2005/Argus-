@@ -241,57 +241,55 @@ class ToolExecutor:
         cursor = conn.cursor()
 
         try:
-            stored_count = 0
-
+            rows = []
             for finding in findings:
-                finding_id = str(uuid.uuid4())
+                rows.append((
+                    str(uuid.uuid4()),
+                    engagement_id,
+                    finding.type,
+                    finding.severity.value
+                    if hasattr(finding.severity, "value")
+                    else finding.severity,
+                    finding.confidence,
+                    finding.endpoint,
+                    Json(finding.evidence),
+                    finding.source_tool,
+                    finding.cvss_score,
+                    finding.owasp_category,
+                    finding.cwe_id,
+                    finding.evidence_strength.value
+                    if finding.evidence_strength
+                    and hasattr(finding.evidence_strength, "value")
+                    else (finding.evidence_strength or None),
+                    finding.tool_agreement_level,
+                    finding.fp_likelihood,
+                ))
 
-                cursor.execute(
-                    """
-                    INSERT INTO findings (
-                        id, engagement_id, type, severity, confidence,
-                        endpoint, evidence, source_tool, cvss_score,
-                        owasp_category, cwe_id, evidence_strength,
-                        tool_agreement_level, fp_likelihood, created_at
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
-                    )
-                    ON CONFLICT (engagement_id, endpoint, type, source_tool)
-                    DO UPDATE SET
-                        severity = EXCLUDED.severity,
-                        confidence = EXCLUDED.confidence,
-                        evidence = EXCLUDED.evidence,
-                        cvss_score = EXCLUDED.cvss_score,
-                        fp_likelihood = EXCLUDED.fp_likelihood,
-                        updated_at = NOW()
-                    """,
-                    (
-                        finding_id,
-                        engagement_id,
-                        finding.type,
-                        finding.severity.value
-                        if hasattr(finding.severity, "value")
-                        else finding.severity,
-                        finding.confidence,
-                        finding.endpoint,
-                        Json(finding.evidence),
-                        finding.source_tool,
-                        finding.cvss_score,
-                        finding.owasp_category,
-                        finding.cwe_id,
-                        finding.evidence_strength.value
-                        if finding.evidence_strength
-                        and hasattr(finding.evidence_strength, "value")
-                        else (finding.evidence_strength or None),
-                        finding.tool_agreement_level,
-                        finding.fp_likelihood,
-                    ),
-                )
-
-                stored_count += 1
+            from psycopg2.extras import execute_values
+            execute_values(
+                cursor,
+                """
+                INSERT INTO findings (
+                    id, engagement_id, type, severity, confidence,
+                    endpoint, evidence, source_tool, cvss_score,
+                    owasp_category, cwe_id, evidence_strength,
+                    tool_agreement_level, fp_likelihood, created_at
+                ) VALUES %s
+                ON CONFLICT (engagement_id, endpoint, type, source_tool)
+                DO UPDATE SET
+                    severity = EXCLUDED.severity,
+                    confidence = EXCLUDED.confidence,
+                    evidence = EXCLUDED.evidence,
+                    cvss_score = EXCLUDED.cvss_score,
+                    fp_likelihood = EXCLUDED.fp_likelihood,
+                    updated_at = NOW()
+                """,
+                rows,
+                template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
+            )
 
             conn.commit()
-            return stored_count
+            return len(rows)
 
         except Exception as e:
             conn.rollback()
