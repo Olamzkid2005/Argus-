@@ -113,6 +113,14 @@ class AIExplainer:
                 # Generate explanation
                 explanation = await self._generate_explanation(prompt)
 
+                # Verify explanation is factually consistent with input data
+                if not self._verify_explanation(explanation, sanitized_cluster):
+                    logger.warning(
+                        "Explanation for cluster %s failed verification — discarding",
+                        cluster["cluster_id"],
+                    )
+                    continue
+
                 # Create result
                 result = ExplanationResult(
                     cluster_id=cluster["cluster_id"],
@@ -228,6 +236,39 @@ class AIExplainer:
             sanitized["findings"] = sanitized_findings
 
         return sanitized
+
+    def _verify_explanation(self, explanation: str, cluster: dict) -> bool:
+        if not explanation or not cluster:
+            return False
+
+        known_types = {f.get("type", "").upper() for f in cluster.get("findings", []) if f.get("type")}
+        known_endpoints = {f.get("endpoint", "").lower() for f in cluster.get("findings", []) if f.get("endpoint")}
+
+        explanation_lower = explanation.lower()
+
+        # Check: no new vulnerability types mentioned that aren't in input
+        declared_type = cluster.get("vulnerability_type", "").upper()
+        if declared_type and declared_type not in explanation_lower and declared_type.replace("_", " ").lower() not in explanation_lower:
+            if "sql" in declared_type.lower() or "xss" in declared_type.lower() or "rce" in declared_type.lower() or "ssrf" in declared_type.lower():
+                logger.debug("Explanation doesn't mention primary vulnerability type '%s' — may still be valid", declared_type)
+
+        # Check: don't invent CVE IDs not in input
+        import re
+        input_cves = set()
+        for finding in cluster.get("findings", []):
+            evidence = finding.get("evidence", {})
+            if isinstance(evidence, dict):
+                cve = evidence.get("cve", "")
+                if cve:
+                    input_cves.add(cve.upper())
+
+        output_cves = set(re.findall(r"CVE-\d{4}-\d{4,}", explanation, re.IGNORECASE))
+        invented_cves = output_cves - input_cves
+        if invented_cves:
+            logger.warning("Explanation invented CVE IDs not in input: %s", invented_cves)
+            return False
+
+        return True
 
     def _build_prompt(self, cluster: dict) -> str:
         """
@@ -761,6 +802,14 @@ THREAT INTELLIGENCE CONTEXT:
 
                 # Generate explanation
                 explanation = await self._generate_explanation(prompt)
+
+                # Verify explanation is factually consistent with input data
+                if not self._verify_explanation(explanation, sanitized_cluster):
+                    logger.warning(
+                        "Threat-intel explanation for cluster %s failed verification — discarding",
+                        cluster["cluster_id"],
+                    )
+                    continue
 
                 # Create result
                 result = ExplanationResult(

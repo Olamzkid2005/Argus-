@@ -15,16 +15,17 @@ logger = logging.getLogger(__name__)
 
 FIX_SYSTEM_PROMPT = """
 You are a senior application security engineer generating developer-ready
-remediation. Given a confirmed finding and the app's tech stack, produce:
+remediation. Given a confirmed finding, the app's tech stack, and the
+actual vulnerable code snippet (when available), produce:
 
-1. vulnerable_pattern: The code pattern that caused this (pseudocode or real)
+1. vulnerable_pattern: The code pattern that caused this (use the provided code_snippet if available, or pseudocode)
 2. fixed_pattern: The corrected version with security controls applied
 3. explanation: Why the fix works (2-3 sentences, developer-friendly)
 4. unit_test: A unit test that would catch this regression
 5. library_recommendation: Library that makes this safer (or null)
 6. additional_contexts: Other places this pattern might exist (or [])
 
-Be specific to the actual tech stack. Never give generic advice.
+Be specific to the actual tech stack and code. Never give generic advice.
 Return valid JSON only.
 """
 
@@ -101,6 +102,7 @@ class DeveloperFixAssistant:
                 "request": str(evidence.get("request", ""))[:400],
                 "response": str(evidence.get("response", ""))[:300],
                 "payload": str(evidence.get("payload", ""))[:200],
+                "code_snippet": str(evidence.get("code", "") or evidence.get("code_snippet", "") or evidence.get("match", "") or "")[:500],
             },
             "tech_stack": tech_stack[:5],
             "instruction": (
