@@ -160,26 +160,28 @@ class WebSocketEventPublisher:
             return
 
         with self._flush_lock:
-            for engagement_id, events in self._batch_buffer.items():
-                if not events:
-                    continue
+            buffer = self._batch_buffer
+            self._batch_buffer = {}
 
-                events_key = self._get_events_key(engagement_id)
-                channel = self._get_channel(engagement_id)
+        for engagement_id, events in buffer.items():
+            if not events:
+                continue
 
-                filtered = [e for e in events if self._should_publish(e, min_severity)]
+            events_key = self._get_events_key(engagement_id)
+            channel = self._get_channel(engagement_id)
 
-                if filtered:
-                    pipe = self.redis.pipeline()
-                    for event in filtered:
-                        pipe.lpush(events_key, json.dumps(event))
-                        pipe.publish(channel, json.dumps(event))
-                    pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
-                    pipe.expire(events_key, self.EVENTS_TTL)
-                    pipe.execute()
+            filtered = [e for e in events if self._should_publish(e, min_severity)]
 
-            self._batch_buffer.clear()
-            self._last_flush = time.time()
+            if filtered:
+                pipe = self.redis.pipeline()
+                for event in filtered:
+                    pipe.lpush(events_key, json.dumps(event))
+                    pipe.publish(channel, json.dumps(event))
+                pipe.ltrim(events_key, 0, self.MAX_EVENTS - 1)
+                pipe.expire(events_key, self.EVENTS_TTL)
+                pipe.execute()
+
+        self._last_flush = time.time()
 
     def publish_finding(
         self,
