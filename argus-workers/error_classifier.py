@@ -96,21 +96,21 @@ def classify_error(
     task_name: str | None = None,
     retry_count: int = 0
 ) -> ErrorClassification:
-    """
-    Classify an error for targeted handling.
-
-    Args:
-        error: The exception that occurred
-        task_name: Name of the task that failed
-        retry_count: Number of retries already attempted
-
-    Returns:
-        ErrorClassification with handling recommendations
-    """
     error_message = str(error).lower()
     error_type = type(error).__name__
 
-    # Determine category
+    # Check for ErrorCode attribute (set via tag_error()) — preferred path
+    error_code = getattr(error, 'error_code', None)
+    if error_code is not None:
+        code_result = classify_by_error_code(error_code, retry_count)
+        return ErrorClassification(
+            category=code_result.category,
+            severity=code_result.severity,
+            should_retry=code_result.should_retry,
+            retry_delay_seconds=code_result.retry_delay_seconds,
+            alert_message=code_result.alert_message,
+        )
+
     category = ErrorCategory.UNKNOWN
     for cat, patterns in ERROR_PATTERNS.items():
         if any(pattern in error_message for pattern in patterns):
@@ -120,18 +120,15 @@ def classify_error(
             category = cat
             break
 
-    # Check if error is permanent (should not retry)
     is_permanent = any(ind in error_message for ind in PERMANENT_INDICATORS)
 
-    # Determine if should retry
     if is_permanent or category in (ErrorCategory.VALIDATION, ErrorCategory.SECURITY) or category == ErrorCategory.TIMEOUT and retry_count >= 2 or retry_count >= 3:
         should_retry = False
         retry_delay = 0
     else:
         should_retry = True
-        retry_delay = min(2 ** retry_count * 30, 600)  # Exponential backoff, max 10 min
+        retry_delay = min(2 ** retry_count * 30, 600)
 
-    # Determine severity
     if category in (ErrorCategory.INFRASTRUCTURE, ErrorCategory.RESOURCE):
         severity = ErrorSeverity.HIGH
     elif category == ErrorCategory.SECURITY:
@@ -143,7 +140,6 @@ def classify_error(
     else:
         severity = ErrorSeverity.LOW
 
-    # Build alert message for high/critical
     alert_message = None
     if severity in (ErrorSeverity.HIGH, ErrorSeverity.CRITICAL):
         alert_message = (

@@ -162,6 +162,37 @@ class FindingNormalizer:
         "A10:2021-Server-Side Request Forgery (SSRF)": "SSRF",
     }
 
+    # Consolidated TYPE → (OWASP, CWE) mapping — single source of truth.
+    # Used by both normalizer and orchestrator. Add new types here only.
+    TYPE_CLASSIFICATION_MAP = {
+        "OPEN_PORT": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+        "HISTORICAL_URL": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+        "SQL_INJECTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-89"},
+        "XSS": {"owasp": "A03:2021-Injection", "cwe": "CWE-79"},
+        "IDOR": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-639"},
+        "COMMITTED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+        "EXPOSED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+        "REMOTE_CODE_EXECUTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-78"},
+        "SSRF": {"owasp": "A10:2021-Server-Side Request Forgery", "cwe": "CWE-918"},
+        "PATH_TRAVERSAL": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-22"},
+        "MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
+        "SECURITY_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
+        "AUTH_BYPASS": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-287"},
+        "SENSITIVE_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
+        "INFORMATION_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
+        "SERVER_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
+        "CORS_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-942"},
+        "WEB_SERVER_VULNERABILITY": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
+        "DIFFERENTIAL_ANOMALY": {"owasp": "A06:2021-Vulnerable and Outdated Components", "cwe": "CWE-1104"},
+        "CRAWLED_ENDPOINT": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+        "HARDCODED_CREDENTIAL": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+        "MISSING_SECURITY_HEADERS": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-693"},
+        "WEAK_CRYPTO": {"owasp": "A02:2021-Cryptographic Failures", "cwe": "CWE-327"},
+        "FILE_UPLOAD_VULNERABILITY": {"owasp": "A03:2021-Injection", "cwe": "CWE-434"},
+        "RATE_LIMIT_MISSING": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-770"},
+        "LOG_FORGING": {"owasp": "A09:2021-Security Logging and Monitoring Failures", "cwe": "CWE-117"},
+    }
+
     # Severity mappings (tool-specific → Severity enum)
     SEVERITY_MAPPINGS = {
         "critical": Severity.CRITICAL,
