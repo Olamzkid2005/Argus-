@@ -17,6 +17,7 @@ from config.constants import (
 )
 from streaming import emit_tool_complete, emit_tool_start
 from tools.web_scanner import WebScanner
+from utils.logging_utils import ScanLogger
 
 from .utils import get_nuclei_templates_path
 from types import SimpleNamespace
@@ -168,6 +169,8 @@ def execute_scan_tools(
 
         ctx = ToolContext.from_orchestrator(ctx)
 
+    slog = ScanLogger("scan_pipeline", engagement_id=getattr(ctx, 'engagement_id', ''))
+    slog.phase_header("EXECUTE SCAN TOOLS", targets=f"{len(targets)} target(s)", aggressiveness=aggressiveness)
     all_findings = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     _skip = set(skip_tools or [])
@@ -175,6 +178,7 @@ def execute_scan_tools(
     # Guard against None targets list
     if not targets:
         logger.warning("execute_scan_tools called with empty/None targets list")
+        slog.warn("No targets provided")
         return all_findings
 
     # Auto-update nuclei templates once before scanning (not per-target)
@@ -223,7 +227,10 @@ def execute_scan_tools(
 
         # Skip if target is unreachable (DNS NXDOMAIN/SERVFAIL only)
         if not _is_reachable(target):
+            slog.info(f"Target {target} unreachable, skipping")
             continue
+
+        slog.target_start(target, index=targets.index(target)+1, total=len(targets))
 
         # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:
@@ -319,6 +326,8 @@ def execute_scan_tools(
                 except TimeoutError:
                     logger.warning("Scan tool batch timed out — some tools may not have completed")
 
+        slog.info(f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel")
+
         # Authenticate session if auth_config is provided
         authenticated_session = None
         if auth_config:
@@ -331,6 +340,7 @@ def execute_scan_tools(
                 logger.warning(f"Authentication failed for {target}: {e}")
 
         # Execute comprehensive web scanner
+        slog.tool_start("web_scanner", [target])
         try:
             web_scanner = WebScanner(
                 timeout=SSL_TIMEOUT,
@@ -338,19 +348,23 @@ def execute_scan_tools(
                 llm_payload_generator=ctx.llm_payload_generator,
                 session=authenticated_session,
                 tech_stack=tech_stack,
+                engagement_id=ctx.engagement_id,
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
             web_findings = web_scanner.scan(target)
 
+            slog.tool_complete("web_scanner", success=True, findings=len(web_findings))
             for wf in web_findings:
                 normalized = ctx._normalize_finding(wf, "web_scanner")
                 if normalized:
                     all_findings.append(normalized)
         except Exception as e:
+            slog.tool_complete("web_scanner", success=False)
             logger.warning(f"WebScanner failed for {target}: {e}")
 
         # DualAuthScanner — cross-account BOLA/BOPLA testing when dual_auth_config is provided
         if dual_auth_config and auth_config:
+            slog.tool_start("dual_auth_scanner", [target])
             try:
                 from tools.dual_auth_scanner import DualAuthScanner
                 dual_scanner = DualAuthScanner(
@@ -361,6 +375,7 @@ def execute_scan_tools(
                 )
                 emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
                 dual_findings = dual_scanner.scan(target)
+                slog.tool_complete("dual_auth_scanner", success=True, findings=len(dual_findings))
                 for df in dual_findings:
                     normalized = ctx._normalize_finding(df, "dual_auth_scanner")
                     if normalized:
@@ -369,9 +384,11 @@ def execute_scan_tools(
                                     finding_count=len(dual_findings))
                 logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
             except Exception as e:
+                slog.tool_complete("dual_auth_scanner", success=False)
                 logger.warning(f"DualAuthScanner failed for {target}: {e}")
 
         # AIVulnScanner — prompt injection and AI information disclosure
+        slog.tool_start("ai_vuln_scanner", [target])
         try:
             from tools.ai_vuln_scanner import AIVulnScanner
             ai_scanner = AIVulnScanner(
@@ -381,6 +398,7 @@ def execute_scan_tools(
             )
             emit_tool_start(ctx.engagement_id, "ai_vuln_scanner", [target])
             ai_findings = ai_scanner.scan(target)
+            slog.tool_complete("ai_vuln_scanner", success=True, findings=len(ai_findings))
             for af in ai_findings:
                 normalized = ctx._normalize_finding(af, "ai_vuln_scanner")
                 if normalized:
@@ -390,6 +408,10 @@ def execute_scan_tools(
             if ai_findings:
                 logger.info(f"AIVulnScanner complete: {len(ai_findings)} findings for {target}")
         except Exception as e:
+            slog.tool_complete("ai_vuln_scanner", success=False)
             logger.warning(f"AIVulnScanner failed for {target}: {e}")
 
+        slog.target_complete(target, findings=len(all_findings))
+
+    slog.info(f"Scan pipeline complete: {len(all_findings)} total findings across {len(targets)} targets")
     return all_findings

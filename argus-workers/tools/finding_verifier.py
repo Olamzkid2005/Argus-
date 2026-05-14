@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import httpx
 
 from feature_flags import is_enabled
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ XSS_TEST_PAYLOADS = [
 ]
 
 
-async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = None) -> dict:
+async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = None, engagement_id: str = "") -> dict:
     """
     Verify SQL injection by differential response analysis.
     
@@ -37,10 +38,14 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
     variant doesn't trigger SQL error markers but the original does, the
     finding is likely a true positive.
     """
+    slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
     result = {"verified": False, "confidence": "low", "reason": None}
+
+    slog.tool_start("verify_sqli", endpoint=endpoint[:60])
 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
+        slog.info("SQLi verification disabled (feature flag off)")
         return result
 
     try:
@@ -70,33 +75,43 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
                 result["verified"] = True
                 result["confidence"] = "high"
                 result["reason"] = f"SQL error markers in original only: {original_markers}"
+                slog.info(f"SQLi verified (high conf): markers in original only")
             elif original_markers and benign_markers:
                 result["confidence"] = "medium"
                 result["reason"] = f"SQL markers in both: original={original_markers}, benign={benign_markers}"
+                slog.info(f"SQLi potential (medium conf): markers in both")
             elif not original_markers and not benign_markers:
                 result["verified"] = True  # Could be blind/boolean-based
                 result["confidence"] = "low"
                 result["reason"] = "No SQL markers in either response — could be blind SQLi"
+                slog.info("SQLi potential (low conf): blind possible")
             else:
                 result["reason"] = "Benign triggered markers but original didn't (likely FP)"
+                slog.info("SQLi likely false positive")
     except Exception as e:
+        slog.warn(f"SQLi verification error: {e}")
         logger.warning(f"SQLi verification failed for {endpoint}: {e}")
         result["reason"] = f"Verification error: {e}"
 
+    slog.tool_complete("verify_sqli", verified=result["verified"], confidence=result["confidence"])
     return result
 
 
-async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> dict:
+async def verify_xss(endpoint: str, payload: str, param: str | None = None, engagement_id: str = "") -> dict:
     """
     Verify XSS by checking if payload is reflected in response.
     
     Note: This catches reflected XSS. DOM-based XSS requires browser
     instrumentation and won't be detected here.
     """
+    slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
     result = {"verified": False, "confidence": "low", "reason": None}
+
+    slog.tool_start("verify_xss", endpoint=endpoint[:60])
 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
+        slog.info("XSS verification disabled (feature flag off)")
         return result
 
     try:
@@ -119,6 +134,7 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> d
                         result["verified"] = True
                         result["confidence"] = "high"
                         result["reason"] = f"Payload '{test_payload[:20]}...' reflected in response"
+                        slog.info("XSS verified (high conf): payload reflected")
                         break
                     # Check for partial reflection (URL-encoded, etc.)
                     encoded = urllib.parse.quote(test_payload)
@@ -126,29 +142,37 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None) -> d
                         result["verified"] = True
                         result["confidence"] = "medium"
                         result["reason"] = f"Payload reflected (URL-encoded): '{encoded[:20]}...'"
+                        slog.info("XSS verified (medium conf): URL-encoded reflection")
                         break
                 except Exception:
                     continue
 
             if not result["verified"]:
                 result["reason"] = "No payload reflection detected in response"
+                slog.info("XSS not verified: no reflection detected")
     except Exception as e:
+        slog.warn(f"XSS verification error: {e}")
         logger.warning(f"XSS verification failed for {endpoint}: {e}")
         result["reason"] = f"Verification error: {e}"
 
+    slog.tool_complete("verify_xss", verified=result["verified"], confidence=result["confidence"])
     return result
 
 
-async def verify_open_redirect(endpoint: str) -> dict:
+async def verify_open_redirect(endpoint: str, engagement_id: str = "") -> dict:
     """
     Verify open redirect by following the redirect chain.
     
     Checks if the final destination is an external domain.
     """
+    slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
     result = {"verified": False, "confidence": "low", "reason": None}
+
+    slog.tool_start("verify_open_redirect", endpoint=endpoint[:60])
 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
+        slog.info("Open redirect verification disabled (feature flag off)")
         return result
 
     try:
@@ -164,17 +188,23 @@ async def verify_open_redirect(endpoint: str) -> dict:
                     result["confidence"] = "high"
                     result["reason"] = f"Redirects from {original_domain} to external {final_domain}"
                     result["redirect_chain"] = [str(h.url) for h in resp.history] + [str(resp.url)]
+                    slog.info(f"Open redirect verified: {original_domain} -> {final_domain}")
                 else:
                     result["reason"] = f"Redirects to same domain ({final_domain})"
+                    slog.info(f"Same-domain redirect: {final_domain}")
             else:
                 result["reason"] = f"No redirect detected (status: {resp.status_code})"
+                slog.info("No redirect detected")
     except httpx.HTTPError as e:
+        slog.warn(f"Open redirect HTTP error: {e}")
         logger.warning(f"Open redirect verification failed for {endpoint}: {e}")
         result["reason"] = f"HTTP error: {e}"
     except Exception as e:
+        slog.warn(f"Open redirect verification error: {e}")
         logger.warning(f"Open redirect verification error: {e}")
         result["reason"] = f"Verification error: {e}"
 
+    slog.tool_complete("verify_open_redirect", verified=result["verified"], confidence=result["confidence"])
     return result
 
 
@@ -189,12 +219,13 @@ VERIFIERS = {
 }
 
 
-async def verify_finding(finding: dict) -> dict:
+async def verify_finding(finding: dict, engagement_id: str = "") -> dict:
     """
     Verify a finding using the appropriate verifier based on finding type.
     
     Returns the finding with verification metadata added.
     """
+    import functools
     finding_type = (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
     verifier = VERIFIERS.get(finding_type)
 
@@ -205,7 +236,8 @@ async def verify_finding(finding: dict) -> dict:
     endpoint = finding.get("endpoint") or finding.get("url") or ""
     payload = finding.get("evidence", {}).get("payload") or finding.get("payload") or ""
 
-    result = await verifier(endpoint, payload)
+    bound_verifier = functools.partial(verifier, engagement_id=engagement_id)
+    result = await bound_verifier(endpoint, payload)
     finding["verification"] = result
 
     return finding

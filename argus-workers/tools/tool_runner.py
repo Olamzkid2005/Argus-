@@ -11,7 +11,7 @@ import site
 import subprocess
 import sys
 import tempfile
-import time
+import time as _time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ from tools.circuit_breaker import (
 )
 from tools.models import ToolResult
 from tracing import ExecutionSpan, StructuredLogger, get_trace_id
+from utils.logging_utils import ScanLogger
 
 
 class SecurityException(Exception):
@@ -329,6 +330,9 @@ class ToolRunner:
         # Record start time
         start_time = time.time()
 
+        slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
+        slog.tool_start(tool, "running")
+
         # Execute with span tracing
         with self.span_recorder.span(ExecutionSpan.SPAN_TOOL_EXECUTION, {"tool": tool}):
             # Get env with tool-specific proxy settings
@@ -388,6 +392,9 @@ class ToolRunner:
                         # Don't fail execution if metrics recording fails
                         logger.warning("Failed to record tool metric: %s", metric_error)
 
+                # Console logging
+                slog.tool_complete(tool, success=success, findings=0)
+
                 # Log tool execution
                 try:
                     self.logger.log_tool_executed(
@@ -413,6 +420,7 @@ class ToolRunner:
                 )
 
                 cache.set(cache_key, tool_result.as_dict(), ttl=300)
+                slog.info(f"Tool cache set for {tool}")
                 return tool_result
 
             except subprocess.TimeoutExpired:
@@ -511,6 +519,9 @@ class ToolRunner:
             i += 1
         args = sanitized_args
 
+        slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
+        slog.tool_start(tool, f"streaming, timeout={timeout}s")
+
         proc = subprocess.Popen(
             [tool_path] + args,
             stdout=subprocess.PIPE,
@@ -586,14 +597,19 @@ class ToolRunner:
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1
+        success = returncode == 0
+        duration_ms = int((time.time() - start) * 1000)
+        timed_out = time.time() - start > timeout
+
+        slog.tool_complete(tool, success=success, duration_ms=duration_ms)
         return ToolResult(
             stdout=stdout,
             stderr="",
             returncode=returncode,
             tool=tool,
-            success=returncode == 0,
-            duration_ms=int((time.time() - start) * 1000),
-            timeout=time.time() - start > timeout,
+            success=success,
+            duration_ms=duration_ms,
+            timeout=timed_out,
             trace_id=get_trace_id(),
         )
 
@@ -746,6 +762,8 @@ class ToolRunner:
             tool, self._failure_threshold, self._cooldown_seconds
         )
         breaker.record_success()
+        slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
+        slog.info(f"Circuit breaker reset for {tool} (success)")
 
     def record_tool_failure(self, tool: str):
         """Record failed tool execution."""
@@ -753,10 +771,13 @@ class ToolRunner:
             tool, self._failure_threshold, self._cooldown_seconds
         )
         breaker.record_failure()
+        slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
+        slog.warn(f"Circuit breaker failure recorded for {tool}")
 
     def run_with_circuit_breaker(
         self, tool: str, args: list[str], timeout: int = 180
     ) -> ToolResult:
+        slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         """
         Execute tool with circuit breaker protection.
 
