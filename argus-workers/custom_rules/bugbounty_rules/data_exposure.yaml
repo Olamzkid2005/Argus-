@@ -1,0 +1,252 @@
+rules:
+- id: br_data_pii_email
+  message: Email address exposed in API response
+  severity: HIGH
+  source: bugbounty
+  cwe: CWE-359
+  tags:
+  - pii
+  - data-exposure
+  - bugbounty
+  - email
+  requires_validation: false
+  patterns:
+  - regex: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+  metadata:
+    category: data-exposure
+    confidence: 0.8
+    detection_method: "Regex match for email patterns in API response body"
+  test_patterns:
+  - '"email": "user@example.com"'
+  - 'contact: admin@company.co.uk'
+  non_matching_patterns:
+  - 'noreply@example.com (if documentation/placeholder)'
+
+- id: br_data_pii_ssn
+  message: Social Security Number pattern detected in API response
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-359
+  tags:
+  - pii
+  - data-exposure
+  - bugbounty
+  - ssn
+  requires_validation: true
+  patterns:
+  - regex: '\\b\\d{3}-\\d{2}-\\d{4}\\b'
+  - regex: '\\b\\d{9}\\b(?!\\d)'
+  metadata:
+    category: data-exposure
+    confidence: 0.75
+    detection_method: "Regex match for XXX-XX-XXXX SSN format or 9-digit SSN in API response"
+  test_patterns:
+  - '123-45-6789'
+  - 'ssn: 987654321'
+  non_matching_patterns:
+  - '123-456-7890 (not SSN format)'
+  - '00000000123456789 (too many digits)'
+
+- id: br_data_pii_credit_card
+  message: Credit card number pattern detected in API response
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-359
+  tags:
+  - pii
+  - data-exposure
+  - bugbounty
+  - credit-card
+  - pci
+  requires_validation: true
+  patterns:
+  - regex: '\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\\b'
+  metadata:
+    category: data-exposure
+    confidence: 0.7
+    detection_method: "Regex match for Visa, Mastercard, Amex, Discover card number patterns"
+  test_patterns:
+  - '4111111111111111'
+  - '"card_number": "5500000000000004"'
+  non_matching_patterns:
+  - '1234567890123456 (invalid prefix)'
+  - '0000000000000000'
+
+- id: br_data_pii_phone
+  message: Phone number pattern detected in API response
+  severity: MEDIUM
+  source: bugbounty
+  cwe: CWE-359
+  tags:
+  - pii
+  - data-exposure
+  - bugbounty
+  - phone
+  requires_validation: false
+  patterns:
+  - regex: '\\b\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b'
+  - regex: '\\b\\+\\d{1,3}[-.\\s]?\\(?\\d{1,4}\\)?[-.\\s]?\\d{1,4}[-.\\s]?\\d{1,9}\\b'
+  metadata:
+    category: data-exposure
+    confidence: 0.7
+    detection_method: "Regex match for US phone number and international phone number patterns"
+  test_patterns:
+  - '(555) 123-4567'
+  - 'phone: +1-555-123-4567'
+  non_matching_patterns:
+  - '000-000-0000'
+  - '555-1234 (incomplete)'
+
+- id: br_data_internal_ip
+  message: Internal IP address exposed in API response
+  severity: MEDIUM
+  source: bugbounty
+  cwe: CWE-200
+  tags:
+  - data-exposure
+  - bugbounty
+  - information-disclosure
+  requires_validation: false
+  patterns:
+  - regex: '\\b(10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})\\b'
+  - regex: '\\b(172\\.(1[6-9]|2[0-9]|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b'
+  - regex: '\\b(192\\.168\\.\\d{1,3}\\.\\d{1,3})\\b'
+  - regex: '\\b(127\\.0\\.0\\.1)\\b'
+  metadata:
+    category: data-exposure
+    confidence: 0.85
+    detection_method: "Regex match for RFC 1918 private IPv4 addresses and loopback in API response"
+  test_patterns:
+  - '10.0.0.1'
+  - '"ip": "192.168.1.100"'
+  non_matching_patterns:
+  - '8.8.8.8 (public IP)'
+
+- id: br_data_api_key_leak
+  message: API key or secret token exposed in API response
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-798
+  tags:
+  - data-exposure
+  - bugbounty
+  - api-key
+  - secret
+  requires_validation: true
+  patterns:
+  - regex: '(?i)(?:api[_-]?key|apikey|api[_-]?secret|client[_-]?secret|secret[_-]?key)\\s*[:=]\\s*["\']?[a-zA-Z0-9_\\-]{16,64}["\']?'
+  - regex: '(?i)sk-[a-zA-Z0-9]{32,}'
+  - regex: '(?i)(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}'
+  metadata:
+    category: data-exposure
+    confidence: 0.7
+    detection_method: "Regex match for API keys, secrets, and GitHub tokens in response body"
+  test_patterns:
+  - '"api_key": "sk-abc123def456ghi789jkl012mno345pqr678"'
+  - 'Authorization: Bearer ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+  non_matching_patterns:
+  - '"api_key": "YOUR_API_KEY_HERE" (placeholder)'
+
+- id: br_data_password_leak
+  message: Password or password hash exposed in API response
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-522
+  tags:
+  - data-exposure
+  - bugbounty
+  - password
+  - credentials
+  requires_validation: true
+  patterns:
+  - regex: '(?i)"(?:password|password_hash|hashed_password|pwd|passwd|secret|pass)"\\s*:\\s*"'
+  - regex: '(?i)(?:password|pwd|passwd)\\s*=\\s*["\']?[^"\'&\\s]{4,}'
+  - regex: '(?i)\\$2[aby]\\$\\d{2}\\$[A-Za-z0-9./]{53}'
+  - regex: '(?i)[0-9a-f]{32}(?!\\w)'
+  metadata:
+    category: data-exposure
+    confidence: 0.65
+    detection_method: "Regex match for password fields with values, bcrypt hashes, and bare MD5 hashes"
+  test_patterns:
+  - '"password": "supersecret"'
+  - '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLM'
+  non_matching_patterns:
+  - '"password": "" (empty field)'
+
+- id: br_data_token_leak
+  message: JWT or authentication token exposed in API response
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-319
+  tags:
+  - data-exposure
+  - bugbounty
+  - jwt
+  - token
+  requires_validation: true
+  patterns:
+  - regex: '(?i)(?:access[_-]?token|auth[_-]?token|refresh[_-]?token|bearer[_-]?token)\\s*[:=]\\s*["\']?[a-zA-Z0-9_\\-.]{20,}["\']?'
+  - regex: 'eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+'
+  - regex: '(?i)["\']token["\']\\s*:\\s*["\']'
+  metadata:
+    category: data-exposure
+    confidence: 0.75
+    detection_method: "Regex match for JWT tokens and access/refresh/auth token fields in API response"
+  test_patterns:
+  - '"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"'
+  - 'token: abc123def456ghi789jkl'
+  non_matching_patterns:
+  - '"token": "" (empty)'
+
+- id: br_data_debug_info
+  message: Debug information or stack trace exposed in API response
+  severity: MEDIUM
+  source: bugbounty
+  cwe: CWE-209
+  tags:
+  - data-exposure
+  - bugbounty
+  - debug
+  - information-disclosure
+  requires_validation: false
+  patterns:
+  - regex: '(?i)Traceback\\s*\\(most recent call last\\)'
+  - regex: '(?i)at\\s+[\\w.]+\\.[\\w]+\\('
+  - regex: '(?i)Exception\\s+in\\s+thread'
+  - regex: '(?i)Fatal\\s+error:'
+  - regex: '(?i)DEBUG\\s*=\\s*True'
+  - regex: '(?i)in\\s+/[\\w/]+\\s+on\\s+line\\s+\\d+'
+  metadata:
+    category: data-exposure
+    confidence: 0.75
+    detection_method: "Regex match for stack traces, exception messages, and debug flags in API response"
+  test_patterns:
+  - 'Traceback (most recent call last): File "app.py", line 42, in index'
+  - 'at com.example.controller.UserController.getUser(UserController.java:52)'
+  non_matching_patterns:
+  - 'Debugging mode: off (informational)'
+
+- id: br_data_connection_string
+  message: Database connection string or URL exposed in API response
+  severity: CRITICAL
+  source: bugbounty
+  cwe: CWE-200
+  tags:
+  - data-exposure
+  - bugbounty
+  - database
+  - credentials
+  requires_validation: true
+  patterns:
+  - regex: '(?i)(?:database[_-]?url|db[_-]?url|connection[_-]?string|dsn)\\s*[:=]\\s*["\']?[a-z]+://'
+  - regex: '(?i)(?:postgresql://|postgres://|mysql://|mongodb://|redis://|sqlite://|jdbc:[a-z]+://)'
+  - regex: '(?i)(?:DATABASE_URL|DB_URL|MONGO_URI|REDIS_URL)\\s*=\\s*["\']?'
+  metadata:
+    category: data-exposure
+    confidence: 0.8
+    detection_method: "Regex match for database connection strings and URLs in API response"
+  test_patterns:
+  - 'DATABASE_URL=postgresql://user:pass@localhost:5432/db'
+  - 'mongodb://admin:secret@10.0.0.5:27017/production'
+  non_matching_patterns:
+  - 'postgresql://localhost:5432/mydb (no credentials, might be documentation)'
