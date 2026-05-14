@@ -289,6 +289,7 @@ class WebScanner:
         self.findings = []
         self.target_url = target_url.rstrip("/")
 
+        self.slog.phase_header("WEB SCAN", target=self.target_url)
         logger.info(f"Starting comprehensive web scan: {self.target_url}")
 
         from concurrent.futures import ThreadPoolExecutor, as_completed

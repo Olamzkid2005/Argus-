@@ -97,7 +97,7 @@ class DualAuthScanner:
         self.target_url = target_url.rstrip("/")
         findings = []
 
-        slog.phase_header("Dual-Auth Scan", self.target_url)
+        slog.phase_header("Dual-Auth Scan", target=self.target_url)
         logger.info(f"Starting dual-auth scan: {self.target_url}")
 
         # Phase 1: Authenticate as User A and discover owned resources
@@ -135,8 +135,7 @@ class DualAuthScanner:
             logger.warning(f"User B authentication failed: {e}")
             # Still run BOPLA on User A session
             findings.extend(self._check_bopla(session_a, "user_a"))
-            slog.tool_complete("dual_auth_scan", findings=len(findings),
-                               note="User B auth failed — limited to BOPLA")
+            slog.tool_complete("dual_auth_scan", findings=len(findings))
             return findings
 
         slog.tool_start("cross_account_access")

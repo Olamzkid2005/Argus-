@@ -175,7 +175,7 @@ class AIVulnScanner:
         endpoints = ai_endpoints or self.DEFAULT_AI_ENDPOINTS
         slog = ScanLogger("ai_vuln_scanner", engagement_id=self.engagement_id)
 
-        slog.phase_header("AI VULN SCAN", f"target={self.target_url} endpoints={len(endpoints)}")
+        slog.phase_header("AI VULN SCAN", target=self.target_url, endpoints=len(endpoints))
 
         # Discover which AI endpoints actually exist
         active_endpoints = self._discover_ai_endpoints(endpoints)
@@ -187,12 +187,12 @@ class AIVulnScanner:
 
         for endpoint in active_endpoints:
             url = urljoin(self.target_url, endpoint.lstrip("/"))
-            slog.tool_start("prompt_injection", f"endpoint={endpoint}")
+            slog.tool_start("prompt_injection", [endpoint])
             injection_findings = self._test_prompt_injection(url)
             slog.tool_complete("prompt_injection", success=True, findings=len(injection_findings))
             findings.extend(injection_findings)
 
-            slog.tool_start("info_disclosure", f"endpoint={endpoint}")
+            slog.tool_start("info_disclosure", [endpoint])
             disclosure_findings = self._test_information_disclosure(url)
             slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
             findings.extend(disclosure_findings)
