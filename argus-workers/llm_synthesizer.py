@@ -6,6 +6,7 @@ reasoning, attack chain identification, false positive analysis, and prioritizat
 on top of already-scored data.
 """
 import logging
+import time as _time
 from typing import Any
 
 from agent.agent_prompts import SYNTHESIS_SYSTEM_PROMPT, build_synthesis_prompt
@@ -31,6 +32,11 @@ class LLMSynthesizer:
         attack_paths: list[dict],
         recon_context: Any = None,
     ) -> dict:
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("llm_synthesizer")
+        slog.llm_start("synthesizer", f"{len(scored_findings)} findings, {len(attack_paths)} attack paths")
+        start = _time.time()
+
         recon_summary = ""
         if recon_context is not None:
             recon_summary = (
@@ -44,7 +50,14 @@ class LLMSynthesizer:
             SYNTHESIS_SYSTEM_PROMPT, prompt,
             max_tokens=LLM_AGENT_MAX_TOKENS_SYNTH,
         )
+        duration_ms = int((_time.time() - start) * 1000)
+        slog.llm_complete("synthesizer", duration_ms=duration_ms)
+
         if result.get("_fallback"):
+            slog.warn("LLM synthesis returned fallback")
             logger.warning("LLM synthesis returned fallback — findings will lack LLM analysis")
             result["_synthesis_fallback"] = True
+        else:
+            slog.llm_result(f"Risk level: {result.get('risk_level', 'unknown')}")
+
         return result

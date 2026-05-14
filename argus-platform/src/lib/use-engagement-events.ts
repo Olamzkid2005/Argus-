@@ -112,15 +112,22 @@ export function useEngagementEvents(
   onErrorRef.current = onError;
 
   // Reset stored data when engagementId changes
+  // Also close old SSE connection to prevent leaks (fix 1.1, 1.6)
   useEffect(() => {
     if (prevIdRef.current !== engagementId) {
+      // Close old SSE connection before switching engagements
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      stopPolling();
       prevIdRef.current = engagementId;
       setEvents(loadStoredEvents(engagementId));
       setCurrentState(loadStoredState(engagementId));
       lastTimestampRef.current = null;
       useSseRef.current = true; // Reset SSE attempt on new engagement
     }
-  }, [engagementId]);
+  }, [engagementId, stopPolling]);
 
   // Persist events to sessionStorage
   useEffect(() => {
@@ -135,8 +142,18 @@ export function useEngagementEvents(
   }, [engagementId, currentState]);
 
   // ── SSE connection ──
+  // Uses ref for engagementId to avoid stale closure in event handlers (fix 1.6)
+  const engagementIdRef = useRef(engagementId);
+  engagementIdRef.current = engagementId;
+
   const startSse = useCallback(() => {
     if (!mountedRef.current || !enabled) return;
+
+    // Close any existing connection first (fix 1.1)
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
 
     try {
       const source = new EventSource(`/api/stream/${engagementId}`);
@@ -158,17 +175,19 @@ export function useEngagementEvents(
           // Skip internal/control events
           if (raw.type === "__connected__" || raw.type === "__heartbeat__") return;
 
+          // Use engagement_id from event data if available (fix 1.6)
+          const eventEngagementId = (raw.engagement_id as string) || engagementIdRef.current;
           const event = raw as unknown as WebSocketEvent;
 
           setEvents((prev) => {
             const next = [event as WebSocketEvent, ...prev].slice(0, 100);
-            saveStoredEvents(engagementId, next);
+            saveStoredEvents(eventEngagementId, next);
             return next;
           });
 
           if (event.type === "state_transition" && event.data?.to_state) {
             setCurrentState(event.data.to_state as string);
-            saveStoredState(engagementId, event.data.to_state as string);
+            saveStoredState(eventEngagementId, event.data.to_state as string);
           }
 
           onEventRef.current?.(event as WebSocketEvent);
@@ -182,7 +201,7 @@ export function useEngagementEvents(
 
         // SSE connection failed — fall back to polling
         log.wsError("SSE connection failed, falling back to polling", {
-          engagementId,
+          engagementId: engagementIdRef.current,
         });
         source.close();
         eventSourceRef.current = null;
@@ -201,7 +220,7 @@ export function useEngagementEvents(
       useSseRef.current = false;
       startPollingFallback();
     }
-  }, [engagementId, enabled]);
+  }, [engagementId, enabled, startPollingFallback]);
 
   // Track consecutive errors for backoff
   const consecutiveErrorsRef = useRef(0);

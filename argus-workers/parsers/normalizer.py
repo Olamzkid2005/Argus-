@@ -378,6 +378,8 @@ class FindingNormalizer:
         - Internal/admin endpoints: CRITICAL → HIGH, HIGH → MEDIUM
         - Public API endpoints: MEDIUM → HIGH
         - Authenticated-only: CRITICAL → HIGH (still serious, but requires auth)
+
+        Returns a valid Severity enum value string (fix 6.2).
         """
         if not context:
             return self._normalize_severity(raw_severity).value
@@ -408,6 +410,9 @@ class FindingNormalizer:
         if is_public_api:
             if current_idx == 2:
                 current_idx = 3
+
+        # Clamp index to valid range (fix 6.2)
+        current_idx = max(0, min(current_idx, len(severity_order) - 1))
 
         return severity_order[current_idx]
 

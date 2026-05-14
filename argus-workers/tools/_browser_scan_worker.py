@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Standalone browser scan worker — runs Playwright in its own process."""
 import json
+import logging
 import sys
 
 from playwright.sync_api import sync_playwright
+
+from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_url(url: str) -> str:
@@ -51,9 +56,11 @@ def _validate_url(url: str) -> str:
 
 
 def scan(target_url: str, tech_stack: list) -> list[dict]:
+    slog = ScanLogger("browser_scan_worker")
     findings = []
     browser = None
     target_url = _validate_url(target_url)  # SSRF guard
+    slog.tool_start("browser_scan", target=target_url)
     with sync_playwright() as p:
         try:
             browser = p.chromium.launch(headless=True)
@@ -79,14 +86,15 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
                         'confidence': 0.9,
                     })
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Browser scan failed: {e}")
+            slog.warn(f"Browser scan failed: {e}")
+            logger.warning(f"Browser scan failed: {e}")
         finally:
             if browser:
                 try:
                     browser.close()
                 except Exception:
                     pass
+    slog.tool_complete("browser_scan", findings=len(findings))
     return findings
 
 

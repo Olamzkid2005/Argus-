@@ -170,6 +170,10 @@ export async function pushJob(job: JobMessage): Promise<string> {
       trace_id: traceId,
       platform: (job as any).platform,
       output_path: (job as any).output_path,
+      aggressiveness: job.aggressiveness,
+      agent_mode: job.agent_mode,
+      scan_mode: job.scan_mode,
+      bug_bounty_mode: job.bug_bounty_mode,
     };
 
     const child = spawn(pythonPath, [dispatchScript], {

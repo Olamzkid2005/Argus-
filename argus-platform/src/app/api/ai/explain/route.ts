@@ -141,6 +141,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No findings provided" }, { status: 400 });
     }
 
+    // Limit input size to prevent token explosion (fix 2.5)
+    if (findings.length > 20) {
+      findings = findings.slice(0, 20);
+    }
+
     // If findings only have IDs (no type/evidence), fetch full data from DB
     const needsDbFetch = findings.some((f) => !f.type && !f.evidence);
     if (needsDbFetch) {

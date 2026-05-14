@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 
 class ScopeViolationError(Exception):
     """Raised when a tool is requested for an out-of-scope target."""
@@ -33,6 +35,9 @@ class ScopeValidator:
         """
         self.engagement_id = engagement_id
         self._scope = self._parse_scope(authorized_scope)
+        slog = ScanLogger("scope_validator", engagement_id=engagement_id)
+        if self._scope["domains"] or self._scope["ipRanges"]:
+            slog.info(f"Scope loaded: {len(self._scope['domains'])} domains, {len(self._scope['ipRanges'])} IP ranges")
 
     def _parse_scope(self, scope) -> dict:
         """Parse authorized scope from dict or JSON string."""
@@ -59,17 +64,22 @@ class ScopeValidator:
         Raises:
             ScopeViolationError: If target is out of scope
         """
+        slog = ScanLogger("scope_validator", engagement_id=self.engagement_id)
+
         if not target:
             return True
 
         hostname = self._extract_hostname(target)
 
         if self._matches_domain(hostname):
+            slog.info(f"Target {target} in scope (domain match)")
             return True
 
         if self._matches_ip_range(hostname):
+            slog.info(f"Target {target} in scope (IP range match)")
             return True
 
+        slog.warn(f"Target {target} OUT of scope (hostname: {hostname})")
         raise ScopeViolationError(
             f"Target '{target}' (hostname: {hostname}) is not in authorized scope. "
             f"Authorized domains: {self._scope['domains']}"

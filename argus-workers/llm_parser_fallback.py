@@ -100,7 +100,12 @@ class LLMParserFallback:
         Returns:
             List of finding dicts in standard format, or empty list
         """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("llm_parser_fallback")
+        slog.llm_start(tool_name, f"{len(raw_output)} chars")
+
         if not self._ensure_service():
+            slog.llm_result("LLM service unavailable")
             return []
 
         is_available = False
@@ -110,6 +115,7 @@ class LLMParserFallback:
             pass
 
         if not is_available:
+            slog.llm_result("LLM service not available")
             return []
 
         # Truncate raw output to keep the LLM call manageable.
@@ -136,6 +142,7 @@ class LLMParserFallback:
             )
 
             if result.get("_fallback"):
+                slog.llm_result(f"LLM call failed for {tool_name}")
                 logger.debug(
                     "LLMParserFallback: LLM call failed for %s", tool_name
                 )
@@ -175,9 +182,12 @@ class LLMParserFallback:
                            and str(f.get("severity", "")).strip().upper() in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
                            and str(f.get("endpoint", "")).strip()]
 
+            slog.llm_complete(tool_name, tokens=len(raw_output) // 4)
+            slog.llm_result(f"Extracted {len(findings)} findings from {tool_name}")
             return findings
 
         except Exception as e:
+            slog.llm_result(f"Failed: {e}")
             logger.warning(
                 "LLMParserFallback: extraction failed for %s: %s", tool_name, e
             )

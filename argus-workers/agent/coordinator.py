@@ -3,6 +3,8 @@ Coordinator Agent - Multi-Agent Coordinator that delegates phases to specialized
 """
 import logging
 
+from utils.logging_utils import ScanLogger
+
 from .react_agent import ReActAgent
 from .tool_registry import ToolRegistry
 
@@ -41,6 +43,7 @@ class CoordinatorAgent:
         self.engagement_id = engagement_id
         self.current_phase = "recon"
         self.phase_results: dict[str, list] = {}
+        self._slog = ScanLogger("coordinator", engagement_id=engagement_id)
 
     def can_transition_to(self, next_phase: str) -> bool:
         """Check if transition to next phase is valid."""
@@ -53,6 +56,7 @@ class CoordinatorAgent:
             logger.warning("Invalid transition: %s -> %s",
                           self.current_phase, next_phase)
             return False
+        self._slog.transition(self.current_phase, next_phase, "coordinator transition")
         self.current_phase = next_phase
         return True
 
@@ -72,6 +76,7 @@ class CoordinatorAgent:
     def run_phase(self, phase: str, context: dict, tool_runner=None,
                   llm_client=None, decision_repo=None, mode: str | None = None) -> list:
         """Run a single phase with tools."""
+        self._slog.phase_header(f"COORDINATOR RUN PHASE: {phase}")
         self._ensure_phase_agents()
         agent = create_phase_agent(
             phase,
@@ -83,6 +88,7 @@ class CoordinatorAgent:
         )
         task_desc = self.PHASE_AGENTS.get(phase, {}).get("description", phase)
         results = agent.run(task_desc, initial_context=context)
+        self._slog.info(f"Phase {phase} complete: {len(results)} results")
         self.phase_results[phase] = results
         return results
 

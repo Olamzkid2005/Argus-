@@ -17,6 +17,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 # Try to import config constants (graceful if not available)
 try:
     from config.constants import (
@@ -181,8 +183,12 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
         Returns:
             List of payload strings (empty on failure or if LLM unavailable)
         """
+        slog = ScanLogger("llm_payload_generator")
+        slog.llm_start("payload_generation", vuln_class=vuln_class, param=param_name)
+
         try:
             if not self.is_available():
+                slog.info("LLM payload generation not available")
                 logger.debug("LLM payload generation not available")
                 return []
 
@@ -196,8 +202,12 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             # Check cache
             cached = self.cache.get(cache_key)
             if cached is not None:
+                slog.info(f"Cache hit: {cache_key}")
                 logger.debug(f"LLM payload cache hit: {cache_key}")
+                slog.llm_complete("payload_generation", cached=True, payloads=len(cached[:self.max_payloads]))
                 return cached[:self.max_payloads]
+
+            slog.info(f"Cache miss: {cache_key}, generating payloads...")
 
             # Generate callback marker for detection
             callback = f"LLM_{hashlib.md5(fingerprint.encode()).hexdigest()[:8]}"
@@ -231,16 +241,19 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             payloads = self._parse_payloads(response_text)
 
             # Inject callback marker into payloads (ensure detectability)
-            payloads = [p.replace(callback, callback) for p in payloads]  # just ensure marker present
+            payloads = [p.replace(callback, callback) for p in payloads]
 
             # Cache
             if payloads:
                 self.cache.set(cache_key, payloads)
+                slog.info(f"Generated {len(payloads)} payloads for {cache_key}")
                 logger.debug(f"Generated {len(payloads)} LLM payloads for {cache_key}")
 
+            slog.llm_complete("payload_generation", payloads=len(payloads[:self.max_payloads]))
             return payloads[:self.max_payloads]
 
         except Exception as e:
+            slog.warn(f"LLM payload generation failed: {e}")
             logger.warning(f"LLM payload generation failed: {e}")
             return []
 

@@ -11,17 +11,18 @@ export async function GET(req: NextRequest) {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
 
-    // Pagination params
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "50");
-    const offset = (page - 1) * limit;
-
     // Filter params
     const severity = searchParams.get("severity");
     const tool = searchParams.get("tool");
     const verified = searchParams.get("verified");
     const search = searchParams.get("search");
     const engagementId = searchParams.get("engagement_id");
+    const groupBy = searchParams.get("group_by"); // "type" | "severity" | "source_tool" | null
+
+    // Cap limit to prevent OOM (max 200)
+    const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50", 10) || 50, 1), 200);
+    const page = Math.max(parseInt(searchParams.get("page") || "1", 10) || 1, 1);
+    const offset = (page - 1) * limit;
 
     // Date range params
     const dateFrom = searchParams.get("date_from");
@@ -142,9 +143,31 @@ export async function GET(req: NextRequest) {
 
       const result = await client.query(query, params);
 
-      log.apiEnd('GET', '/api/findings', 200, { total, returned: result.rows.length });
+      // ── Group by mode ──
+      let groups: Record<string, { findings: typeof result.rows; count: number; severities: Record<string, number> }> | undefined;
+      if (groupBy && ["type", "severity", "source_tool"].includes(groupBy)) {
+        groups = {};
+        for (const row of result.rows) {
+          const key = String(row[groupBy as keyof typeof row] || "OTHER");
+          if (!groups[key]) {
+            groups[key] = { findings: [], count: 0, severities: {} };
+          }
+          groups[key].findings.push(row);
+          groups[key].count++;
+          const sev = String(row.severity || "INFO");
+          groups[key].severities[sev] = (groups[key].severities[sev] || 0) + 1;
+        }
+      }
+
+      log.apiEnd('GET', '/api/findings', 200, { total, returned: result.rows.length, grouped: !!groupBy });
       const response = NextResponse.json({
         findings: result.rows,
+        groups: groups ? Object.entries(groups).map(([key, val]) => ({
+          key,
+          count: val.count,
+          severities: val.severities,
+          findings: val.findings,
+        })) : undefined,
         meta: {
           total,
           page,
@@ -152,6 +175,7 @@ export async function GET(req: NextRequest) {
           totalPages: Math.ceil(total / limit),
           sort_by: sortBy,
           sort_order: sortOrder,
+          group_by: groupBy || undefined,
         },
       });
 

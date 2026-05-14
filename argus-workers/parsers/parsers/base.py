@@ -31,8 +31,9 @@ class BaseParser(ABC):
         """
         Parse tool output as a generator, yielding one finding at a time.
 
-        This avoids loading all findings into memory at once,
-        which is useful for large tool outputs.
+        Override this in subclasses for true streaming behavior.
+        The default implementation loads all findings then yields them,
+        which defeats streaming — subclasses should parse line-by-line.
 
         Args:
             raw_output: Raw tool output string
@@ -40,9 +41,12 @@ class BaseParser(ABC):
         Yields:
             Finding dictionaries one at a time
         """
-        # Default implementation delegates to parse()
-        # Subclasses can override for true streaming
-        yield from self.parse(raw_output)
+        # Default: parse all and yield from (not true streaming — override in subclass)
+        findings = self.parse(raw_output)
+        for finding in findings:
+            yield finding
+        # Free memory after yielding all findings
+        del findings
 
 
 def _safe_get(data, *keys, default=None):

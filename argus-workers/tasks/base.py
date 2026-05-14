@@ -83,6 +83,9 @@ def task_context(
     from orchestrator import Orchestrator
     from state_machine import EngagementStateMachine
     from tracing import TracingManager
+    from utils.logging_utils import ScanLogger
+
+    slog = ScanLogger(job_type, engagement_id=engagement_id)
 
     db_conn_string = os.getenv("DATABASE_URL")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -105,6 +108,8 @@ def task_context(
         redis_url=redis_url,
     )
 
+    slog.phase_start(job_type, target=job_extra.get("target", "") if job_extra else "")
+
     with tracing_manager.trace_execution(engagement_id, job_type, trace_id):
         lock = DistributedLock(redis_url)
         _lock_acquired = False
@@ -120,11 +125,14 @@ def task_context(
                 sm._ws_publisher = get_websocket_publisher()
                 ctx.state = sm
 
+                slog.info(f"Lock acquired, state machine initialized")
+
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
                 ctx.orchestrator = orchestrator
 
                 yield ctx
         except SoftTimeLimitExceeded as ste:
+            slog.error(f"Soft time limit exceeded — transitioning to failed")
             logger.warning(
                 "Soft time limit exceeded for %s engagement %s — transitioning to failed",
                 job_type, engagement_id,
@@ -139,11 +147,13 @@ def task_context(
                             current_state=current,
                         )
                         sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                        slog.phase_complete(job_type, status="failed", reason="soft_time_limit")
                         task._failed_transition_done = True
                 except Exception as st_error:
                     logger.error("Failed to transition on soft time limit: %s", st_error)
             raise
         except Exception as e:
+            slog.error(f"Task failed: {e}")
             if _lock_acquired:
                 current = _get_engagement_state(engagement_id, db_conn_string)
                 if current not in ("complete", "failed"):
@@ -154,6 +164,7 @@ def task_context(
                             current_state=current,
                         )
                         sm.transition("failed", f"{job_type} failed: {e}")
+                        slog.phase_complete(job_type, status="failed", reason=str(e)[:100])
                         task._failed_transition_done = True
                     except Exception as sm_error:
                         logger.error("State transition to failed error: %s", sm_error)
@@ -187,9 +198,13 @@ def task_error_boundary(
     Raises:
         The original exception after classification and logging.
     """
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger(phase_name, engagement_id=engagement_id)
+
     try:
         yield
     except SoftTimeLimitExceeded as ste:
+        slog.error(f"Soft time limit exceeded in {phase_name}")
         logger.warning(
             "Soft time limit exceeded in %s for engagement %s — transitioning to failed",
             phase_name, engagement_id,
@@ -208,6 +223,7 @@ def task_error_boundary(
             logger.error("Failed to update engagement state on soft time limit: %s", state_error)
         raise
     except Exception as e:
+        slog.error(f"{phase_name} failed: {e}")
         from error_classifier import classify_error_with_code, log_classified_error
 
         classification = classify_error_with_code(

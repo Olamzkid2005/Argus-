@@ -21,6 +21,13 @@
 # workflow
 - After writing code, review it for errors, fix any found, then repeat the review-fix loop at least twice. Confidence: 0.65
 - Write an implementation plan to docs/ before starting to code, and wait for user approval before proceeding. Confidence: 0.60
+- When code review surfaces ambiguous questions, resolve them autonomously instead of blocking on user input — the user trusts your judgment. Confidence: 0.60
 
 # testing
 - When performing browser-based QA testing, also check browser console logs and Celery worker logs for errors, not just the UI. Confidence: 0.70
+
+# workflow
+- When asked to check configuration via the frontend/UI settings page, use browser-based testing to verify through the UI rather than bypassing to check config files directly. Confidence: 0.70
+
+# llm
+- LLM/OpenRouter API keys are configured through the frontend Settings page and stored in Redis — do not look for them in .env.local. Confidence: 0.80

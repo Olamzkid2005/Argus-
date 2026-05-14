@@ -79,6 +79,14 @@ const SEVERITY_COLORS: Record<string, string> = {
   INFO: "text-blue-500 bg-blue-500/10 border-blue-500/30",
 };
 
+const SEVERITY_BADGE: Record<string, string> = {
+  CRITICAL: "text-red-500 bg-red-500/10 border-red-500/30",
+  HIGH: "text-orange-500 bg-orange-500/10 border-orange-500/30",
+  MEDIUM: "text-yellow-500 bg-yellow-500/10 border-yellow-500/30",
+  LOW: "text-blue-400 bg-blue-400/10 border-blue-400/30",
+  INFO: "text-gray-400 bg-gray-400/10 border-gray-400/30",
+};
+
 export default function EngagementDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -443,24 +451,61 @@ export default function EngagementDetailPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {findings.map((finding) => (
-                  <div
-                    key={finding.id}
-                    className="flex items-center gap-3 px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08] rounded-lg hover:border-primary/30 transition-all cursor-pointer"
-                    onClick={() => router.push(`/findings/${finding.id}`)}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${finding.severity === "CRITICAL" ? "bg-error" : finding.severity === "HIGH" ? "bg-orange-500" : finding.severity === "MEDIUM" ? "bg-yellow-500" : "bg-green-500"}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-on-surface font-medium truncate">{finding.type}</div>
-                      <div className="text-[10px] font-mono text-on-surface-variant truncate">{finding.endpoint}</div>
-                    </div>
-                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${SEVERITY_COLORS[finding.severity] || ""}`}>
-                      {finding.severity}
-                    </span>
-                    <span className="text-[9px] font-mono text-on-surface-variant">{finding.source_tool}</span>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {(() => {
+                  // Group findings by type
+                  const groups: Record<string, Finding[]> = {};
+                  for (const f of findings) {
+                    const key = f.type;
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(f);
+                  }
+                  return Object.entries(groups).map(([type, items]) => {
+                    // Count severities in this group
+                    const sevCounts: Record<string, number> = {};
+                    for (const f of items) {
+                      sevCounts[f.severity] = (sevCounts[f.severity] || 0) + 1;
+                    }
+                    const worstSev = Object.keys(sevCounts).reduce((a, b) => {
+                      const order = ["CRITICAL","HIGH","MEDIUM","LOW","INFO"];
+                      return order.indexOf(a) <= order.indexOf(b) ? a : b;
+                    }, Object.keys(sevCounts)[0] || "INFO");
+                    const dotColor = worstSev === "CRITICAL" ? "bg-error" : worstSev === "HIGH" ? "bg-orange-500" : worstSev === "MEDIUM" ? "bg-yellow-500" : worstSev === "LOW" ? "bg-blue-400" : "bg-green-500";
+                    return (
+                      <div key={type} className="rounded-lg border border-outline-variant dark:border-[#ffffff10] overflow-hidden bg-surface-container dark:bg-[#1A1A24]">
+                        {/* Group Header */}
+                        <div className="flex items-center justify-between px-3 py-2 bg-surface-container-high dark:bg-[#2A2A35] border-b border-outline-variant dark:border-[#ffffff08]">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                            <span className="text-xs font-bold text-on-surface font-headline uppercase">{type}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">{items.length}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {Object.entries(sevCounts).map(([sev, cnt]) => (
+                              <span key={sev} className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${SEVERITY_BADGE[sev] || ""}`}>
+                                {sev}:{cnt}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {/* Group Items */}
+                        <div className="divide-y divide-outline-variant/20 dark:divide-[#ffffff08]">
+                          {items.map((finding) => (
+                            <div
+                              key={finding.id}
+                              className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface-container-high dark:hover:bg-[#2A2A35]/50 cursor-pointer transition-all"
+                              onClick={() => router.push(`/findings/${finding.id}`)}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${finding.severity === "CRITICAL" ? "bg-error" : finding.severity === "HIGH" ? "bg-orange-500" : finding.severity === "MEDIUM" ? "bg-yellow-500" : finding.severity === "LOW" ? "bg-blue-400" : "bg-green-500"}`} />
+                              <span className="text-[10px] font-mono text-on-surface truncate flex-1">{finding.endpoint}</span>
+                              <span className="text-[9px] font-mono text-on-surface-variant shrink-0">{finding.source_tool}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             )}
           </motion.div>
@@ -513,9 +558,116 @@ export default function EngagementDetailPage() {
               isActive={engagement.status === "scanning"}
             />
           )}
+
+          {/* Explainability — shown only for completed engagements */}
+          {engagement && ["complete", "failed"].includes(engagement.status) && (
+            <EngagementExplainability engagementId={engagementId} />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Engagement Explainability Component ──
+
+function EngagementExplainability({ engagementId }: { engagementId: string }) {
+  const [loading, setLoading] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleExplain = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/engagement/${engagementId}/explainability`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Failed to generate explanation");
+        return;
+      }
+      const data = await res.json();
+      if (data.traces && data.traces.length > 0) {
+        // Use the first trace's explanation if available
+        setExplanation(data.traces[0].explanation || JSON.stringify(data.traces[0].trace_data, null, 2));
+      } else {
+        // Fallback: try the AI explain endpoint
+        const explainRes = await fetch("/api/ai/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ engagement_id: engagementId }),
+        });
+        if (explainRes.ok) {
+          const explainData = await explainRes.json();
+          setExplanation(explainData.explanation || explainData.summary || "Explanation generated.");
+        } else {
+          setError("AI explanation unavailable. Configure an API key in Settings.");
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate explanation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <Sparkles size={14} className="text-primary" />
+        <h3 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest font-headline">
+          AI Explainability
+        </h3>
+      </div>
+
+      {!explanation && !loading && !error && (
+        <div className="py-6 text-center">
+          <p className="text-[11px] font-mono text-on-surface-variant/40 uppercase tracking-widest mb-4">
+            Get an AI-powered plain-English explanation of this scan&apos;s findings
+          </p>
+          <button
+            onClick={handleExplain}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-primary/90 transition-all"
+          >
+            <Sparkles size={14} />
+            Generate Explanation
+          </button>
+        </div>
+      )}
+
+      {loading && (
+        <div className="space-y-3 animate-pulse">
+          <div className="h-4 bg-surface-container-high rounded w-3/4" />
+          <div className="h-4 bg-surface-container-high rounded w-1/2" />
+          <div className="h-4 bg-surface-container-high rounded w-5/6" />
+        </div>
+      )}
+
+      {error && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
+          {error}
+        </div>
+      )}
+
+      {explanation && !loading && (
+        <div className="space-y-3">
+          <div className="p-4 rounded-lg bg-surface-container border border-outline-variant/30">
+            <p className="text-sm text-on-surface leading-relaxed whitespace-pre-wrap">{explanation}</p>
+          </div>
+          <button
+            onClick={() => setExplanation(null)}
+            className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors"
+          >
+            Clear & regenerate
+          </button>
+        </div>
+      )}
+    </motion.div>
   );
 }
 

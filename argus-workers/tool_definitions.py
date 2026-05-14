@@ -19,6 +19,8 @@ Pattern: Declarative agent registry with derived types and phase maps.
 
 from __future__ import annotations
 
+import os
+import shutil
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import final
@@ -647,18 +649,57 @@ _register(ToolDefinition(
 TOOLS_DEFINED = list(TOOLS.keys())
 
 
+def is_tool_available(tool_name: str) -> bool:
+    """Check if a tool binary is available on the system PATH.
+
+    Uses the same augmented PATH resolution as ToolRunner to find
+    tools installed via pip, go install, brew, etc.
+
+    Args:
+        tool_name: Name of the tool binary to check.
+
+    Returns:
+        True if the tool is found, False otherwise.
+    """
+    # Build augmented PATH matching ToolRunner.resolve_tool_path
+    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin")
+    go_bin = os.path.expanduser("~/go/bin")
+    extra_dirs = [
+        venv_bin,
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        go_bin,
+    ]
+    current_path = os.environ.get("PATH", "")
+    for d in extra_dirs:
+        if d not in current_path and os.path.isdir(d):
+            current_path = f"{d}:{current_path}"
+
+    resolved = shutil.which(tool_name, path=current_path)
+    if resolved:
+        return True
+
+    # Final fallback: direct file check
+    for d in extra_dirs:
+        candidate = os.path.join(d, tool_name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return True
+
+    return False
+
+
 def get_tools_for_phase(phase: PhaseName) -> list[ToolDefinition]:
-    """Get all tool definitions for a given phase.
+    """Get all tool definitions for a given phase, filtering to available tools only.
 
     Args:
         phase: Phase name (e.g., "recon", "scan").
 
     Returns:
-        List of ToolDefinition objects for that phase.
+        List of ToolDefinition objects for that phase whose binaries are installed.
     """
     return [
         tool for tool in TOOLS.values()
-        if phase in tool.phases
+        if phase in tool.phases and is_tool_available(tool.name)
     ]
 
 

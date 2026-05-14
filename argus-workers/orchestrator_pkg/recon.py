@@ -12,6 +12,7 @@ from config.constants import (
     DEFAULT_AGGRESSIVENESS,
 )
 from streaming import emit_tool_start
+from utils.logging_utils import ScanLogger
 
 from .utils import get_wordlist_path
 
@@ -45,6 +46,8 @@ def execute_recon_tools(
 
         ctx = ToolContext.from_orchestrator(ctx)
 
+    slog = ScanLogger("recon_pipeline", engagement_id=getattr(ctx, 'engagement_id', ''))
+    slog.phase_header("EXECUTE RECON TOOLS", target=target, aggressiveness=aggressiveness)
     all_findings = []
 
     # Guard against None/empty target
@@ -85,6 +88,7 @@ def execute_recon_tools(
         )
 
     # Execute httpx for endpoint discovery
+    slog.tool_start("httpx", [target])
     _emit("httpx", "Discovering live endpoints and probing HTTP services", "started")
     try:
         emit_tool_start(ctx.engagement_id, "httpx", ["-u", target, "-json", "-silent"])
@@ -99,10 +103,12 @@ def execute_recon_tools(
                 if normalized:
                     all_findings.append(normalized)
                     parsed_count += 1
+        slog.tool_complete("httpx", success=True, findings=parsed_count)
         _emit(
             "httpx", "Live endpoint discovery complete", "completed", items=parsed_count
         )
     except Exception as e:
+        slog.tool_complete("httpx", success=False)
         _emit("httpx", f"Live endpoint discovery failed: {str(e)}", "failed")
         logger.warning(f"httpx failed: {e}")
 
@@ -237,6 +243,7 @@ def execute_recon_tools(
         },
     }
 
+    slog.info(f"Launching {len(recon_tools)} parallel recon tools")
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {
             pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings, cfg.get("start_msg")): name
@@ -246,13 +253,16 @@ def execute_recon_tools(
             for future in as_completed(futures, timeout=150):
                 tool_name, success, parsed_count, error = future.result(timeout=15)
                 if success:
+                    slog.tool_complete(tool_name, success=True, findings=parsed_count)
                     success_msg = recon_tools[tool_name]["success_msg"]
                     formatted_msg = success_msg.replace("{{}}", str(parsed_count)) if "{{}}" in success_msg else success_msg
                     _emit(tool_name, formatted_msg, "completed", items=parsed_count)
                 else:
+                    slog.tool_complete(tool_name, success=False)
                     _emit(tool_name, f"{tool_name} failed: {error}" if error else f"{tool_name} failed", "failed")
         except TimeoutError:
             logger.warning("Recon tool batch timed out after 150s — some tools may not have completed")
+            slog.warn("Recon tool batch timed out after 150s")
             # Cancel remaining futures
             for future in futures:
                 future.cancel()
@@ -295,6 +305,7 @@ def execute_recon_tools(
     except Exception as e:
         logger.warning("Could not load target profile (non-fatal): %s", e)
 
+    slog.info(f"Recon pipeline complete: {len(all_findings)} total findings")
     return all_findings, recon_context
 
 

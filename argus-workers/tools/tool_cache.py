@@ -13,6 +13,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 # Tool cache directory
 TOOL_CACHE_DIR = Path("/tmp/argus_tool_cache")
 TOOL_CACHE_DIR.mkdir(exist_ok=True)
@@ -98,11 +100,15 @@ class ToolCache:
 
     def cache_tool(self, tool_name: str, download_url: str | None = None) -> bool:
         """Download and cache a tool."""
+        slog = ScanLogger("tool_cache")
         self._validate_tool_name(tool_name)
 
         if self.is_cached(tool_name):
+            slog.info(f"Tool {tool_name} already cached")
             logger.info(f"Tool {tool_name} already cached")
             return True
+
+        slog.tool_start("cache_tool", tool=tool_name)
 
         # Only allow known tools to be installed via pip (supply-chain safety)
         if tool_name in PIP_ALLOWLIST:
@@ -121,6 +127,7 @@ class ToolCache:
                     capture_output=True, text=True, timeout=300
                 )
                 if result.returncode == 0:
+                    slog.info(f"Installed {tool_name} via pip (version={version or 'latest'})")
                     logger.info("Installed %s via pip (version=%s, hashes=%s)",
                                 tool_name, version or 'latest', 'enabled' if hashes_env else 'disabled')
                     # Verify installation succeeded by checking --version
@@ -128,13 +135,17 @@ class ToolCache:
                         [tool_name, "--version"],
                         capture_output=True, text=True, timeout=10,
                     )
+                    slog.info(f"{tool_name} version: {verify.stdout.strip()}")
                     logger.info("Installed %s version: %s", tool_name, verify.stdout.strip())
                     return True
                 else:
+                    slog.warn(f"pip install {tool_name} failed: {result.stderr[:200]}")
                     logger.error("pip install %s failed: %s", tool_name, result.stderr[:500])
             except Exception as e:
+                slog.warn(f"Failed to install {tool_name} via pip: {e}")
                 logger.warning(f"Failed to install {tool_name} via pip: {e}")
         else:
+            slog.info(f"{tool_name} not in pip allowlist, trying download")
             logger.warning(f"Tool {tool_name!r} is not in pip allowlist, skipping pip install")
 
         # Otherwise download
@@ -152,9 +163,11 @@ class ToolCache:
                     tool_path = self.tools_dir / tool_name / tool_name
                     shutil.move(f"{temp_dir}/{tool_name}", tool_path)
                     os.chmod(tool_path, 0o755)
+                    slog.info(f"Cached {tool_name} from {download_url}")
                     logger.info(f"Cached {tool_name} from {download_url}")
                     return True
             except Exception as e:
+                slog.warn(f"Failed to download {tool_name}: {e}")
                 logger.error(f"Failed to download {tool_name}: {e}")
 
         return False

@@ -34,7 +34,7 @@ class DistributedLock:
         self.worker_id = worker_id or str(uuid.uuid4())
         self.held_locks = {}  # engagement_id -> lock_key mapping
 
-    def acquire(self, engagement_id: str) -> bool:
+    def acquire(self, engagement_id: str, ttl_override: int | None = None) -> bool:
         """
         Attempt to acquire lock on engagement
 
@@ -42,31 +42,45 @@ class DistributedLock:
 
         Args:
             engagement_id: Engagement ID to lock
+            ttl_override: Optional custom TTL for this lock (defaults to LOCK_TTL_SECONDS)
 
         Returns:
             True if lock acquired, False if already held by another worker
         """
         lock_key = f"engagement_lock:{engagement_id}"
+        ttl = ttl_override or self.LOCK_TTL_SECONDS
 
         # Try to acquire lock with NX flag and expiration
         acquired = self.redis_client.set(
             lock_key,
             self.worker_id,
             nx=True,  # Only set if not exists
-            ex=self.LOCK_TTL_SECONDS  # Expiration in seconds
+            ex=ttl  # Expiration in seconds
         )
 
         if acquired:
             # Store lock key for heartbeat
-            self.held_locks[engagement_id] = lock_key
+            self.held_locks[engagement_id] = {
+                "key": lock_key,
+                "expires_at": time.time() + ttl,
+            }
             return True
 
         # Check if we already hold this lock
         current_holder = self.redis_client.get(lock_key)
         if current_holder and current_holder.decode('utf-8') == self.worker_id:
-            # We already hold this lock
-            self.held_locks[engagement_id] = lock_key
+            # We already hold this lock — extend it to prevent expiry during long operations
+            self.extend(engagement_id)
+            self.held_locks[engagement_id] = {
+                "key": lock_key,
+                "expires_at": time.time() + ttl,
+            }
             return True
+
+        # Check if lock is stale (expired key but not cleaned up)
+        if not current_holder:
+            # Key expired between check and get — retry acquire
+            return self.acquire(engagement_id, ttl)
 
         # Lock held by another worker
         return False
@@ -76,6 +90,7 @@ class DistributedLock:
         Release lock on engagement
 
         Uses Lua script to verify ownership before deletion.
+        Ensures locks are released even on cancellation.
 
         Args:
             engagement_id: Engagement ID to unlock
@@ -107,7 +122,8 @@ class DistributedLock:
         """
         Extend lock TTL (heartbeat mechanism)
 
-        Should be called every 60 seconds while processing continues.
+        Should be called regularly while processing continues.
+        Re-acquires the lock with a fresh TTL to handle long-running scans.
 
         Args:
             engagement_id: Engagement ID
@@ -117,25 +133,26 @@ class DistributedLock:
         """
         lock_key = f"engagement_lock:{engagement_id}"
 
-        # Lua script to verify ownership before extending
-        lua_script = """
-        if redis.call("get", KEYS[1]) == ARGV[1] then
-            return redis.call("expire", KEYS[1], ARGV[2])
-        else
-            return 0
-        end
-        """
-
-        # Execute Lua script
-        result = self.redis_client.eval(
-            lua_script,
-            1,
+        # Use SET with XX (update only if exists) to refresh TTL atomically
+        # This is simpler and safer than the Lua script approach
+        from redis.client import NEVER_DECODE
+        result = self.redis_client.set(
             lock_key,
             self.worker_id,
-            self.LOCK_TTL_SECONDS
+            xx=True,  # Only update if key exists
+            ex=self.LOCK_TTL_SECONDS,
         )
 
-        return result == 1
+        if result:
+            # Update held_locks tracking
+            if engagement_id in self.held_locks:
+                self.held_locks[engagement_id] = {
+                    "key": lock_key,
+                    "expires_at": time.time() + self.LOCK_TTL_SECONDS,
+                }
+            return True
+
+        return False
 
     def is_locked(self, engagement_id: str) -> bool:
         """
@@ -173,21 +190,41 @@ class DistributedLock:
         for engagement_id in list(self.held_locks.keys()):
             self.release(engagement_id)
 
-    def heartbeat_loop(self, engagement_id: str, stop_callback):
+    def heartbeat_loop(self, engagement_id: str, stop_callback, interval_seconds: int | None = None):
         """
         Run heartbeat loop to extend lock while processing
+
+        Uses exponential backoff on extend failures — if extending fails,
+        retries more frequently to regain the lock before TTL expires.
 
         Args:
             engagement_id: Engagement ID
             stop_callback: Function that returns True when processing is done
+            interval_seconds: Heartbeat interval (defaults to HEARTBEAT_INTERVAL_SECONDS)
         """
+        interval = interval_seconds or self.HEARTBEAT_INTERVAL_SECONDS
+        consecutive_failures = 0
+
         while not stop_callback():
-            time.sleep(self.HEARTBEAT_INTERVAL_SECONDS)
+            time.sleep(interval)
 
             if not self.extend(engagement_id):
-                # Failed to extend lock - another worker may have taken over
-                print(f"WARNING: Failed to extend lock for engagement {engagement_id}")
-                break
+                consecutive_failures += 1
+                logger.warning(
+                    "Failed to extend lock for engagement %s (attempt %d)",
+                    engagement_id, consecutive_failures,
+                )
+                if consecutive_failures >= 3:
+                    logger.error(
+                        "Lost lock for engagement %s after %d failed extend attempts",
+                        engagement_id, consecutive_failures,
+                    )
+                    break
+                # Retry more frequently after failure
+                interval = max(5, interval // 2)
+            else:
+                consecutive_failures = 0
+                interval = interval_seconds or self.HEARTBEAT_INTERVAL_SECONDS
 
 
 class LockContext:

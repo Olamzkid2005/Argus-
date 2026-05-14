@@ -3,8 +3,10 @@ Celery tasks for scanning phase
 
 Requirements: 4.3, 4.4, 20.1, 20.2, 20.3
 """
-import os
+import json
 import logging
+import os
+import time
 
 from celery_app import app
 from tasks.base import task_context
@@ -12,26 +14,130 @@ from tasks.base import task_context
 logger = logging.getLogger(__name__)
 
 
+# #region agent log
+def _debug_scan_task_ndjson(
+    hypothesis_id: str, location: str, message: str, data: dict | None = None
+) -> None:
+    try:
+        with open(
+            "/Users/mac/Documents/Argus-/.cursor/debug-70a9cd.log",
+            "a",
+            encoding="utf-8",
+        ) as _df:
+            _df.write(
+                json.dumps(
+                    {
+                        "sessionId": "70a9cd",
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data or {},
+                        "timestamp": int(time.time() * 1000),
+                    },
+                    default=str,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+# #endregion
+
+
 @app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=2400, time_limit=3600)
-def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None, agent_mode: bool = True):
+def run_scan(
+    self,
+    engagement_id: str,
+    targets: list,
+    budget: dict,
+    trace_id: str = None,
+    agent_mode: bool = True,
+    scan_mode: str | None = None,
+    aggressiveness: str | None = None,
+):
     """
     Execute scanning phase for an engagement
     """
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger("scan", engagement_id=engagement_id)
+
     # Load recon context from Redis for agent mode dispatch
     from tasks.utils import load_recon_context
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     try:
         recon_context = load_recon_context(engagement_id, redis_url)
+        recon_info = f"{len(recon_context.live_endpoints) if hasattr(recon_context, 'live_endpoints') else 0} endpoints" if recon_context else "none"
+        slog.info(f"Recon context loaded: {recon_info}")
     except Exception as e:
         logger.error("Failed to load recon context for engagement=%s: %s", engagement_id, e, exc_info=True)
         recon_context = None
 
+    # #region agent log
+    _n_ep = (
+        len(recon_context.live_endpoints)
+        if recon_context and hasattr(recon_context, "live_endpoints")
+        else 0
+    )
+    _debug_scan_task_ndjson(
+        "H2",
+        "tasks/scan.py:run_scan",
+        "recon_context_task_layer",
+        {
+            "engagement_id": engagement_id,
+            "trace_id_in": trace_id,
+            "celery_task_id": getattr(self.request, "id", None),
+            "recon_loaded": recon_context is not None,
+            "live_endpoints_count": _n_ep,
+            "agent_mode": agent_mode,
+        },
+    )
+    # #endregion
+
+    mode = "agent" if agent_mode else "deterministic"
+    slog.phase_header("SCAN PHASE", targets=f"{len(targets)} target(s)", mode=mode)
+
+    job_extra = {
+        "targets": targets,
+        "budget": budget,
+        "agent_mode": agent_mode,
+        "recon_context": recon_context,
+    }
+    if scan_mode is not None:
+        job_extra["scan_mode"] = scan_mode
+    if aggressiveness is not None:
+        job_extra["aggressiveness"] = aggressiveness
+
     with task_context(self, engagement_id, "scan",
-                      job_extra={"targets": targets, "budget": budget, "agent_mode": agent_mode,
-                                 "recon_context": recon_context},
+                      job_extra=job_extra,
                       trace_id=trace_id) as ctx:
+        # #region agent log
+        _debug_scan_task_ndjson(
+            "H3",
+            "tasks/scan.py:run_scan",
+            "task_context_ready",
+            {
+                "engagement_id": engagement_id,
+                "ctx_trace_id": ctx.trace_id,
+                "celery_task_id": getattr(self.request, "id", None),
+            },
+        )
+        # #endregion
         ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
+
+        # #region agent log
+        _debug_scan_task_ndjson(
+            "H1",
+            "tasks/scan.py:run_scan",
+            "orchestrator_run_scan_returned",
+            {
+                "engagement_id": engagement_id,
+                "ctx_trace_id": ctx.trace_id,
+                "result_status": result.get("status"),
+                "result_findings_count": result.get("findings_count"),
+                "result_trace_id": result.get("trace_id"),
+            },
+        )
+        # #endregion
 
         # Dispatch downstream task BEFORE transitioning state to avoid stuck engagements
         try:
@@ -40,9 +146,34 @@ def run_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: st
                 args=[engagement_id, budget, ctx.trace_id],
             )
             result["analysis_task_id"] = analyze_task.id
+            slog.dispatch("analyze", task_id=analyze_task.id)
+            # #region agent log
+            _debug_scan_task_ndjson(
+                "H3",
+                "tasks/scan.py:run_scan",
+                "analysis_dispatched",
+                {
+                    "engagement_id": engagement_id,
+                    "ctx_trace_id": ctx.trace_id,
+                    "analysis_task_id": analyze_task.id,
+                },
+            )
+            # #endregion
             ctx.state.transition("analyzing", "Scan complete")
         except Exception as e:
             logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
+            # #region agent log
+            _debug_scan_task_ndjson(
+                "H3",
+                "tasks/scan.py:run_scan",
+                "analysis_dispatch_failed",
+                {
+                    "engagement_id": engagement_id,
+                    "ctx_trace_id": ctx.trace_id,
+                    "error_type": type(e).__name__,
+                },
+            )
+            # #endregion
             ctx.state.transition("failed", f"Failed to dispatch analysis: {e}")
 
         return result
@@ -53,8 +184,22 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
     """
     Execute deep scanning on specific targets
     """
+    from tasks.utils import fetch_engagement_scan_options
+    from utils.logging_utils import ScanLogger
+
+    opts = fetch_engagement_scan_options(engagement_id)
+    slog = ScanLogger("deep_scan", engagement_id=engagement_id)
+    slog.phase_header("DEEP SCAN", targets=f"{len(targets)} target(s)")
+
+    job_extra = {
+        "targets": targets,
+        "budget": budget,
+        "agent_mode": opts["agent_mode"],
+        "scan_mode": opts["scan_mode"],
+        "aggressiveness": opts["aggressiveness"],
+    }
     with task_context(self, engagement_id, "deep_scan",
-                      job_extra={"targets": targets, "budget": budget},
+                      job_extra=job_extra,
                       trace_id=trace_id) as ctx:
         return ctx.orchestrator.run_scan(ctx.job)
 
@@ -64,7 +209,21 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
     """
     Execute authentication-focused scanning
     """
+    from tasks.utils import fetch_engagement_scan_options
+    from utils.logging_utils import ScanLogger
+
+    opts = fetch_engagement_scan_options(engagement_id)
+    slog = ScanLogger("auth_focused_scan", engagement_id=engagement_id)
+    slog.phase_header("AUTH FOCUSED SCAN", endpoints=f"{len(endpoints)} endpoint(s)")
+
+    job_extra = {
+        "endpoints": endpoints,
+        "budget": budget,
+        "agent_mode": opts["agent_mode"],
+        "scan_mode": opts["scan_mode"],
+        "aggressiveness": opts["aggressiveness"],
+    }
     with task_context(self, engagement_id, "auth_focused_scan",
-                      job_extra={"endpoints": endpoints, "budget": budget},
+                      job_extra=job_extra,
                       trace_id=trace_id) as ctx:
         return ctx.orchestrator.run_scan(ctx.job)

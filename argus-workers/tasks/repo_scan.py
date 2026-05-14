@@ -180,9 +180,20 @@ def run_repo_scan(
                 # Don't transition to "scanning" here — scan.py handles that transition
                 # and reads the actual DB state before transitioning
                 # Auto-push web scan job (skip awaiting_approval phase)
+                from tasks.utils import fetch_engagement_scan_options
+
+                opts = fetch_engagement_scan_options(engagement_id)
                 app.send_task(
                     "tasks.scan.run_scan",
-                    args=[engagement_id, [repo_url], budget, trace_id],
+                    args=[
+                        engagement_id,
+                        [repo_url],
+                        budget,
+                        trace_id,
+                        opts["agent_mode"],
+                        opts["scan_mode"],
+                        opts["aggressiveness"],
+                    ],
                 )
 
                 return result

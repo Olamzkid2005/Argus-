@@ -13,6 +13,7 @@ Replaces scattered LLM call logic in:
 
 import json
 import logging
+import time as _time
 from dataclasses import dataclass
 
 from config.constants import (
@@ -82,7 +83,13 @@ class LLMService:
 
         Returns a dict (never None, never raises). On error, returns a fallback dict.
         """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("llm_service")
+        slog.llm_start(self._client.model if hasattr(self._client, 'model') else 'unknown', system_prompt[:60])
+        start = _time.time()
+
         if not self._client.is_available():
+            slog.llm_result("LLM not available")
             return self._fallback("LLM not available")
 
         try:
@@ -109,6 +116,9 @@ class LLMService:
 
             try:
                 parsed = json.loads(response_text)
+                duration_ms = int((_time.time() - start) * 1000)
+                tokens = raw.output_tokens if isinstance(raw, LLMResponse) else 0
+                slog.llm_complete(self._client.model if hasattr(self._client, 'model') else 'unknown', duration_ms=duration_ms, tokens=tokens, cost=cost)
                 # Validate that the response is a dict or list (callers expect structured data)
                 if not isinstance(parsed, (dict, list)):
                     logger.warning("LLM returned unexpected type %s, using fallback", type(parsed).__name__)
@@ -119,11 +129,15 @@ class LLMService:
                 return self._fallback(f"JSON parse error: {e}")
 
         except Exception as e:
+            slog.llm_result(f"Failed: {e}")
             logger.warning(f"LLM call failed: {e}")
             return self._fallback(str(e))
 
     def _fallback(self, reason: str) -> dict:
         """Single fallback response for all callers."""
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("llm_service")
+        slog.warn(f"Fallback: {reason}")
         logger.warning("LLM service using FALLBACK response — reason: %s. "
                        "All downstream analysis will be placeholder data.", reason)
         return {

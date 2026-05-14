@@ -20,6 +20,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 SPA_FRAMEWORKS = {"react", "vue", "angular", "next.js", "nuxt", "svelte", "ember", "backbone"}
 
 
@@ -35,8 +37,12 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
     Returns:
         List of finding dicts
     """
+    slog = ScanLogger("browser_scanner")
+    slog.tool_start("browser_scan", target=target_url, tech=len(tech_stack) if tech_stack else 0)
+
     worker = Path(__file__).parent / "_browser_scan_worker.py"
     if not worker.exists():
+        slog.warn(f"Browser scan worker not found at {worker}")
         logger.warning(f"Browser scan worker not found at {worker}")
         return []
 
@@ -52,30 +58,37 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
             timeout=timeout,
         )
     except FileNotFoundError:
+        slog.warn(f"Python interpreter not found")
         logger.warning(f"Python interpreter not found at {sys.executable}")
         return []
     except subprocess.TimeoutExpired:
+        slog.warn(f"Browser scan timed out after {timeout}s")
         logger.warning(f"Browser scan timed out after {timeout}s for {target_url}")
         return []
 
     if result.returncode != 0:
         stderr = result.stderr.strip()[:500] if result.stderr else "unknown error"
+        slog.warn(f"Browser scan worker failed (exit {result.returncode})")
         logger.warning(f"Browser scan worker failed (exit {result.returncode}): {stderr}")
         return []
 
     stdout = result.stdout.strip()
     if not stdout:
+        slog.debug(f"Browser scan returned empty output")
         logger.debug(f"Browser scan returned empty output for {target_url}")
         return []
 
     try:
         findings = json.loads(stdout)
         if not isinstance(findings, list):
+            slog.warn(f"Browser scan returned non-list JSON: {type(findings).__name__}")
             logger.warning(f"Browser scan worker returned non-list JSON: {type(findings).__name__}")
             return []
+        slog.tool_complete("browser_scan", findings=len(findings))
         logger.info(f"Browser scan complete: {len(findings)} findings for {target_url}")
         return findings
     except json.JSONDecodeError as e:
+        slog.warn(f"Browser scan worker returned invalid JSON: {e}")
         logger.warning(f"Browser scan worker returned invalid JSON: {e}")
         return []
 

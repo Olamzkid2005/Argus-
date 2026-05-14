@@ -11,6 +11,8 @@ from collections.abc import Callable
 from enum import Enum
 from functools import wraps
 
+from utils.logging_utils import ScanLogger
+
 
 class CircuitState(Enum):
     """Circuit breaker states."""
@@ -73,19 +75,25 @@ class CircuitBreaker:
 
     def record_success(self):
         """Record a successful call, resetting failure count."""
+        slog = ScanLogger("circuit_breaker", engagement_id=self.name)
         with self._lock:
+            if self._failure_count > 0:
+                slog.info(f"Circuit {self.name}: success — resetting (was {self._failure_count} failures)")
             self._failure_count = 0
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.CLOSED
+                slog.info(f"Circuit {self.name}: HALF_OPEN -> CLOSED (recovered)")
 
     def record_failure(self):
         """Record a failed call, potentially opening the circuit."""
+        slog = ScanLogger("circuit_breaker", engagement_id=self.name)
         with self._lock:
             self._failure_count += 1
             self._last_failure_time = time.time()
 
             if self._failure_count >= self.failure_threshold:
                 self._state = CircuitState.OPEN
+                slog.warn(f"Circuit {self.name}: OPEN after {self._failure_count} failures (cooldown={self.cooldown_seconds}s)")
 
     def __call__(self, func: Callable) -> Callable:
         """

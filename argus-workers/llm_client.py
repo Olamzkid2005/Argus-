@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -193,16 +194,19 @@ class LLMClient:
         Raises:
             LLMUnavailableError: If client is not configured or all retries fail
         """
+        slog = ScanLogger("llm_client")
+        slog.llm_start(self.model, messages[0]["content"][:60] if messages else "chat")
+        start = time.time()
+
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
 
         # Circuit breaker: skip if too many recent failures
-        import time as _time
         if self._circuit_failures >= self._circuit_threshold:
-            if _time.time() < self._circuit_open_until:
+            if time.time() < self._circuit_open_until:
                 raise LLMUnavailableError(
                     f"LLM circuit breaker open — skipping call for "
-                    f"{self._circuit_open_until - _time.time():.0f}s "
+                    f"{self._circuit_open_until - time.time():.0f}s "
                     f"({self._circuit_failures} consecutive failures)"
                 )
             self._circuit_failures = 0
@@ -229,6 +233,8 @@ class LLMClient:
                         timeout=30
                     )
                     self._circuit_failures = 0
+                    duration_ms = int((time.time() - start) * 1000)
+                    slog.llm_complete(self.model, duration_ms=duration_ms)
                     return response.choices[0].message.content
                 else:
                     # Generic HTTP API
@@ -252,6 +258,8 @@ class LLMClient:
                         resp.raise_for_status()
                         data = resp.json()
                         self._circuit_failures = 0
+                        duration_ms = int((time.time() - start) * 1000)
+                        slog.llm_complete(self.model, duration_ms=duration_ms)
 
                         # Try common response formats
                         if "choices" in data and len(data["choices"]) > 0:
@@ -265,7 +273,7 @@ class LLMClient:
                 last_error = e
                 self._circuit_failures += 1
                 if self._circuit_failures >= self._circuit_threshold:
-                    self._circuit_open_until = _time.time() + self._circuit_cooldown
+                    self._circuit_open_until = time.time() + self._circuit_cooldown
                     logger.warning(
                         "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
                         self._circuit_failures, self._circuit_cooldown,
@@ -295,16 +303,20 @@ class LLMClient:
         Returns:
             LLMResponse with .text, .input_tokens, .output_tokens, .cost_usd
         """
+        slog = ScanLogger("llm_client")
+        action_desc = messages[0].get("content", "")[:60] if messages else "chat_sync"
+        slog.llm_start(self.model, action_desc)
+        start = time.time()
+
         if not self.is_available():
             raise LLMUnavailableError("LLM client not configured (no API key)")
 
         # Circuit breaker: skip if too many recent failures
-        import time as _time
         if self._circuit_failures >= self._circuit_threshold:
-            if _time.time() < self._circuit_open_until:
+            if time.time() < self._circuit_open_until:
                 raise LLMUnavailableError(
                     f"LLM circuit breaker open — skipping call for "
-                    f"{self._circuit_open_until - _time.time():.0f}s "
+                    f"{self._circuit_open_until - time.time():.0f}s "
                     f"({self._circuit_failures} consecutive failures)"
                 )
             self._circuit_failures = 0
@@ -336,6 +348,8 @@ class LLMClient:
                         (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
                         + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
                     )
+                    duration_ms = int((time.time() - start) * 1000)
+                    slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
                     return LLMResponse(
                         text=response.choices[0].message.content,
                         input_tokens=input_tokens,
@@ -373,6 +387,8 @@ class LLMClient:
                             (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
                             + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
                         )
+                        duration_ms = int((time.time() - start) * 1000)
+                        slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
 
                         if "choices" in data and len(data["choices"]) > 0:
                             text = data["choices"][0]["message"]["content"]
@@ -392,14 +408,14 @@ class LLMClient:
                 last_error = e
                 self._circuit_failures += 1
                 if self._circuit_failures >= self._circuit_threshold:
-                    self._circuit_open_until = _time.time() + self._circuit_cooldown
+                    self._circuit_open_until = time.time() + self._circuit_cooldown
                     logger.warning(
                         "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
                         self._circuit_failures, self._circuit_cooldown,
                     )
                 logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
-                    _time.sleep(2 ** attempt)
+                    time.sleep(2 ** attempt)
 
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 

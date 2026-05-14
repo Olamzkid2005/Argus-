@@ -33,12 +33,17 @@ interface Report {
 }
 
 // ── Helpers ──
-const reportTypeConfig = {
+const reportTypeConfig: Record<string, { color: string; label: string }> = {
   engagement: { color: "#6720FF", label: "Engagement" },
   finding: { color: "#FF8800", label: "Finding" },
   summary: { color: "#7A7489", label: "Summary" },
   executive: { color: "#FF4444", label: "Executive" },
+  compliance: { color: "#10B981", label: "Compliance" },
 };
+
+function getTypeStyle(type: string) {
+  return reportTypeConfig[type] || { color: "#7A7489", label: type.charAt(0).toUpperCase() + type.slice(1) };
+}
 
 const statusConfig = {
   generating: { color: "#6720FF", label: "Generating", bg: "bg-primary/10" },
@@ -341,7 +346,7 @@ export default function ReportsPage() {
         {/* Table Body */}
         <AnimatePresence>
           {filtered.map((report, index) => {
-            const typeStyle = reportTypeConfig[report.type];
+            const typeStyle = getTypeStyle(report.type);
             const statusStyle = statusConfig[report.status] || { color: "#7A7489", label: report.status || "Unknown", bg: "bg-surface-container" };
             const isReady = report.status === "ready";
 

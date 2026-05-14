@@ -16,12 +16,52 @@ import { log } from "@/lib/logger";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Track active SSE connections globally for connection limiting.
+ */
+const activeSseConnections = new Map<string, Set<string>>(); // engagementId -> Set<connectionId>
+const MAX_CONNECTIONS_PER_ENGAGEMENT = 10;
+const MAX_CONNECTIONS_PER_IP = 5;
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: engagementId } = await params;
   log.api("GET", `/api/stream/${engagementId}`);
+
+  // ── Connection limiting ──
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+  const connectionId = `${clientIp}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+
+  if (!activeSseConnections.has(engagementId)) {
+    activeSseConnections.set(engagementId, new Set());
+  }
+  const engConnections = activeSseConnections.get(engagementId)!;
+  if (engConnections.size >= MAX_CONNECTIONS_PER_ENGAGEMENT) {
+    log.warn("SSE connection limit reached for engagement", { engagementId, count: engConnections.size });
+    return NextResponse.json(
+      { error: "Too many SSE connections for this engagement" },
+      { status: 429 },
+    );
+  }
+
+  // Count connections per IP across all engagements
+  let ipCount = 0;
+  for (const conns of activeSseConnections.values()) {
+    for (const cid of conns) {
+      if (cid.startsWith(clientIp)) ipCount++;
+    }
+  }
+  if (ipCount >= MAX_CONNECTIONS_PER_IP) {
+    log.warn("SSE connection limit reached for IP", { clientIp, count: ipCount });
+    return NextResponse.json(
+      { error: "Too many SSE connections from this IP" },
+      { status: 429 },
+    );
+  }
 
   try {
     const session = await requireAuth();
@@ -31,11 +71,13 @@ export async function GET(
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json(
-      { error: "Forbidden" },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // Track connection AFTER auth check to prevent slot exhaustion by unauthenticated requests.
+  // Note: activeSseConnections is in-memory and NOT shared across serverless instances.
+  // In multi-instance deployments, use Redis-based tracking instead.
+  engConnections.add(connectionId);
 
   const encoder = new TextEncoder();
   const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
@@ -49,9 +91,19 @@ export async function GET(
 
       let subscriber: Redis | null = null;
       let heartbeat: NodeJS.Timeout | null = null;
+      let redisReconnectAttempts = 0;
+      const MAX_REDIS_RECONNECTS = 3;
 
       try {
-        subscriber = new Redis(redisUrl);
+        subscriber = new Redis(redisUrl, {
+          retryStrategy(times) {
+            if (times > MAX_REDIS_RECONNECTS) return null; // give up
+            return Math.min(times * 200, 2000); // 200ms, 400ms, 600ms
+          },
+          maxRetriesPerRequest: 3,
+          lazyConnect: true,
+        });
+        await subscriber.connect();
 
         // Send a heartbeat every 15s to keep the connection alive
         heartbeat = setInterval(() => {
@@ -76,7 +128,11 @@ export async function GET(
 
         subscriber.on("error", (err: Error) => {
           log.error("SSE Redis subscriber error:", err.message);
-          // Don't close the stream — the heartbeat keeps it alive
+          redisReconnectAttempts++;
+          if (redisReconnectAttempts > MAX_REDIS_RECONNECTS) {
+            log.error("SSE Redis max reconnects reached, closing stream");
+            cleanup();
+          }
         });
 
         // Handle client disconnect
@@ -110,6 +166,11 @@ export async function GET(
             // ignore
           }
           subscriber = null;
+        }
+        // Release connection tracking
+        engConnections.delete(connectionId);
+        if (engConnections.size === 0) {
+          activeSseConnections.delete(engagementId);
         }
         try {
           controller.close();

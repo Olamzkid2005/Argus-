@@ -16,6 +16,7 @@ from config.constants import (
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
     Returns:
         List of code vulnerability findings
     """
+    slog = ScanLogger("repo_scan", engagement_id=orchestrator.engagement_id if hasattr(orchestrator, 'engagement_id') else "")
+    slog.phase_header("EXECUTE REPO SCAN", repo=repo_url, aggressiveness=aggressiveness)
     all_findings = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
 
@@ -296,6 +299,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
         }
 
         # ── 1. Gitleaks: secret detection in git history ──
+        slog.tool_start("gitleaks", [repo_url])
         _emit("gitleaks", "Scanning git history for leaked secrets", "started")
         try:
             gitleaks_cmd = [
@@ -326,6 +330,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             logger.warning(f"Gitleaks failed: {e}")
 
         # ── 2. Trufflehog: parallel git history secret scanning ──
+        slog.tool_start("trufflehog", [repo_url])
         _emit("trufflehog", "Scanning git history with trufflehog", "started")
         try:
             # Build trufflehog args — only include --since-commit for default mode
@@ -379,6 +384,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             logger.warning(f"Trufflehog failed: {e}")
 
         # ── 3. Working tree secret check ──
+        slog.tool_start("secret-scan", [repo_url])
         _emit("secret-scan", "Scanning working tree for exposed secrets", "started")
         try:
             wt_count = 0
@@ -487,6 +493,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             logger.warning(f"Working tree secret scan failed: {e}")
 
         # ── 4. Trivy: dependency vulnerability scanning ──
+        slog.tool_start("trivy", [repo_url])
         _emit("trivy", "Scanning dependencies for known CVEs", "started")
         try:
             trivy_scanners = "vuln"
@@ -521,6 +528,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # ── 3. Bandit: Python security scanning ──
         if "python" in detected_langs:
+            slog.tool_start("bandit", [repo_url])
             _emit("bandit", "Running Bandit Python security scanner", "started")
             try:
                 bandit_result = orchestrator.tool_runner.run(
@@ -570,6 +578,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # ── 4. Brakeman: Ruby on Rails security scanning ──
         if "ruby" in detected_langs:
+            slog.tool_start("brakeman", [repo_url])
             _emit("brakeman", "Running Brakeman Rails security scanner", "started")
             try:
                 brakeman_result = orchestrator.tool_runner.run(
@@ -621,6 +630,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # ── 5. Gosec: Go security scanning ──
         if "go" in detected_langs:
+            slog.tool_start("gosec", [repo_url])
             _emit("gosec", "Running Gosec Go security scanner", "started")
             try:
                 gosec_result = orchestrator.tool_runner.run(
@@ -672,6 +682,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # ── 6. ESLint: JavaScript/TypeScript security scanning ──
         if "javascript" in detected_langs:
+            slog.tool_start("eslint", [repo_url])
             _emit("eslint", "Running ESLint security scanner", "started")
             try:
                 eslint_result = orchestrator.tool_runner.run(
@@ -725,6 +736,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # ── 7. PHPCS: PHP security scanning ──
         if "php" in detected_langs:
+            slog.tool_start("phpcs", [repo_url])
             _emit("phpcs", "Running PHP CodeSniffer security audit", "started")
             try:
                 phpcs_result = orchestrator.tool_runner.run(
@@ -777,6 +789,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # ── 8. SpotBugs: Java/Kotlin security scanning ──
         if "java" in detected_langs:
+            slog.tool_start("spotbugs", [repo_url])
             _emit("spotbugs", "Running SpotBugs Java security scanner", "started")
             try:
                 spotbugs_result = orchestrator.tool_runner.run(
@@ -835,6 +848,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 logger.warning(f"SpotBugs failed: {e}")
 
         # ── 9. Snyk: dependency vulnerability scanning ──
+        slog.tool_start("snyk", [repo_url])
         _emit("snyk", "Running Snyk dependency vulnerability scan", "started")
         try:
             snyk_result = orchestrator.tool_runner.run(
@@ -885,6 +899,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # npm audit for Node.js projects
         if os.path.exists(os.path.join(temp_dir, "package.json")):
+            slog.tool_start("npm_audit", [repo_url])
             _emit("npm_audit", "Running npm audit for Node.js dependencies", "started")
             try:
                 npm_findings = run_npm_audit(temp_dir)
@@ -904,6 +919,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
            os.path.exists(os.path.join(temp_dir, "Pipfile")) or \
            os.path.exists(os.path.join(temp_dir, "setup.py")) or \
            os.path.exists(os.path.join(temp_dir, "pyproject.toml")):
+            slog.tool_start("pip_audit", [repo_url])
             _emit("pip_audit", "Running pip-audit for Python dependencies", "started")
             try:
                 pip_findings = run_pip_audit(temp_dir)
@@ -920,6 +936,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # govulncheck for Go projects
         if os.path.exists(os.path.join(temp_dir, "go.mod")):
+            slog.tool_start("govulncheck", [repo_url])
             _emit("govulncheck", "Running govulncheck for Go vulnerabilities", "started")
             try:
                 go_findings = run_govulncheck(temp_dir)
@@ -936,6 +953,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
 
         # Maven dependency check for Java projects
         if os.path.exists(os.path.join(temp_dir, "pom.xml")):
+            slog.tool_start("maven_check", [repo_url])
             _emit("maven_check", "Checking Maven dependencies", "started")
             try:
                 maven_findings = check_maven_dependencies(temp_dir)
@@ -951,6 +969,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 logger.warning(f"Maven check failed: {e}")
 
         # ── 7. Semgrep: static code analysis ──
+        slog.tool_start("semgrep", [repo_url])
         _rules_registry = os.path.join(os.path.dirname(os.path.dirname(__file__)), "semgrep_rules", "registry")
         def _resolve_semgrep_config(cfg: str) -> list:
             """Resolve a semgrep config name to local file paths."""
@@ -1026,6 +1045,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
         with contextlib.suppress(Exception):
             shutil.rmtree(temp_dir)
 
+    slog.info(f"Repo scan complete: {len(all_findings)} total findings across all tools")
     _emit("repo_scan", f"Repository scan complete — {len(all_findings)} total issues found", "completed", items=len(all_findings))
 
     return all_findings

@@ -1,4 +1,5 @@
 """Parser for gitleaks JSON output (gitleaks detect --json)."""
+import hashlib
 import json
 import logging
 
@@ -32,7 +33,10 @@ class GitleaksParser(BaseParser):
                     "author": item.get("Author"),
                     "email": item.get("Email"),
                     "repository": item.get("Repo"),
-                    "offender": (item.get("Secret") or "")[:100],
+                    # Hash the secret instead of storing plaintext (fix 6.6)
+                    # SHA-256 hash allows dedup without leaking secrets
+                    "offender_hash": hashlib.sha256((item.get("Secret") or "").encode()).hexdigest()[:16] if item.get("Secret") else "",
+                    "has_secret": bool(item.get("Secret")),
                     "match": item.get("Match"),
                 },
                 "tool": "gitleaks",

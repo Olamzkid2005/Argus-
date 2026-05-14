@@ -15,6 +15,7 @@ from config.constants import (
     HARD_TIMEOUT_SECONDS,
     LLM_AGENT_MODEL,
 )
+from utils.logging_utils import ScanLogger
 from database.connection import connect
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.finding_repository import FindingRepository
@@ -44,6 +45,35 @@ from websocket_events import get_websocket_publisher
 from .repo_scan import execute_repo_scan
 
 logger = logging.getLogger(__name__)
+
+# #region agent log
+def _debug_pipeline_ndjson(
+    hypothesis_id: str, location: str, message: str, data: dict | None = None
+) -> None:
+    """Append one NDJSON line for pipeline debug analysis (no secrets)."""
+    try:
+        with open(
+            "/Users/mac/Documents/Argus-/.cursor/debug-70a9cd.log",
+            "a",
+            encoding="utf-8",
+        ) as _df:
+            _df.write(
+                json.dumps(
+                    {
+                        "sessionId": "70a9cd",
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data or {},
+                        "timestamp": int(time.time() * 1000),
+                    },
+                    default=str,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+# #endregion
 
 
 class EngagementTimeoutError(Exception):
@@ -164,6 +194,8 @@ class Orchestrator:
                 raise ValueError(f"Unknown job type: {job_type}")
 
     def run_recon(self, job: dict) -> dict:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.tool_start("orchestrator.run_recon", ["target"])
         self._check_timeout()
         target = job.get("target")
         if not target:
@@ -189,6 +221,7 @@ class Orchestrator:
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         findings, recon_context = execute_recon_pipeline(self, target, job.get("budget", {}), aggressiveness)
+        slog.tool_complete("orchestrator.run_recon", success=True, findings=len(findings))
 
         findings_count = len(findings)
         self._save_findings(findings, "tool")
@@ -199,6 +232,7 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"Failed to save recon context to Redis: {e}")
 
+        slog.info(f"Recon complete: {findings_count} findings")
         return {
             "phase": "recon", "status": "completed", "findings_count": findings_count,
             "next_state": "scanning",
@@ -366,6 +400,18 @@ class Orchestrator:
                         logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
         except Exception as e:
             logger.error(f"Failed to save findings: {e}")
+            # #region agent log
+            _debug_pipeline_ndjson(
+                "H_SAVE",
+                "orchestrator.py:_save_findings",
+                "save_findings_exception",
+                {
+                    "engagement_id": self.engagement_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)[:500],
+                },
+            )
+            # #endregion
 
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column.
@@ -526,6 +572,8 @@ class Orchestrator:
         return all_findings
 
     def run_scan(self, job: dict) -> dict:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.tool_start("orchestrator.run_scan", [f"{len(job.get('targets', []))} targets"])
         self._check_timeout()
         targets = job.get("targets", [])
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="scan", target=str(targets))
@@ -539,27 +587,63 @@ class Orchestrator:
         agent_mode_enabled = job.get("agent_mode", True)
         auth_config = job.get("auth_config", {})
 
-        if (
-            scan_mode == "swarm"
-            and recon_context is not None
-            and self.llm_client is not None
-            and self.llm_client.is_available()
-        ):
+        _llm_ok = self.llm_client is not None and self.llm_client.is_available()
+        _recon_ok = recon_context is not None
+        # #region agent log
+        _debug_pipeline_ndjson(
+            "H4",
+            "orchestrator.py:run_scan",
+            "scan_branch_inputs",
+            {
+                "engagement_id": self.engagement_id,
+                "trace_id": get_trace_id(),
+                "scan_mode": scan_mode,
+                "agent_mode_enabled": agent_mode_enabled,
+                "recon_context_loaded": _recon_ok,
+                "llm_client_available": _llm_ok,
+            },
+        )
+        # #endregion
+        if scan_mode == "swarm" and _recon_ok and _llm_ok:
+            scan_execution_path = "swarm"
             findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
-        elif (
-            agent_mode_enabled
-            and recon_context is not None
-            and self.llm_client is not None
-            and self.llm_client.is_available()
-        ):
+        elif agent_mode_enabled and _recon_ok and _llm_ok:
+            scan_execution_path = "agent"
             findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
         else:
+            scan_execution_path = "deterministic"
             findings = self._run_deterministic_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
 
         findings = self._maybe_run_browser_scanner(targets, recon_context, findings)
 
+        slog.info(f"Scan mode: {scan_mode}, total findings: {len(findings)}")
         findings_count = len(findings)
+        # #region agent log
+        _debug_pipeline_ndjson(
+            "H4",
+            "orchestrator.py:run_scan",
+            "scan_branch_selected",
+            {
+                "engagement_id": self.engagement_id,
+                "trace_id": get_trace_id(),
+                "scan_execution_path": scan_execution_path,
+                "findings_count_pre_persist": findings_count,
+            },
+        )
+        # #endregion
         self._save_findings(findings)
+        # #region agent log
+        _debug_pipeline_ndjson(
+            "H_PERSIST",
+            "orchestrator.py:run_scan",
+            "post_save_findings",
+            {
+                "engagement_id": self.engagement_id,
+                "trace_id": get_trace_id(),
+                "findings_count_pre_persist": findings_count,
+            },
+        )
+        # #endregion
 
         from llm_client import load_llm_setting
         llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
@@ -571,6 +655,7 @@ class Orchestrator:
             except Exception as e:
                 logger.warning(f"Failed to enqueue LLM review (non-fatal): {e}")
 
+        slog.tool_complete("orchestrator.run_scan", success=True, findings=findings_count)
         return {"phase": "scan", "status": "completed", "findings_count": findings_count,
                 "next_state": "analyzing", "trace_id": get_trace_id()}
 
@@ -589,6 +674,8 @@ class Orchestrator:
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict,
     ) -> list[dict]:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.phase_header("SWARM SCAN", targets=f"{len(targets)} target(s)")
         emit_thinking(
             self.engagement_id,
             "Multi-agent swarm mode active — spawning specialist agents...",
@@ -608,6 +695,7 @@ class Orchestrator:
             decision_repo=decision_repo,
         )
         swarm_findings = swarm.run(timeout=1800)
+        slog.info(f"Swarm returned {len(swarm_findings)} findings")
         logger.info("Swarm returned %d findings", len(swarm_findings))
         swarm_tools: set[str] = set()
         for f in swarm_findings:
@@ -619,12 +707,15 @@ class Orchestrator:
             self, targets, budget, aggressiveness, auth_config, tech_stack,
             skip_tools=swarm_tools,
         )
+        slog.tool_complete("swarm", success=True, findings=len(swarm_findings))
         return swarm_findings + safety_findings
 
     def _run_agent_scan(
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict,
     ) -> list[dict]:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.phase_header("AGENT SCAN", targets=f"{len(targets)} target(s)")
         emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
         findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config)
         agent_tried = getattr(self, "_last_agent_tried_tools", set())
@@ -635,12 +726,15 @@ class Orchestrator:
             skip_tools=agent_tried,
         )
         findings.extend(deterministic_findings)
+        slog.tool_complete("agent_scan", success=True, findings=len(findings))
         return findings
 
     def _run_deterministic_scan(
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict,
     ) -> list[dict]:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.phase_header("DETERMINISTIC SCAN")
         mode = "deterministic"
         if not recon_context:
             mode += " (no recon context)"
@@ -650,7 +744,9 @@ class Orchestrator:
             mode += " (LLM unavailable)"
         logger.info(f"Running {mode} scan")
         tech_stack = recon_context.tech_stack if recon_context else None
-        return execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack)
+        result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack)
+        slog.tool_complete("deterministic_scan", success=True, findings=len(result))
+        return result
 
     def _maybe_run_browser_scanner(
         self, targets: list[str], recon_context, findings: list[dict],
@@ -677,6 +773,8 @@ class Orchestrator:
         return findings
 
     def run_analysis(self, job: dict) -> dict:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.tool_start("orchestrator.run_analysis", [])
         self._check_timeout()
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="analyze")
         self.logger.log_job_started(job_type="analyze", engagement_id=self.engagement_id)
@@ -853,12 +951,16 @@ class Orchestrator:
             else:
                 logger.info(f"Budget exhausted: {reason}")
 
+        slog.tool_complete("orchestrator.run_analysis", success=True, findings=len(evaluation.get("scored_findings", [])))
+        slog.info(f"Next state: {next_state}, actions: {len(actions)}")
         return {"phase": "analyze", "status": "completed", "actions": actions,
                 "scored_findings": evaluation.get("scored_findings", []),
                 "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
                 "next_state": next_state, "trace_id": get_trace_id()}
 
     def run_reporting(self, job: dict) -> dict:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.tool_start("orchestrator.run_reporting", [])
         self._check_timeout()
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="report")
         self.logger.log_job_started(job_type="report", engagement_id=self.engagement_id)
@@ -979,10 +1081,13 @@ class Orchestrator:
                 "Scan diff dispatch failed (non-fatal): %s", e
             )
 
+        slog.tool_complete("orchestrator.run_reporting", success=True)
         return {"phase": "report", "status": "completed", "next_state": "complete",
                 "report": report_data, "trace_id": get_trace_id()}
 
     def run_repo_scan(self, job: dict) -> dict:
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.tool_start("orchestrator.run_repo_scan", [f"repo={job.get('repo_url', '')}"])
         self._check_timeout()
         repo_url = job.get("repo_url")
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="repo_scan", target=repo_url)
@@ -1063,6 +1168,7 @@ class Orchestrator:
             engagement_id=self.engagement_id, from_state="recon", to_state=next_state,
             reason="Repository scan completed — auto-advancing to web scan",
         )
+        slog.tool_complete("orchestrator.run_repo_scan", success=True, findings=findings_count)
         return {"phase": "repo_scan", "status": "completed", "findings_count": findings_count,
                 "next_state": next_state, "trace_id": get_trace_id()}
 

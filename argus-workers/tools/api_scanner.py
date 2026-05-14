@@ -18,6 +18,7 @@ from requests.exceptions import ConnectionError, RequestException, Timeout
 logger = logging.getLogger(__name__)
 
 from config.constants import LLM_MAX_GENERATED_PAYLOADS
+from utils.logging_utils import ScanLogger
 
 
 class APISecurityScanner:
@@ -106,37 +107,56 @@ class APISecurityScanner:
         Returns:
             List of vulnerability findings
         """
+        slog = ScanLogger("api_scanner", engagement_id=getattr(self, 'engagement_id', ''))
+        slog.phase_header("API SCAN", f"target={target_url}, type={api_type}")
+
         self.findings = []
         self.target_url = target_url.rstrip("/")
         self.auth_config = auth_config or {}
 
         # Apply authentication if configured
         if self.auth_config.get("type") == "api_key":
+            slog.info(f"Applying API key auth to header: {self.auth_config.get('header', 'X-API-Key')}")
             self.session.headers[self.auth_config.get("header", "X-API-Key")] = (
                 self.auth_config.get("key", "")
             )
         elif self.auth_config.get("type") == "bearer":
+            slog.info("Applying Bearer token auth")
             self.session.headers["Authorization"] = (
                 f"Bearer {self.auth_config.get('token', '')}"
             )
 
         # 1. OWASP ZAP-style basic checks
+        slog.tool_start("security_headers", f"target={self.target_url}")
         self.check_security_headers()
+        slog.tool_complete("security_headers", success=True)
 
         # 2. API type-specific scanning
         if api_type == "graphql":
+            slog.tool_start("graphql_scan", f"target={self.target_url}")
             self.scan_graphql()
+            slog.tool_complete("graphql_scan", success=True)
         elif api_type == "openapi":
+            slog.tool_start("openapi_scan", f"target={self.target_url}")
             self.scan_openapi()
+            slog.tool_complete("openapi_scan", success=True)
         else:
+            slog.tool_start("rest_scan", f"target={self.target_url}")
             self.scan_rest_endpoints()
+            slog.tool_complete("rest_scan", success=True)
 
         # 3. Authentication testing
+        slog.tool_start("auth_testing", f"target={self.target_url}")
         self.test_authentication()
+        slog.tool_complete("auth_testing", success=True)
 
         # 4. Rate limiting test
+        slog.tool_start("rate_limit_test", f"target={self.target_url}")
         self.test_rate_limiting()
+        slog.tool_complete("rate_limit_test", success=True)
 
+        slog.tool_complete("api_scan", success=True, findings=len(self.findings))
+        slog.info(f"API scan complete: {len(self.findings)} total findings")
         return self.findings
 
     def _safe_request(

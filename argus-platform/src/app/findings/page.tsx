@@ -259,6 +259,8 @@ export default function FindingsPage() {
   const [selectedEngagement, setSelectedEngagement] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [groupBy, setGroupBy] = useState<string | null>(null);
+  const [groupsData, setGroupsData] = useState<Array<{key: string; count: number; severities: Record<string, number>; findings: Finding[]}> | null>(null);
   const [selectedFindings, setSelectedFindings] = useState<Set<string>>(new Set());
   const [isBulkVerifying, setIsBulkVerifying] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -331,10 +333,6 @@ export default function FindingsPage() {
           const data = await response.json();
           const nextEngagements: Engagement[] = data.engagements || [];
           setEngagements(nextEngagements);
-          // Default to the most recent engagement to avoid cross-target blending.
-          if (selectedEngagement === "all" && nextEngagements.length > 0) {
-            setSelectedEngagement(nextEngagements[0].id);
-          }
         }
       } catch (err) {
         console.error("Failed to fetch engagements:", err);
@@ -349,14 +347,18 @@ export default function FindingsPage() {
     const fetchFindings = async () => {
       setIsLoading(true);
       try {
-        let url = "/api/findings?limit=100";
+        let url = "/api/findings?limit=200";
         if (selectedEngagement && selectedEngagement !== "all") {
           url += `&engagement_id=${selectedEngagement}`;
+        }
+        if (groupBy) {
+          url += `&group_by=${groupBy}`;
         }
         const response = await fetch(url);
         if (response.ok) {
           const data = await response.json();
           setFindings(data.findings || []);
+          setGroupsData(data.groups || null);
         }
       } catch (err) {
         showToast("error", "Failed to load findings");
@@ -365,7 +367,7 @@ export default function FindingsPage() {
       }
     };
     fetchFindings();
-  }, [status, showToast, selectedEngagement]);
+  }, [status, showToast, selectedEngagement, groupBy]);
 
   const handleExplainAll = async () => {
     if (filtered.length === 0) {
@@ -697,7 +699,8 @@ export default function FindingsPage() {
         </div>
         <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Findings</h1>
         <p className="text-sm text-on-surface-variant mt-1 font-body">
-          {findings.length} total vulnerabilities discovered across the target infrastructure
+          {findings.length} total vulnerabilities discovered
+          {selectedEngagement !== "all" ? ` in selected engagement` : " across all engagements"}
         </p>
       </motion.div>
 
@@ -886,12 +889,95 @@ export default function FindingsPage() {
               ))}
             </select>
           </div>
+
+          {/* Group By */}
+          <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-4">
+            <h3 className="text-[11px] font-bold text-on-surface uppercase tracking-wider mb-3 font-headline flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h16"/><path d="M8 12h12"/><path d="M8 18h8"/></svg>
+              Group By
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: null, label: "None" },
+                { key: "type", label: "Type" },
+                { key: "severity", label: "Severity" },
+                { key: "source_tool", label: "Tool" },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => setGroupBy(opt.key)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${
+                    groupBy === opt.key
+                      ? "bg-primary text-white shadow-glow"
+                      : "bg-surface-container-low dark:bg-surface-container text-on-surface-variant border border-outline-variant dark:border-outline/30 hover:text-on-surface"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </motion.div>
 
         {/* Center - Findings List */}
         <ScrollReveal direction="up" delay={0.15} className={`${isMobile ? "order-1 col-span-1" : "col-span-12 lg:col-span-5"}`}>
           <StaggerContainer className="space-y-3" staggerDelay={0.04}>
-            {findingsListItems.map((item) => {
+            {/* Grouped mode */}
+            {groupBy && groupsData && groupsData.length > 0 && groupsData.map((group) => (
+              <StaggerItem key={group.key}>
+                <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant dark:border-outline/30 bg-surface-container-low/50 dark:bg-surface-container/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold font-headline text-on-surface uppercase">{group.key}</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary">{group.count}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {Object.entries(group.severities).map(([sev, cnt]) => {
+                        const colors: Record<string, string> = {
+                          CRITICAL: "text-red-500 bg-red-500/10",
+                          HIGH: "text-orange-500 bg-orange-500/10",
+                          MEDIUM: "text-yellow-500 bg-yellow-500/10",
+                          LOW: "text-blue-400 bg-blue-400/10",
+                          INFO: "text-gray-400 bg-gray-400/10",
+                        };
+                        return (
+                          <span key={sev} className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${colors[sev] || "text-gray-400"}`}>
+                            {sev}:{cnt}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="divide-y divide-outline-variant/20 dark:divide-outline/10 max-h-[400px] overflow-y-auto">
+                    {group.findings.map((finding) => {
+                      const sev = severityConfig[finding.severity];
+                      return (
+                        <div
+                          key={finding.id}
+                          className="flex items-center gap-2 px-4 py-2 hover:bg-surface-container-low dark:hover:bg-surface-container/50 cursor-pointer transition-all"
+                          onClick={() => {
+                            setExpandedRow(expandedRow === finding.id ? null : finding.id);
+                            setSelectedFindingId(selectedFindingId === finding.id ? null : finding.id);
+                          }}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sev.color }} />
+                          <span className="text-[11px] font-mono text-on-surface truncate flex-1">{finding.endpoint}</span>
+                          <span className="text-[9px] font-mono text-on-surface-variant shrink-0">{((finding.confidence || 0) * 100).toFixed(0)}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </StaggerItem>
+            ))}
+
+            {groupBy && groupsData && groupsData.length === 0 && filtered.length === 0 && (
+              <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant dark:border-outline/30 rounded-xl bg-surface dark:bg-surface-container-low">
+                NO FINDINGS DETECTED IN SELECTED TELEMETRY
+              </div>
+            )}
+
+            {!groupBy && findingsListItems.map((item) => {
               if (item.kind === "header") {
                 return (
                   <StaggerItem key={item.key}>
@@ -1142,7 +1228,7 @@ export default function FindingsPage() {
           );
         })}
 
-            {filtered.length === 0 && (
+            {!groupBy && filtered.length === 0 && (
               <div className="px-5 py-20 text-center text-on-surface-variant/40 italic text-sm tracking-widest uppercase border border-outline-variant dark:border-outline/30 rounded-xl bg-surface dark:bg-surface-container-low">
                 NO FINDINGS DETECTED IN SELECTED TELEMETRY
               </div>

@@ -33,6 +33,9 @@ export interface JobMessage {
   };
   aggressiveness?: string;
   agent_mode?: boolean;
+  /** Must match engagements.scan_mode (agent | swarm) when set */
+  scan_mode?: string;
+  bug_bounty_mode?: boolean;
   trace_id: string;
   created_at: string;
   platform?: string;

@@ -43,6 +43,7 @@ from config.constants import (
     SSL_TIMEOUT,
 )
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
+from utils.logging_utils import ScanLogger
 
 
 class WebScanner:
@@ -257,6 +258,7 @@ class WebScanner:
         self.discovered_parameters = None  # Initialized before parameter_discovery()
         self._last_request_time = 0.0  # For token-bucket rate limiting
         self._rate_lock = threading.Lock()  # Thread safety for rate limiting
+        self.slog = ScanLogger("web_scanner", engagement_id=self.engagement_id)
 
     @staticmethod
     def _redact_for_llm(text: str) -> str:

@@ -13,21 +13,36 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from parsers.parsers.base import BaseParser, ParserError, _safe_get  # noqa: F401
+from parsers.parsers.base import BaseParser, ParserError  # noqa: F401
 
 # Auto-discover all parser modules in this package
 _parser_registry: dict[str, type[BaseParser]] = {}
 
 _this_dir = Path(__file__).parent
-_skip_modules = {"__init__", "base"}
+
+def _is_parser_module(module) -> bool:
+    """Check if module contains a BaseParser subclass (fix 6.1, 11.10)."""
+    for attr_name in dir(module):
+        attr = getattr(module, attr_name)
+        if (
+            isinstance(attr, type)
+            and issubclass(attr, BaseParser)
+            and attr is not BaseParser
+        ):
+            return True
+    return False
 
 for module_info in pkgutil.iter_modules([str(_this_dir)]):
     module_name = module_info.name
-    if module_name in _skip_modules:
+    if module_name.startswith("__"):
         continue
 
     try:
         module = importlib.import_module(f"parsers.parsers.{module_name}")
+        # Only register modules that actually contain a parser class (fix 11.10)
+        if not _is_parser_module(module):
+            logger.debug(f"Skipping module '{module_name}' — no BaseParser subclass found")
+            continue
         # Find the parser class in the module
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
@@ -42,4 +57,4 @@ for module_info in pkgutil.iter_modules([str(_this_dir)]):
     except Exception as e:
         logger.warning(f"Failed to load parser module '{module_name}': {e}")
 
-__all__ = ["BaseParser", "ParserError", "_safe_get"] + list(_parser_registry.keys())
+__all__ = ["BaseParser", "ParserError"] + list(_parser_registry.keys())

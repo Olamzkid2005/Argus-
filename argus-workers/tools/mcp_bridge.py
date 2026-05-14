@@ -5,11 +5,47 @@ Allows existing tools to be called via MCP protocol while
 maintaining backward compatibility with the current ToolRunner API.
 """
 import logging
+import os
+import shutil
 
 from mcp_server import ToolDefinition, ToolSchema, get_mcp_server
 from tools.tool_runner import ToolRunner
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
+
+def _is_binary_available(binary: str) -> bool:
+    """Check if a tool binary is available on the system PATH or in expected locations.
+
+    Args:
+        binary: Name of the binary to check (e.g., 'nuclei', 'httpx').
+
+    Returns:
+        True if the binary is found, False otherwise.
+    """
+    # Augmented PATH matching ToolRunner.resolve_tool_path
+    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "venv", "bin")
+    go_bin = os.path.expanduser("~/go/bin")
+    extra_dirs = [
+        venv_bin,
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        go_bin,
+    ]
+    current_path = os.environ.get("PATH", "")
+    for d in extra_dirs:
+        if d not in current_path and os.path.isdir(d):
+            current_path = f"{d}:{current_path}"
+
+    resolved = shutil.which(binary, path=current_path)
+    if resolved:
+        return True
+    for d in extra_dirs:
+        candidate = os.path.join(d, binary)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return True
+    return False
 
 
 class MCPToolBridge:
@@ -31,6 +67,7 @@ class MCPToolBridge:
 
     def _register_tools(self):
         """Register ToolRunner tools with MCP server."""
+        slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id)
         tools = [
             # ── Reconnaissance tools ──
             ToolDefinition("httpx", "httpx",
@@ -211,14 +248,29 @@ class MCPToolBridge:
                 parameters=[ToolSchema("target", "string", "Audit target path")],
                 timeout=300),
         ]
+        registered_count = 0
+        skipped_tools = []
         for tool in tools:
+            if not _is_binary_available(tool.binary or tool.name):
+                skipped_tools.append(tool.name)
+                slog.info(f"Skipping tool '{tool.name}' — binary not found on PATH")
+                continue
             self.mcp.register_tool(tool)
+            registered_count += 1
+
+        if skipped_tools:
+            logger.warning(f"Skipped {len(skipped_tools)} unavailable tool(s): {', '.join(skipped_tools)}")
+        slog.info(f"Registered {registered_count} tools with MCP ({len(skipped_tools)} skipped)")
 
     def call_via_mcp(self, tool: str, arguments: dict = None) -> dict:
         """
         Call a tool via MCP, falling back to direct ToolRunner.run() if needed.
         """
-        return self.mcp.call_tool(tool, arguments or {})
+        slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id)
+        slog.tool_start(f"mcp_call:{tool}")
+        result = self.mcp.call_tool(tool, arguments or {})
+        slog.tool_complete(f"mcp_call:{tool}")
+        return result
 
     def call_via_runner(self, tool: str, args: list[str], timeout: int = None) -> dict:
         """Call a tool via the existing ToolRunner."""

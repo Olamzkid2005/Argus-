@@ -120,12 +120,15 @@ class StructuredLogger:
             message: Log message
             metadata: Additional metadata as dictionary
         """
+        from utils.logging_utils import ScanLogger
+
         trace_id = TraceContext.get_trace_id()
         context = TraceContext.get_context()
+        slog = ScanLogger("tracing")
 
         if not trace_id:
             # No trace context, log to console only
-            print(f"[NO_TRACE] {event_type}: {message}")
+            slog.info(f"[NO_TRACE] {event_type}: {message}")
             return
 
         log_entry = {
@@ -141,7 +144,7 @@ class StructuredLogger:
         self._store_log(log_entry)
 
         # Also print for debugging
-        print(f"[{trace_id[:8]}] {event_type}: {message}")
+        slog.info(f"[{trace_id[:8]}] {event_type}: {message}")
 
     def _store_log(self, log_entry: dict) -> None:
         """Store log entry in execution_logs table"""
@@ -295,6 +298,9 @@ class ExecutionSpan:
         Yields:
             Span dictionary
         """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("tracing")
+
         trace_id = TraceContext.get_trace_id()
         start_time = time.time()
         span_data = {
@@ -303,6 +309,8 @@ class ExecutionSpan:
             "metadata": metadata or {},
             "start_time": start_time,
         }
+
+        slog.info(f"SPAN START: {span_name}")
 
         try:
             yield span_data
@@ -315,9 +323,7 @@ class ExecutionSpan:
             if trace_id:
                 self._store_span(trace_id, span_name, duration_ms)
 
-            # Print for debugging
-            print(f"[{trace_id[:8] if trace_id else 'NO_TRACE'}] "
-                  f"SPAN {span_name}: {duration_ms}ms")
+            slog.info(f"SPAN END: {span_name} ({duration_ms}ms)")
 
     def _store_span(self, trace_id: str, span_name: str, duration_ms: int) -> None:
         """Store span in execution_spans table"""

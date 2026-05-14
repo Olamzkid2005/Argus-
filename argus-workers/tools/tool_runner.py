@@ -11,7 +11,7 @@ import site
 import subprocess
 import sys
 import tempfile
-import time as _time
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

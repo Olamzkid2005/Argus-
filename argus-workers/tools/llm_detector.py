@@ -17,6 +17,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 
 @dataclass
 class LLMAnalysisResult:
@@ -131,8 +133,12 @@ If NOT vulnerable:
         Returns:
             LLMAnalysisResult if analysis succeeds, None on failure or if not vulnerable
         """
+        slog = ScanLogger("llm_detector")
+        slog.llm_start("response_analysis", target=test_url[:60], vuln_class=vuln_class)
+
         try:
             if not self.llm.is_available():
+                slog.info("LLM not available, skipping response analysis")
                 logger.debug("LLM not available, skipping response analysis")
                 return None
 
@@ -183,11 +189,14 @@ If NOT vulnerable:
             if result:
                 result.model = self.model
                 result.timestamp = datetime.now(UTC).isoformat()
+                slog.llm_complete("response_analysis", vulnerable=result.vulnerable, confidence=result.confidence)
                 return result
 
+            slog.llm_result("response_analysis", vulnerable=False, reason="parse_failed")
             return None
 
         except Exception as e:
+            slog.warn(f"LLM response analysis failed: {e}")
             logger.warning(f"LLM response analysis failed: {e}")
             return None
 

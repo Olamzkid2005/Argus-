@@ -4,7 +4,7 @@ Wires together: Tool Runner → Parser → Normalizer → PostgreSQL
 """
 
 import logging
-import time
+import time as _time
 import uuid
 
 from psycopg2.extras import Json
@@ -16,6 +16,7 @@ from parsers.parser import Parser, ParserError
 from tools.models import ToolResult
 from tools.scope_validator import ScopeValidator, ScopeViolationError
 from tools.tool_runner import SecurityException, ToolRunner
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,16 @@ class ToolExecutor:
         Returns:
             Dictionary with execution results
         """
-        start_time = time.time()
+        start_time = _time.time()
+        slog = ScanLogger("tool_executor", engagement_id=engagement_id)
+        slog.tool_start(tool_name, f"execute_tool target={target_url}")
 
         # Validate scope
         scope_validator = ScopeValidator(engagement_id, authorized_scope)
         try:
             scope_validator.validate_target(target_url)
         except ScopeViolationError as e:
+            slog.warn(f"Scope violation: {e}")
             return {
                 "success": False,
                 "error": "scope_violation",
@@ -77,15 +81,17 @@ class ToolExecutor:
             }
 
         # Execute tool with retries
+        slog.info(f"Executing {tool_name} with {max_retries} max retries")
         tool_result = self._execute_with_retries(tool_name, args, timeout, max_retries)
 
         if not tool_result.success:
+            slog.tool_complete(tool_name, success=False, findings=0)
             return {
                 "success": False,
                 "error": "tool_execution_failed",
                 "message": tool_result.stderr or "Unknown error",
                 "tool": tool_name,
-                "duration_ms": int((time.time() - start_time) * 1000),
+                "duration_ms": int((_time.time() - start_time) * 1000),
             }
 
         # Parse output with retries
@@ -117,7 +123,8 @@ class ToolExecutor:
         # Store findings in PostgreSQL
         stored_count = self._store_findings(engagement_id, normalized_findings)
 
-        duration_ms = int((time.time() - start_time) * 1000)
+        duration_ms = int((_time.time() - start_time) * 1000)
+        slog.tool_complete(tool_name, success=True, findings=stored_count)
 
         return {
             "success": True,

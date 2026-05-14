@@ -23,6 +23,7 @@ from streaming import (
     emit_swarm_agent_complete,
     emit_swarm_merge_complete,
 )
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -456,11 +457,14 @@ class SwarmOrchestrator:
             Deduplicated list of finding dicts
         """
         active = [a for a in self.agents if a.should_activate()]
+        slog = ScanLogger("swarm", engagement_id=active[0].engagement_id if active else "")
 
         if not active:
             logger.info("Swarm: no specialists activated")
+            slog.info("No specialists activated")
             return []
 
+        slog.swarm_activate([a.DOMAIN for a in active])
         logger.info(
             "Swarm: activating %d specialist(s): %s",
             len(active),
@@ -523,6 +527,7 @@ class SwarmOrchestrator:
             len(all_findings),
             len(deduped),
         )
+        slog.swarm_complete(len(all_findings), len(deduped))
         emit_swarm_merge_complete(
             active[0].engagement_id,
             total_findings=len(deduped),

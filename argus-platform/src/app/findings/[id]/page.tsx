@@ -767,8 +767,8 @@ export default function FindingDetailPage() {
                 {finding.cvss_score && finding.source_tool === "nvd" ? "CVSS (NVD)" : "CVSS Score"}
               </div>
               {finding.cvss_score != null ? (
-                <span className={`inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold border ${cvssColor(finding.cvss_score)}`}>
-                  {finding.cvss_score.toFixed(1)}
+                <span className={`inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold border ${cvssColor(Number(finding.cvss_score))}`}>
+                  {Number(finding.cvss_score).toFixed(1)}
                 </span>
               ) : (
                 <span className="text-xs text-on-surface-variant italic">Not calculated</span>

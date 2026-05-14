@@ -90,13 +90,17 @@ class EngagementStateMachine:
             else:
                 get_db().release_connection(conn)
 
-    def transition(self, new_state: str, reason: str | None = None):
+    def transition(self, new_state: str, reason: str | None = None, trace_id: str | None = None):
         """
-        Enforce valid state transitions
+        Enforce valid state transitions with atomic locking and causality tracking.
+
+        Uses SELECT ... FOR UPDATE within a transaction to prevent concurrent
+        workers from racing on the same engagement's state.
 
         Args:
             new_state: Target state
-            reason: Reason for transition
+            reason: Reason for transition (human-readable)
+            trace_id: Distributed trace ID for causality chain
 
         Raises:
             InvalidStateTransition: If transition is invalid
@@ -114,19 +118,18 @@ class EngagementStateMachine:
 
         old_state = self.current_state
 
-        # Persist state transition atomically (loop-back budget update handled internally)
+        # Persist state transition atomically with FOR UPDATE locking
         self._persist_state_and_budget(
             from_state=old_state,
             to_state=new_state,
-            reason=reason or f"Transition to {new_state}"
+            reason=reason or f"Transition to {new_state}",
+            trace_id=trace_id,
         )
 
         # Update current state
         self.current_state = new_state
 
         # Notify frontend via websocket publisher if configured.
-        # This ensures ALL state changes (even those from task context) are
-        # published, preventing the orchestrator ↔ state machine divergence.
         if self._ws_publisher:
             try:
                 self._ws_publisher.publish_state_transition(
@@ -138,43 +141,79 @@ class EngagementStateMachine:
             except Exception:
                 logger.debug("Failed to publish state transition for %s", self.engagement_id)
 
-    def _persist_state_and_budget(self, from_state: str, to_state: str, reason: str):
+    def _persist_state_and_budget(self, from_state: str, to_state: str, reason: str, trace_id: str | None = None):
         """
         Atomically record state transition and update loop budget if needed.
-        Uses a single transaction for consistency.
+        Uses SELECT ... FOR UPDATE to prevent concurrent state races.
 
         Args:
             from_state: Source state
             to_state: Target state
             reason: Reason for transition
+            trace_id: Distributed trace ID for causality chain
         """
         conn = self._get_connection()
 
         try:
             cursor = conn.cursor()
 
-            # Record state transition
+            # Lock the engagement row to prevent concurrent state transitions
+            cursor.execute(
+                "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
+                (self.engagement_id,)
+            )
+            locked_row = cursor.fetchone()
+            if not locked_row:
+                raise ValueError(f"Engagement {self.engagement_id} not found")
+
+            current_db_state = locked_row[0]
+            if current_db_state != from_state:
+                # State was already changed by another worker — this is a race
+                logger.warning(
+                    "State race detected: expected %s, actual %s for engagement %s. "
+                    "Allowing transition to %s (FOR UPDATE guarantees ordering).",
+                    from_state, current_db_state, self.engagement_id, to_state
+                )
+                # Update our local state to match DB before continuing
+                self.current_state = current_db_state
+                if to_state not in self.TRANSITIONS.get(current_db_state, []):
+                    raise InvalidStateTransition(
+                        f"Race: engagement {self.engagement_id} is {current_db_state}, "
+                        f"cannot transition to {to_state}. "
+                        f"Another worker changed state from {from_state}."
+                    )
+
+            # Record state transition with trace_id for causality chain
             transition_id = str(uuid.uuid4())
             cursor.execute(
                 """
                 INSERT INTO engagement_states (
-                    id, engagement_id, from_state, to_state, reason, created_at
+                    id, engagement_id, from_state, to_state, reason, trace_id, created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s, %s, NOW()
                 )
                 """,
-                (transition_id, self.engagement_id, from_state, to_state, reason)
+                (transition_id, self.engagement_id, current_db_state, to_state,
+                 reason, trace_id)
             )
 
-            # Update engagement status
+            # Update engagement status with WHERE clause for safety
             cursor.execute(
                 """
                 UPDATE engagements
                 SET status = %s, updated_at = NOW()
-                WHERE id = %s
+                WHERE id = %s AND status = %s
                 """,
-                (to_state, self.engagement_id)
+                (to_state, self.engagement_id, current_db_state)
             )
+
+            if cursor.rowcount == 0:
+                # Someone else changed state after our FOR UPDATE lock —
+                # this shouldn't happen, but guard against it
+                conn.rollback()
+                raise InvalidStateTransition(
+                    f"Concurrent state change detected for engagement {self.engagement_id}"
+                )
 
             # If looping back from analyzing to recon, increment budget
             if from_state == "analyzing" and to_state == "recon":
@@ -192,7 +231,7 @@ class EngagementStateMachine:
 
         except Exception as e:
             conn.rollback()
-            logger.error(f"Failed to persist state transition: {e}")
+            logger.error(f"Failed to persist state transition for engagement {self.engagement_id}: {e}")
             raise
         finally:
             if not self._external_conn:

@@ -33,6 +33,10 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         trace_id: Optional trace ID
         budget: Optional budget dict (forwards prev_engagement_id for diff engine)
     """
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger("report", engagement_id=engagement_id)
+    slog.phase_header("REPORT PHASE")
+
     job_extra = {}
     if budget:
         job_extra["budget"] = budget
@@ -43,6 +47,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     ) as ctx:
         result = ctx.orchestrator.run_reporting(ctx.job)
         ctx.state.transition("complete", "Report generated")
+        slog.phase_complete("report", status="completed")
         return result
 
 

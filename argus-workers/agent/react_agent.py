@@ -26,6 +26,7 @@ from config.constants import (
     LLM_AGENT_ZERO_FINDING_STOP,
 )
 from llm_service import LLMService
+from utils.logging_utils import ScanLogger
 
 from .agent_action import AgentAction
 from .agent_prompts import (
@@ -440,6 +441,8 @@ class ReActAgent:
         Returns:
             List of tool execution results
         """
+        slog = ScanLogger("agent", engagement_id=self.engagement_id)
+        slog.phase_header(f"AGENT RUN: {task[:80]}")
         self.history = []
         results = []
         tried_tools = set()
@@ -485,6 +488,7 @@ class ReActAgent:
                         results.append(result)
                 break
 
+            slog.agent_iteration(iteration, action.tool, action.reasoning[:80] if action.reasoning else "", cost=action.cost_usd)
             logger.info(
                 "Agent iteration %d: %s — %s (cost: $%.6f)",
                 iteration,
@@ -558,4 +562,5 @@ class ReActAgent:
                 except Exception as e:
                     logger.warning(f"Failed to log decision: {e}")
 
+        slog.agent_complete(tools_ran=len(results), total_cost=total_cost_usd)
         return results

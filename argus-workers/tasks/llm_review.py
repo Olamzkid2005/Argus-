@@ -79,6 +79,10 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         budget: Budget configuration dict (max_cycles, max_depth)
         trace_id: Optional trace ID for distributed tracing
     """
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger("llm_review", engagement_id=engagement_id)
+    slog.phase_header("LLM REVIEW")
+
     db_conn_string = os.getenv("DATABASE_URL")
 
     # Check if LLM review is enabled
@@ -103,19 +107,19 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         LLM_REVIEW_ENABLED = True
 
     if not LLM_REVIEW_ENABLED:
-        logger.info("LLM review disabled via config")
+        slog.info("LLM review disabled via config")
         return {"status": "skipped", "reason": "LLM_REVIEW_ENABLED=False"}
 
     # Get LLM detector
     detector = _get_llm_detector()
     if not detector:
-        logger.info("LLM detector not available, skipping LLM review")
+        slog.info("LLM detector not available, skipping LLM review")
         return {"status": "skipped", "reason": "LLM detector unavailable"}
 
     # Get finding repository
     repo = _get_finding_repo(db_conn_string)
     if not repo:
-        logger.warning("Finding repository not available, skipping LLM review")
+        slog.warning("Finding repository not available, skipping LLM review")
         return {"status": "skipped", "reason": "Finding repository unavailable"}
 
     # Initialize budget manager
@@ -123,7 +127,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         from loop_budget_manager import LoopBudgetManager
         LoopBudgetManager(engagement_id, budget or {})
     except Exception as e:
-        logger.warning(f"Budget manager not available: {e}")
+        slog.warning(f"Budget manager not available: {e}")
 
     # Load candidate findings
     try:
@@ -134,17 +138,14 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             limit=LLM_REVIEW_MAX_PER_ENGAGEMENT,
         )
     except Exception as e:
-        logger.error(f"Failed to load candidate findings: {e}")
+        slog.error(f"Failed to load candidate findings: {e}")
         return {"status": "error", "error": str(e)}
 
     if not candidate_findings:
-        logger.info(f"No candidate findings for LLM review (engagement {engagement_id})")
+        slog.info(f"No candidate findings for LLM review")
         return {"status": "completed", "analyzed": 0, "total": 0}
 
-    logger.info(
-        f"LLM review: {len(candidate_findings)} candidate findings "
-        f"for engagement {engagement_id}"
-    )
+    slog.info(f"LLM review: {len(candidate_findings)} candidate findings")
 
     # Analyze each finding
     analyzed_count = 0
@@ -152,6 +153,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     budget_exhausted = False
 
     for finding in candidate_findings:
+        slog.tool_start("LLM Review", [f"finding={finding.get('id', '?')[:8]}..."])
 
         try:
             # Skip if finding has no payload/response evidence
@@ -161,12 +163,12 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             # Replay HTTP request to get fresh response
             response = _replay_request(finding.get("endpoint", ""), evidence)
             if not response:
-                logger.debug(f"Skipping finding {finding.get('id')}: no response")
+                slog.tool_result("LLM Review", f"Skipping finding {finding.get('id', '?')[:8]}: no response")
                 continue
 
             # Skip if detector says skip
             if detector.should_skip(finding, response):
-                logger.debug(f"Skipping finding {finding.get('id')}: should_skip=True")
+                slog.tool_result("LLM Review", f"Skipping finding {finding.get('id', '?')[:8]}: should_skip=True")
                 continue
 
             # LLM analysis
@@ -194,7 +196,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 ))
 
             if result is None:
-                logger.debug(f"LLM analysis returned None for finding {finding.get('id')}")
+                slog.tool_result("LLM Review", f"Returned None for finding {finding.get('id', '?')[:8]}")
                 # Still mark as reviewed to avoid re-analyzing
                 with contextlib.suppress(Exception):
                     repo.add_llm_evidence(finding["id"], {"error": "LLM returned no result"})
@@ -228,22 +230,15 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 try:
                     repo.update_confidence(finding["id"], new_confidence)
                     confirmed_count += 1
-                    logger.info(
-                        f"LLM confirmed {finding.get('type')} at {finding.get('endpoint')}: "
-                        f"confidence {current_confidence:.2f} -> {new_confidence:.2f}"
-                    )
+                    slog.tool_result("LLM Review", f"Confirmed {finding.get('type')} at {finding.get('endpoint')}: confidence {current_confidence:.2f} -> {new_confidence:.2f}")
                 except Exception as e:
                     logger.warning(f"Failed to update confidence: {e}")
 
         except Exception as e:
-            logger.warning(f"LLM review failed for finding {finding.get('id')}: {e}")
+            slog.warning(f"LLM review failed for finding {finding.get('id', '?')[:8]}: {e}")
             continue
 
-    logger.info(
-        f"LLM review complete: {analyzed_count} analyzed, "
-        f"{confirmed_count} confirmed, "
-        f"{'budget exhausted' if budget_exhausted else 'all processed'}"
-    )
+    slog.info(f"LLM review complete: {analyzed_count} analyzed, {confirmed_count} confirmed, {'budget exhausted' if budget_exhausted else 'all processed'}")
 
     return {
         "status": "completed",

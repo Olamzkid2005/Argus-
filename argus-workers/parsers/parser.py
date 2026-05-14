@@ -31,8 +31,19 @@ class Parser:
     @staticmethod
     @lru_cache(maxsize=1)
     def _build_parsers() -> dict:
+        """Build parser registry (cached, invalidated upon request).
+        
+        Call _invalidate_parser_cache() to force re-discovery after hot-reload.
+        """
         from parsers.parsers import _parser_registry
         return {tool_name: parser_cls() for tool_name, parser_cls in _parser_registry.items()}
+
+    @staticmethod
+    def _invalidate_parser_cache():
+        """Invalidate the cached parser registry (fix 6.4).
+        Call this after installing new parsers to force re-discovery.
+        """
+        Parser._build_parsers.cache_clear()
 
     def __init__(self, connection_string: str = None):
         """

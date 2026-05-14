@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
     time_limit=3600,        # 60 minutes hard limit
 )
 def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None,
-              agent_mode: bool = True, prev_engagement_id: str | None = None):
+              agent_mode: bool = True, scan_mode: str | None = None, aggressiveness: str | None = None,
+              bug_bounty_mode: bool | None = None, prev_engagement_id: str | None = None):
     """
     Execute reconnaissance phase for an engagement
 
@@ -28,14 +29,30 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         budget: Budget config dict
         trace_id: Optional trace ID
         agent_mode: Enable LLM agent mode
+        scan_mode: Engagement scan_mode (from job / platform)
+        aggressiveness: Recon/scan aggressiveness string
+        bug_bounty_mode: Whether engagement is in bug-bounty-style mode
         prev_engagement_id: Previous engagement ID for diff engine (scheduled scans)
     """
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger("recon", engagement_id=engagement_id)
+
     # Forward prev_engagement_id through the chain via budget
     if prev_engagement_id:
         budget["prev_engagement_id"] = prev_engagement_id
 
+    slog.phase_header("RECON PHASE", target=target, agent_mode=agent_mode)
+
+    job_extra = {"target": target, "budget": budget, "agent_mode": agent_mode}
+    if scan_mode is not None:
+        job_extra["scan_mode"] = scan_mode
+    if aggressiveness is not None:
+        job_extra["aggressiveness"] = aggressiveness
+    if bug_bounty_mode is not None:
+        job_extra["bug_bounty_mode"] = bug_bounty_mode
+
     with task_context(self, engagement_id, "recon",
-                      job_extra={"target": target, "budget": budget, "agent_mode": agent_mode},
+                      job_extra=job_extra,
                       trace_id=trace_id, current_state="created") as ctx:
         ctx.state.transition("recon", "Starting reconnaissance")
         result = ctx.orchestrator.run_recon(ctx.job)
@@ -47,15 +64,17 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 countdown=5,
                 task_id=f"asset_discovery-{engagement_id}",
             )
+            slog.dispatch("asset_discovery", task_id=asset_task.id)
         except Exception as e:
             logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
         try:
             scan_task = app.send_task(
                 'tasks.scan.run_scan',
-                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode],
+                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness],
                 task_id=f"scan-{engagement_id}",
             )
+            slog.dispatch("scan", task_id=scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
 
@@ -67,8 +86,12 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
     """
     Expand reconnaissance with additional targets
     """
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger("recon_expand", engagement_id=engagement_id)
+
     valid_targets = [t for t in targets if t and isinstance(t, str)]
     if not valid_targets:
+        slog.info(f"expand_recon called with empty/invalid targets, transitioning to reporting")
         logger.warning(f"expand_recon called with empty/invalid targets for engagement {engagement_id}, transitioning to reporting")
         from tasks.base import task_context
         with task_context(self, engagement_id, "recon_expand",
@@ -88,6 +111,8 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                 logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
         return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets", "next_state": "reporting"}
 
+    slog.phase_header("EXPAND RECON", targets=f"{len(valid_targets)} targets")
+
     with task_context(self, engagement_id, "recon_expand",
                       job_extra={"target": valid_targets[0], "targets": valid_targets, "budget": budget},
                       trace_id=trace_id, current_state="recon") as ctx:
@@ -102,13 +127,30 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                     from models.recon_context import ReconContext
                     ctx_data = ReconContext.from_dict(ctx_data)
                 save_recon_context(engagement_id, ctx_data)
+                slog.info("Saved expanded recon context")
                 logger.info("Saved expanded recon context for %s", engagement_id)
             except Exception as e:
                 logger.warning("Failed to save expanded recon context: %s", e)
 
         # Dispatch downstream task BEFORE transitioning state
+        # Load scan flags from DB (expand_recon is not dispatched with full job payload)
+        from tasks.utils import fetch_engagement_scan_options
+
+        opts = fetch_engagement_scan_options(engagement_id)
         try:
-            scan_task = app.send_task('tasks.scan.run_scan', args=[engagement_id, valid_targets, budget, ctx.trace_id])
+            scan_task = app.send_task(
+                'tasks.scan.run_scan',
+                args=[
+                    engagement_id,
+                    valid_targets,
+                    budget,
+                    ctx.trace_id,
+                    opts["agent_mode"],
+                    opts["scan_mode"],
+                    opts["aggressiveness"],
+                ],
+            )
+            slog.dispatch("scan", task_id=scan_task.id)
             ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
             logger.info("Dispatched scan after expand for engagement=%s (task=%s)", engagement_id, scan_task.id)
         except Exception as e:

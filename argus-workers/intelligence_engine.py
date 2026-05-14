@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import time as _time
 from collections import defaultdict
 from urllib.parse import urlparse
 
@@ -78,7 +79,13 @@ class IntelligenceEngine:
                 - actions: List of recommended actions
                 - reasoning: Explanation of decisions
         """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("intelligence_engine")
+        slog.phase_header("INTELLIGENCE EVALUATION")
+        start = _time.time()
+
         findings = snapshot.get("findings", [])
+        slog.info(f"Evaluating {len(findings)} findings")
 
         # Sort findings by signal quality so confirmed findings get analysis
         # budget first — candidates get processed last when time is short.
@@ -104,6 +111,9 @@ class IntelligenceEngine:
                 findings_analyzed=len(findings),
                 reasoning=reasoning
             )
+
+            duration_ms = int((_time.time() - start) * 1000)
+            slog.info(f"Evaluation complete: {len(scored_findings)} scored findings, {len(actions)} actions ({duration_ms}ms)")
 
             return {
                 "scored_findings": scored_findings,
@@ -132,6 +142,10 @@ class IntelligenceEngine:
         Returns:
             Findings with updated confidence scores
         """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("intelligence_engine")
+        slog.info(f"Assigning confidence scores to {len(findings)} findings")
+
         # Load learned FP rates for this org (if available)
         tool_fp_rates: dict[str, float] = {}
         if org_id:
@@ -141,6 +155,7 @@ class IntelligenceEngine:
                 )
                 repo = ToolAccuracyRepository(self.connection_string)
                 tool_fp_rates = repo.load_fp_rates(org_id)
+                slog.info(f"Loaded FP rates for {len(tool_fp_rates)} tools")
             except Exception as e:
                 logger.warning(
                     "Could not load tool_accuracy for org %s: %s", org_id, e,
@@ -149,6 +164,7 @@ class IntelligenceEngine:
 
         # Group findings by normalized vulnerability family for tool agreement
         finding_groups = self._group_findings_for_agreement(findings)
+        slog.info(f"Grouped into {len(finding_groups)} vulnerability families")
 
         scored_findings = []
 
@@ -299,6 +315,9 @@ class IntelligenceEngine:
         Returns:
             List of recommended actions
         """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("intelligence_engine")
+
         actions = []
 
         # Pattern: Low coverage detected
@@ -309,6 +328,7 @@ class IntelligenceEngine:
                 "reason": "low_coverage_detected",
                 "description": "Insufficient endpoint coverage detected. Expanding reconnaissance to discover more attack surface.",
             })
+            slog.info("Low coverage detected — scheduling recon_expand")
 
         # Pattern: High-value targets found
         if self.detect_high_value_targets(scored_findings):
@@ -318,6 +338,7 @@ class IntelligenceEngine:
                 "reason": "high_value_targets_identified",
                 "description": "High-value targets with potential vulnerabilities identified. Performing deep scan.",
             })
+            slog.info("High-value targets found — scheduling deep_scan")
 
         # Pattern: Weak authentication signals
         if self.detect_weak_auth_signals(scored_findings):
@@ -334,7 +355,9 @@ class IntelligenceEngine:
                 "reason": "weak_auth_signals",
                 "description": "Weak authentication signals detected. Focusing on authentication mechanisms.",
             })
+            slog.info("Weak auth signals detected — scheduling auth_focused_scan")
 
+        slog.info(f"Generated {len(actions)} action(s)")
         return actions
 
     def detect_low_coverage(self, findings: list[dict]) -> bool:

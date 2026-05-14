@@ -17,6 +17,7 @@ from typing import Any
 
 from feature_flags import is_enabled
 from tools.tool_runner import ToolRunner
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +113,21 @@ class PortScanner:
         All subprocess calls go through ToolRunner which provides safety checks,
         environment locking, circuit breaker, and output size enforcement.
         """
+        slog = ScanLogger("port_scanner", engagement_id=target)
+        slog.phase_header("PORT SCAN", f"target={target}, ports={ports}")
+
         result = PortScanResult(target=target)
         start = time.time()
 
         if not is_enabled("PORT_SCANNER", default=False):
+            slog.info("Port scanner disabled (ARGUS_FF_PORT_SCANNER not set)")
             logger.info("Port scanner disabled (ARGUS_FF_PORT_SCANNER not set)")
             return result
 
         live_ports: list[dict] = []
 
         # --- Phase 1: naabu SYN scan via ToolRunner ---
+        slog.tool_start("naabu", f"target={target}, ports={ports}")
         try:
             naabu_result = self._tool_runner.run(
                 "naabu", ["-host", target, "-ports", ports, "-json"],
@@ -129,10 +135,13 @@ class PortScanner:
             )
             if naabu_result.success:
                 live_ports = self._parse_naabu_ports(naabu_result.stdout)
+                slog.tool_complete("naabu", success=True, findings=len(live_ports))
                 logger.info("naabu found %d live ports", len(live_ports))
             else:
+                slog.tool_complete("naabu", success=False)
                 logger.warning("naabu failed: %s", naabu_result.error or naabu_result.stderr[:200])
         except Exception as e:
+            slog.tool_complete("naabu", success=False)
             logger.warning("naabu scan failed: %s", e)
             return result
 
@@ -143,10 +152,11 @@ class PortScanner:
         # --- Phase 2: nmap service detection via ToolRunner ---
         port_list = ",".join(str(p.get("port")) for p in live_ports if p.get("port"))
         if not port_list:
-            logger.warning("No live ports found for %s", target)
+            slog.warn(f"No live ports found for {target}")
             result.scan_duration = time.time() - start
             return result
 
+        slog.tool_start("nmap", f"target={target}, ports={port_list}")
         try:
             nmap_result = self._tool_runner.run(
                 "nmap", ["-sV", "-sC", "-p", port_list, target, "-oX", "-"],
@@ -154,9 +164,12 @@ class PortScanner:
             )
             if nmap_result.success:
                 result = self._parse_nmap_services(nmap_result.stdout, result)
+                slog.tool_complete("nmap", success=True, findings=len(result.open_ports))
             else:
+                slog.tool_complete("nmap", success=False)
                 logger.warning("nmap service detection failed: %s", nmap_result.error or nmap_result.stderr[:200])
         except Exception as e:
+            slog.tool_complete("nmap", success=False)
             logger.warning("nmap service detection failed: %s", e)
 
         # Build result from naabu data even if nmap failed

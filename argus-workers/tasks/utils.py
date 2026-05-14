@@ -121,3 +121,40 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
         return None
     data = json.loads(raw)
     return ReconContext.from_dict(data)
+
+
+def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
+    """
+    Read scan-related flags from engagements for downstream tasks.
+
+    Used when Celery was invoked without full job payload (e.g. expand_recon → scan).
+    """
+    defaults: dict[str, str | bool] = {
+        "scan_mode": "agent",
+        "aggressiveness": "default",
+        "agent_mode": True,
+    }
+    try:
+        from database.connection import db_cursor
+        from utils.validation import validate_uuid
+
+        eid = validate_uuid(engagement_id, "engagement_id")
+        with db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT scan_mode, scan_aggressiveness, agent_mode
+                FROM engagements WHERE id = %s
+                """,
+                (eid,),
+            )
+            row = cursor.fetchone()
+            if row:
+                sm, sa, am = row[0], row[1], row[2]
+                return {
+                    "scan_mode": (sm or defaults["scan_mode"]) if isinstance(sm, str) else defaults["scan_mode"],
+                    "aggressiveness": (sa or defaults["aggressiveness"]) if isinstance(sa, str) else defaults["aggressiveness"],
+                    "agent_mode": bool(am) if am is not None else defaults["agent_mode"],
+                }
+    except Exception:
+        logger.debug("fetch_engagement_scan_options failed for %s", engagement_id, exc_info=True)
+    return dict(defaults)
