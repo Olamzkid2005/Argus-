@@ -309,14 +309,31 @@ class DualAuthScanner:
                         continue
 
                     # Check if User B successfully accessed User A's resource
-                    if resp.status_code in (200, 201):
+                    if resp.status_code in (200, 201, 204):
                         response_text = resp.text.lower()
+                        # 204 on DELETE = successfully deleted — confirmed BOLA
+                        is_delete_success = resp.status_code == 204 and method == "DELETE"
                         is_access_denied = any(
                             indicator in response_text
                             for indicator in self.ACCESS_DENIED_INDICATORS
                         )
 
-                        if not is_access_denied and len(resp.text) > 50:
+                        if is_delete_success:
+                            findings.append({
+                                "type": "CONFIRMED_BOLA",
+                                "severity": "CRITICAL",
+                                "endpoint": url,
+                                "evidence": {
+                                    "resource_type": resource_type,
+                                    "resource_id": resource_id,
+                                    "method": method,
+                                    "response_status": resp.status_code,
+                                    "message": f"User B successfully DELETED User A's {resource_type} resource (204 No Content)",
+                                },
+                                "confidence": 0.95,
+                            })
+                            break
+                        elif not is_access_denied and len(resp.text) > 50:
                             # Confirmed BOLA — User B can see/use User A's resource
                             findings.append({
                                 "type": "CONFIRMED_BOLA",

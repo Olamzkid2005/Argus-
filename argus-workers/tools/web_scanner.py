@@ -1840,6 +1840,9 @@ class WebScanner:
         if len(all_ids) < 8:
             return
 
+        # Sort IDs — entropy is computed on gaps between consecutive sorted values
+        all_ids = sorted(set(all_ids))
+
         # Shannon entropy calculation
         counter = _Counter()
         for i in range(len(all_ids) - 1):
