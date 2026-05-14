@@ -283,12 +283,21 @@ class ScanLogger:
             msg += f"  ({detail_str})"
         self._logger.info(msg)
 
-    def phase_header(self, phase_label: str, **details):
+    def phase_header(self, phase_label: str, detail: str = "", **details):
         """Log a phase entry header (less prominent than phase_start).
 
         Used for sub-phases within a larger phase.
+
+        Args:
+            phase_label: Human-readable phase name (e.g. "Port Scan")
+            detail: Optional positional detail string (legacy format, e.g. "target=x, ports=y")
+            **details: Optional key=value pairs appended as context
         """
         detail_str = " ".join(f"{k}={v}" for k, v in details.items())
+        if detail and detail_str:
+            detail_str = detail + " | " + detail_str
+        elif detail:
+            detail_str = detail
         msg = f"{self._prefix()} {self._CYAN}>>> {phase_label}{self._RESET}"
         if detail_str:
             msg += f"  {self._DIM}({detail_str}){self._RESET}"
