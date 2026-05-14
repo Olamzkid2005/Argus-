@@ -1563,10 +1563,6 @@ class WebScanner:
                                       "message": "Path traversal characters accepted in filename"},
                             confidence=0.85,
                         )
-                    if "." in filename and filename.split(".")[-1] != filename.rsplit(".", 1)[-1]:
-                        continue  # Already reported above
-                    if "." in filename.rsplit(".", 1)[0] and filename != "test.php.jpg":
-                        continue
             break  # Only test first available endpoint
 
     def check_token_storage(self):
@@ -1667,8 +1663,8 @@ class WebScanner:
             resp = self._safe_request("POST", url,
                 json={"email": "test@example.com"},
                 headers={"Content-Type": "application/json"})
-            if not resp or resp.status_code not in (200, 201):
-                # Try form-encoded as fallback
+            # Only fall back to form-encoded if JSON was explicitly rejected (415)
+            if resp and resp.status_code == 415:
                 resp = self._safe_request("POST", url,
                     data={"email": "test@example.com"})
 

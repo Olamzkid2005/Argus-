@@ -372,6 +372,7 @@ def execute_scan_tools(
                     auth_config_b=dual_auth_config,
                     timeout=SSL_TIMEOUT,
                     rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                    engagement_id=ctx.engagement_id,
                 )
                 emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
                 dual_findings = dual_scanner.scan(target)
@@ -395,6 +396,7 @@ def execute_scan_tools(
                 timeout=SSL_TIMEOUT * 2,  # AI endpoints may be slower
                 rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
                 session=authenticated_session,
+                engagement_id=ctx.engagement_id,
             )
             emit_tool_start(ctx.engagement_id, "ai_vuln_scanner", [target])
             ai_findings = ai_scanner.scan(target)

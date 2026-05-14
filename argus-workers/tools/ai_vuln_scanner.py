@@ -21,6 +21,8 @@ from requests.exceptions import ConnectionError, RequestException, Timeout
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 
 # Payloads that attempt to override or extract system instructions
 PROMPT_INJECTION_PAYLOADS = [
@@ -133,6 +135,7 @@ class AIVulnScanner:
         rate_limit: float = 0.5,
         session: requests.Session | None = None,
         verify: bool = True,
+        engagement_id: str = "",
     ):
         """
         Args:
@@ -140,18 +143,17 @@ class AIVulnScanner:
             rate_limit: Seconds between requests (AI endpoints may rate-limit aggressively).
             session: Optional pre-authenticated requests.Session.
             verify: SSL certificate verification.
+            engagement_id: Engagement ID for log/trace correlation.
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
-        self.session = session or requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        })
+        self._provided_session = session  # Stored for authenticated use
         self.verify = verify
+        self.engagement_id = engagement_id
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
+        self._detected_format = None  # Cached successful AI payload format
+        self._thread_session = threading.local()  # Thread-local sessions
 
     def scan(
         self,
@@ -171,29 +173,31 @@ class AIVulnScanner:
         self.target_url = target_url.rstrip("/")
         findings = []
         endpoints = ai_endpoints or self.DEFAULT_AI_ENDPOINTS
+        slog = ScanLogger("ai_vuln_scanner", engagement_id=self.engagement_id)
 
-        logger.info(f"Starting AI vuln scan: {self.target_url}")
+        slog.phase_header("AI VULN SCAN", f"target={self.target_url} endpoints={len(endpoints)}")
 
         # Discover which AI endpoints actually exist
         active_endpoints = self._discover_ai_endpoints(endpoints)
         if not active_endpoints:
-            logger.info("No AI endpoints detected — skipping AI scan")
+            slog.info("No AI endpoints detected — skipping AI scan")
             return findings
 
-        logger.info(f"Found {len(active_endpoints)} active AI endpoints")
+        slog.info(f"Found {len(active_endpoints)} active AI endpoints")
 
         for endpoint in active_endpoints:
             url = urljoin(self.target_url, endpoint.lstrip("/"))
-
-            # Test 1: Prompt injection
+            slog.tool_start("prompt_injection", f"endpoint={endpoint}")
             injection_findings = self._test_prompt_injection(url)
+            slog.tool_complete("prompt_injection", success=True, findings=len(injection_findings))
             findings.extend(injection_findings)
 
-            # Test 2: Information disclosure
+            slog.tool_start("info_disclosure", f"endpoint={endpoint}")
             disclosure_findings = self._test_information_disclosure(url)
+            slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
             findings.extend(disclosure_findings)
 
-        logger.info(f"AI scan complete: {len(findings)} findings")
+        slog.tool_complete("ai_vuln_scan", success=True, findings=len(findings))
         return findings
 
     # --- Private helpers ---
@@ -205,13 +209,27 @@ class AIVulnScanner:
         session: requests.Session | None = None,
         **kwargs,
     ) -> requests.Response | None:
-        """Rate-limited HTTP request with error handling."""
+        """Rate-limited HTTP request with error handling. Thread-safe."""
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)
 
-            req_session = session or self.session
+            # Use provided session, authenticated session, or thread-local
+            if session is not None:
+                req_session = session
+            elif self._provided_session is not None:
+                req_session = self._provided_session
+            else:
+                req_session = getattr(self._thread_session, "session", None)
+                if req_session is None:
+                    req_session = requests.Session()
+                    req_session.headers.update({
+                        "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    })
+                    self._thread_session.session = req_session
 
             with self._rate_lock:
                 now = time.time()
@@ -243,7 +261,19 @@ class AIVulnScanner:
         return active
 
     def _query_ai(self, url: str, message: str) -> dict | str | None:
-        """Send a message to an AI endpoint and return the parsed response."""
+        """Send a message to an AI endpoint and return the parsed response.
+
+        Caches the successful payload format after the first 200 response
+        to avoid re-sending all 6 format variations on subsequent calls."""
+        # Use cached format from a previous successful call
+        if self._detected_format:
+            resp = self._safe_request("POST", url, json={**self._detected_format, list(self._detected_format.keys())[0]: message})
+            if resp and resp.status_code in (200, 201):
+                try:
+                    return resp.json()
+                except (json.JSONDecodeError, ValueError):
+                    return resp.text
+
         payloads_to_try = [
             {"message": message},
             {"prompt": message},
@@ -253,10 +283,13 @@ class AIVulnScanner:
             {"content": message},
         ]
         for payload in payloads_to_try:
-            resp = self._safe_request("POST", url, json=payload, session=self.session)
+            resp = self._safe_request("POST", url, json=payload)
             if not resp:
                 continue
             if resp.status_code in (200, 201):
+                # Cache the format (without the message value) for subsequent calls
+                fmt_key = list(payload.keys())[0]
+                self._detected_format = {fmt_key: "__PLACEHOLDER__"}
                 try:
                     return resp.json()
                 except (json.JSONDecodeError, ValueError):
