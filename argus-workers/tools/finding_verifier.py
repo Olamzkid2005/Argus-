@@ -41,7 +41,7 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
     slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
     result = {"verified": False, "confidence": "low", "reason": None}
 
-    slog.tool_start("verify_sqli", endpoint=endpoint[:60])
+    slog.tool_start("verify_sqli", [endpoint[:60]])
 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
@@ -93,7 +93,8 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
         logger.warning(f"SQLi verification failed for {endpoint}: {e}")
         result["reason"] = f"Verification error: {e}"
 
-    slog.tool_complete("verify_sqli", verified=result["verified"], confidence=result["confidence"])
+    slog.info(f"verification result: verified={result['verified']}, confidence={result['confidence']}")
+    slog.tool_complete("verify_sqli")
     return result
 
 
@@ -107,7 +108,7 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None, enga
     slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
     result = {"verified": False, "confidence": "low", "reason": None}
 
-    slog.tool_start("verify_xss", endpoint=endpoint[:60])
+    slog.tool_start("verify_xss", [endpoint[:60]])
 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
@@ -155,7 +156,8 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None, enga
         logger.warning(f"XSS verification failed for {endpoint}: {e}")
         result["reason"] = f"Verification error: {e}"
 
-    slog.tool_complete("verify_xss", verified=result["verified"], confidence=result["confidence"])
+    slog.info(f"verification result: verified={result['verified']}, confidence={result['confidence']}")
+    slog.tool_complete("verify_xss")
     return result
 
 
@@ -168,7 +170,7 @@ async def verify_open_redirect(endpoint: str, engagement_id: str = "") -> dict:
     slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
     result = {"verified": False, "confidence": "low", "reason": None}
 
-    slog.tool_start("verify_open_redirect", endpoint=endpoint[:60])
+    slog.tool_start("verify_open_redirect", [endpoint[:60]])
 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
@@ -204,7 +206,8 @@ async def verify_open_redirect(endpoint: str, engagement_id: str = "") -> dict:
         logger.warning(f"Open redirect verification error: {e}")
         result["reason"] = f"Verification error: {e}"
 
-    slog.tool_complete("verify_open_redirect", verified=result["verified"], confidence=result["confidence"])
+    slog.info(f"verification result: verified={result['verified']}, confidence={result['confidence']}")
+    slog.tool_complete("verify_open_redirect")
     return result
 
 
