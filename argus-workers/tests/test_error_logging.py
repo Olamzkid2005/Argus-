@@ -48,10 +48,8 @@ class TestErrorLogging:
         scanner._tool_runner = MagicMock()
         scanner._tool_runner.run.return_value = naabu_result
 
-        with patch("tools.port_scanner.logger") as mock_logger:
-            result = scanner.scan("example.com")
+        result = scanner.scan("example.com")
 
-        # Logger should NOT have warning (nmap exception is caught silently)
         assert len(result.open_ports) == 1
         assert result.open_ports[0].port == 80
 

@@ -93,20 +93,24 @@ class WebSocketScanner:
         findings: list[dict[str, Any]] = []
 
         slog.tool_start("origin_validation", target=ws_url)
-        findings.extend(await self._test_origin_validation(ws_url))
-        slog.tool_result("origin_validation", f"{len(findings)} finding(s)")
+        origin_findings = await self._test_origin_validation(ws_url)
+        slog.tool_result("origin_validation", f"{len(origin_findings)} finding(s)")
+        findings.extend(origin_findings)
 
         slog.tool_start("auth_required", target=ws_url)
-        findings.extend(await self._test_auth_required(ws_url))
-        slog.tool_result("auth_required", f"{len(findings)} finding(s)")
+        auth_findings = await self._test_auth_required(ws_url)
+        slog.tool_result("auth_required", f"{len(auth_findings)} finding(s)")
+        findings.extend(auth_findings)
 
         slog.tool_start("message_injection", target=ws_url)
-        findings.extend(await self._test_message_injection(ws_url))
-        slog.tool_result("message_injection", f"{len(findings)} finding(s)")
+        injection_findings = await self._test_message_injection(ws_url)
+        slog.tool_result("message_injection", f"{len(injection_findings)} finding(s)")
+        findings.extend(injection_findings)
 
         slog.tool_start("rate_limiting", target=ws_url)
-        findings.extend(await self._test_rate_limiting(ws_url))
-        slog.tool_result("rate_limiting", f"{len(findings)} finding(s)")
+        rate_findings = await self._test_rate_limiting(ws_url)
+        slog.tool_result("rate_limiting", f"{len(rate_findings)} finding(s)")
+        findings.extend(rate_findings)
 
         slog.tool_complete("websocket_scan", findings=len(findings))
         return findings
