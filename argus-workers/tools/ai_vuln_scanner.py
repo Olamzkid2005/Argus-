@@ -267,7 +267,8 @@ class AIVulnScanner:
         to avoid re-sending all 6 format variations on subsequent calls."""
         # Use cached format from a previous successful call
         if self._detected_format:
-            resp = self._safe_request("POST", url, json={**self._detected_format, list(self._detected_format.keys())[0]: message})
+            fmt_key = list(self._detected_format.keys())[0]
+            resp = self._safe_request("POST", url, json={fmt_key: message})
             if resp and resp.status_code in (200, 201):
                 try:
                     return resp.json()

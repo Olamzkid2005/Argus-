@@ -1514,7 +1514,7 @@ class WebScanner:
                 r = self._safe_request("POST", url, json=replay_payload, session=self.session)
                 if r:
                     replay_responses.append(r.status_code)
-            if replay_responses.count(200) >= 2:
+            if replay_responses.count(200) + replay_responses.count(201) >= 2:
                 self._add_finding(
                     finding_type="REPLAY_VULNERABLE",
                     severity="MEDIUM",
