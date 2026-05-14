@@ -205,3 +205,201 @@ def setup_logging():
             logger.addFilter(SecretsRedactionFilter(filter_name))
             # Ensure propagate is on (default is True, but be explicit)
             logger.propagate = True
+
+
+# ── Standardized Console Logging Utilities ──────────────────────────────
+
+import time as _time
+
+
+class ScanLogger:
+    """
+    Standardized console logger for the scan pipeline.
+
+    Provides banner-style logging for phase boundaries, tool start/complete,
+    and LLM call tracing — all with a consistent visual format.
+
+    Usage:
+        slog = ScanLogger("recon", engagement_id="abc-123")
+        slog.phase_start("Reconnaissance", target="https://example.com")
+        slog.tool_start("nuclei", ["-u", "target", "-severity", "high"])
+        slog.tool_complete("nuclei", success=True, findings=5, duration_ms=12000)
+        slog.phase_complete("recon", status="completed", findings=12)
+    """
+
+    # ANSI color codes for terminal output
+    _CYAN = "\033[36m"
+    _GREEN = "\033[32m"
+    _YELLOW = "\033[33m"
+    _RED = "\033[31m"
+    _MAGENTA = "\033[35m"
+    _BLUE = "\033[34m"
+    _BOLD = "\033[1m"
+    _RESET = "\033[0m"
+    _DIM = "\033[2m"
+
+    def __init__(self, phase: str, engagement_id: str = ""):
+        self.phase = phase
+        self.engagement_id = engagement_id[:8] if engagement_id else ""
+        self._start_time = _time.time()
+        self._logger = logging.getLogger(f"argus.scan.{phase}")
+
+    def _elapsed(self) -> str:
+        seconds = _time.time() - self._start_time
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        return f"{seconds/60:.1f}m"
+
+    def _prefix(self) -> str:
+        tag = self.phase.upper()
+        eid = f"[{self.engagement_id}]" if self.engagement_id else ""
+        return f"{self._DIM}{self._elapsed():>8}{self._RESET} {self._BLUE}{tag:>10}{self._RESET} {eid}"
+
+    def phase_start(self, phase_label: str, **details):
+        """Log a phase boundary start — emits a prominent banner.
+
+        Args:
+            phase_label: Human-readable phase name (e.g. "Reconnaissance")
+            **details: Key-value pairs appended as context (target, budget, etc.)
+        """
+        detail_str = " ".join(f"{k}={v}" for k, v in details.items())
+        msg = f"{self._prefix()} {self._CYAN}{self._BOLD}=== {phase_label.upper()} START ==={self._RESET}"
+        if detail_str:
+            msg += f"  ({detail_str})"
+        self._logger.info(msg)
+
+    def phase_complete(self, phase_label: str, status: str = "completed", **details):
+        """Log a phase boundary completion.
+
+        Args:
+            phase_label: Human-readable phase name
+            status: "completed", "failed", or "skipped"
+            **details: Key-value pairs (findings, duration, etc.)
+        """
+        detail_str = " ".join(f"{k}={v}" for k, v in details.items())
+        color = self._GREEN if status == "completed" else self._RED if status == "failed" else self._YELLOW
+        msg = f"{self._prefix()} {color}{self._BOLD}=== {phase_label.upper()} {status.upper()} ==={self._RESET}"
+        if detail_str:
+            msg += f"  ({detail_str})"
+        self._logger.info(msg)
+
+    def phase_header(self, phase_label: str, **details):
+        """Log a phase entry header (less prominent than phase_start).
+
+        Used for sub-phases within a larger phase.
+        """
+        detail_str = " ".join(f"{k}={v}" for k, v in details.items())
+        msg = f"{self._prefix()} {self._CYAN}>>> {phase_label}{self._RESET}"
+        if detail_str:
+            msg += f"  {self._DIM}({detail_str}){self._RESET}"
+        self._logger.info(msg)
+
+    def tool_start(self, tool: str, args: list | None = None):
+        """Log a tool execution start."""
+        arg_summary = " ".join(str(a) for a in (args or [])[:4])
+        if len(args or []) > 4:
+            arg_summary += "..."
+        msg = f"{self._prefix()}   {self._BOLD}├─{self._RESET} [{tool}] Starting"
+        if arg_summary:
+            msg += f"  {self._DIM}{arg_summary}{self._RESET}"
+        self._logger.info(msg)
+
+    def tool_complete(self, tool: str, success: bool = True, findings: int = 0, duration_ms: int = 0):
+        """Log a tool execution completion with findings count and duration."""
+        status_icon = self._GREEN + "✓" + self._RESET if success else self._RED + "✗" + self._RESET
+        dur_str = f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms/1000:.1f}s"
+        msg = f"{self._prefix()}   {self._BOLD}└─{self._RESET} [{tool}] {status_icon}  "
+        parts = []
+        if findings:
+            parts.append(f"{findings} finding(s)")
+        parts.append(f"{dur_str}")
+        msg += ", ".join(parts)
+        self._logger.info(msg)
+
+    def tool_result(self, tool: str, detail: str):
+        """Log a tool result detail line (indented under a tool)."""
+        msg = f"{self._prefix()}   {self._DIM}  -> [{tool}] {detail}{self._RESET}"
+        self._logger.info(msg)
+
+    def llm_start(self, model: str, action: str):
+        """Log an LLM call start."""
+        msg = f"{self._prefix()}   {self._MAGENTA}┌─ LLM [{model}] {action}{self._RESET}"
+        self._logger.info(msg)
+
+    def llm_complete(self, model: str, duration_ms: int = 0, tokens: int = 0, cost: float = 0.0):
+        """Log an LLM call completion."""
+        dur_str = f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms/1000:.1f}s"
+        msg = f"{self._prefix()}   {self._MAGENTA}└─ LLM [{model}] ✓ {dur_str}"
+        if tokens:
+            msg += f", {tokens} tokens"
+        if cost:
+            msg += f", ${cost:.6f}"
+        msg += self._RESET
+        self._logger.info(msg)
+
+    def llm_result(self, detail: str):
+        """Log an LLM result detail."""
+        msg = f"{self._prefix()}   {self._DIM}  -> {detail}{self._RESET}"
+        self._logger.info(msg)
+
+    def info(self, message: str):
+        """Log a simple info message with the standard prefix."""
+        msg = f"{self._prefix()}  {message}"
+        self._logger.info(msg)
+
+    def warn(self, message: str):
+        """Log a warning message with the standard prefix."""
+        msg = f"{self._prefix()}  {self._YELLOW}{message}{self._RESET}"
+        self._logger.warning(msg)
+
+    def error(self, message: str):
+        """Log an error message with the standard prefix."""
+        msg = f"{self._prefix()}  {self._RED}{self._BOLD}ERROR: {message}{self._RESET}"
+        self._logger.error(msg)
+
+    def target_start(self, target: str, index: int = 0, total: int = 1):
+        """Log the start of processing a specific target."""
+        label = f"[{index}/{total}]" if total > 1 else ""
+        msg = f"{self._prefix()}   {self._BOLD}┌─ Target{label}: {target}{self._RESET}"
+        self._logger.info(msg)
+
+    def target_complete(self, target: str, findings: int = 0, tools: int = 0):
+        """Log the completion of processing a target."""
+        msg = f"{self._prefix()}   {self._BOLD}└─ Target: {target}{self._RESET} — {findings} findings, {tools} tools"
+        self._logger.info(msg)
+
+    def agent_iteration(self, iteration: int, tool: str, reasoning: str = "", cost: float = 0.0):
+        """Log an agent loop iteration."""
+        rsn = f" — {reasoning[:80]}" if reasoning else ""
+        cost_str = f" [${cost:.6f}]" if cost else ""
+        msg = f"{self._prefix()}   {self._BLUE}├─ Iter {iteration}:{self._RESET} [{tool}]{rsn}{cost_str}"
+        self._logger.info(msg)
+
+    def agent_complete(self, tools_ran: int, total_cost: float = 0.0):
+        """Log agent completion summary."""
+        msg = f"{self._prefix()}   {self._BLUE}└─ AGENT: ran {tools_ran} tools"
+        if total_cost:
+            msg += f", total cost=${total_cost:.4f}"
+        self._logger.info(msg)
+
+    def swarm_activate(self, agents: list[str]):
+        """Log swarm agent activations."""
+        msg = f"{self._prefix()}   {self._MAGENTA}SWARM: activated {len(agents)} specialist(s): {', '.join(agents)}{self._RESET}"
+        self._logger.info(msg)
+
+    def swarm_complete(self, raw: int, deduped: int):
+        """Log swarm completion with dedup stats."""
+        msg = f"{self._prefix()}   {self._MAGENTA}SWARM: {raw} raw → {deduped} deduped findings{self._RESET}"
+        self._logger.info(msg)
+
+    def dispatch(self, task_name: str, task_id: str = ""):
+        """Log a downstream task dispatch."""
+        tid = f" (id={task_id})" if task_id else ""
+        msg = f"{self._prefix()}  {self._GREEN}-> Dispatching: {task_name}{tid}{self._RESET}"
+        self._logger.info(msg)
+
+    def transition(self, from_state: str, to_state: str, reason: str = ""):
+        """Log a state transition."""
+        rsn = f": {reason}" if reason else ""
+        msg = f"{self._prefix()}  {self._YELLOW}~> State: {from_state} -> {to_state}{rsn}{self._RESET}"
+        self._logger.info(msg)
