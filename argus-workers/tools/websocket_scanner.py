@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 from feature_flags import is_enabled
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -81,15 +82,33 @@ class WebSocketScanner:
         Returns:
             List of finding dicts compatible with VulnerabilityFinding schema
         """
+        slog = ScanLogger("websocket_scanner")
+
         if not is_enabled("WS_SCANNER", default=False):
+            slog.info("WebSocket scanner disabled (feature flag off)")
             logger.info("WebSocket scanner disabled (ARGUS_FF_WS_SCANNER not set)")
             return []
 
+        slog.phase_header("WebSocket Scan", ws_url)
         findings: list[dict[str, Any]] = []
+
+        slog.tool_start("origin_validation", target=ws_url)
         findings.extend(await self._test_origin_validation(ws_url))
+        slog.tool_result("origin_validation", f"{len(findings)} finding(s)")
+
+        slog.tool_start("auth_required", target=ws_url)
         findings.extend(await self._test_auth_required(ws_url))
+        slog.tool_result("auth_required", f"{len(findings)} finding(s)")
+
+        slog.tool_start("message_injection", target=ws_url)
         findings.extend(await self._test_message_injection(ws_url))
+        slog.tool_result("message_injection", f"{len(findings)} finding(s)")
+
+        slog.tool_start("rate_limiting", target=ws_url)
         findings.extend(await self._test_rate_limiting(ws_url))
+        slog.tool_result("rate_limiting", f"{len(findings)} finding(s)")
+
+        slog.tool_complete("websocket_scan", findings=len(findings))
         return findings
 
     async def _test_origin_validation(self, ws_url: str) -> list[dict[str, Any]]:
@@ -311,12 +330,15 @@ class WebSocketScanner:
         Returns:
             Deduplicated list of discovered WebSocket URLs
         """
+        slog = ScanLogger("websocket_scanner")
+        slog.info(f"Discovering WebSocket URLs: {page_url}")
         urls: list[str] = []
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(page_url)
                 if resp.status_code != 200:
+                    slog.info(f"Page returned {resp.status_code}, no WebSocket discovery")
                     return urls
 
                 html = resp.text

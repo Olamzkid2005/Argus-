@@ -18,6 +18,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 # CycloneDX specification version
 SPEC_VERSION = "1.5"
 
@@ -40,6 +42,9 @@ def generate_sbom_from_findings(
     Returns:
         CycloneDX JSON dict, or empty dict if no dependency findings
     """
+    slog = ScanLogger("sbom_generator")
+    slog.tool_start("sbom_generation", target=target_url or repo_url or engagement_id)
+
     dep_findings = [
         f for f in findings
         if f.get("type") == "DEPENDENCY_VULNERABILITY"
@@ -47,8 +52,11 @@ def generate_sbom_from_findings(
     ]
 
     if not dep_findings:
+        slog.info("No dependency findings — skipping SBOM")
         logger.info("No dependency findings to generate SBOM from")
         return {}
+
+    slog.info(f"Generating SBOM from {len(dep_findings)} dependency findings")
 
     # Deduplicate by package name
     seen_packages: dict[str, dict] = {}
@@ -157,5 +165,6 @@ def generate_sbom_from_findings(
     if vulnerabilities:
         sbom["vulnerabilities"] = vulnerabilities
 
+    slog.tool_complete("sbom_generation", components=len(components), vulnerabilities=len(vulnerabilities))
     logger.info(f"Generated CycloneDX SBOM with {len(components)} components and {len(vulnerabilities)} vulnerabilities")
     return sbom

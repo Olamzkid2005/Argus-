@@ -21,6 +21,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from feature_flags import is_enabled
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
@@ -116,29 +117,46 @@ class APISecurityScanner:
         Returns:
             List of finding dicts compatible with VulnerabilityFinding schema.
         """
+        slog = ScanLogger("api_security_scanner")
+
         if not is_enabled("API_SCANNER", default=False):
-            logger.info("API security scanner disabled (ARGUS_FF_API_SCANNER not set)")
+            slog.info("API security scanner disabled (ARGUS_FF_API_SCANNER not set)")
             return []
 
         self._validate_external_url(base_url)
 
         if not endpoints:
-            logger.info("No endpoints provided, running discovery...")
+            slog.info("No endpoints provided, running discovery...")
             endpoints = await self.discover_endpoints(base_url)
             if not endpoints:
                 return []
 
         auth_headers = auth_headers or {}
 
+        slog.phase_header("API SECURITY SCAN", f"{len(endpoints)} endpoints")
         findings: list[dict[str, Any]] = []
+
+        slog.tool_start("bola", f"{len(endpoints)} endpoints")
         findings.extend(await self._test_bola(base_url, endpoints, auth_headers))
+        slog.tool_complete("bola", findings=len(findings))
+
+        slog.tool_start("mass_assignment", f"{len(endpoints)} endpoints")
         findings.extend(
             await self._test_mass_assignment(base_url, endpoints, auth_headers)
         )
+        slog.tool_complete("mass_assignment")
+
+        slog.tool_start("auth_bypass", f"{len(endpoints)} endpoints")
         findings.extend(await self._test_auth_bypass(base_url, endpoints))
+        slog.tool_complete("auth_bypass")
+
+        slog.tool_start("rate_limiting", f"{len(endpoints)} endpoints")
         findings.extend(
             await self._test_api_rate_limiting(base_url, endpoints, auth_headers)
         )
+        slog.tool_complete("rate_limiting")
+
+        slog.tool_complete("api_security_scan", findings=len(findings))
         return findings
 
     # ------------------------------------------------------------------

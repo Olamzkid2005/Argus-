@@ -14,6 +14,8 @@ from requests.exceptions import ConnectionError, RequestException, Timeout
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 
 class AuthError(Exception):
     """Raised when authentication fails for any reason."""
@@ -74,10 +76,11 @@ class AuthManager:
         2. Bearer / custom-header token if token string provided.
         3. Form-based or JSON login if username/password provided.
         """
+        slog = ScanLogger("auth_manager")
         session = requests.Session()
 
         if self._config.cookie:
-            logger.debug("Injecting pre-existing cookie into session")
+            slog.info("Injecting pre-existing cookie into session")
             for pair in self._config.cookie.split(";"):
                 pair = pair.strip()
                 if "=" in pair:
@@ -86,16 +89,16 @@ class AuthManager:
             return session
 
         if self._config.token:
-            logger.debug("Setting %s header with Bearer token", self._config.token_header)
+            slog.info(f"Setting {self._config.token_header} header with Bearer token")
             session.headers[self._config.token_header] = (
                 f"Bearer {self._config.token}"
             )
             return session
 
         if self._config.username and self._config.password:
-            return self._login(session, target_url, auth_endpoints)
+            return self._login(session, target_url, auth_endpoints, slog)
 
-        logger.debug("No credentials provided; returning unauthenticated session")
+        slog.info("No credentials provided; returning unauthenticated session")
         return session
 
     def attach_to_session(self, session: requests.Session) -> requests.Session:

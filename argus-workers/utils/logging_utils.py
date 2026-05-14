@@ -294,18 +294,38 @@ class ScanLogger:
             msg += f"  {self._DIM}({detail_str}){self._RESET}"
         self._logger.info(msg)
 
-    def tool_start(self, tool: str, args: list | None = None):
-        """Log a tool execution start."""
+    def tool_start(self, tool: str, args: list | None = None, **details):
+        """Log a tool execution start.
+
+        Args:
+            tool: Tool name (e.g. "nuclei", "browser_scan")
+            args: Optional list of argument strings (legacy format)
+            **details: Optional key=value pairs appended as context
+        """
         arg_summary = " ".join(str(a) for a in (args or [])[:4])
         if len(args or []) > 4:
             arg_summary += "..."
+        if details:
+            detail_str = " ".join(f"{k}={v}" for k, v in details.items())
+            if arg_summary:
+                arg_summary += " | " + detail_str
+            else:
+                arg_summary = detail_str
         msg = f"{self._prefix()}   {self._BOLD}├─{self._RESET} [{tool}] Starting"
         if arg_summary:
             msg += f"  {self._DIM}{arg_summary}{self._RESET}"
         self._logger.info(msg)
 
-    def tool_complete(self, tool: str, success: bool = True, findings: int = 0, duration_ms: int = 0):
-        """Log a tool execution completion with findings count and duration."""
+    def tool_complete(self, tool: str, success: bool = True, findings: int = 0, duration_ms: int = 0, **details):
+        """Log a tool execution completion with findings count and duration.
+
+        Args:
+            tool: Tool name (e.g. "nuclei", "browser_scan")
+            success: Whether the tool completed successfully
+            findings: Number of findings discovered
+            duration_ms: Execution duration in milliseconds
+            **details: Optional key=value pairs appended as context
+        """
         status_icon = self._GREEN + "✓" + self._RESET if success else self._RED + "✗" + self._RESET
         dur_str = f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms/1000:.1f}s"
         msg = f"{self._prefix()}   {self._BOLD}└─{self._RESET} [{tool}] {status_icon}  "
@@ -313,6 +333,9 @@ class ScanLogger:
         if findings:
             parts.append(f"{findings} finding(s)")
         parts.append(f"{dur_str}")
+        if details:
+            detail_str = " ".join(f"{k}={v}" for k, v in details.items())
+            parts.append(detail_str)
         msg += ", ".join(parts)
         self._logger.info(msg)
 

@@ -17,6 +17,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from utils.logging_utils import ScanLogger
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Bug-Reaper Platform Templates (copied from generate_report.py)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -635,6 +637,8 @@ class BugBountyReportGenerator:
         Returns:
             Markdown string with platform-formatted report(s)
         """
+        slog = ScanLogger("bugbounty_report_generator")
+
         platform = platform.lower()
         if platform not in self.SUPPORTED_PLATFORMS:
             raise ValueError(
@@ -642,10 +646,15 @@ class BugBountyReportGenerator:
                 f"Supported: {', '.join(self.SUPPORTED_PLATFORMS)}"
             )
 
+        slog.phase_header("Bug Bounty Report", platform)
+        slog.info(f"Processing {len(findings)} findings (min_confidence={min_confidence})")
+
         # Apply Bug-Reaper audit rules: filter findings by quality
         reportable = self._filter_findings(findings, min_confidence)
+        slog.info(f"{len(reportable)}/{len(findings)} findings reportable after filtering")
 
         if not reportable:
+            slog.info("No reportable vulnerabilities — generating empty report")
             return (
                 f"# Bug Bounty Report — {platform.upper()}\n\n"
                 f"**No reportable vulnerabilities identified.**\n\n"
@@ -672,6 +681,7 @@ class BugBountyReportGenerator:
                 report_md = generator_fn(finding_data, vuln_type)
                 reports.append(report_md)
             except Exception as e:
+                slog.warn(f"Failed to generate report for finding {finding.get('id', '?')}: {e}")
                 logger.warning(f"Failed to generate report for finding {finding.get('id', '?')}: {e}")
                 continue
 
@@ -684,6 +694,7 @@ class BugBountyReportGenerator:
             f"---\n\n"
         )
 
+        slog.tool_complete("report_generation", platform=platform, reports=len(reports))
         return header + "\n\n---\n\n".join(reports)
 
     def _filter_findings(self, findings: list[dict], min_confidence: float) -> list[dict]:
