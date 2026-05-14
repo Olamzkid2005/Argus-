@@ -15,7 +15,7 @@ from config.constants import (
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
-from streaming import emit_tool_start
+from streaming import emit_tool_end, emit_tool_start
 from tools.web_scanner import WebScanner
 
 from .utils import get_nuclei_templates_path
@@ -144,7 +144,8 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
 
 def execute_scan_tools(
     ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS,
-    auth_config: dict | None = None, tech_stack: list[str] | None = None,
+    auth_config: dict | None = None, dual_auth_config: dict | None = None,
+    tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
 ) -> list[dict]:
     """
@@ -347,5 +348,48 @@ def execute_scan_tools(
                     all_findings.append(normalized)
         except Exception as e:
             logger.warning(f"WebScanner failed for {target}: {e}")
+
+        # DualAuthScanner — cross-account BOLA/BOPLA testing when dual_auth_config is provided
+        if dual_auth_config and auth_config:
+            try:
+                from tools.dual_auth_scanner import DualAuthScanner
+                dual_scanner = DualAuthScanner(
+                    auth_config_a=auth_config,
+                    auth_config_b=dual_auth_config,
+                    timeout=SSL_TIMEOUT,
+                    rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                )
+                emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
+                dual_findings = dual_scanner.scan(target)
+                for df in dual_findings:
+                    normalized = ctx._normalize_finding(df, "dual_auth_scanner")
+                    if normalized:
+                        all_findings.append(normalized)
+                emit_tool_end(ctx.engagement_id, "dual_auth_scanner", [target],
+                              {"findings_count": len(dual_findings)})
+                logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
+            except Exception as e:
+                logger.warning(f"DualAuthScanner failed for {target}: {e}")
+
+        # AIVulnScanner — prompt injection and AI information disclosure
+        try:
+            from tools.ai_vuln_scanner import AIVulnScanner
+            ai_scanner = AIVulnScanner(
+                timeout=SSL_TIMEOUT * 2,  # AI endpoints may be slower
+                rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                session=authenticated_session,
+            )
+            emit_tool_start(ctx.engagement_id, "ai_vuln_scanner", [target])
+            ai_findings = ai_scanner.scan(target)
+            for af in ai_findings:
+                normalized = ctx._normalize_finding(af, "ai_vuln_scanner")
+                if normalized:
+                    all_findings.append(normalized)
+            emit_tool_end(ctx.engagement_id, "ai_vuln_scanner", [target],
+                          {"findings_count": len(ai_findings)})
+            if ai_findings:
+                logger.info(f"AIVulnScanner complete: {len(ai_findings)} findings for {target}")
+        except Exception as e:
+            logger.warning(f"AIVulnScanner failed for {target}: {e}")
 
     return all_findings

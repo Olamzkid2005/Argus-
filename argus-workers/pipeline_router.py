@@ -30,7 +30,8 @@ def execute_recon_pipeline(
 
 def execute_scan_pipeline(
     ctx, targets: list[str], budget: dict, aggressiveness: str = "default",
-    auth_config: dict | None = None, tech_stack: list[str] | None = None,
+    auth_config: dict | None = None, dual_auth_config: dict | None = None,
+    tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
 ) -> list[dict]:
     """
@@ -42,6 +43,7 @@ def execute_scan_pipeline(
         budget: Budget config
         aggressiveness: Scan aggressiveness
         auth_config: Optional authentication configuration for scanning
+        dual_auth_config: Optional second user auth configuration for BOLA testing
         tech_stack: Detected technology stack (triggers browser scanner for SPAs)
         skip_tools: Set of tool names to skip
 
@@ -49,4 +51,4 @@ def execute_scan_pipeline(
         List of findings
     """
     from orchestrator_pkg.scan import execute_scan_tools
-    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, tech_stack, skip_tools)
+    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, dual_auth_config, tech_stack, skip_tools)
