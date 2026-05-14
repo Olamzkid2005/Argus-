@@ -15,7 +15,7 @@ from config.constants import (
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
-from streaming import emit_tool_end, emit_tool_start
+from streaming import emit_tool_complete, emit_tool_start
 from tools.web_scanner import WebScanner
 
 from .utils import get_nuclei_templates_path
@@ -365,8 +365,8 @@ def execute_scan_tools(
                     normalized = ctx._normalize_finding(df, "dual_auth_scanner")
                     if normalized:
                         all_findings.append(normalized)
-                emit_tool_end(ctx.engagement_id, "dual_auth_scanner", [target],
-                              {"findings_count": len(dual_findings)})
+                emit_tool_complete(ctx.engagement_id, "dual_auth_scanner", True, 0,
+                                    finding_count=len(dual_findings))
                 logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
             except Exception as e:
                 logger.warning(f"DualAuthScanner failed for {target}: {e}")
@@ -385,8 +385,8 @@ def execute_scan_tools(
                 normalized = ctx._normalize_finding(af, "ai_vuln_scanner")
                 if normalized:
                     all_findings.append(normalized)
-            emit_tool_end(ctx.engagement_id, "ai_vuln_scanner", [target],
-                          {"findings_count": len(ai_findings)})
+            emit_tool_complete(ctx.engagement_id, "ai_vuln_scanner", True, 0,
+                                finding_count=len(ai_findings))
             if ai_findings:
                 logger.info(f"AIVulnScanner complete: {len(ai_findings)} findings for {target}")
         except Exception as e:

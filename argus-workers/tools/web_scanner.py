@@ -1431,7 +1431,7 @@ class WebScanner:
         # GraphQL SQLi-in-resolver test
         for path in self.GRAPHQL_ENDPOINTS[:1]:
             url = urljoin(self.target_url, path.lstrip("/"))
-            sqli_query = {"query": '{users(search:"\\' OR 1=1--"){id,name}}'}
+            sqli_query = {"query": "{users(search:\"' OR 1=1--\"){id,name}}"}
             resp = self._safe_request(
                 "POST", url,
                 json=sqli_query,
