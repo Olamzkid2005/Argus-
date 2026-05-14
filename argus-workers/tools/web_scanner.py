@@ -1640,7 +1640,7 @@ class WebScanner:
                             confidence=0.9,
                         )
                     elif exp - now > 86400 * 30:
-                        days = int((exp - now) / 86400)
+                        days = min(int((exp - now) / 86400), 365)
                         self._add_finding(
                             finding_type="EXCESSIVE_TOKEN_LIFETIME",
                             severity="MEDIUM",
@@ -1740,17 +1740,21 @@ class WebScanner:
 
             # Use a barrier to maximize simultaneity
             barrier = threading.Barrier(5, timeout=5)
+            barrier_broken = [False]  # Mutable to capture from thread closures
 
             def _race_request():
                 try:
                     barrier.wait(timeout=5)
                 except threading.BrokenBarrierError:
-                    pass
+                    barrier_broken[0] = True
                 return self._safe_request("POST", url, json=payload, session=self.session)
 
             with _cf.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [executor.submit(_race_request) for _ in range(5)]
                 responses = [f.result() for f in _cf.as_completed(futures)]
+
+            if barrier_broken[0]:
+                continue  # Test inconclusive — threads didn't synchronize
 
             success_count = sum(1 for r in responses if r and r.status_code in (200, 201))
             if success_count > 1:

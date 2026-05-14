@@ -41,14 +41,8 @@ class DualAuthScanner:
     # HTTP methods to test for each discovered resource
     TEST_METHODS = ["GET", "PUT", "DELETE"]
 
-    # Sensitive fields blocklist (BOPLA)
-    SENSITIVE_RESPONSE_FIELDS = {
-        "password", "password_hash", "hashed_password", "pwd",
-        "card_number", "pan", "cvv", "cvv2", "cvc",
-        "secret", "api_key", "access_token", "refresh_token",
-        "ssn", "social_security", "pin", "credit_score",
-        "is_admin", "admin", "role", "privilege", "is_superuser",
-    }
+    # Sensitive fields blocklist (BOPLA) — shared with WebScanner via import
+    # See: tools.web_scanner.WebScanner.SENSITIVE_RESPONSE_FIELDS
 
     # Known "access denied" indicators
     ACCESS_DENIED_INDICATORS = [
@@ -382,7 +376,10 @@ class DualAuthScanner:
 
             data_str = json.dumps(data).lower()
             exposed_fields = []
-            for field in self.SENSITIVE_RESPONSE_FIELDS:
+            # Shared source of truth with WebScanner.SENSITIVE_RESPONSE_FIELDS
+            from tools.web_scanner import WebScanner as _WS
+            sensitive_fields = _WS.SENSITIVE_RESPONSE_FIELDS
+            for field in sensitive_fields:
                 if f'"{field}"' in data_str:
                     exposed_fields.append(field)
 
