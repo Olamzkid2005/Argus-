@@ -1,10 +1,10 @@
  
- -------------- celery@MacBook-Air.local v5.6.3 (recovery)
+ -------------- celery@MacBook-Air v5.6.3 (recovery)
 --- ***** ----- 
--- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-10 23:15:45
+-- ******* ---- macOS-13.5.2-x86_64-i386-64bit-Mach-O 2026-05-11 17:59:42
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         argus_workers:0x1057652b0
+- ** ---------- .> app:         argus_workers:0x11269d2b0
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 8 (prefork)
@@ -47,369 +47,851 @@
   . tasks.scheduled.run_due_scans
   . tasks.security.run_self_scan
 
-[2026-05-10 23:15:48,427: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2026-05-10 23:15:48,439: INFO/MainProcess] mingle: searching for neighbors
-[2026-05-10 23:15:49,466: INFO/MainProcess] mingle: all alone
-[2026-05-10 23:15:49,620: INFO/MainProcess] celery@MacBook-Air.local ready.
-[2026-05-10 23:15:49,629: INFO/MainProcess] Task tasks.llm_review.run_llm_review[df196202-f213-412d-b5c4-a02cbd785f6e] received
-[2026-05-10 23:15:50,309: INFO/ForkPoolWorker-8] LLM review: 20 candidate findings for engagement fa4ea0de-ae39-466b-9f28-d6ab91b4fc17
-[2026-05-10 23:16:05,240: INFO/MainProcess] Task tasks.maintenance.worker_health_check[26a72412-98c1-4585-807b-ac0f53ce6095] received
-[2026-05-10 23:16:05,502: INFO/ForkPoolWorker-1] Task 26a72412-98c1-4585-807b-ac0f53ce6095 succeeded
-[2026-05-10 23:16:05,503: INFO/ForkPoolWorker-1] Task tasks.maintenance.worker_health_check[26a72412-98c1-4585-807b-ac0f53ce6095] succeeded in 0.2581744809867814s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:16:54,557: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[eefce508-7f15-4aa5-b96a-a3d6fbf1e89d] received
-[2026-05-10 23:16:55,075: INFO/ForkPoolWorker-1] Task eefce508-7f15-4aa5-b96a-a3d6fbf1e89d succeeded
-[2026-05-10 23:16:55,075: INFO/ForkPoolWorker-1] Task tasks.maintenance.cleanup_old_results[eefce508-7f15-4aa5-b96a-a3d6fbf1e89d] succeeded in 0.5132468829397112s: {'status': 'error', 'error': 'permission denied for table query_performance_log
-'}
-[2026-05-10 23:17:05,272: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6e6286f5-97a2-4a4a-a4a6-fb25ddee223a] received
-[2026-05-10 23:17:06,037: INFO/ForkPoolWorker-1] Task 6e6286f5-97a2-4a4a-a4a6-fb25ddee223a succeeded
-[2026-05-10 23:17:06,040: INFO/ForkPoolWorker-1] Task tasks.maintenance.worker_health_check[6e6286f5-97a2-4a4a-a4a6-fb25ddee223a] succeeded in 0.75348416401539s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:18:00,090: INFO/ForkPoolWorker-8] LLM review complete: 0 analyzed, 0 confirmed, all processed
-[2026-05-10 23:18:00,105: INFO/ForkPoolWorker-8] Task df196202-f213-412d-b5c4-a02cbd785f6e succeeded
-[2026-05-10 23:18:00,106: INFO/ForkPoolWorker-8] Task tasks.llm_review.run_llm_review[df196202-f213-412d-b5c4-a02cbd785f6e] succeeded in 130.46771197300404s: {'status': 'completed', 'analyzed': 0, 'confirmed': 0, 'total_candidates': 20, 'budget_exhausted': False}
-[2026-05-10 23:18:05,250: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5284e53e-ac3e-4b7d-bd6b-1c24bb972149] received
-[2026-05-10 23:18:05,476: INFO/ForkPoolWorker-8] Task 5284e53e-ac3e-4b7d-bd6b-1c24bb972149 succeeded
-[2026-05-10 23:18:05,477: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[5284e53e-ac3e-4b7d-bd6b-1c24bb972149] succeeded in 0.2223277420271188s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:19:05,238: INFO/MainProcess] Task tasks.maintenance.worker_health_check[07fbee74-8c32-4eab-82e6-486d2648fc87] received
-[2026-05-10 23:19:05,463: INFO/ForkPoolWorker-8] Task 07fbee74-8c32-4eab-82e6-486d2648fc87 succeeded
-[2026-05-10 23:19:05,463: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[07fbee74-8c32-4eab-82e6-486d2648fc87] succeeded in 0.22126171295531094s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:20:05,052: INFO/MainProcess] Task tasks.maintenance.refresh_views[65792f95-8aad-4594-a613-c6e19a55126c] received
-[2026-05-10 23:20:05,108: INFO/MainProcess] Task tasks.scheduled.run_due_scans[78a72a58-000c-4f1e-9b48-8f7c7220b506] received
-[2026-05-10 23:20:05,251: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d3e6c617-497c-4f24-ad90-a28c4fe14bc8] received
-[2026-05-10 23:20:05,800: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:20:05,805: INFO/ForkPoolWorker-8] Task 65792f95-8aad-4594-a613-c6e19a55126c succeeded
-[2026-05-10 23:20:05,808: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[65792f95-8aad-4594-a613-c6e19a55126c] succeeded in 0.7382920560194179s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 17:59:44,364: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-05-11 17:59:44,378: INFO/MainProcess] mingle: searching for neighbors
+[2026-05-11 17:59:45,407: INFO/MainProcess] mingle: all alone
+[2026-05-11 17:59:45,514: INFO/MainProcess] celery@MacBook-Air ready.
+[2026-05-11 17:59:45,518: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3af0c51b-e95d-4371-af1b-81b37081ab93] received
+[2026-05-11 17:59:45,520: INFO/MainProcess] Task tasks.maintenance.refresh_views[2a272feb-c0cd-4c24-825b-d36273c9aa89] received
+[2026-05-11 17:59:45,552: INFO/MainProcess] Task tasks.scheduled.run_due_scans[a6851517-6063-4fc9-951d-d0426bbb8712] received
+[2026-05-11 17:59:45,925: INFO/ForkPoolWorker-8] Task 3af0c51b-e95d-4371-af1b-81b37081ab93 succeeded
+[2026-05-11 17:59:45,925: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[3af0c51b-e95d-4371-af1b-81b37081ab93] succeeded in 0.40251860199987277s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 17:59:45,952: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 17:59:45,953: INFO/ForkPoolWorker-1] Task 2a272feb-c0cd-4c24-825b-d36273c9aa89 succeeded
+[2026-05-11 17:59:45,954: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[2a272feb-c0cd-4c24-825b-d36273c9aa89] succeeded in 0.4317238730000099s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:20:05,810: INFO/ForkPoolWorker-1] Task 78a72a58-000c-4f1e-9b48-8f7c7220b506 succeeded
-[2026-05-10 23:20:05,811: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[78a72a58-000c-4f1e-9b48-8f7c7220b506] succeeded in 0.6918264139676467s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:20:05,853: INFO/ForkPoolWorker-2] Task d3e6c617-497c-4f24-ad90-a28c4fe14bc8 succeeded
-[2026-05-10 23:20:05,853: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[d3e6c617-497c-4f24-ad90-a28c4fe14bc8] succeeded in 0.5880091929575428s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:21:05,253: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1b998297-6ba6-4009-9b6d-24c69476cca4] received
-[2026-05-10 23:21:05,521: INFO/ForkPoolWorker-8] Task 1b998297-6ba6-4009-9b6d-24c69476cca4 succeeded
-[2026-05-10 23:21:05,522: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1b998297-6ba6-4009-9b6d-24c69476cca4] succeeded in 0.2441008830210194s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:22:05,238: INFO/MainProcess] Task tasks.maintenance.worker_health_check[89b07ecc-265b-469e-a0ea-73a219fc9725] received
-[2026-05-10 23:22:05,457: INFO/ForkPoolWorker-8] Task 89b07ecc-265b-469e-a0ea-73a219fc9725 succeeded
-[2026-05-10 23:22:05,457: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[89b07ecc-265b-469e-a0ea-73a219fc9725] succeeded in 0.2156984149478376s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:23:05,248: INFO/MainProcess] Task tasks.maintenance.worker_health_check[cf8d5959-c92a-4797-ae84-83e19904fdbc] received
-[2026-05-10 23:23:05,544: INFO/ForkPoolWorker-8] Task cf8d5959-c92a-4797-ae84-83e19904fdbc succeeded
-[2026-05-10 23:23:05,545: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[cf8d5959-c92a-4797-ae84-83e19904fdbc] succeeded in 0.29063667997252196s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:24:05,245: INFO/MainProcess] Task tasks.maintenance.worker_health_check[95e2b28f-9cba-4e88-af16-2ba3f0c487fc] received
-[2026-05-10 23:24:05,465: INFO/ForkPoolWorker-8] Task 95e2b28f-9cba-4e88-af16-2ba3f0c487fc succeeded
-[2026-05-10 23:24:05,465: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[95e2b28f-9cba-4e88-af16-2ba3f0c487fc] succeeded in 0.2163620200008154s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:25:05,024: INFO/MainProcess] Task tasks.maintenance.refresh_views[c13dea6c-9401-4295-a72f-151a9d3c2dbb] received
-[2026-05-10 23:25:05,062: INFO/MainProcess] Task tasks.scheduled.run_due_scans[db273c3e-f5e0-4460-aadc-ee72898d7576] received
-[2026-05-10 23:25:05,246: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7c8b96f4-3460-4916-a530-d76c2fac64c9] received
-[2026-05-10 23:25:05,333: INFO/ForkPoolWorker-8] Task c13dea6c-9401-4295-a72f-151a9d3c2dbb succeeded
-[2026-05-10 23:25:05,334: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[c13dea6c-9401-4295-a72f-151a9d3c2dbb] succeeded in 0.30597062199376523s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 17:59:45,958: INFO/ForkPoolWorker-2] Task a6851517-6063-4fc9-951d-d0426bbb8712 succeeded
+[2026-05-11 17:59:45,958: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[a6851517-6063-4fc9-951d-d0426bbb8712] succeeded in 0.4004112270004043s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 17:59:47,562: INFO/MainProcess] Task tasks.health.ping[4ac41cee-e2d2-4042-bf1e-c40cda0a7c68] received
+[2026-05-11 17:59:48,632: INFO/ForkPoolWorker-8] Task 4ac41cee-e2d2-4042-bf1e-c40cda0a7c68 succeeded
+[2026-05-11 17:59:48,633: INFO/ForkPoolWorker-8] Task tasks.health.ping[4ac41cee-e2d2-4042-bf1e-c40cda0a7c68] succeeded in 0.10453358500035392s: {'status': 'ok', 'worker': 'celery@MacBook-Air', 'pid': 35558, 'timestamp': '2026-05-11T16:59:48.631480+00:00'}
+[2026-05-11 18:00:45,439: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6f372b99-9d59-4a7f-8eba-325668775879] received
+[2026-05-11 18:00:45,659: INFO/ForkPoolWorker-8] Task 6f372b99-9d59-4a7f-8eba-325668775879 succeeded
+[2026-05-11 18:00:45,659: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[6f372b99-9d59-4a7f-8eba-325668775879] succeeded in 0.21790213100030087s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:01:45,438: INFO/MainProcess] Task tasks.maintenance.worker_health_check[74b1cf13-a2d8-4dc1-87c8-c802b0c70b4b] received
+[2026-05-11 18:01:45,671: INFO/ForkPoolWorker-8] Task 74b1cf13-a2d8-4dc1-87c8-c802b0c70b4b succeeded
+[2026-05-11 18:01:45,671: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[74b1cf13-a2d8-4dc1-87c8-c802b0c70b4b] succeeded in 0.2310500929997943s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:02:45,439: INFO/MainProcess] Task tasks.maintenance.worker_health_check[085fbeb5-817b-416f-951f-b71e54ce8e17] received
+[2026-05-11 18:02:45,661: INFO/ForkPoolWorker-8] Task 085fbeb5-817b-416f-951f-b71e54ce8e17 succeeded
+[2026-05-11 18:02:45,661: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[085fbeb5-817b-416f-951f-b71e54ce8e17] succeeded in 0.21940406799876655s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:03:45,458: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5d092456-07f1-42e2-a551-7ee668f6c7c3] received
+[2026-05-11 18:03:45,695: INFO/ForkPoolWorker-8] Task 5d092456-07f1-42e2-a551-7ee668f6c7c3 succeeded
+[2026-05-11 18:03:45,696: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[5d092456-07f1-42e2-a551-7ee668f6c7c3] succeeded in 0.233294546000252s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:04:45,439: INFO/MainProcess] Task tasks.maintenance.worker_health_check[bf92bc82-858f-49b8-9c9b-a182d1fcf748] received
+[2026-05-11 18:04:45,495: INFO/MainProcess] Task tasks.maintenance.refresh_views[db1b14fc-6d07-4290-85e1-0d9f0c032604] received
+[2026-05-11 18:04:45,505: INFO/MainProcess] Task tasks.scheduled.run_due_scans[68095a4a-5941-44de-9c4b-badcd9dc3089] received
+[2026-05-11 18:04:45,693: INFO/ForkPoolWorker-8] Task bf92bc82-858f-49b8-9c9b-a182d1fcf748 succeeded
+[2026-05-11 18:04:45,693: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[bf92bc82-858f-49b8-9c9b-a182d1fcf748] succeeded in 0.2510660640000424s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:04:46,071: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:04:46,075: INFO/ForkPoolWorker-2] Task 68095a4a-5941-44de-9c4b-badcd9dc3089 succeeded
+[2026-05-11 18:04:46,076: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[68095a4a-5941-44de-9c4b-badcd9dc3089] succeeded in 0.5690450160000182s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:04:46,273: INFO/ForkPoolWorker-1] Task db1b14fc-6d07-4290-85e1-0d9f0c032604 succeeded
+[2026-05-11 18:04:46,273: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[db1b14fc-6d07-4290-85e1-0d9f0c032604] succeeded in 0.7710536609993142s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:25:05,353: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:25:05,358: INFO/ForkPoolWorker-1] Task db273c3e-f5e0-4460-aadc-ee72898d7576 succeeded
-[2026-05-10 23:25:05,359: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[db273c3e-f5e0-4460-aadc-ee72898d7576] succeeded in 0.2899129099678248s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:25:05,485: INFO/ForkPoolWorker-2] Task 7c8b96f4-3460-4916-a530-d76c2fac64c9 succeeded
-[2026-05-10 23:25:05,487: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[7c8b96f4-3460-4916-a530-d76c2fac64c9] succeeded in 0.23309823498129845s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:26:05,247: INFO/MainProcess] Task tasks.maintenance.worker_health_check[61b6303d-57e7-4122-b086-bcfeb6dcbae8] received
-[2026-05-10 23:26:05,464: INFO/ForkPoolWorker-8] Task 61b6303d-57e7-4122-b086-bcfeb6dcbae8 succeeded
-[2026-05-10 23:26:05,465: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[61b6303d-57e7-4122-b086-bcfeb6dcbae8] succeeded in 0.2145193830365315s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:27:05,246: INFO/MainProcess] Task tasks.maintenance.worker_health_check[a162a8ae-7418-44dc-b330-742e83041266] received
-[2026-05-10 23:27:05,464: INFO/ForkPoolWorker-8] Task a162a8ae-7418-44dc-b330-742e83041266 succeeded
-[2026-05-10 23:27:05,465: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[a162a8ae-7418-44dc-b330-742e83041266] succeeded in 0.21539969998411834s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:28:05,247: INFO/MainProcess] Task tasks.maintenance.worker_health_check[8bfc027b-5753-4fc1-b952-fb74185d8fa1] received
-[2026-05-10 23:28:05,465: INFO/ForkPoolWorker-8] Task 8bfc027b-5753-4fc1-b952-fb74185d8fa1 succeeded
-[2026-05-10 23:28:05,465: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[8bfc027b-5753-4fc1-b952-fb74185d8fa1] succeeded in 0.21502458699978888s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:29:05,247: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5c35dbab-4c05-46fc-aeb1-76149ad9d402] received
-[2026-05-10 23:29:05,467: INFO/ForkPoolWorker-8] Task 5c35dbab-4c05-46fc-aeb1-76149ad9d402 succeeded
-[2026-05-10 23:29:05,467: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[5c35dbab-4c05-46fc-aeb1-76149ad9d402] succeeded in 0.2171521750278771s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:30:05,181: INFO/MainProcess] Task tasks.maintenance.refresh_views[9ed23540-eb4e-4199-bab2-df4d9cf6b8f4] received
-[2026-05-10 23:30:05,450: INFO/MainProcess] Task tasks.scheduled.run_due_scans[049e91a0-eade-4325-bb47-f2e9f99fc2da] received
-[2026-05-10 23:30:05,469: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7ef8d99b-fb8b-4f0a-8fd1-cdcbf1b4ab1f] received
-[2026-05-10 23:30:05,783: INFO/ForkPoolWorker-2] Task 7ef8d99b-fb8b-4f0a-8fd1-cdcbf1b4ab1f succeeded
-[2026-05-10 23:30:05,786: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[7ef8d99b-fb8b-4f0a-8fd1-cdcbf1b4ab1f] succeeded in 0.3072377929929644s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:30:06,408: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:30:06,421: INFO/ForkPoolWorker-1] Task 049e91a0-eade-4325-bb47-f2e9f99fc2da succeeded
-[2026-05-10 23:30:06,422: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[049e91a0-eade-4325-bb47-f2e9f99fc2da] succeeded in 0.960732574108988s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:30:06,807: INFO/ForkPoolWorker-8] Task 9ed23540-eb4e-4199-bab2-df4d9cf6b8f4 succeeded
-[2026-05-10 23:30:06,810: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[9ed23540-eb4e-4199-bab2-df4d9cf6b8f4] succeeded in 1.5949922949075699s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:05:45,440: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c2861a4a-bae0-4979-bddb-37bae9df4889] received
+[2026-05-11 18:05:45,663: INFO/ForkPoolWorker-8] Task c2861a4a-bae0-4979-bddb-37bae9df4889 succeeded
+[2026-05-11 18:05:45,664: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[c2861a4a-bae0-4979-bddb-37bae9df4889] succeeded in 0.22014532400135067s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:06:45,441: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f244760f-ac93-44cd-b30e-7dff95464c9e] received
+[2026-05-11 18:06:45,666: INFO/ForkPoolWorker-8] Task f244760f-ac93-44cd-b30e-7dff95464c9e succeeded
+[2026-05-11 18:06:45,666: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[f244760f-ac93-44cd-b30e-7dff95464c9e] succeeded in 0.2229349410008581s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:07:45,441: INFO/MainProcess] Task tasks.maintenance.worker_health_check[99ed8f7a-7553-4498-a1ed-c2cc20a5c248] received
+[2026-05-11 18:07:45,661: INFO/ForkPoolWorker-8] Task 99ed8f7a-7553-4498-a1ed-c2cc20a5c248 succeeded
+[2026-05-11 18:07:45,662: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[99ed8f7a-7553-4498-a1ed-c2cc20a5c248] succeeded in 0.21863360199859017s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:08:45,461: INFO/MainProcess] Task tasks.maintenance.worker_health_check[57729b81-702b-45a8-9a47-3c0472680fb3] received
+[2026-05-11 18:08:45,694: INFO/ForkPoolWorker-8] Task 57729b81-702b-45a8-9a47-3c0472680fb3 succeeded
+[2026-05-11 18:08:45,697: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[57729b81-702b-45a8-9a47-3c0472680fb3] succeeded in 0.2244652560002578s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:09:00,828: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[682a8170-1d69-4132-b9ae-2d06c635b21c] received
+[2026-05-11 18:09:01,161: INFO/ForkPoolWorker-8] Task 682a8170-1d69-4132-b9ae-2d06c635b21c succeeded
+[2026-05-11 18:09:01,161: INFO/ForkPoolWorker-8] Task tasks.maintenance.cleanup_old_results[682a8170-1d69-4132-b9ae-2d06c635b21c] succeeded in 0.3305020970001351s: {'status': 'error', 'error': 'permission denied for table query_performance_log
+'}
+[2026-05-11 18:09:45,441: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d7f36e7d-3cbd-451d-9de6-77314d46f258] received
+[2026-05-11 18:09:45,492: INFO/MainProcess] Task tasks.maintenance.refresh_views[93ffc649-5127-42c0-851e-9541127f53f8] received
+[2026-05-11 18:09:45,495: INFO/MainProcess] Task tasks.scheduled.run_due_scans[5e151e06-3bfc-4290-8447-24a7261b02b8] received
+[2026-05-11 18:09:45,657: INFO/ForkPoolWorker-8] Task d7f36e7d-3cbd-451d-9de6-77314d46f258 succeeded
+[2026-05-11 18:09:45,657: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d7f36e7d-3cbd-451d-9de6-77314d46f258] succeeded in 0.21351703700020153s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:09:45,772: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:09:45,777: INFO/ForkPoolWorker-2] Task 5e151e06-3bfc-4290-8447-24a7261b02b8 succeeded
+[2026-05-11 18:09:45,778: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[5e151e06-3bfc-4290-8447-24a7261b02b8] succeeded in 0.2775800910003454s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:09:45,778: INFO/ForkPoolWorker-1] Task 93ffc649-5127-42c0-851e-9541127f53f8 succeeded
+[2026-05-11 18:09:45,779: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[93ffc649-5127-42c0-851e-9541127f53f8] succeeded in 0.2809539099998801s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:31:05,297: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3a8c3515-7efe-4d8d-bbfb-db32dc2898fa] received
-[2026-05-10 23:31:06,085: INFO/ForkPoolWorker-8] Task 3a8c3515-7efe-4d8d-bbfb-db32dc2898fa succeeded
-[2026-05-10 23:31:06,088: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[3a8c3515-7efe-4d8d-bbfb-db32dc2898fa] succeeded in 0.7661390850553289s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:32:05,270: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6df760e9-eb71-4965-8d6b-3c68a7c2ec78] received
-[2026-05-10 23:32:05,593: INFO/ForkPoolWorker-8] Task 6df760e9-eb71-4965-8d6b-3c68a7c2ec78 succeeded
-[2026-05-10 23:32:05,593: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[6df760e9-eb71-4965-8d6b-3c68a7c2ec78] succeeded in 0.315700474078767s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:33:05,270: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6ac3bd59-7f1b-4ee8-a295-c7ece0f6584e] received
-[2026-05-10 23:33:05,517: INFO/ForkPoolWorker-8] Task 6ac3bd59-7f1b-4ee8-a295-c7ece0f6584e succeeded
-[2026-05-10 23:33:05,518: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[6ac3bd59-7f1b-4ee8-a295-c7ece0f6584e] succeeded in 0.2390034319832921s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:34:05,292: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1bd38c0d-6916-4b10-ab1c-cc795b7d4f01] received
-[2026-05-10 23:34:05,662: INFO/ForkPoolWorker-8] Task 1bd38c0d-6916-4b10-ab1c-cc795b7d4f01 succeeded
-[2026-05-10 23:34:05,679: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1bd38c0d-6916-4b10-ab1c-cc795b7d4f01] succeeded in 0.3335653629619628s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:35:05,131: INFO/MainProcess] Task tasks.maintenance.refresh_views[93502116-7192-4065-a439-a8f21fbb988f] received
-[2026-05-10 23:35:05,167: INFO/MainProcess] Task tasks.scheduled.run_due_scans[7a1011b0-31f9-463c-8b1f-e3cd86fe0b54] received
-[2026-05-10 23:35:05,269: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c1d530a8-0de9-404b-a1d9-79d184a6ecb7] received
-[2026-05-10 23:35:05,555: INFO/ForkPoolWorker-2] Task c1d530a8-0de9-404b-a1d9-79d184a6ecb7 succeeded
-[2026-05-10 23:35:05,557: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[c1d530a8-0de9-404b-a1d9-79d184a6ecb7] succeeded in 0.25320595502853394s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:35:05,626: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:35:05,635: INFO/ForkPoolWorker-1] Task 7a1011b0-31f9-463c-8b1f-e3cd86fe0b54 succeeded
-[2026-05-10 23:35:05,634: INFO/ForkPoolWorker-8] Task 93502116-7192-4065-a439-a8f21fbb988f succeeded
-[2026-05-10 23:35:05,635: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[93502116-7192-4065-a439-a8f21fbb988f] succeeded in 0.49097100796643645s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:10:45,439: INFO/MainProcess] Task tasks.maintenance.worker_health_check[009874b7-48a7-4616-b2ec-917d876e917a] received
+[2026-05-11 18:10:45,661: INFO/ForkPoolWorker-8] Task 009874b7-48a7-4616-b2ec-917d876e917a succeeded
+[2026-05-11 18:10:45,662: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[009874b7-48a7-4616-b2ec-917d876e917a] succeeded in 0.22029746500084002s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:11:45,440: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e1d0a5b4-6851-4423-9861-25a607467021] received
+[2026-05-11 18:11:45,660: INFO/ForkPoolWorker-8] Task e1d0a5b4-6851-4423-9861-25a607467021 succeeded
+[2026-05-11 18:11:45,661: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e1d0a5b4-6851-4423-9861-25a607467021] succeeded in 0.21710590300062904s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:12:45,440: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0cc7b3a2-d943-4011-8024-a952c734265c] received
+[2026-05-11 18:12:45,659: INFO/ForkPoolWorker-8] Task 0cc7b3a2-d943-4011-8024-a952c734265c succeeded
+[2026-05-11 18:12:45,660: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[0cc7b3a2-d943-4011-8024-a952c734265c] succeeded in 0.21644057299999986s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:13:45,439: INFO/MainProcess] Task tasks.maintenance.worker_health_check[bb6c9466-7e3d-4a60-af2b-27947bd6ae80] received
+[2026-05-11 18:13:45,659: INFO/ForkPoolWorker-8] Task bb6c9466-7e3d-4a60-af2b-27947bd6ae80 succeeded
+[2026-05-11 18:13:45,659: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[bb6c9466-7e3d-4a60-af2b-27947bd6ae80] succeeded in 0.216616490000888s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:14:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[567a6a4f-12a1-4aa1-85e4-a257158a09af] received
+[2026-05-11 18:14:45,609: INFO/MainProcess] Task tasks.maintenance.refresh_views[b424246f-a5c6-4915-bd9f-ccffad4c2a3a] received
+[2026-05-11 18:14:45,613: INFO/MainProcess] Task tasks.scheduled.run_due_scans[beeb2693-33f9-4006-9745-a0d057e346f9] received
+[2026-05-11 18:14:45,824: INFO/ForkPoolWorker-8] Task 567a6a4f-12a1-4aa1-85e4-a257158a09af succeeded
+[2026-05-11 18:14:45,825: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[567a6a4f-12a1-4aa1-85e4-a257158a09af] succeeded in 0.2160549069994886s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:14:45,835: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:14:45,837: INFO/ForkPoolWorker-2] Task beeb2693-33f9-4006-9745-a0d057e346f9 succeeded
+[2026-05-11 18:14:45,838: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[beeb2693-33f9-4006-9745-a0d057e346f9] succeeded in 0.22279062400048133s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:14:45,877: INFO/ForkPoolWorker-1] Task b424246f-a5c6-4915-bd9f-ccffad4c2a3a succeeded
+[2026-05-11 18:14:45,878: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[b424246f-a5c6-4915-bd9f-ccffad4c2a3a] succeeded in 0.26541080300012254s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:35:05,635: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[7a1011b0-31f9-463c-8b1f-e3cd86fe0b54] succeeded in 0.4452672739280388s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:36:05,268: INFO/MainProcess] Task tasks.maintenance.worker_health_check[054eb024-9471-48bd-8dd9-da5a556a5ed1] received
-[2026-05-10 23:36:05,513: INFO/ForkPoolWorker-8] Task 054eb024-9471-48bd-8dd9-da5a556a5ed1 succeeded
-[2026-05-10 23:36:05,514: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[054eb024-9471-48bd-8dd9-da5a556a5ed1] succeeded in 0.2429478169651702s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:37:05,330: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4f2bbe59-d7af-4a15-9d77-7dcaafa9357a] received
-[2026-05-10 23:37:05,623: INFO/ForkPoolWorker-8] Task 4f2bbe59-d7af-4a15-9d77-7dcaafa9357a succeeded
-[2026-05-10 23:37:05,626: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[4f2bbe59-d7af-4a15-9d77-7dcaafa9357a] succeeded in 0.2800703439861536s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:38:05,399: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7337b15c-0cd6-47d7-baf2-4f3719847446] received
-[2026-05-10 23:38:07,003: INFO/ForkPoolWorker-8] Task 7337b15c-0cd6-47d7-baf2-4f3719847446 succeeded
-[2026-05-10 23:38:07,006: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[7337b15c-0cd6-47d7-baf2-4f3719847446] succeeded in 1.287999815074727s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:39:05,269: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4df5f8cc-6cd8-4941-b5cf-7c01744ce94a] received
-[2026-05-10 23:39:05,503: INFO/ForkPoolWorker-8] Task 4df5f8cc-6cd8-4941-b5cf-7c01744ce94a succeeded
-[2026-05-10 23:39:05,504: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[4df5f8cc-6cd8-4941-b5cf-7c01744ce94a] succeeded in 0.2243953599827364s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:40:05,376: INFO/MainProcess] Task tasks.maintenance.refresh_views[14b77f48-c6bb-4b95-8665-dc2b09345f87] received
-[2026-05-10 23:40:05,652: INFO/MainProcess] Task tasks.scheduled.run_due_scans[1f6fb9f1-400e-43ed-8939-e93dd84ff3b3] received
-[2026-05-10 23:40:05,662: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c5806d34-3ffd-4b48-9e60-39b96ceb5f15] received
-[2026-05-10 23:40:06,184: INFO/ForkPoolWorker-2] Task c5806d34-3ffd-4b48-9e60-39b96ceb5f15 succeeded
-[2026-05-10 23:40:06,186: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[c5806d34-3ffd-4b48-9e60-39b96ceb5f15] succeeded in 0.4947443369310349s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:40:06,292: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:40:06,311: INFO/ForkPoolWorker-1] Task 1f6fb9f1-400e-43ed-8939-e93dd84ff3b3 succeeded
-[2026-05-10 23:40:06,316: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[1f6fb9f1-400e-43ed-8939-e93dd84ff3b3] succeeded in 0.6406335779465735s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:40:06,383: INFO/ForkPoolWorker-8] Task 14b77f48-c6bb-4b95-8665-dc2b09345f87 succeeded
-[2026-05-10 23:40:06,385: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[14b77f48-c6bb-4b95-8665-dc2b09345f87] succeeded in 0.7310071400133893s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:15:45,604: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ca30caa0-e1b4-4d53-8fb4-a3eb0f245e32] received
+[2026-05-11 18:15:45,827: INFO/ForkPoolWorker-8] Task ca30caa0-e1b4-4d53-8fb4-a3eb0f245e32 succeeded
+[2026-05-11 18:15:45,827: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[ca30caa0-e1b4-4d53-8fb4-a3eb0f245e32] succeeded in 0.22001779699894541s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:16:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0e5bf6a6-d57c-43ce-be3c-48f7f7ed711c] received
+[2026-05-11 18:16:45,826: INFO/ForkPoolWorker-8] Task 0e5bf6a6-d57c-43ce-be3c-48f7f7ed711c succeeded
+[2026-05-11 18:16:45,826: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[0e5bf6a6-d57c-43ce-be3c-48f7f7ed711c] succeeded in 0.2178447149999556s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:17:45,608: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c9eca9a0-3b45-4807-a610-a506c9c7048e] received
+[2026-05-11 18:17:45,836: INFO/ForkPoolWorker-8] Task c9eca9a0-3b45-4807-a610-a506c9c7048e succeeded
+[2026-05-11 18:17:45,837: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[c9eca9a0-3b45-4807-a610-a506c9c7048e] succeeded in 0.22305933499956154s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:18:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d32bb935-d0b3-4e41-8280-e9a1a757bbf3] received
+[2026-05-11 18:18:45,826: INFO/ForkPoolWorker-8] Task d32bb935-d0b3-4e41-8280-e9a1a757bbf3 succeeded
+[2026-05-11 18:18:45,826: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d32bb935-d0b3-4e41-8280-e9a1a757bbf3] succeeded in 0.21871384599944577s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:19:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c10b063e-257d-46fc-a2d6-67ace8eee287] received
+[2026-05-11 18:19:45,608: INFO/MainProcess] Task tasks.maintenance.refresh_views[4fde3247-d2e5-45c2-94b6-680d23d648a6] received
+[2026-05-11 18:19:45,611: INFO/MainProcess] Task tasks.scheduled.run_due_scans[bf4f0499-b0e8-4904-8337-0c0d89f0c480] received
+[2026-05-11 18:19:45,823: INFO/ForkPoolWorker-8] Task c10b063e-257d-46fc-a2d6-67ace8eee287 succeeded
+[2026-05-11 18:19:45,823: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[c10b063e-257d-46fc-a2d6-67ace8eee287] succeeded in 0.2157135509987711s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:19:45,858: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:19:45,862: INFO/ForkPoolWorker-2] Task bf4f0499-b0e8-4904-8337-0c0d89f0c480 succeeded
+[2026-05-11 18:19:45,863: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[bf4f0499-b0e8-4904-8337-0c0d89f0c480] succeeded in 0.24544615000013437s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:19:45,910: INFO/ForkPoolWorker-1] Task 4fde3247-d2e5-45c2-94b6-680d23d648a6 succeeded
+[2026-05-11 18:19:45,911: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[4fde3247-d2e5-45c2-94b6-680d23d648a6] succeeded in 0.2932833719987684s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:41:05,406: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e9079db9-7ab6-4f26-8efb-af4da71ff5b5] received
-[2026-05-10 23:41:05,815: INFO/ForkPoolWorker-8] Task e9079db9-7ab6-4f26-8efb-af4da71ff5b5 succeeded
-[2026-05-10 23:41:05,824: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e9079db9-7ab6-4f26-8efb-af4da71ff5b5] succeeded in 0.3855923400260508s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:42:05,397: INFO/MainProcess] Task tasks.maintenance.worker_health_check[babed36b-bb9d-4a31-9233-c3329da4e1e6] received
-[2026-05-10 23:42:05,668: INFO/ForkPoolWorker-8] Task babed36b-bb9d-4a31-9233-c3329da4e1e6 succeeded
-[2026-05-10 23:42:05,671: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[babed36b-bb9d-4a31-9233-c3329da4e1e6] succeeded in 0.26697186299134046s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:43:05,407: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c220f795-7e70-4e08-9035-2c4944b14072] received
-[2026-05-10 23:43:05,684: INFO/ForkPoolWorker-8] Task c220f795-7e70-4e08-9035-2c4944b14072 succeeded
-[2026-05-10 23:43:05,686: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[c220f795-7e70-4e08-9035-2c4944b14072] succeeded in 0.2563876429339871s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:44:05,392: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d1cbe32a-8574-4aa3-ac95-036676e9f2d4] received
-[2026-05-10 23:44:05,629: INFO/ForkPoolWorker-8] Task d1cbe32a-8574-4aa3-ac95-036676e9f2d4 succeeded
-[2026-05-10 23:44:05,629: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d1cbe32a-8574-4aa3-ac95-036676e9f2d4] succeeded in 0.2332205029670149s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:45:05,118: INFO/MainProcess] Task tasks.maintenance.refresh_views[8918b57f-75ef-4c02-9e1b-a1730dd5c577] received
-[2026-05-10 23:45:05,184: INFO/MainProcess] Task tasks.scheduled.run_due_scans[4f66378e-e6bc-432d-b00b-e266a09e0918] received
-[2026-05-10 23:45:05,392: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d3223b39-d7fa-4aaf-a211-c20f51967b52] received
-[2026-05-10 23:45:05,564: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:45:05,575: INFO/ForkPoolWorker-1] Task 4f66378e-e6bc-432d-b00b-e266a09e0918 succeeded
-[2026-05-10 23:45:05,575: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[4f66378e-e6bc-432d-b00b-e266a09e0918] succeeded in 0.3825966219883412s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:45:05,618: INFO/ForkPoolWorker-8] Task 8918b57f-75ef-4c02-9e1b-a1730dd5c577 succeeded
-[2026-05-10 23:45:05,621: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[8918b57f-75ef-4c02-9e1b-a1730dd5c577] succeeded in 0.4893976360326633s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:20:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[aac3430c-a091-4abf-9432-d36e1ab4ae7e] received
+[2026-05-11 18:20:45,828: INFO/ForkPoolWorker-8] Task aac3430c-a091-4abf-9432-d36e1ab4ae7e succeeded
+[2026-05-11 18:20:45,829: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[aac3430c-a091-4abf-9432-d36e1ab4ae7e] succeeded in 0.22111846400002833s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:21:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ca9542c1-5d87-497b-b70c-2c6d6fac7787] received
+[2026-05-11 18:21:45,826: INFO/ForkPoolWorker-8] Task ca9542c1-5d87-497b-b70c-2c6d6fac7787 succeeded
+[2026-05-11 18:21:45,827: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[ca9542c1-5d87-497b-b70c-2c6d6fac7787] succeeded in 0.21930366900051013s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:22:45,606: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9fa25d4d-cbdd-45e9-a218-479b581cedeb] received
+[2026-05-11 18:22:45,827: INFO/ForkPoolWorker-8] Task 9fa25d4d-cbdd-45e9-a218-479b581cedeb succeeded
+[2026-05-11 18:22:45,828: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[9fa25d4d-cbdd-45e9-a218-479b581cedeb] succeeded in 0.21843458100011048s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:23:45,607: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6a351d4d-de38-4261-98f8-032b7133b042] received
+[2026-05-11 18:23:45,825: INFO/ForkPoolWorker-8] Task 6a351d4d-de38-4261-98f8-032b7133b042 succeeded
+[2026-05-11 18:23:45,826: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[6a351d4d-de38-4261-98f8-032b7133b042] succeeded in 0.2141731739993702s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:24:45,606: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1f6a3c5e-af8a-4d69-8c23-6f2c2a52c826] received
+[2026-05-11 18:24:45,609: INFO/MainProcess] Task tasks.maintenance.refresh_views[a70ed430-2231-440d-8674-daf382b2e7aa] received
+[2026-05-11 18:24:45,612: INFO/MainProcess] Task tasks.scheduled.run_due_scans[f26e772c-6349-4d35-9106-b1274e5ff6d1] received
+[2026-05-11 18:24:45,826: INFO/ForkPoolWorker-8] Task 1f6a3c5e-af8a-4d69-8c23-6f2c2a52c826 succeeded
+[2026-05-11 18:24:45,827: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1f6a3c5e-af8a-4d69-8c23-6f2c2a52c826] succeeded in 0.21642383499965945s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:24:45,946: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:24:45,949: INFO/ForkPoolWorker-2] Task f26e772c-6349-4d35-9106-b1274e5ff6d1 succeeded
+[2026-05-11 18:24:45,950: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[f26e772c-6349-4d35-9106-b1274e5ff6d1] succeeded in 0.3347915539998212s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:24:45,953: INFO/ForkPoolWorker-1] Task a70ed430-2231-440d-8674-daf382b2e7aa succeeded
+[2026-05-11 18:24:45,954: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[a70ed430-2231-440d-8674-daf382b2e7aa] succeeded in 0.34352608200060786s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:45:05,658: INFO/ForkPoolWorker-2] Task d3223b39-d7fa-4aaf-a211-c20f51967b52 succeeded
-[2026-05-10 23:45:05,664: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[d3223b39-d7fa-4aaf-a211-c20f51967b52] succeeded in 0.2562652120832354s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:46:05,396: INFO/MainProcess] Task tasks.maintenance.worker_health_check[13e130c3-8a8a-4ef9-b01d-be39a72f11f9] received
-[2026-05-10 23:46:05,637: INFO/ForkPoolWorker-8] Task 13e130c3-8a8a-4ef9-b01d-be39a72f11f9 succeeded
-[2026-05-10 23:46:05,637: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[13e130c3-8a8a-4ef9-b01d-be39a72f11f9] succeeded in 0.23558590293396264s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:47:05,427: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1ff3b05d-1ce6-44cf-95d7-3028e8e695cc] received
-[2026-05-10 23:47:05,664: INFO/ForkPoolWorker-8] Task 1ff3b05d-1ce6-44cf-95d7-3028e8e695cc succeeded
-[2026-05-10 23:47:05,665: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1ff3b05d-1ce6-44cf-95d7-3028e8e695cc] succeeded in 0.2269185009645298s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:48:05,394: INFO/MainProcess] Task tasks.maintenance.worker_health_check[2e674207-9f0d-4eb4-921f-89805b6de2db] received
-[2026-05-10 23:48:05,670: INFO/ForkPoolWorker-8] Task 2e674207-9f0d-4eb4-921f-89805b6de2db succeeded
-[2026-05-10 23:48:05,671: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[2e674207-9f0d-4eb4-921f-89805b6de2db] succeeded in 0.2703317010309547s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:49:05,487: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7f5998fd-0a1a-48c4-a9da-76ac47799f94] received
-[2026-05-10 23:49:05,721: INFO/ForkPoolWorker-8] Task 7f5998fd-0a1a-48c4-a9da-76ac47799f94 succeeded
-[2026-05-10 23:49:05,722: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[7f5998fd-0a1a-48c4-a9da-76ac47799f94] succeeded in 0.2281335109146312s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:50:05,171: INFO/MainProcess] Task tasks.maintenance.refresh_views[41e5fc0a-0435-47b8-be92-4a255c98f0c8] received
-[2026-05-10 23:50:05,180: INFO/MainProcess] Task tasks.scheduled.run_due_scans[87ab791a-ffea-4dc2-9860-8b39d146ac13] received
-[2026-05-10 23:50:05,394: INFO/MainProcess] Task tasks.maintenance.worker_health_check[15c63e9b-b41b-4216-b99f-f095c2c62abf] received
-[2026-05-10 23:50:05,546: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
-[2026-05-10 23:50:05,554: INFO/ForkPoolWorker-1] Task 87ab791a-ffea-4dc2-9860-8b39d146ac13 succeeded
-[2026-05-10 23:50:05,555: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[87ab791a-ffea-4dc2-9860-8b39d146ac13] succeeded in 0.36540383100509644s: {'status': 'completed', 'spawned': 0}
-[2026-05-10 23:50:05,596: INFO/ForkPoolWorker-8] Task 41e5fc0a-0435-47b8-be92-4a255c98f0c8 succeeded
-[2026-05-10 23:50:05,598: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[41e5fc0a-0435-47b8-be92-4a255c98f0c8] succeeded in 0.41328983393032104s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:25:45,606: INFO/MainProcess] Task tasks.maintenance.worker_health_check[13fd27b4-0a50-4518-b21e-9ee7e0892a69] received
+[2026-05-11 18:25:45,829: INFO/ForkPoolWorker-8] Task 13fd27b4-0a50-4518-b21e-9ee7e0892a69 succeeded
+[2026-05-11 18:25:45,829: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[13fd27b4-0a50-4518-b21e-9ee7e0892a69] succeeded in 0.21974431499984348s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:26:45,607: INFO/MainProcess] Task tasks.maintenance.worker_health_check[82e1ebd0-73f7-48ad-b1f8-64a669c6bd50] received
+[2026-05-11 18:26:45,826: INFO/ForkPoolWorker-8] Task 82e1ebd0-73f7-48ad-b1f8-64a669c6bd50 succeeded
+[2026-05-11 18:26:45,827: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[82e1ebd0-73f7-48ad-b1f8-64a669c6bd50] succeeded in 0.21667540999987978s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:27:45,605: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5f62bb15-b2cf-4cf1-8d4f-73dd329b569a] received
+[2026-05-11 18:27:45,820: INFO/ForkPoolWorker-8] Task 5f62bb15-b2cf-4cf1-8d4f-73dd329b569a succeeded
+[2026-05-11 18:27:45,821: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[5f62bb15-b2cf-4cf1-8d4f-73dd329b569a] succeeded in 0.21245672500117507s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:28:45,607: INFO/MainProcess] Task tasks.maintenance.worker_health_check[58c19b8b-7fa2-4c0a-8fcb-45dc9712ba1e] received
+[2026-05-11 18:28:45,826: INFO/ForkPoolWorker-8] Task 58c19b8b-7fa2-4c0a-8fcb-45dc9712ba1e succeeded
+[2026-05-11 18:28:45,827: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[58c19b8b-7fa2-4c0a-8fcb-45dc9712ba1e] succeeded in 0.2165018939995207s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:29:45,695: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3160da96-75b2-4f84-b79a-4e4b26948279] received
+[2026-05-11 18:29:45,699: INFO/MainProcess] Task tasks.maintenance.refresh_views[87845280-102e-4e2a-be6c-03b6c8f53c70] received
+[2026-05-11 18:29:45,702: INFO/MainProcess] Task tasks.scheduled.run_due_scans[840f93e1-9060-43b0-889c-721596671e0c] received
+[2026-05-11 18:29:45,914: INFO/ForkPoolWorker-8] Task 3160da96-75b2-4f84-b79a-4e4b26948279 succeeded
+[2026-05-11 18:29:45,914: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[3160da96-75b2-4f84-b79a-4e4b26948279] succeeded in 0.21428981600001862s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:29:46,025: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:29:46,030: INFO/ForkPoolWorker-2] Task 840f93e1-9060-43b0-889c-721596671e0c succeeded
+[2026-05-11 18:29:46,030: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[840f93e1-9060-43b0-889c-721596671e0c] succeeded in 0.3218244460003916s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:29:46,036: INFO/ForkPoolWorker-1] Task 87845280-102e-4e2a-be6c-03b6c8f53c70 succeeded
+[2026-05-11 18:29:46,037: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[87845280-102e-4e2a-be6c-03b6c8f53c70] succeeded in 0.3324220510003215s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-10 23:50:05,643: INFO/ForkPoolWorker-2] Task 15c63e9b-b41b-4216-b99f-f095c2c62abf succeeded
-[2026-05-10 23:50:05,647: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[15c63e9b-b41b-4216-b99f-f095c2c62abf] succeeded in 0.23706730699632317s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-10 23:51:05,396: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e5ad2beb-2577-4687-ba70-7b5d89822a1b] received
-[2026-05-10 23:51:05,632: INFO/ForkPoolWorker-8] Task e5ad2beb-2577-4687-ba70-7b5d89822a1b succeeded
-[2026-05-10 23:51:05,633: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e5ad2beb-2577-4687-ba70-7b5d89822a1b] succeeded in 0.231084719998762s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:21:55,734: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e6be6a0c-9bea-454f-b33c-56ce23537d00] received
-[2026-05-11 00:21:55,747: INFO/MainProcess] Task tasks.maintenance.refresh_views[34ebcbaf-086a-44fa-9d6b-e50d9e2c92df] received
-[2026-05-11 00:21:55,770: INFO/MainProcess] Task tasks.scheduled.run_due_scans[063518d6-f14a-40f5-b57e-ab98784d589d] received
-[2026-05-11 00:21:55,777: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[116ce37f-6568-4838-a7fa-d0980e0357c6] received
-[2026-05-11 00:21:56,222: INFO/ForkPoolWorker-8] Task e6be6a0c-9bea-454f-b33c-56ce23537d00 succeeded
-[2026-05-11 00:21:56,223: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e6be6a0c-9bea-454f-b33c-56ce23537d00] succeeded in 0.48325449600815773s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:21:57,041: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 00:21:57,061: INFO/ForkPoolWorker-2] Task 063518d6-f14a-40f5-b57e-ab98784d589d succeeded
-[2026-05-11 00:21:57,062: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[063518d6-f14a-40f5-b57e-ab98784d589d] succeeded in 1.2747037999797612s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 00:21:57,487: INFO/ForkPoolWorker-1] Task 34ebcbaf-086a-44fa-9d6b-e50d9e2c92df succeeded
-[2026-05-11 00:21:57,490: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[34ebcbaf-086a-44fa-9d6b-e50d9e2c92df] succeeded in 1.718751461012289s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:30:45,697: INFO/MainProcess] Task tasks.maintenance.worker_health_check[555a7cdb-2292-47e1-a237-ac4457629aa3] received
+[2026-05-11 18:30:45,919: INFO/ForkPoolWorker-8] Task 555a7cdb-2292-47e1-a237-ac4457629aa3 succeeded
+[2026-05-11 18:30:45,920: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[555a7cdb-2292-47e1-a237-ac4457629aa3] succeeded in 0.21937972100022307s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:31:45,697: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0b81b69c-f853-4f6c-865c-d5fe3ac1669f] received
+[2026-05-11 18:31:45,916: INFO/ForkPoolWorker-8] Task 0b81b69c-f853-4f6c-865c-d5fe3ac1669f succeeded
+[2026-05-11 18:31:45,916: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[0b81b69c-f853-4f6c-865c-d5fe3ac1669f] succeeded in 0.2164924169992446s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:32:45,698: INFO/MainProcess] Task tasks.maintenance.worker_health_check[cfb41809-7634-428d-bc51-53422f78b9bb] received
+[2026-05-11 18:32:45,916: INFO/ForkPoolWorker-8] Task cfb41809-7634-428d-bc51-53422f78b9bb succeeded
+[2026-05-11 18:32:45,917: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[cfb41809-7634-428d-bc51-53422f78b9bb] succeeded in 0.21630949400059762s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:33:45,701: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6e5aa58a-0f03-4a5a-9475-f6041e1aefc1] received
+[2026-05-11 18:33:45,922: INFO/ForkPoolWorker-8] Task 6e5aa58a-0f03-4a5a-9475-f6041e1aefc1 succeeded
+[2026-05-11 18:33:45,922: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[6e5aa58a-0f03-4a5a-9475-f6041e1aefc1] succeeded in 0.2185010120010702s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:34:45,698: INFO/MainProcess] Task tasks.maintenance.refresh_views[75998b12-f74e-44c8-ba4c-c06b3f69c66e] received
+[2026-05-11 18:34:45,703: INFO/MainProcess] Task tasks.scheduled.run_due_scans[fcf0b9fd-6658-47d2-9a13-4184b58ebafa] received
+[2026-05-11 18:34:45,706: INFO/MainProcess] Task tasks.maintenance.worker_health_check[08a953d3-cb25-478c-bb57-2c499e1b7207] received
+[2026-05-11 18:34:45,937: INFO/ForkPoolWorker-2] Task 08a953d3-cb25-478c-bb57-2c499e1b7207 succeeded
+[2026-05-11 18:34:45,938: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[08a953d3-cb25-478c-bb57-2c499e1b7207] succeeded in 0.2254820660000405s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:34:45,995: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:34:46,007: INFO/ForkPoolWorker-1] Task fcf0b9fd-6658-47d2-9a13-4184b58ebafa succeeded
+[2026-05-11 18:34:46,007: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[fcf0b9fd-6658-47d2-9a13-4184b58ebafa] succeeded in 0.2984884779998538s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:34:46,015: INFO/ForkPoolWorker-8] Task 75998b12-f74e-44c8-ba4c-c06b3f69c66e succeeded
+[2026-05-11 18:34:46,015: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[75998b12-f74e-44c8-ba4c-c06b3f69c66e] succeeded in 0.3132789789997332s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 00:21:57,926: INFO/ForkPoolWorker-3] Task 116ce37f-6568-4838-a7fa-d0980e0357c6 succeeded
-[2026-05-11 00:21:57,928: INFO/ForkPoolWorker-3] Task tasks.maintenance.cleanup_old_results[116ce37f-6568-4838-a7fa-d0980e0357c6] succeeded in 2.0531796470750123s: {'status': 'error', 'error': 'permission denied for table query_performance_log
-'}
-[2026-05-11 00:22:56,195: INFO/MainProcess] Task tasks.maintenance.worker_health_check[84c16073-c19e-46bf-943a-7f221bce5fd1] received
-[2026-05-11 00:22:56,662: INFO/ForkPoolWorker-8] Task 84c16073-c19e-46bf-943a-7f221bce5fd1 succeeded
-[2026-05-11 00:22:56,667: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[84c16073-c19e-46bf-943a-7f221bce5fd1] succeeded in 0.43389193899929523s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:23:55,840: INFO/MainProcess] Task tasks.maintenance.worker_health_check[789224c8-0762-41c2-8e85-42808c002fdf] received
-[2026-05-11 00:23:56,066: INFO/ForkPoolWorker-8] Task 789224c8-0762-41c2-8e85-42808c002fdf succeeded
-[2026-05-11 00:23:56,068: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[789224c8-0762-41c2-8e85-42808c002fdf] succeeded in 0.22069025796372443s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:24:56,089: INFO/MainProcess] Task tasks.maintenance.worker_health_check[74479a89-eaca-4a73-b530-8cdba41f259f] received
-[2026-05-11 00:24:56,523: INFO/ForkPoolWorker-8] Task 74479a89-eaca-4a73-b530-8cdba41f259f succeeded
-[2026-05-11 00:24:56,531: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[74479a89-eaca-4a73-b530-8cdba41f259f] succeeded in 0.3852170800091699s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:55:46,875: INFO/MainProcess] Task tasks.maintenance.worker_health_check[381974d7-1df6-4bbd-a5ee-c3b33b6089e9] received
-[2026-05-11 00:55:46,889: INFO/MainProcess] Task tasks.maintenance.refresh_views[f94a80d2-c7ba-49e9-9838-26fd133b1d1c] received
-[2026-05-11 00:55:47,181: INFO/MainProcess] Task tasks.scheduled.run_due_scans[63a3503e-3801-47d4-adcc-873a28fdd88f] received
-[2026-05-11 00:55:48,221: INFO/ForkPoolWorker-8] Task 381974d7-1df6-4bbd-a5ee-c3b33b6089e9 succeeded
-[2026-05-11 00:55:48,224: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[381974d7-1df6-4bbd-a5ee-c3b33b6089e9] succeeded in 1.3319276300026104s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:55:48,617: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 00:55:48,628: INFO/ForkPoolWorker-2] Task 63a3503e-3801-47d4-adcc-873a28fdd88f succeeded
-[2026-05-11 00:55:48,629: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[63a3503e-3801-47d4-adcc-873a28fdd88f] succeeded in 1.4252651589922607s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 00:55:48,858: INFO/ForkPoolWorker-1] Task f94a80d2-c7ba-49e9-9838-26fd133b1d1c succeeded
-[2026-05-11 00:55:48,861: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[f94a80d2-c7ba-49e9-9838-26fd133b1d1c] succeeded in 1.7549718719674274s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:35:45,705: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ecbbf0da-3f91-4f29-a923-8e5e9dc403ef] received
+[2026-05-11 18:35:45,929: INFO/ForkPoolWorker-8] Task ecbbf0da-3f91-4f29-a923-8e5e9dc403ef succeeded
+[2026-05-11 18:35:45,930: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[ecbbf0da-3f91-4f29-a923-8e5e9dc403ef] succeeded in 0.22142008599985274s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:36:45,704: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9f761e0f-8deb-4e9a-8271-dd84123fabdc] received
+[2026-05-11 18:36:45,924: INFO/ForkPoolWorker-8] Task 9f761e0f-8deb-4e9a-8271-dd84123fabdc succeeded
+[2026-05-11 18:36:45,924: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[9f761e0f-8deb-4e9a-8271-dd84123fabdc] succeeded in 0.2172700459996122s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:37:45,704: INFO/MainProcess] Task tasks.maintenance.worker_health_check[2d2dcba1-7114-45ac-8157-0bbfe67151e8] received
+[2026-05-11 18:37:45,926: INFO/ForkPoolWorker-8] Task 2d2dcba1-7114-45ac-8157-0bbfe67151e8 succeeded
+[2026-05-11 18:37:45,926: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[2d2dcba1-7114-45ac-8157-0bbfe67151e8] succeeded in 0.2183839209992584s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:38:45,703: INFO/MainProcess] Task tasks.maintenance.worker_health_check[14476232-b3ae-4c47-9e96-d275bb83b232] received
+[2026-05-11 18:38:45,924: INFO/ForkPoolWorker-8] Task 14476232-b3ae-4c47-9e96-d275bb83b232 succeeded
+[2026-05-11 18:38:45,924: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[14476232-b3ae-4c47-9e96-d275bb83b232] succeeded in 0.21887315599997237s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:39:45,697: INFO/MainProcess] Task tasks.maintenance.refresh_views[30f3ef06-b259-4c98-8e6d-ac9db22cba5f] received
+[2026-05-11 18:39:45,700: INFO/MainProcess] Task tasks.scheduled.run_due_scans[521bf4d0-7e80-4914-be71-f01bc50616af] received
+[2026-05-11 18:39:45,703: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b7e1e7cf-0a4e-46fa-9b5c-87ddd7e447b3] received
+[2026-05-11 18:39:45,917: INFO/ForkPoolWorker-2] Task b7e1e7cf-0a4e-46fa-9b5c-87ddd7e447b3 succeeded
+[2026-05-11 18:39:45,918: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[b7e1e7cf-0a4e-46fa-9b5c-87ddd7e447b3] succeeded in 0.21321512399845233s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:39:45,968: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:39:45,971: INFO/ForkPoolWorker-1] Task 521bf4d0-7e80-4914-be71-f01bc50616af succeeded
+[2026-05-11 18:39:45,972: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[521bf4d0-7e80-4914-be71-f01bc50616af] succeeded in 0.26940458999888506s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:39:45,975: INFO/ForkPoolWorker-8] Task 30f3ef06-b259-4c98-8e6d-ac9db22cba5f succeeded
+[2026-05-11 18:39:45,975: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[30f3ef06-b259-4c98-8e6d-ac9db22cba5f] succeeded in 0.2763859409988072s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 00:56:46,823: INFO/MainProcess] Task tasks.maintenance.worker_health_check[67d56103-06d1-4537-a3c8-4a419d64a08e] received
-[2026-05-11 00:56:47,118: INFO/ForkPoolWorker-8] Task 67d56103-06d1-4537-a3c8-4a419d64a08e succeeded
-[2026-05-11 00:56:47,121: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[67d56103-06d1-4537-a3c8-4a419d64a08e] succeeded in 0.26282800699118525s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:57:46,779: INFO/MainProcess] Task tasks.maintenance.worker_health_check[675c6a90-3371-4461-9376-3b1414a30c11] received
-[2026-05-11 00:57:47,011: INFO/ForkPoolWorker-8] Task 675c6a90-3371-4461-9376-3b1414a30c11 succeeded
-[2026-05-11 00:57:47,013: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[675c6a90-3371-4461-9376-3b1414a30c11] succeeded in 0.22331242798827589s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:58:46,826: INFO/MainProcess] Task tasks.maintenance.worker_health_check[94f63a06-94af-4447-a0c1-80541b88e1eb] received
-[2026-05-11 00:58:47,233: INFO/ForkPoolWorker-8] Task 94f63a06-94af-4447-a0c1-80541b88e1eb succeeded
-[2026-05-11 00:58:47,236: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[94f63a06-94af-4447-a0c1-80541b88e1eb] succeeded in 0.38224857999011874s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 00:59:46,790: INFO/MainProcess] Task tasks.maintenance.worker_health_check[eaba7d3e-373a-4bd2-a089-843c79311bf7] received
-[2026-05-11 00:59:47,052: INFO/ForkPoolWorker-8] Task eaba7d3e-373a-4bd2-a089-843c79311bf7 succeeded
-[2026-05-11 00:59:47,055: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[eaba7d3e-373a-4bd2-a089-843c79311bf7] succeeded in 0.24751587002538145s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 01:00:46,795: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f26c432d-a777-487d-9622-a7d019f4068b] received
-[2026-05-11 01:00:46,821: INFO/MainProcess] Task tasks.maintenance.refresh_views[f1703381-33d2-49c9-a7cb-7138c3366b22] received
-[2026-05-11 01:00:46,892: INFO/MainProcess] Task tasks.scheduled.run_due_scans[e4534ea0-873b-47f5-80ad-73330f2e22c3] received
-[2026-05-11 01:00:47,095: INFO/ForkPoolWorker-8] Task f26c432d-a777-487d-9622-a7d019f4068b succeeded
-[2026-05-11 01:00:47,097: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[f26c432d-a777-487d-9622-a7d019f4068b] succeeded in 0.2611569659784436s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 01:00:48,785: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 01:00:48,810: INFO/ForkPoolWorker-2] Task e4534ea0-873b-47f5-80ad-73330f2e22c3 succeeded
-[2026-05-11 01:00:48,813: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[e4534ea0-873b-47f5-80ad-73330f2e22c3] succeeded in 1.8713680190267041s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 01:00:48,822: INFO/ForkPoolWorker-1] Task f1703381-33d2-49c9-a7cb-7138c3366b22 succeeded
-[2026-05-11 01:00:48,831: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[f1703381-33d2-49c9-a7cb-7138c3366b22] succeeded in 1.944377524079755s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:40:45,708: INFO/MainProcess] Task tasks.maintenance.worker_health_check[716e4522-767f-44e9-99fc-d356b04a835f] received
+[2026-05-11 18:40:45,932: INFO/ForkPoolWorker-8] Task 716e4522-767f-44e9-99fc-d356b04a835f succeeded
+[2026-05-11 18:40:45,933: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[716e4522-767f-44e9-99fc-d356b04a835f] succeeded in 0.22217126900068251s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:41:45,707: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e9743bc1-61d3-4ca3-8aa1-08b6f1b259c6] received
+[2026-05-11 18:41:45,930: INFO/ForkPoolWorker-8] Task e9743bc1-61d3-4ca3-8aa1-08b6f1b259c6 succeeded
+[2026-05-11 18:41:45,931: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e9743bc1-61d3-4ca3-8aa1-08b6f1b259c6] succeeded in 0.22055684800034214s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:42:45,707: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0bfe402a-b85e-4696-8594-a528473ef7b9] received
+[2026-05-11 18:42:45,926: INFO/ForkPoolWorker-8] Task 0bfe402a-b85e-4696-8594-a528473ef7b9 succeeded
+[2026-05-11 18:42:45,927: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[0bfe402a-b85e-4696-8594-a528473ef7b9] succeeded in 0.21709827199993015s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:43:45,710: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e88d2035-180e-48de-b119-e9022aa14935] received
+[2026-05-11 18:43:45,932: INFO/ForkPoolWorker-8] Task e88d2035-180e-48de-b119-e9022aa14935 succeeded
+[2026-05-11 18:43:45,933: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e88d2035-180e-48de-b119-e9022aa14935] succeeded in 0.2201568349992158s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:44:45,796: INFO/MainProcess] Task tasks.maintenance.refresh_views[debd6362-3897-41c6-a021-9994a6cf1bdc] received
+[2026-05-11 18:44:45,799: INFO/MainProcess] Task tasks.scheduled.run_due_scans[00004e37-d32c-4c2f-97c6-5fc38455da4e] received
+[2026-05-11 18:44:45,803: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9adca36e-ca5d-4b2f-9af2-bb318c290fa5] received
+[2026-05-11 18:44:46,035: INFO/ForkPoolWorker-2] Task 9adca36e-ca5d-4b2f-9af2-bb318c290fa5 succeeded
+[2026-05-11 18:44:46,035: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[9adca36e-ca5d-4b2f-9af2-bb318c290fa5] succeeded in 0.23010081400025229s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:44:46,143: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:44:46,146: INFO/ForkPoolWorker-8] Task debd6362-3897-41c6-a021-9994a6cf1bdc succeeded
+[2026-05-11 18:44:46,145: INFO/ForkPoolWorker-1] Task 00004e37-d32c-4c2f-97c6-5fc38455da4e succeeded
+[2026-05-11 18:44:46,146: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[debd6362-3897-41c6-a021-9994a6cf1bdc] succeeded in 0.3455695890006609s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 01:01:46,813: INFO/MainProcess] Task tasks.maintenance.worker_health_check[cdc6ad82-2537-4c87-af66-d8378e5540e5] received
-[2026-05-11 01:01:47,398: INFO/ForkPoolWorker-8] Task cdc6ad82-2537-4c87-af66-d8378e5540e5 succeeded
-[2026-05-11 01:01:47,400: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[cdc6ad82-2537-4c87-af66-d8378e5540e5] succeeded in 0.5436443539801985s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 01:02:46,870: INFO/MainProcess] Task tasks.maintenance.worker_health_check[33b3ebe3-41bb-41e2-b92b-957413a79691] received
-[2026-05-11 01:02:47,138: WARNING/ForkPoolWorker-8] Found 1 unhealthy workers
-[2026-05-11 01:02:47,153: INFO/ForkPoolWorker-8] Task 33b3ebe3-41bb-41e2-b92b-957413a79691 succeeded
-[2026-05-11 01:02:47,155: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[33b3ebe3-41bb-41e2-b92b-957413a79691] succeeded in 0.2697175439679995s: {'status': 'completed', 'unhealthy_workers': 1, 'cleaned_workers': 0}
-[2026-05-11 02:20:01,345: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e258c093-4d28-4b57-b485-2f742319ea54] received
-[2026-05-11 02:20:01,355: INFO/MainProcess] Task tasks.maintenance.refresh_views[ad51b596-f14e-4e91-a7ad-8bdb3f6825f0] received
-[2026-05-11 02:20:01,359: INFO/MainProcess] Task tasks.scheduled.run_due_scans[59779531-27c5-430e-8780-51308d847b98] received
-[2026-05-11 02:20:01,407: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[1950d727-b581-4388-aa27-7b4168d6b917] received
-[2026-05-11 02:20:01,642: INFO/ForkPoolWorker-8] Task e258c093-4d28-4b57-b485-2f742319ea54 succeeded
-[2026-05-11 02:20:01,645: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e258c093-4d28-4b57-b485-2f742319ea54] succeeded in 0.2791959879687056s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 02:20:02,397: INFO/ForkPoolWorker-3] Task 1950d727-b581-4388-aa27-7b4168d6b917 succeeded
-[2026-05-11 02:20:02,413: INFO/ForkPoolWorker-3] Task tasks.maintenance.cleanup_old_results[1950d727-b581-4388-aa27-7b4168d6b917] succeeded in 0.9302671289769933s: {'status': 'error', 'error': 'permission denied for table query_performance_log
-'}
-[2026-05-11 02:20:02,606: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 02:20:02,618: INFO/ForkPoolWorker-2] Task 59779531-27c5-430e-8780-51308d847b98 succeeded
-[2026-05-11 02:20:02,619: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[59779531-27c5-430e-8780-51308d847b98] succeeded in 1.2343426420120522s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 02:20:02,621: INFO/ForkPoolWorker-1] Task ad51b596-f14e-4e91-a7ad-8bdb3f6825f0 succeeded
-[2026-05-11 02:20:02,623: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[ad51b596-f14e-4e91-a7ad-8bdb3f6825f0] succeeded in 1.2415993999456987s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:44:46,146: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[00004e37-d32c-4c2f-97c6-5fc38455da4e] succeeded in 0.34538132499983476s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:45:45,803: INFO/MainProcess] Task tasks.maintenance.worker_health_check[db5bc350-0ecb-41a8-955d-81434bd74fe0] received
+[2026-05-11 18:45:46,023: INFO/ForkPoolWorker-8] Task db5bc350-0ecb-41a8-955d-81434bd74fe0 succeeded
+[2026-05-11 18:45:46,023: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[db5bc350-0ecb-41a8-955d-81434bd74fe0] succeeded in 0.21783480100020824s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:46:45,802: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1f8e8a90-7277-45f6-84d9-4bc09ccd0bef] received
+[2026-05-11 18:46:46,020: INFO/ForkPoolWorker-8] Task 1f8e8a90-7277-45f6-84d9-4bc09ccd0bef succeeded
+[2026-05-11 18:46:46,021: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1f8e8a90-7277-45f6-84d9-4bc09ccd0bef] succeeded in 0.21517198199944687s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:47:45,805: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7c491dc3-f803-46dd-97a3-359519f43fbb] received
+[2026-05-11 18:47:46,043: INFO/ForkPoolWorker-8] Task 7c491dc3-f803-46dd-97a3-359519f43fbb succeeded
+[2026-05-11 18:47:46,044: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[7c491dc3-f803-46dd-97a3-359519f43fbb] succeeded in 0.2242895449999196s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:48:45,816: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d170af3d-d226-4f7a-a90a-51f7d618e22e] received
+[2026-05-11 18:48:46,035: INFO/ForkPoolWorker-8] Task d170af3d-d226-4f7a-a90a-51f7d618e22e succeeded
+[2026-05-11 18:48:46,035: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d170af3d-d226-4f7a-a90a-51f7d618e22e] succeeded in 0.21719220600061817s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:49:45,796: INFO/MainProcess] Task tasks.maintenance.refresh_views[36cd81cd-6f22-4a25-8dc5-5db1496af4cf] received
+[2026-05-11 18:49:45,800: INFO/MainProcess] Task tasks.scheduled.run_due_scans[57a3b0d6-8156-499c-90b1-66531bed028b] received
+[2026-05-11 18:49:45,804: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c338a986-7fb1-4b78-8d76-204e48ea28cd] received
+[2026-05-11 18:49:46,045: INFO/ForkPoolWorker-2] Task c338a986-7fb1-4b78-8d76-204e48ea28cd succeeded
+[2026-05-11 18:49:46,046: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[c338a986-7fb1-4b78-8d76-204e48ea28cd] succeeded in 0.23953442699894367s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:49:46,163: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:49:46,176: INFO/ForkPoolWorker-1] Task 57a3b0d6-8156-499c-90b1-66531bed028b succeeded
+[2026-05-11 18:49:46,177: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[57a3b0d6-8156-499c-90b1-66531bed028b] succeeded in 0.3738754940004583s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:49:46,186: INFO/ForkPoolWorker-8] Task 36cd81cd-6f22-4a25-8dc5-5db1496af4cf succeeded
+[2026-05-11 18:49:46,187: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[36cd81cd-6f22-4a25-8dc5-5db1496af4cf] succeeded in 0.38752534899867896s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 07:15:45,324: INFO/MainProcess] Task tasks.maintenance.worker_health_check[fc882c3b-961e-464f-9194-1359ec6d234b] received
-[2026-05-11 07:15:45,421: INFO/MainProcess] Task tasks.maintenance.refresh_views[959b4c23-ca40-427d-9018-c36d8a390cc9] received
-[2026-05-11 07:15:45,426: INFO/MainProcess] Task tasks.scheduled.run_due_scans[49782c36-6f60-43c2-9989-d9b4a73c5b00] received
-[2026-05-11 07:15:45,442: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[749414b2-6287-4471-bd89-60c1b059e113] received
-[2026-05-11 07:15:45,727: INFO/ForkPoolWorker-8] Task fc882c3b-961e-464f-9194-1359ec6d234b succeeded
-[2026-05-11 07:15:45,731: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[fc882c3b-961e-464f-9194-1359ec6d234b] succeeded in 0.3702162540284917s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 07:15:46,116: INFO/ForkPoolWorker-3] Task 749414b2-6287-4471-bd89-60c1b059e113 succeeded
-[2026-05-11 07:15:46,120: INFO/ForkPoolWorker-3] Task tasks.maintenance.cleanup_old_results[749414b2-6287-4471-bd89-60c1b059e113] succeeded in 0.6544128219829872s: {'status': 'error', 'error': 'permission denied for table query_performance_log
-'}
-[2026-05-11 07:15:46,133: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 07:15:46,150: INFO/ForkPoolWorker-2] Task 49782c36-6f60-43c2-9989-d9b4a73c5b00 succeeded
-[2026-05-11 07:15:46,151: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[49782c36-6f60-43c2-9989-d9b4a73c5b00] succeeded in 0.6942558590089902s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 07:15:46,350: INFO/ForkPoolWorker-1] Task 959b4c23-ca40-427d-9018-c36d8a390cc9 succeeded
-[2026-05-11 07:15:46,354: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[959b4c23-ca40-427d-9018-c36d8a390cc9] succeeded in 0.9051343930186704s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:50:45,802: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3115d39c-8198-4328-84c8-1116f77e9748] received
+[2026-05-11 18:50:46,030: INFO/ForkPoolWorker-8] Task 3115d39c-8198-4328-84c8-1116f77e9748 succeeded
+[2026-05-11 18:50:46,030: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[3115d39c-8198-4328-84c8-1116f77e9748] succeeded in 0.2262058350006555s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:51:45,805: INFO/MainProcess] Task tasks.maintenance.worker_health_check[fe785fdd-9385-46f9-aedc-f051eb1add00] received
+[2026-05-11 18:51:46,024: INFO/ForkPoolWorker-8] Task fe785fdd-9385-46f9-aedc-f051eb1add00 succeeded
+[2026-05-11 18:51:46,025: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[fe785fdd-9385-46f9-aedc-f051eb1add00] succeeded in 0.21592572900044615s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:52:45,803: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d4c9e4ec-551c-43b4-8346-691e7b47aa70] received
+[2026-05-11 18:52:46,024: INFO/ForkPoolWorker-8] Task d4c9e4ec-551c-43b4-8346-691e7b47aa70 succeeded
+[2026-05-11 18:52:46,024: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d4c9e4ec-551c-43b4-8346-691e7b47aa70] succeeded in 0.2189006190001237s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:53:45,845: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e2711d12-36e5-4026-9f12-ee442cb6b967] received
+[2026-05-11 18:53:46,205: INFO/ForkPoolWorker-8] Task e2711d12-36e5-4026-9f12-ee442cb6b967 succeeded
+[2026-05-11 18:53:46,205: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[e2711d12-36e5-4026-9f12-ee442cb6b967] succeeded in 0.35699145199941995s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:54:45,798: INFO/MainProcess] Task tasks.maintenance.refresh_views[4695fe8d-d355-4ddd-83de-2466153910d8] received
+[2026-05-11 18:54:45,803: INFO/MainProcess] Task tasks.scheduled.run_due_scans[b18d6039-439e-41c4-ae95-a46f44cffe3c] received
+[2026-05-11 18:54:45,818: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c773d8cb-fa44-4013-b390-680f666a6d66] received
+[2026-05-11 18:54:46,040: INFO/ForkPoolWorker-2] Task c773d8cb-fa44-4013-b390-680f666a6d66 succeeded
+[2026-05-11 18:54:46,041: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[c773d8cb-fa44-4013-b390-680f666a6d66] succeeded in 0.22084766599982686s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:54:46,126: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:54:46,129: INFO/ForkPoolWorker-1] Task b18d6039-439e-41c4-ae95-a46f44cffe3c succeeded
+[2026-05-11 18:54:46,129: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[b18d6039-439e-41c4-ae95-a46f44cffe3c] succeeded in 0.3224671429998125s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:54:46,171: INFO/ForkPoolWorker-8] Task 4695fe8d-d355-4ddd-83de-2466153910d8 succeeded
+[2026-05-11 18:54:46,171: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[4695fe8d-d355-4ddd-83de-2466153910d8] succeeded in 0.36906569700113323s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 07:55:05,158: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5b69f973-4e3b-44c8-a45b-74230e55dcc4] received
-[2026-05-11 07:55:05,185: INFO/MainProcess] Task tasks.maintenance.refresh_views[78bd8764-38a1-4a90-9bc8-56bd4631504e] received
-[2026-05-11 07:55:05,192: INFO/MainProcess] Task tasks.scheduled.run_due_scans[e785c2f2-d1b4-45ad-b2f8-18cb9eca5361] received
-[2026-05-11 07:55:05,531: INFO/ForkPoolWorker-8] Task 5b69f973-4e3b-44c8-a45b-74230e55dcc4 succeeded
-[2026-05-11 07:55:05,533: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[5b69f973-4e3b-44c8-a45b-74230e55dcc4] succeeded in 0.35382096807006747s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 07:55:15,355: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 07:55:15,395: INFO/ForkPoolWorker-2] Task e785c2f2-d1b4-45ad-b2f8-18cb9eca5361 succeeded
-[2026-05-11 07:55:15,395: INFO/ForkPoolWorker-1] Task 78bd8764-38a1-4a90-9bc8-56bd4631504e succeeded
-[2026-05-11 07:55:15,398: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[e785c2f2-d1b4-45ad-b2f8-18cb9eca5361] succeeded in 11.797948766034096s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 07:55:15,399: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[78bd8764-38a1-4a90-9bc8-56bd4631504e] succeeded in 11.799724717973731s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 18:55:45,804: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3118be0b-f867-4fbf-b7ec-ea49e23d6d76] received
+[2026-05-11 18:55:46,027: INFO/ForkPoolWorker-8] Task 3118be0b-f867-4fbf-b7ec-ea49e23d6d76 succeeded
+[2026-05-11 18:55:46,027: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[3118be0b-f867-4fbf-b7ec-ea49e23d6d76] succeeded in 0.22064173800026765s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:56:45,813: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0cc1ca89-1cff-4f78-ab29-81fd521fe94c] received
+[2026-05-11 18:56:46,033: WARNING/ForkPoolWorker-8] Found 1 unhealthy workers
+[2026-05-11 18:56:46,035: INFO/ForkPoolWorker-8] Task 0cc1ca89-1cff-4f78-ab29-81fd521fe94c succeeded
+[2026-05-11 18:56:46,035: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[0cc1ca89-1cff-4f78-ab29-81fd521fe94c] succeeded in 0.21964727799968387s: {'status': 'completed', 'unhealthy_workers': 1, 'cleaned_workers': 0}
+[2026-05-11 18:57:45,802: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4a878541-5324-4d9a-b8ce-448dc84c4d4e] received
+[2026-05-11 18:57:46,080: INFO/ForkPoolWorker-8] Task 4a878541-5324-4d9a-b8ce-448dc84c4d4e succeeded
+[2026-05-11 18:57:46,081: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[4a878541-5324-4d9a-b8ce-448dc84c4d4e] succeeded in 0.2757504909986892s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:58:45,804: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9a09933a-253b-4c76-bc04-f6768b53dda8] received
+[2026-05-11 18:58:46,042: INFO/ForkPoolWorker-8] Task 9a09933a-253b-4c76-bc04-f6768b53dda8 succeeded
+[2026-05-11 18:58:46,042: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[9a09933a-253b-4c76-bc04-f6768b53dda8] succeeded in 0.2357459260001633s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:59:45,796: INFO/MainProcess] Task tasks.maintenance.refresh_views[f923f9a5-53d6-4787-9fe3-9d45471f08f7] received
+[2026-05-11 18:59:45,798: INFO/MainProcess] Task tasks.scheduled.run_due_scans[d184f02b-3698-411e-89a8-a52014d94404] received
+[2026-05-11 18:59:45,804: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b2d9d093-f162-4f79-a600-ccb6922e5007] received
+[2026-05-11 18:59:46,024: INFO/ForkPoolWorker-2] Task b2d9d093-f162-4f79-a600-ccb6922e5007 succeeded
+[2026-05-11 18:59:46,024: INFO/ForkPoolWorker-2] Task tasks.maintenance.worker_health_check[b2d9d093-f162-4f79-a600-ccb6922e5007] succeeded in 0.21865789599905838s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 18:59:46,095: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 18:59:46,097: INFO/ForkPoolWorker-1] Task d184f02b-3698-411e-89a8-a52014d94404 succeeded
+[2026-05-11 18:59:46,098: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[d184f02b-3698-411e-89a8-a52014d94404] succeeded in 0.2978256620008324s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 18:59:46,101: INFO/ForkPoolWorker-8] Task f923f9a5-53d6-4787-9fe3-9d45471f08f7 succeeded
+[2026-05-11 18:59:46,101: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[f923f9a5-53d6-4787-9fe3-9d45471f08f7] succeeded in 0.30166562799968233s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 07:56:05,190: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d8f14f32-9cc5-40fc-96d3-1b7dcf02cda6] received
-[2026-05-11 07:56:05,590: INFO/ForkPoolWorker-8] Task d8f14f32-9cc5-40fc-96d3-1b7dcf02cda6 succeeded
-[2026-05-11 07:56:05,594: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d8f14f32-9cc5-40fc-96d3-1b7dcf02cda6] succeeded in 0.3851264490513131s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 07:57:05,142: INFO/MainProcess] Task tasks.maintenance.worker_health_check[89d13c7e-5b69-4f83-be5a-5a2e4feebbbe] received
-[2026-05-11 07:57:05,361: WARNING/ForkPoolWorker-8] Found 1 unhealthy workers
-[2026-05-11 07:57:05,364: INFO/ForkPoolWorker-8] Task 89d13c7e-5b69-4f83-be5a-5a2e4feebbbe succeeded
-[2026-05-11 07:57:05,365: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[89d13c7e-5b69-4f83-be5a-5a2e4feebbbe] succeeded in 0.2173667709575966s: {'status': 'completed', 'unhealthy_workers': 1, 'cleaned_workers': 0}
-[2026-05-11 07:58:05,141: INFO/MainProcess] Task tasks.maintenance.worker_health_check[dc0e3505-6ac7-4c40-9448-815c102cac18] received
-[2026-05-11 07:58:05,357: INFO/ForkPoolWorker-8] Task dc0e3505-6ac7-4c40-9448-815c102cac18 succeeded
-[2026-05-11 07:58:05,357: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[dc0e3505-6ac7-4c40-9448-815c102cac18] succeeded in 0.21217719605192542s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 07:59:05,204: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b2e770d0-8ba7-4d07-80cf-ae15276c34bf] received
-[2026-05-11 07:59:05,494: INFO/ForkPoolWorker-8] Task b2e770d0-8ba7-4d07-80cf-ae15276c34bf succeeded
-[2026-05-11 07:59:05,495: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[b2e770d0-8ba7-4d07-80cf-ae15276c34bf] succeeded in 0.27784882800187916s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:00:05,140: INFO/MainProcess] Task tasks.maintenance.worker_health_check[33aae90b-c600-4dd9-ad71-8a4fdb77f8bd] received
-[2026-05-11 08:00:05,178: INFO/MainProcess] Task tasks.maintenance.refresh_views[cfcfea00-aea4-49f0-8cef-2583e187ea80] received
-[2026-05-11 08:00:05,186: INFO/MainProcess] Task tasks.scheduled.run_due_scans[8a041df8-0f3a-447a-89d8-78a626cc01ba] received
-[2026-05-11 08:00:05,486: INFO/ForkPoolWorker-8] Task 33aae90b-c600-4dd9-ad71-8a4fdb77f8bd succeeded
-[2026-05-11 08:00:05,486: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[33aae90b-c600-4dd9-ad71-8a4fdb77f8bd] succeeded in 0.343662177096121s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:00:05,511: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 08:00:05,518: INFO/ForkPoolWorker-2] Task 8a041df8-0f3a-447a-89d8-78a626cc01ba succeeded
-[2026-05-11 08:00:05,518: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[8a041df8-0f3a-447a-89d8-78a626cc01ba] succeeded in 0.3248363840393722s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 08:00:05,554: INFO/ForkPoolWorker-1] Task cfcfea00-aea4-49f0-8cef-2583e187ea80 succeeded
-[2026-05-11 08:00:05,556: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[cfcfea00-aea4-49f0-8cef-2583e187ea80] succeeded in 0.36838194995652884s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 19:00:45,803: INFO/MainProcess] Task tasks.maintenance.worker_health_check[a92df14a-a927-4c78-bc58-6f642695c0d3] received
+[2026-05-11 19:00:46,035: INFO/ForkPoolWorker-8] Task a92df14a-a927-4c78-bc58-6f642695c0d3 succeeded
+[2026-05-11 19:00:46,035: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[a92df14a-a927-4c78-bc58-6f642695c0d3] succeeded in 0.2291998769997008s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:01:45,804: INFO/MainProcess] Task tasks.maintenance.worker_health_check[58c818ef-77b0-414a-8c0f-f885d526760e] received
+[2026-05-11 19:01:46,024: INFO/ForkPoolWorker-8] Task 58c818ef-77b0-414a-8c0f-f885d526760e succeeded
+[2026-05-11 19:01:46,024: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[58c818ef-77b0-414a-8c0f-f885d526760e] succeeded in 0.21881144599865365s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:02:58,665: INFO/MainProcess] Task tasks.maintenance.worker_health_check[434c0e0c-6da5-4e8a-8a65-78f2efa507ce] received
+[2026-05-11 19:02:59,449: INFO/ForkPoolWorker-8] Task 434c0e0c-6da5-4e8a-8a65-78f2efa507ce succeeded
+[2026-05-11 19:02:59,450: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[434c0e0c-6da5-4e8a-8a65-78f2efa507ce] succeeded in 0.5693073539987381s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:03:58,029: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d64c61c6-acd7-45d7-8c04-181dce8810b8] received
+[2026-05-11 19:03:58,268: INFO/ForkPoolWorker-8] Task d64c61c6-acd7-45d7-8c04-181dce8810b8 succeeded
+[2026-05-11 19:03:58,270: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d64c61c6-acd7-45d7-8c04-181dce8810b8] succeeded in 0.22765874300057476s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:04:45,797: INFO/MainProcess] Task tasks.maintenance.refresh_views[553c7544-24d1-4b80-a442-d7670d99a4df] received
+[2026-05-11 19:04:45,800: INFO/MainProcess] Task tasks.scheduled.run_due_scans[65923767-f2b5-4e0c-8697-bf78f791653d] received
+[2026-05-11 19:04:46,072: INFO/ForkPoolWorker-8] Task 553c7544-24d1-4b80-a442-d7670d99a4df succeeded
+[2026-05-11 19:04:46,072: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:04:46,073: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[553c7544-24d1-4b80-a442-d7670d99a4df] succeeded in 0.27271737800037954s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 08:01:05,141: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5cbc5874-773e-4eb8-afc6-8fe860e5d3ec] received
-[2026-05-11 08:01:05,357: INFO/ForkPoolWorker-8] Task 5cbc5874-773e-4eb8-afc6-8fe860e5d3ec succeeded
-[2026-05-11 08:01:05,357: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[5cbc5874-773e-4eb8-afc6-8fe860e5d3ec] succeeded in 0.21406896004918963s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:02:05,143: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4d3fe45d-35ee-48f9-aa37-04172371462b] received
-[2026-05-11 08:02:05,365: INFO/ForkPoolWorker-8] Task 4d3fe45d-35ee-48f9-aa37-04172371462b succeeded
-[2026-05-11 08:02:05,365: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[4d3fe45d-35ee-48f9-aa37-04172371462b] succeeded in 0.21651586994994432s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:03:05,145: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3feeddd1-28a2-4dcb-a7b9-aa170761a9ab] received
-[2026-05-11 08:03:05,361: INFO/ForkPoolWorker-8] Task 3feeddd1-28a2-4dcb-a7b9-aa170761a9ab succeeded
-[2026-05-11 08:03:05,362: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[3feeddd1-28a2-4dcb-a7b9-aa170761a9ab] succeeded in 0.21368409192655236s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:04:05,141: INFO/MainProcess] Task tasks.maintenance.worker_health_check[076479a8-b54d-4da5-a770-7f1cd1bf83cc] received
-[2026-05-11 08:04:05,355: INFO/ForkPoolWorker-8] Task 076479a8-b54d-4da5-a770-7f1cd1bf83cc succeeded
-[2026-05-11 08:04:05,355: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[076479a8-b54d-4da5-a770-7f1cd1bf83cc] succeeded in 0.21206798497587442s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:05:05,143: INFO/MainProcess] Task tasks.maintenance.worker_health_check[39d1ac12-0330-439c-96a5-d61acedaf30a] received
-[2026-05-11 08:05:05,179: INFO/MainProcess] Task tasks.maintenance.refresh_views[2cdff3a9-381c-427e-b236-e47fcacad558] received
-[2026-05-11 08:05:05,183: INFO/MainProcess] Task tasks.scheduled.run_due_scans[4c00b0cd-df90-4c3e-826c-e3ab08caf90d] received
-[2026-05-11 08:05:05,358: INFO/ForkPoolWorker-8] Task 39d1ac12-0330-439c-96a5-d61acedaf30a succeeded
-[2026-05-11 08:05:05,358: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[39d1ac12-0330-439c-96a5-d61acedaf30a] succeeded in 0.212226667907089s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
-[2026-05-11 08:05:05,405: INFO/ForkPoolWorker-2] Spawned 0 scheduled engagement(s)
-[2026-05-11 08:05:05,408: INFO/ForkPoolWorker-1] Task 2cdff3a9-381c-427e-b236-e47fcacad558 succeeded
-[2026-05-11 08:05:05,408: INFO/ForkPoolWorker-1] Task tasks.maintenance.refresh_views[2cdff3a9-381c-427e-b236-e47fcacad558] succeeded in 0.22658370807766914s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+[2026-05-11 19:04:46,075: INFO/ForkPoolWorker-1] Task 65923767-f2b5-4e0c-8697-bf78f791653d succeeded
+[2026-05-11 19:04:46,076: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[65923767-f2b5-4e0c-8697-bf78f791653d] succeeded in 0.2730532169989601s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:04:58,028: INFO/MainProcess] Task tasks.maintenance.worker_health_check[96ac2538-698b-4d94-85b5-31a5ffbd23f6] received
+[2026-05-11 19:04:58,247: INFO/ForkPoolWorker-8] Task 96ac2538-698b-4d94-85b5-31a5ffbd23f6 succeeded
+[2026-05-11 19:04:58,248: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[96ac2538-698b-4d94-85b5-31a5ffbd23f6] succeeded in 0.21691553500022565s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:05:58,088: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f9bd0aa0-07f1-4894-92d4-fe59e771a062] received
+[2026-05-11 19:05:58,339: INFO/ForkPoolWorker-8] Task f9bd0aa0-07f1-4894-92d4-fe59e771a062 succeeded
+[2026-05-11 19:05:58,341: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[f9bd0aa0-07f1-4894-92d4-fe59e771a062] succeeded in 0.2340180369992595s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:06:58,036: INFO/MainProcess] Task tasks.maintenance.worker_health_check[dc4b19dc-73c1-4251-926a-a1598f2afbca] received
+[2026-05-11 19:06:58,255: INFO/ForkPoolWorker-8] Task dc4b19dc-73c1-4251-926a-a1598f2afbca succeeded
+[2026-05-11 19:06:58,256: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[dc4b19dc-73c1-4251-926a-a1598f2afbca] succeeded in 0.21650062699882255s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:07:58,036: INFO/MainProcess] Task tasks.maintenance.worker_health_check[91be5f22-d0dc-4d6e-813a-4a30e6663240] received
+[2026-05-11 19:07:58,255: INFO/ForkPoolWorker-8] Task 91be5f22-d0dc-4d6e-813a-4a30e6663240 succeeded
+[2026-05-11 19:07:58,256: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[91be5f22-d0dc-4d6e-813a-4a30e6663240] succeeded in 0.21669348800060106s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:08:58,056: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b2b3ee3f-7fa4-4b95-b827-831434be86c7] received
+[2026-05-11 19:08:58,281: INFO/ForkPoolWorker-8] Task b2b3ee3f-7fa4-4b95-b827-831434be86c7 succeeded
+[2026-05-11 19:08:58,283: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[b2b3ee3f-7fa4-4b95-b827-831434be86c7] succeeded in 0.2214950500001578s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:09:00,831: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[3e0a7135-f165-4dd8-890e-bef3dba50c96] received
+[2026-05-11 19:09:01,284: INFO/ForkPoolWorker-8] Task 3e0a7135-f165-4dd8-890e-bef3dba50c96 succeeded
+[2026-05-11 19:09:01,284: INFO/ForkPoolWorker-8] Task tasks.maintenance.cleanup_old_results[3e0a7135-f165-4dd8-890e-bef3dba50c96] succeeded in 0.448943016001067s: {'status': 'error', 'error': 'permission denied for table query_performance_log
+'}
+[2026-05-11 19:09:45,797: INFO/MainProcess] Task tasks.maintenance.refresh_views[eab50fb0-7a39-4e83-af24-de4c05de9c76] received
+[2026-05-11 19:09:45,800: INFO/MainProcess] Task tasks.scheduled.run_due_scans[07dd78de-38dd-480e-8564-8489ba4b6f7c] received
+[2026-05-11 19:09:46,016: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:09:46,021: INFO/ForkPoolWorker-1] Task 07dd78de-38dd-480e-8564-8489ba4b6f7c succeeded
+[2026-05-11 19:09:46,022: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[07dd78de-38dd-480e-8564-8489ba4b6f7c] succeeded in 0.21619102700060466s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:09:46,062: INFO/ForkPoolWorker-8] Task eab50fb0-7a39-4e83-af24-de4c05de9c76 succeeded
+[2026-05-11 19:09:46,063: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[eab50fb0-7a39-4e83-af24-de4c05de9c76] succeeded in 0.263484758001141s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
 CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
 PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
 '}
-[2026-05-11 08:05:05,409: INFO/ForkPoolWorker-2] Task 4c00b0cd-df90-4c3e-826c-e3ab08caf90d succeeded
-[2026-05-11 08:05:05,409: INFO/ForkPoolWorker-2] Task tasks.scheduled.run_due_scans[4c00b0cd-df90-4c3e-826c-e3ab08caf90d] succeeded in 0.22416949400212616s: {'status': 'completed', 'spawned': 0}
-[2026-05-11 08:06:05,142: INFO/MainProcess] Task tasks.maintenance.worker_health_check[38d5c67d-88c9-4dcc-8904-f8c54fca0f51] received
-[2026-05-11 08:06:05,361: INFO/ForkPoolWorker-8] Task 38d5c67d-88c9-4dcc-8904-f8c54fca0f51 succeeded
-[2026-05-11 08:06:05,362: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[38d5c67d-88c9-4dcc-8904-f8c54fca0f51] succeeded in 0.21643430495169014s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:09:58,050: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f1b71b57-a35b-48b7-9b9b-558d02e3a054] received
+[2026-05-11 19:09:58,269: INFO/ForkPoolWorker-8] Task f1b71b57-a35b-48b7-9b9b-558d02e3a054 succeeded
+[2026-05-11 19:09:58,270: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[f1b71b57-a35b-48b7-9b9b-558d02e3a054] succeeded in 0.21709868499965523s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:10:58,052: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4e048435-56c1-4aea-b356-2df77d2937f8] received
+[2026-05-11 19:10:58,279: INFO/ForkPoolWorker-8] Task 4e048435-56c1-4aea-b356-2df77d2937f8 succeeded
+[2026-05-11 19:10:58,280: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[4e048435-56c1-4aea-b356-2df77d2937f8] succeeded in 0.22442294400025276s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:11:58,052: INFO/MainProcess] Task tasks.maintenance.worker_health_check[2501cd56-cd30-419b-8c4d-5d553553c7e4] received
+[2026-05-11 19:11:58,272: INFO/ForkPoolWorker-8] Task 2501cd56-cd30-419b-8c4d-5d553553c7e4 succeeded
+[2026-05-11 19:11:58,272: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[2501cd56-cd30-419b-8c4d-5d553553c7e4] succeeded in 0.2168008809985622s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:12:58,052: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1a18125f-61a0-44b4-9804-f4188a7221f3] received
+[2026-05-11 19:12:58,326: INFO/ForkPoolWorker-8] Task 1a18125f-61a0-44b4-9804-f4188a7221f3 succeeded
+[2026-05-11 19:12:58,327: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1a18125f-61a0-44b4-9804-f4188a7221f3] succeeded in 0.2709790659991995s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:13:58,106: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1a1921fe-523f-4347-866a-142caeed53e6] received
+[2026-05-11 19:13:58,456: INFO/ForkPoolWorker-8] Task 1a1921fe-523f-4347-866a-142caeed53e6 succeeded
+[2026-05-11 19:13:58,457: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1a1921fe-523f-4347-866a-142caeed53e6] succeeded in 0.34294946900081413s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:14:45,832: INFO/MainProcess] Task tasks.maintenance.refresh_views[dcfb8c54-7bf7-4df8-a5a1-5a680c59953f] received
+[2026-05-11 19:14:45,840: INFO/MainProcess] Task tasks.scheduled.run_due_scans[2d2a4253-9a6c-4ddf-a209-c173860657ea] received
+[2026-05-11 19:14:46,224: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:14:46,227: INFO/ForkPoolWorker-1] Task 2d2a4253-9a6c-4ddf-a209-c173860657ea succeeded
+[2026-05-11 19:14:46,227: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[2d2a4253-9a6c-4ddf-a209-c173860657ea] succeeded in 0.3852898599998298s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:14:46,233: INFO/ForkPoolWorker-8] Task dcfb8c54-7bf7-4df8-a5a1-5a680c59953f succeeded
+[2026-05-11 19:14:46,233: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[dcfb8c54-7bf7-4df8-a5a1-5a680c59953f] succeeded in 0.3917099219997908s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:14:58,076: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c01c4a9d-df42-4760-8008-3f7e0ef0c572] received
+[2026-05-11 19:14:58,322: INFO/ForkPoolWorker-8] Task c01c4a9d-df42-4760-8008-3f7e0ef0c572 succeeded
+[2026-05-11 19:14:58,323: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[c01c4a9d-df42-4760-8008-3f7e0ef0c572] succeeded in 0.24088906700126245s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:15:58,077: INFO/MainProcess] Task tasks.maintenance.worker_health_check[2f04a84b-2cc0-49d4-ba94-d7a81baf88b3] received
+[2026-05-11 19:15:58,344: INFO/ForkPoolWorker-8] Task 2f04a84b-2cc0-49d4-ba94-d7a81baf88b3 succeeded
+[2026-05-11 19:15:58,345: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[2f04a84b-2cc0-49d4-ba94-d7a81baf88b3] succeeded in 0.26520407399948454s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:16:58,083: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f0ef1fea-7722-41b3-9d5d-e96cf20ffbe7] received
+[2026-05-11 19:16:58,362: INFO/ForkPoolWorker-8] Task f0ef1fea-7722-41b3-9d5d-e96cf20ffbe7 succeeded
+[2026-05-11 19:16:58,362: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[f0ef1fea-7722-41b3-9d5d-e96cf20ffbe7] succeeded in 0.27504763899924s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:17:58,076: INFO/MainProcess] Task tasks.maintenance.worker_health_check[2c942f6f-a9ad-4222-b1c6-0596cb4ec915] received
+[2026-05-11 19:17:58,307: INFO/ForkPoolWorker-8] Task 2c942f6f-a9ad-4222-b1c6-0596cb4ec915 succeeded
+[2026-05-11 19:17:58,307: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[2c942f6f-a9ad-4222-b1c6-0596cb4ec915] succeeded in 0.2237947109988454s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:18:58,076: INFO/MainProcess] Task tasks.maintenance.worker_health_check[95ab95da-754f-4621-a224-f7c8b59b7763] received
+[2026-05-11 19:18:58,312: INFO/ForkPoolWorker-8] Task 95ab95da-754f-4621-a224-f7c8b59b7763 succeeded
+[2026-05-11 19:18:58,313: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[95ab95da-754f-4621-a224-f7c8b59b7763] succeeded in 0.23477568000089377s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:19:45,821: INFO/MainProcess] Task tasks.maintenance.refresh_views[9edc07e9-455c-4d1a-becd-98edc2142814] received
+[2026-05-11 19:19:45,884: INFO/MainProcess] Task tasks.scheduled.run_due_scans[768e3318-44dc-47f1-8b21-05017c237538] received
+[2026-05-11 19:19:46,264: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:19:46,267: INFO/ForkPoolWorker-1] Task 768e3318-44dc-47f1-8b21-05017c237538 succeeded
+[2026-05-11 19:19:46,268: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[768e3318-44dc-47f1-8b21-05017c237538] succeeded in 0.370247777998884s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:19:46,288: INFO/ForkPoolWorker-8] Task 9edc07e9-455c-4d1a-becd-98edc2142814 succeeded
+[2026-05-11 19:19:46,289: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[9edc07e9-455c-4d1a-becd-98edc2142814] succeeded in 0.4048658020001312s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:19:58,116: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0182cafa-4015-45eb-a490-52ccec5381fa] received
+[2026-05-11 19:19:58,338: INFO/ForkPoolWorker-8] Task 0182cafa-4015-45eb-a490-52ccec5381fa succeeded
+[2026-05-11 19:19:58,339: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[0182cafa-4015-45eb-a490-52ccec5381fa] succeeded in 0.21950912600004813s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:20:58,078: INFO/MainProcess] Task tasks.maintenance.worker_health_check[db13e33a-ab27-4b02-8ae7-5f290ffcc63b] received
+[2026-05-11 19:20:58,314: INFO/ForkPoolWorker-8] Task db13e33a-ab27-4b02-8ae7-5f290ffcc63b succeeded
+[2026-05-11 19:20:58,315: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[db13e33a-ab27-4b02-8ae7-5f290ffcc63b] succeeded in 0.23277072299970314s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:21:58,079: INFO/MainProcess] Task tasks.maintenance.worker_health_check[166ff189-d0c7-4f52-9a76-430e16165110] received
+[2026-05-11 19:21:58,299: INFO/ForkPoolWorker-8] Task 166ff189-d0c7-4f52-9a76-430e16165110 succeeded
+[2026-05-11 19:21:58,300: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[166ff189-d0c7-4f52-9a76-430e16165110] succeeded in 0.21743159999823547s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:22:58,083: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9995d315-0c7e-40b7-aef4-c580df67381e] received
+[2026-05-11 19:22:58,303: INFO/ForkPoolWorker-8] Task 9995d315-0c7e-40b7-aef4-c580df67381e succeeded
+[2026-05-11 19:22:58,303: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[9995d315-0c7e-40b7-aef4-c580df67381e] succeeded in 0.21736653900006786s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:23:58,660: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1aa608cd-f36b-4c79-af24-bd5475d2e484] received
+[2026-05-11 19:23:59,003: INFO/ForkPoolWorker-8] Task 1aa608cd-f36b-4c79-af24-bd5475d2e484 succeeded
+[2026-05-11 19:23:59,004: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1aa608cd-f36b-4c79-af24-bd5475d2e484] succeeded in 0.3403986429984798s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:24:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[9b10daab-2af3-4331-9aeb-caff53ef60f7] received
+[2026-05-11 19:24:45,829: INFO/MainProcess] Task tasks.scheduled.run_due_scans[d7c50f24-60d3-4413-9450-51b9ae9709da] received
+[2026-05-11 19:24:46,144: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:24:46,148: INFO/ForkPoolWorker-1] Task d7c50f24-60d3-4413-9450-51b9ae9709da succeeded
+[2026-05-11 19:24:46,148: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[d7c50f24-60d3-4413-9450-51b9ae9709da] succeeded in 0.3165297739997186s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:24:46,164: INFO/ForkPoolWorker-8] Task 9b10daab-2af3-4331-9aeb-caff53ef60f7 succeeded
+[2026-05-11 19:24:46,165: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[9b10daab-2af3-4331-9aeb-caff53ef60f7] succeeded in 0.34289530199930596s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:24:58,664: INFO/MainProcess] Task tasks.maintenance.worker_health_check[606e43a1-58f5-409c-b261-d838a941ae4b] received
+[2026-05-11 19:24:58,883: INFO/ForkPoolWorker-8] Task 606e43a1-58f5-409c-b261-d838a941ae4b succeeded
+[2026-05-11 19:24:58,884: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[606e43a1-58f5-409c-b261-d838a941ae4b] succeeded in 0.2180255790008232s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:25:58,670: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d837c417-55d1-474a-b334-7d612e90f622] received
+[2026-05-11 19:25:58,889: INFO/ForkPoolWorker-8] Task d837c417-55d1-474a-b334-7d612e90f622 succeeded
+[2026-05-11 19:25:58,890: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[d837c417-55d1-474a-b334-7d612e90f622] succeeded in 0.2171783960002358s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:26:58,714: INFO/MainProcess] Task tasks.maintenance.worker_health_check[33ad03a1-5abc-41d3-a3ca-57c1116bab2f] received
+[2026-05-11 19:26:58,939: INFO/ForkPoolWorker-8] Task 33ad03a1-5abc-41d3-a3ca-57c1116bab2f succeeded
+[2026-05-11 19:26:58,940: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[33ad03a1-5abc-41d3-a3ca-57c1116bab2f] succeeded in 0.22097107700028573s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:27:58,734: INFO/MainProcess] Task tasks.maintenance.worker_health_check[135e24bf-e63e-4e4c-a085-07def7eb8131] received
+[2026-05-11 19:27:58,980: INFO/ForkPoolWorker-8] Task 135e24bf-e63e-4e4c-a085-07def7eb8131 succeeded
+[2026-05-11 19:27:58,980: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[135e24bf-e63e-4e4c-a085-07def7eb8131] succeeded in 0.24170653900000616s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:28:58,709: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1bd1a5d6-736a-42fb-925a-afe2de9c2144] received
+[2026-05-11 19:28:58,947: INFO/ForkPoolWorker-8] Task 1bd1a5d6-736a-42fb-925a-afe2de9c2144 succeeded
+[2026-05-11 19:28:58,949: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[1bd1a5d6-736a-42fb-925a-afe2de9c2144] succeeded in 0.2276114169999346s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:29:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[d43a40dc-5c6c-4def-a772-340d152193f2] received
+[2026-05-11 19:29:45,826: INFO/MainProcess] Task tasks.scheduled.run_due_scans[f2db24d1-b4b4-40cf-8711-7bc79a9ebcd0] received
+[2026-05-11 19:29:46,110: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:29:46,113: INFO/ForkPoolWorker-1] Task f2db24d1-b4b4-40cf-8711-7bc79a9ebcd0 succeeded
+[2026-05-11 19:29:46,114: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[f2db24d1-b4b4-40cf-8711-7bc79a9ebcd0] succeeded in 0.28519001099994057s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:29:46,115: INFO/ForkPoolWorker-8] Task d43a40dc-5c6c-4def-a772-340d152193f2 succeeded
+[2026-05-11 19:29:46,116: INFO/ForkPoolWorker-8] Task tasks.maintenance.refresh_views[d43a40dc-5c6c-4def-a772-340d152193f2] succeeded in 0.29284947399901284s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:29:58,696: INFO/MainProcess] Task tasks.maintenance.worker_health_check[a6dbef7f-6e7b-4acf-8dfa-0e15654fc409] received
+[2026-05-11 19:29:58,915: INFO/ForkPoolWorker-8] Task a6dbef7f-6e7b-4acf-8dfa-0e15654fc409 succeeded
+[2026-05-11 19:29:58,916: INFO/ForkPoolWorker-8] Task tasks.maintenance.worker_health_check[a6dbef7f-6e7b-4acf-8dfa-0e15654fc409] succeeded in 0.21713969499978703s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:30:58,699: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9f1eb649-703a-454c-a668-fc078315fd76] received
+[2026-05-11 19:30:59,045: INFO/ForkPoolWorker-9] Task 9f1eb649-703a-454c-a668-fc078315fd76 succeeded
+[2026-05-11 19:30:59,046: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[9f1eb649-703a-454c-a668-fc078315fd76] succeeded in 0.3411840900007519s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:31:58,716: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9b0f01a7-d70a-4cfc-b8df-e1290327c383] received
+[2026-05-11 19:31:58,962: INFO/ForkPoolWorker-9] Task 9b0f01a7-d70a-4cfc-b8df-e1290327c383 succeeded
+[2026-05-11 19:31:58,963: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[9b0f01a7-d70a-4cfc-b8df-e1290327c383] succeeded in 0.23771393300012278s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:32:58,700: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9f79f215-ccc3-4664-b7fd-6773a032b862] received
+[2026-05-11 19:32:58,920: INFO/ForkPoolWorker-9] Task 9f79f215-ccc3-4664-b7fd-6773a032b862 succeeded
+[2026-05-11 19:32:58,921: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[9f79f215-ccc3-4664-b7fd-6773a032b862] succeeded in 0.21751968600074179s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:33:58,711: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f6e33ea5-4d43-4afa-b259-a0d8415365c0] received
+[2026-05-11 19:33:58,933: INFO/ForkPoolWorker-9] Task f6e33ea5-4d43-4afa-b259-a0d8415365c0 succeeded
+[2026-05-11 19:33:58,933: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[f6e33ea5-4d43-4afa-b259-a0d8415365c0] succeeded in 0.21912216300006548s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:34:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[a05f6614-2547-4be1-9e0a-0a65aa4e5fec] received
+[2026-05-11 19:34:45,828: INFO/MainProcess] Task tasks.scheduled.run_due_scans[25bf71da-c5de-4fee-9657-13d0045cb247] received
+[2026-05-11 19:34:46,079: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:34:46,085: INFO/ForkPoolWorker-1] Task 25bf71da-c5de-4fee-9657-13d0045cb247 succeeded
+[2026-05-11 19:34:46,087: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[25bf71da-c5de-4fee-9657-13d0045cb247] succeeded in 0.2521244069994282s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:34:46,129: INFO/ForkPoolWorker-9] Task a05f6614-2547-4be1-9e0a-0a65aa4e5fec succeeded
+[2026-05-11 19:34:46,130: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[a05f6614-2547-4be1-9e0a-0a65aa4e5fec] succeeded in 0.30695839100008016s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:34:58,703: INFO/MainProcess] Task tasks.maintenance.worker_health_check[40081e86-3444-471d-8022-739ad83a1702] received
+[2026-05-11 19:34:58,929: INFO/ForkPoolWorker-9] Task 40081e86-3444-471d-8022-739ad83a1702 succeeded
+[2026-05-11 19:34:58,929: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[40081e86-3444-471d-8022-739ad83a1702] succeeded in 0.22328070500043395s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:35:58,711: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d21e6bb5-ec11-4f0a-a071-ceb14afe0f11] received
+[2026-05-11 19:35:58,930: INFO/ForkPoolWorker-9] Task d21e6bb5-ec11-4f0a-a071-ceb14afe0f11 succeeded
+[2026-05-11 19:35:58,931: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[d21e6bb5-ec11-4f0a-a071-ceb14afe0f11] succeeded in 0.2166575310002372s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:36:58,706: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ae45ddaf-711c-4c28-9970-4e6dc70fbc0b] received
+[2026-05-11 19:36:58,945: INFO/ForkPoolWorker-9] Task ae45ddaf-711c-4c28-9970-4e6dc70fbc0b succeeded
+[2026-05-11 19:36:58,945: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[ae45ddaf-711c-4c28-9970-4e6dc70fbc0b] succeeded in 0.23563921499953722s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:37:58,710: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e3e56a5e-6ea5-4b56-80ef-e0a891a9b55b] received
+[2026-05-11 19:37:59,033: INFO/ForkPoolWorker-9] Task e3e56a5e-6ea5-4b56-80ef-e0a891a9b55b succeeded
+[2026-05-11 19:37:59,035: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[e3e56a5e-6ea5-4b56-80ef-e0a891a9b55b] succeeded in 0.3187603960013803s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:38:58,705: INFO/MainProcess] Task tasks.maintenance.worker_health_check[35ed30b8-71b8-45d9-9033-aa213d40a32c] received
+[2026-05-11 19:38:58,934: INFO/ForkPoolWorker-9] Task 35ed30b8-71b8-45d9-9033-aa213d40a32c succeeded
+[2026-05-11 19:38:58,935: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[35ed30b8-71b8-45d9-9033-aa213d40a32c] succeeded in 0.22592243299914117s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:39:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[bed6df86-0fa1-460b-a355-1a7e609ba18d] received
+[2026-05-11 19:39:45,828: INFO/MainProcess] Task tasks.scheduled.run_due_scans[c2a12841-0082-48d6-a0b7-426ca4d9a829] received
+[2026-05-11 19:39:46,300: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:39:46,303: INFO/ForkPoolWorker-1] Task c2a12841-0082-48d6-a0b7-426ca4d9a829 succeeded
+[2026-05-11 19:39:46,303: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[c2a12841-0082-48d6-a0b7-426ca4d9a829] succeeded in 0.47167368000009446s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:39:46,431: INFO/ForkPoolWorker-9] Task bed6df86-0fa1-460b-a355-1a7e609ba18d succeeded
+[2026-05-11 19:39:46,431: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[bed6df86-0fa1-460b-a355-1a7e609ba18d] succeeded in 0.6075804970005265s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:39:58,711: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5cbc2604-e2ab-4e3c-9f9e-5502368dc201] received
+[2026-05-11 19:39:59,094: INFO/ForkPoolWorker-9] Task 5cbc2604-e2ab-4e3c-9f9e-5502368dc201 succeeded
+[2026-05-11 19:39:59,095: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[5cbc2604-e2ab-4e3c-9f9e-5502368dc201] succeeded in 0.3795004069997958s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:40:58,705: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b116fa19-54cc-48ba-afc7-a3f65049527c] received
+[2026-05-11 19:40:58,938: INFO/ForkPoolWorker-9] Task b116fa19-54cc-48ba-afc7-a3f65049527c succeeded
+[2026-05-11 19:40:58,939: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[b116fa19-54cc-48ba-afc7-a3f65049527c] succeeded in 0.2314535280002019s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:41:58,736: INFO/MainProcess] Task tasks.maintenance.worker_health_check[05a59fda-32fd-49c9-90ac-6b4f875e10e3] received
+[2026-05-11 19:41:58,952: INFO/ForkPoolWorker-9] Task 05a59fda-32fd-49c9-90ac-6b4f875e10e3 succeeded
+[2026-05-11 19:41:58,954: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[05a59fda-32fd-49c9-90ac-6b4f875e10e3] succeeded in 0.213688377998551s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:42:58,708: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ed634953-5fa3-4f89-85be-54cc2f4b6c39] received
+[2026-05-11 19:42:58,927: INFO/ForkPoolWorker-9] Task ed634953-5fa3-4f89-85be-54cc2f4b6c39 succeeded
+[2026-05-11 19:42:58,928: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[ed634953-5fa3-4f89-85be-54cc2f4b6c39] succeeded in 0.21621568800037494s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:43:58,707: INFO/MainProcess] Task tasks.maintenance.worker_health_check[16b93bf3-23a3-4882-aaef-5bff1665568f] received
+[2026-05-11 19:43:58,924: INFO/ForkPoolWorker-9] Task 16b93bf3-23a3-4882-aaef-5bff1665568f succeeded
+[2026-05-11 19:43:58,925: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[16b93bf3-23a3-4882-aaef-5bff1665568f] succeeded in 0.21455032100129756s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:44:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[e098b407-53d7-4096-b791-75e9342e6e1c] received
+[2026-05-11 19:44:45,826: INFO/MainProcess] Task tasks.scheduled.run_due_scans[9c61022b-5e88-4e9c-99ec-28249db6b5ee] received
+[2026-05-11 19:44:46,117: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:44:46,120: INFO/ForkPoolWorker-1] Task 9c61022b-5e88-4e9c-99ec-28249db6b5ee succeeded
+[2026-05-11 19:44:46,121: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[9c61022b-5e88-4e9c-99ec-28249db6b5ee] succeeded in 0.2918287450011121s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:44:46,121: INFO/ForkPoolWorker-9] Task e098b407-53d7-4096-b791-75e9342e6e1c succeeded
+[2026-05-11 19:44:46,122: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[e098b407-53d7-4096-b791-75e9342e6e1c] succeeded in 0.29993318599917984s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:44:58,708: INFO/MainProcess] Task tasks.maintenance.worker_health_check[02d17e6d-6ed9-428a-9235-7f470055bdcb] received
+[2026-05-11 19:44:58,943: INFO/ForkPoolWorker-9] Task 02d17e6d-6ed9-428a-9235-7f470055bdcb succeeded
+[2026-05-11 19:44:58,943: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[02d17e6d-6ed9-428a-9235-7f470055bdcb] succeeded in 0.23232163500142633s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:45:58,709: INFO/MainProcess] Task tasks.maintenance.worker_health_check[67d5b15e-0142-464d-9ebf-1071c4e3cdd8] received
+[2026-05-11 19:45:58,926: INFO/ForkPoolWorker-9] Task 67d5b15e-0142-464d-9ebf-1071c4e3cdd8 succeeded
+[2026-05-11 19:45:58,927: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[67d5b15e-0142-464d-9ebf-1071c4e3cdd8] succeeded in 0.21500995400128886s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:46:58,707: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6d8bac9e-9add-4e74-a2d7-51747d508072] received
+[2026-05-11 19:46:58,933: INFO/ForkPoolWorker-9] Task 6d8bac9e-9add-4e74-a2d7-51747d508072 succeeded
+[2026-05-11 19:46:58,933: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[6d8bac9e-9add-4e74-a2d7-51747d508072] succeeded in 0.22251441099979274s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:47:58,715: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e623f917-bc57-4f1c-b90b-57c309f67fbb] received
+[2026-05-11 19:47:58,948: INFO/ForkPoolWorker-9] Task e623f917-bc57-4f1c-b90b-57c309f67fbb succeeded
+[2026-05-11 19:47:58,950: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[e623f917-bc57-4f1c-b90b-57c309f67fbb] succeeded in 0.22653599200020835s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:48:58,713: INFO/MainProcess] Task tasks.maintenance.worker_health_check[884f1caa-df92-4ead-9b86-66a038419fec] received
+[2026-05-11 19:48:58,933: INFO/ForkPoolWorker-9] Task 884f1caa-df92-4ead-9b86-66a038419fec succeeded
+[2026-05-11 19:48:58,933: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[884f1caa-df92-4ead-9b86-66a038419fec] succeeded in 0.21425695399921096s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:49:45,823: INFO/MainProcess] Task tasks.maintenance.refresh_views[61aee78c-ccfe-43d3-b9fd-ed4010072088] received
+[2026-05-11 19:49:45,830: INFO/MainProcess] Task tasks.scheduled.run_due_scans[5bd999db-192b-4c18-a2d7-2d493dbb8bf9] received
+[2026-05-11 19:49:46,153: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:49:46,407: INFO/ForkPoolWorker-1] Task 5bd999db-192b-4c18-a2d7-2d493dbb8bf9 succeeded
+[2026-05-11 19:49:46,408: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[5bd999db-192b-4c18-a2d7-2d493dbb8bf9] succeeded in 0.5756684689986287s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:49:46,412: INFO/ForkPoolWorker-9] Task 61aee78c-ccfe-43d3-b9fd-ed4010072088 succeeded
+[2026-05-11 19:49:46,413: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[61aee78c-ccfe-43d3-b9fd-ed4010072088] succeeded in 0.5861659340007463s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:49:58,708: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ea9dd9b9-88ff-426b-8332-fe77b6963718] received
+[2026-05-11 19:49:58,940: INFO/ForkPoolWorker-9] Task ea9dd9b9-88ff-426b-8332-fe77b6963718 succeeded
+[2026-05-11 19:49:58,940: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[ea9dd9b9-88ff-426b-8332-fe77b6963718] succeeded in 0.2281322849994467s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:50:58,707: INFO/MainProcess] Task tasks.maintenance.worker_health_check[aea22922-e1ed-47de-935f-2d786d62edd3] received
+[2026-05-11 19:50:58,927: INFO/ForkPoolWorker-9] Task aea22922-e1ed-47de-935f-2d786d62edd3 succeeded
+[2026-05-11 19:50:58,927: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[aea22922-e1ed-47de-935f-2d786d62edd3] succeeded in 0.21838843499972427s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:51:58,868: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d840dc66-abe9-4ab3-b9f7-9d86ea56ab45] received
+[2026-05-11 19:51:59,096: INFO/ForkPoolWorker-9] Task d840dc66-abe9-4ab3-b9f7-9d86ea56ab45 succeeded
+[2026-05-11 19:51:59,097: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[d840dc66-abe9-4ab3-b9f7-9d86ea56ab45] succeeded in 0.22332478099997388s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:52:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[8e66ad3b-c0d6-4bb3-ac07-2e2996532e1e] received
+[2026-05-11 19:52:58,981: INFO/ForkPoolWorker-9] Task 8e66ad3b-c0d6-4bb3-ac07-2e2996532e1e succeeded
+[2026-05-11 19:52:58,982: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[8e66ad3b-c0d6-4bb3-ac07-2e2996532e1e] succeeded in 0.23254611999982444s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:53:58,744: INFO/MainProcess] Task tasks.maintenance.worker_health_check[0db98912-0fdc-47e7-885d-e0febf7389cd] received
+[2026-05-11 19:53:58,963: INFO/ForkPoolWorker-9] Task 0db98912-0fdc-47e7-885d-e0febf7389cd succeeded
+[2026-05-11 19:53:58,964: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[0db98912-0fdc-47e7-885d-e0febf7389cd] succeeded in 0.217870086999028s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:54:45,849: INFO/MainProcess] Task tasks.maintenance.refresh_views[fb9d4563-dd99-4f55-9769-b9d460b7fb53] received
+[2026-05-11 19:54:45,854: INFO/MainProcess] Task tasks.scheduled.run_due_scans[4be5b4ec-1af1-4e27-a046-0bdeb086b3f3] received
+[2026-05-11 19:54:46,123: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:54:46,124: INFO/ForkPoolWorker-1] Task 4be5b4ec-1af1-4e27-a046-0bdeb086b3f3 succeeded
+[2026-05-11 19:54:46,125: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[4be5b4ec-1af1-4e27-a046-0bdeb086b3f3] succeeded in 0.2692414800003462s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:54:46,164: INFO/ForkPoolWorker-9] Task fb9d4563-dd99-4f55-9769-b9d460b7fb53 succeeded
+[2026-05-11 19:54:46,164: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[fb9d4563-dd99-4f55-9769-b9d460b7fb53] succeeded in 0.3086598400004732s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:54:58,745: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ec7a67ad-3ef8-40a7-a21d-b61eb2af905e] received
+[2026-05-11 19:54:59,145: INFO/ForkPoolWorker-9] Task ec7a67ad-3ef8-40a7-a21d-b61eb2af905e succeeded
+[2026-05-11 19:54:59,146: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[ec7a67ad-3ef8-40a7-a21d-b61eb2af905e] succeeded in 0.3992538799993781s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:55:58,745: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b9bd56da-3ae0-452d-9989-487df9861a19] received
+[2026-05-11 19:55:58,970: INFO/ForkPoolWorker-9] Task b9bd56da-3ae0-452d-9989-487df9861a19 succeeded
+[2026-05-11 19:55:58,970: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[b9bd56da-3ae0-452d-9989-487df9861a19] succeeded in 0.2210823450004682s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:56:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f6923317-ada7-4e92-a232-f1f86bb0ca0a] received
+[2026-05-11 19:56:58,976: INFO/ForkPoolWorker-9] Task f6923317-ada7-4e92-a232-f1f86bb0ca0a succeeded
+[2026-05-11 19:56:58,977: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[f6923317-ada7-4e92-a232-f1f86bb0ca0a] succeeded in 0.2248347439999634s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:57:58,760: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4669d056-693a-4124-86a4-d72472c09855] received
+[2026-05-11 19:57:59,031: INFO/ForkPoolWorker-9] Task 4669d056-693a-4124-86a4-d72472c09855 succeeded
+[2026-05-11 19:57:59,031: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[4669d056-693a-4124-86a4-d72472c09855] succeeded in 0.26088784000057785s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:58:58,745: INFO/MainProcess] Task tasks.maintenance.worker_health_check[14db69ee-2c0e-4fcf-8d1f-d2f75dbb16ef] received
+[2026-05-11 19:58:58,963: INFO/ForkPoolWorker-9] Task 14db69ee-2c0e-4fcf-8d1f-d2f75dbb16ef succeeded
+[2026-05-11 19:58:58,964: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[14db69ee-2c0e-4fcf-8d1f-d2f75dbb16ef] succeeded in 0.216452892000234s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 19:59:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[c8a05c04-4db4-4eb2-adc9-add4f03f2328] received
+[2026-05-11 19:59:45,847: INFO/MainProcess] Task tasks.scheduled.run_due_scans[3c603e95-4156-4dc2-a74e-2506111ac307] received
+[2026-05-11 19:59:46,059: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 19:59:46,062: INFO/ForkPoolWorker-1] Task 3c603e95-4156-4dc2-a74e-2506111ac307 succeeded
+[2026-05-11 19:59:46,063: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[3c603e95-4156-4dc2-a74e-2506111ac307] succeeded in 0.21277669099981722s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 19:59:46,089: INFO/ForkPoolWorker-9] Task c8a05c04-4db4-4eb2-adc9-add4f03f2328 succeeded
+[2026-05-11 19:59:46,090: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[c8a05c04-4db4-4eb2-adc9-add4f03f2328] succeeded in 0.2679812989990751s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 19:59:58,745: INFO/MainProcess] Task tasks.maintenance.worker_health_check[8ed1aeb2-a2bc-4ba6-9915-c0ea4229c006] received
+[2026-05-11 19:59:58,971: INFO/ForkPoolWorker-9] Task 8ed1aeb2-a2bc-4ba6-9915-c0ea4229c006 succeeded
+[2026-05-11 19:59:58,971: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[8ed1aeb2-a2bc-4ba6-9915-c0ea4229c006] succeeded in 0.22348389099897759s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:00:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[79d80188-5330-4cef-b6df-51bc878dbd21] received
+[2026-05-11 20:00:58,979: INFO/ForkPoolWorker-9] Task 79d80188-5330-4cef-b6df-51bc878dbd21 succeeded
+[2026-05-11 20:00:58,980: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[79d80188-5330-4cef-b6df-51bc878dbd21] succeeded in 0.23015295999903174s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:01:58,749: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3cb86967-4c8a-411b-86e6-251317f70adb] received
+[2026-05-11 20:01:58,974: INFO/ForkPoolWorker-9] Task 3cb86967-4c8a-411b-86e6-251317f70adb succeeded
+[2026-05-11 20:01:58,974: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[3cb86967-4c8a-411b-86e6-251317f70adb] succeeded in 0.221674868998889s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:02:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[42fc76a0-f944-468a-abb3-dd544ca85e3a] received
+[2026-05-11 20:02:58,971: INFO/ForkPoolWorker-9] Task 42fc76a0-f944-468a-abb3-dd544ca85e3a succeeded
+[2026-05-11 20:02:58,971: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[42fc76a0-f944-468a-abb3-dd544ca85e3a] succeeded in 0.22146973999952024s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:03:58,858: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b98a7b4d-1276-421b-83a3-410a2a3fe3a3] received
+[2026-05-11 20:03:59,270: INFO/ForkPoolWorker-9] Task b98a7b4d-1276-421b-83a3-410a2a3fe3a3 succeeded
+[2026-05-11 20:03:59,270: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[b98a7b4d-1276-421b-83a3-410a2a3fe3a3] succeeded in 0.4032941490004305s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:04:45,820: INFO/MainProcess] Task tasks.maintenance.refresh_views[ac63f4fa-b514-4d9b-8e0c-5da3eb8b1712] received
+[2026-05-11 20:04:45,848: INFO/MainProcess] Task tasks.scheduled.run_due_scans[25ca3dd1-d677-4a68-9089-6726a47b3bc2] received
+[2026-05-11 20:04:46,044: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:04:46,045: INFO/ForkPoolWorker-1] Task 25ca3dd1-d677-4a68-9089-6726a47b3bc2 succeeded
+[2026-05-11 20:04:46,046: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[25ca3dd1-d677-4a68-9089-6726a47b3bc2] succeeded in 0.19602948800093145s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:04:46,088: INFO/ForkPoolWorker-9] Task ac63f4fa-b514-4d9b-8e0c-5da3eb8b1712 succeeded
+[2026-05-11 20:04:46,088: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[ac63f4fa-b514-4d9b-8e0c-5da3eb8b1712] succeeded in 0.2663178249986231s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:04:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f223964c-449a-4d0a-b5d3-d2eaf53bbf64] received
+[2026-05-11 20:04:58,965: INFO/ForkPoolWorker-9] Task f223964c-449a-4d0a-b5d3-d2eaf53bbf64 succeeded
+[2026-05-11 20:04:58,965: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[f223964c-449a-4d0a-b5d3-d2eaf53bbf64] succeeded in 0.21776961500108882s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:05:58,752: INFO/MainProcess] Task tasks.maintenance.worker_health_check[812ef748-d381-4dd1-9fb8-920e0d4f0e58] received
+[2026-05-11 20:05:58,993: INFO/ForkPoolWorker-9] Task 812ef748-d381-4dd1-9fb8-920e0d4f0e58 succeeded
+[2026-05-11 20:05:58,993: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[812ef748-d381-4dd1-9fb8-920e0d4f0e58] succeeded in 0.233436033999169s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:06:58,745: INFO/MainProcess] Task tasks.maintenance.worker_health_check[ce9114d2-6937-4a1c-8e8b-7ff917c9076f] received
+[2026-05-11 20:06:58,965: INFO/ForkPoolWorker-9] Task ce9114d2-6937-4a1c-8e8b-7ff917c9076f succeeded
+[2026-05-11 20:06:58,966: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[ce9114d2-6937-4a1c-8e8b-7ff917c9076f] succeeded in 0.2185775839989219s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:07:58,750: INFO/MainProcess] Task tasks.maintenance.worker_health_check[795792a4-89f0-4244-a183-8ca53487973c] received
+[2026-05-11 20:07:58,985: INFO/ForkPoolWorker-9] Task 795792a4-89f0-4244-a183-8ca53487973c succeeded
+[2026-05-11 20:07:58,986: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[795792a4-89f0-4244-a183-8ca53487973c] succeeded in 0.23393623899937666s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:08:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[4c33bf0f-3030-4908-896a-0c53011016f8] received
+[2026-05-11 20:08:58,965: INFO/ForkPoolWorker-9] Task 4c33bf0f-3030-4908-896a-0c53011016f8 succeeded
+[2026-05-11 20:08:58,966: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[4c33bf0f-3030-4908-896a-0c53011016f8] succeeded in 0.21742084699872066s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:09:00,827: INFO/MainProcess] Task tasks.maintenance.cleanup_old_results[13188093-7579-4513-a339-f7f95cee63bf] received
+[2026-05-11 20:09:01,075: INFO/ForkPoolWorker-9] Task 13188093-7579-4513-a339-f7f95cee63bf succeeded
+[2026-05-11 20:09:01,076: INFO/ForkPoolWorker-9] Task tasks.maintenance.cleanup_old_results[13188093-7579-4513-a339-f7f95cee63bf] succeeded in 0.24724420200072927s: {'status': 'error', 'error': 'permission denied for table query_performance_log
+'}
+[2026-05-11 20:09:45,827: INFO/MainProcess] Task tasks.maintenance.refresh_views[9ab5620f-0e6c-479d-979f-540bcfa0a98b] received
+[2026-05-11 20:09:45,934: INFO/MainProcess] Task tasks.scheduled.run_due_scans[0eaa8ad6-7634-400f-a195-1894b4947f40] received
+[2026-05-11 20:09:46,243: INFO/ForkPoolWorker-9] Task 9ab5620f-0e6c-479d-979f-540bcfa0a98b succeeded
+[2026-05-11 20:09:46,243: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[9ab5620f-0e6c-479d-979f-540bcfa0a98b] succeeded in 0.4102730470003735s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:09:46,246: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:09:46,248: INFO/ForkPoolWorker-1] Task 0eaa8ad6-7634-400f-a195-1894b4947f40 succeeded
+[2026-05-11 20:09:46,248: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[0eaa8ad6-7634-400f-a195-1894b4947f40] succeeded in 0.3109777129993745s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:09:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6aabeb58-4fef-4955-9d64-636e4baf3118] received
+[2026-05-11 20:09:58,965: INFO/ForkPoolWorker-9] Task 6aabeb58-4fef-4955-9d64-636e4baf3118 succeeded
+[2026-05-11 20:09:58,965: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[6aabeb58-4fef-4955-9d64-636e4baf3118] succeeded in 0.21728600499955064s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:10:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c54a9331-5035-4e4f-8984-e0d99c61d293] received
+[2026-05-11 20:10:58,968: INFO/ForkPoolWorker-9] Task c54a9331-5035-4e4f-8984-e0d99c61d293 succeeded
+[2026-05-11 20:10:58,969: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[c54a9331-5035-4e4f-8984-e0d99c61d293] succeeded in 0.22122670099997777s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:11:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d1996465-506e-4839-a326-87f1d34c5fba] received
+[2026-05-11 20:11:58,966: INFO/ForkPoolWorker-9] Task d1996465-506e-4839-a326-87f1d34c5fba succeeded
+[2026-05-11 20:11:58,967: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[d1996465-506e-4839-a326-87f1d34c5fba] succeeded in 0.21850984699995024s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:12:58,749: INFO/MainProcess] Task tasks.maintenance.worker_health_check[480e5c03-ba7a-4154-a4c2-9da2c9601a6a] received
+[2026-05-11 20:12:58,995: INFO/ForkPoolWorker-9] Task 480e5c03-ba7a-4154-a4c2-9da2c9601a6a succeeded
+[2026-05-11 20:12:58,995: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[480e5c03-ba7a-4154-a4c2-9da2c9601a6a] succeeded in 0.23813610800061724s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:13:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[8c54673c-4847-4511-a531-9f3abb371157] received
+[2026-05-11 20:13:58,963: INFO/ForkPoolWorker-9] Task 8c54673c-4847-4511-a531-9f3abb371157 succeeded
+[2026-05-11 20:13:58,963: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[8c54673c-4847-4511-a531-9f3abb371157] succeeded in 0.21422820999941905s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:14:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[f7c5ed0e-26ae-42f8-82a8-ef13f674eb88] received
+[2026-05-11 20:14:45,849: INFO/MainProcess] Task tasks.scheduled.run_due_scans[0765fe72-7a7f-4360-b813-e5ab4091b45f] received
+[2026-05-11 20:14:46,047: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:14:46,050: INFO/ForkPoolWorker-1] Task 0765fe72-7a7f-4360-b813-e5ab4091b45f succeeded
+[2026-05-11 20:14:46,051: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[0765fe72-7a7f-4360-b813-e5ab4091b45f] succeeded in 0.1992550580016541s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:14:46,090: INFO/ForkPoolWorker-9] Task f7c5ed0e-26ae-42f8-82a8-ef13f674eb88 succeeded
+[2026-05-11 20:14:46,090: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[f7c5ed0e-26ae-42f8-82a8-ef13f674eb88] succeeded in 0.2685255470005359s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:14:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b61bddea-e5fc-48d7-873d-abdc889237d2] received
+[2026-05-11 20:14:58,963: INFO/ForkPoolWorker-9] Task b61bddea-e5fc-48d7-873d-abdc889237d2 succeeded
+[2026-05-11 20:14:58,964: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[b61bddea-e5fc-48d7-873d-abdc889237d2] succeeded in 0.2162214199997834s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:15:58,746: INFO/MainProcess] Task tasks.maintenance.worker_health_check[94c52bc6-dcfe-4ccc-9489-682a46b84f53] received
+[2026-05-11 20:15:58,967: INFO/ForkPoolWorker-9] Task 94c52bc6-dcfe-4ccc-9489-682a46b84f53 succeeded
+[2026-05-11 20:15:58,967: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[94c52bc6-dcfe-4ccc-9489-682a46b84f53] succeeded in 0.2188344420010253s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:16:58,749: INFO/MainProcess] Task tasks.maintenance.worker_health_check[e6551af0-be06-4bc0-a54c-35dbe1b2c100] received
+[2026-05-11 20:16:58,967: INFO/ForkPoolWorker-9] Task e6551af0-be06-4bc0-a54c-35dbe1b2c100 succeeded
+[2026-05-11 20:16:58,968: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[e6551af0-be06-4bc0-a54c-35dbe1b2c100] succeeded in 0.21645508799883828s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:17:58,752: INFO/MainProcess] Task tasks.maintenance.worker_health_check[74ef6e9a-e6af-4fab-b460-a9dc16f740cd] received
+[2026-05-11 20:17:58,974: INFO/ForkPoolWorker-9] Task 74ef6e9a-e6af-4fab-b460-a9dc16f740cd succeeded
+[2026-05-11 20:17:58,974: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[74ef6e9a-e6af-4fab-b460-a9dc16f740cd] succeeded in 0.21939902899976005s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:18:58,748: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3bc1c86a-7f3b-4b29-99fc-1eda508df488] received
+[2026-05-11 20:18:58,965: INFO/ForkPoolWorker-9] Task 3bc1c86a-7f3b-4b29-99fc-1eda508df488 succeeded
+[2026-05-11 20:18:58,966: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[3bc1c86a-7f3b-4b29-99fc-1eda508df488] succeeded in 0.21616991699920618s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:19:45,820: INFO/MainProcess] Task tasks.maintenance.refresh_views[9ecf5942-bd18-48b2-a86b-539bf0c631cb] received
+[2026-05-11 20:19:45,848: INFO/MainProcess] Task tasks.scheduled.run_due_scans[89d180d0-a685-4aba-9ff8-906c923820e7] received
+[2026-05-11 20:19:46,023: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:19:46,025: INFO/ForkPoolWorker-1] Task 89d180d0-a685-4aba-9ff8-906c923820e7 succeeded
+[2026-05-11 20:19:46,025: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[89d180d0-a685-4aba-9ff8-906c923820e7] succeeded in 0.1750636190008663s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:19:46,025: INFO/ForkPoolWorker-9] Task 9ecf5942-bd18-48b2-a86b-539bf0c631cb succeeded
+[2026-05-11 20:19:46,026: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[9ecf5942-bd18-48b2-a86b-539bf0c631cb] succeeded in 0.20282236099956208s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:19:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[7636df56-41cf-4cd0-b4ef-493f94cd27f3] received
+[2026-05-11 20:19:58,964: INFO/ForkPoolWorker-9] Task 7636df56-41cf-4cd0-b4ef-493f94cd27f3 succeeded
+[2026-05-11 20:19:58,965: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[7636df56-41cf-4cd0-b4ef-493f94cd27f3] succeeded in 0.21563150499787298s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:20:58,748: INFO/MainProcess] Task tasks.maintenance.worker_health_check[fa7dfa05-a827-467f-bc0e-579d401a5325] received
+[2026-05-11 20:20:58,966: INFO/ForkPoolWorker-9] Task fa7dfa05-a827-467f-bc0e-579d401a5325 succeeded
+[2026-05-11 20:20:58,966: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[fa7dfa05-a827-467f-bc0e-579d401a5325] succeeded in 0.21602538599836407s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:21:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5b4b8e11-42bc-4a16-a44a-482414aaf542] received
+[2026-05-11 20:21:58,966: INFO/ForkPoolWorker-9] Task 5b4b8e11-42bc-4a16-a44a-482414aaf542 succeeded
+[2026-05-11 20:21:58,966: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[5b4b8e11-42bc-4a16-a44a-482414aaf542] succeeded in 0.21686681599749136s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:22:58,748: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d93de9c2-24b0-4755-ae71-33ee2025b305] received
+[2026-05-11 20:22:58,967: INFO/ForkPoolWorker-9] Task d93de9c2-24b0-4755-ae71-33ee2025b305 succeeded
+[2026-05-11 20:22:58,967: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[d93de9c2-24b0-4755-ae71-33ee2025b305] succeeded in 0.21686160800163634s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:23:58,750: INFO/MainProcess] Task tasks.maintenance.worker_health_check[d227fcd4-e1ec-4e80-8ffb-2fe26e637af2] received
+[2026-05-11 20:23:58,974: INFO/ForkPoolWorker-9] Task d227fcd4-e1ec-4e80-8ffb-2fe26e637af2 succeeded
+[2026-05-11 20:23:58,974: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[d227fcd4-e1ec-4e80-8ffb-2fe26e637af2] succeeded in 0.22046950699950685s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:24:45,825: INFO/MainProcess] Task tasks.maintenance.refresh_views[97caca46-b6d6-4458-90b7-d37c033b86bd] received
+[2026-05-11 20:24:45,849: INFO/MainProcess] Task tasks.scheduled.run_due_scans[08c15484-a928-4914-9c86-9f2f9df682f5] received
+[2026-05-11 20:24:46,084: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:24:46,086: INFO/ForkPoolWorker-9] Task 97caca46-b6d6-4458-90b7-d37c033b86bd succeeded
+[2026-05-11 20:24:46,086: INFO/ForkPoolWorker-1] Task 08c15484-a928-4914-9c86-9f2f9df682f5 succeeded
+[2026-05-11 20:24:46,087: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[97caca46-b6d6-4458-90b7-d37c033b86bd] succeeded in 0.25837362799939s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:24:46,087: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[08c15484-a928-4914-9c86-9f2f9df682f5] succeeded in 0.23437846899832948s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:24:58,748: INFO/MainProcess] Task tasks.maintenance.worker_health_check[bb776573-b308-4a4a-ab33-df7bb0ed22b9] received
+[2026-05-11 20:24:58,968: INFO/ForkPoolWorker-9] Task bb776573-b308-4a4a-ab33-df7bb0ed22b9 succeeded
+[2026-05-11 20:24:58,968: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[bb776573-b308-4a4a-ab33-df7bb0ed22b9] succeeded in 0.21881011599907652s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:25:58,751: INFO/MainProcess] Task tasks.maintenance.worker_health_check[aaa3d620-5239-4b15-812f-34301871b136] received
+[2026-05-11 20:25:58,986: INFO/ForkPoolWorker-9] Task aaa3d620-5239-4b15-812f-34301871b136 succeeded
+[2026-05-11 20:25:58,986: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[aaa3d620-5239-4b15-812f-34301871b136] succeeded in 0.23332704700078466s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:26:58,747: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5ac6f372-e750-4e97-9686-6a16c9643971] received
+[2026-05-11 20:26:58,964: INFO/ForkPoolWorker-9] Task 5ac6f372-e750-4e97-9686-6a16c9643971 succeeded
+[2026-05-11 20:26:58,964: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[5ac6f372-e750-4e97-9686-6a16c9643971] succeeded in 0.21502103400052874s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:27:58,850: INFO/MainProcess] Task tasks.maintenance.worker_health_check[9aeca751-8e82-41c1-8191-5a4a1f4a614e] received
+[2026-05-11 20:27:59,098: INFO/ForkPoolWorker-9] Task 9aeca751-8e82-41c1-8191-5a4a1f4a614e succeeded
+[2026-05-11 20:27:59,099: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[9aeca751-8e82-41c1-8191-5a4a1f4a614e] succeeded in 0.24632273899987922s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:28:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[6bb55d02-98a4-4c00-9751-15472bd290de] received
+[2026-05-11 20:28:59,024: INFO/ForkPoolWorker-9] Task 6bb55d02-98a4-4c00-9751-15472bd290de succeeded
+[2026-05-11 20:28:59,025: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[6bb55d02-98a4-4c00-9751-15472bd290de] succeeded in 0.21564926999781164s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:29:45,819: INFO/MainProcess] Task tasks.maintenance.refresh_views[7065583c-986f-4cb9-91f8-2ec051f78d2f] received
+[2026-05-11 20:29:45,849: INFO/MainProcess] Task tasks.scheduled.run_due_scans[21d57c69-557a-4277-851e-e12fe1ea4c88] received
+[2026-05-11 20:29:46,062: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:29:46,064: INFO/ForkPoolWorker-1] Task 21d57c69-557a-4277-851e-e12fe1ea4c88 succeeded
+[2026-05-11 20:29:46,065: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[21d57c69-557a-4277-851e-e12fe1ea4c88] succeeded in 0.21312727899930906s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:29:46,106: INFO/ForkPoolWorker-9] Task 7065583c-986f-4cb9-91f8-2ec051f78d2f succeeded
+[2026-05-11 20:29:46,107: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[7065583c-986f-4cb9-91f8-2ec051f78d2f] succeeded in 0.2849709419970168s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:29:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[b94e978d-ef17-492a-8f24-343ff33d1289] received
+[2026-05-11 20:29:59,025: INFO/ForkPoolWorker-9] Task b94e978d-ef17-492a-8f24-343ff33d1289 succeeded
+[2026-05-11 20:29:59,025: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[b94e978d-ef17-492a-8f24-343ff33d1289] succeeded in 0.21558454600017285s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:30:58,808: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f5784b66-d6e6-4850-9877-cc5d68834154] received
+[2026-05-11 20:30:59,027: INFO/ForkPoolWorker-9] Task f5784b66-d6e6-4850-9877-cc5d68834154 succeeded
+[2026-05-11 20:30:59,027: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[f5784b66-d6e6-4850-9877-cc5d68834154] succeeded in 0.21737386699896888s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:31:58,824: INFO/MainProcess] Task tasks.maintenance.worker_health_check[f34aa8d9-f350-4219-90f9-09e988c6936e] received
+[2026-05-11 20:31:59,084: INFO/ForkPoolWorker-9] Task f34aa8d9-f350-4219-90f9-09e988c6936e succeeded
+[2026-05-11 20:31:59,084: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[f34aa8d9-f350-4219-90f9-09e988c6936e] succeeded in 0.2505732520003221s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:32:58,825: INFO/MainProcess] Task tasks.maintenance.worker_health_check[3e316cea-c7d9-4bd8-8f3e-910732704c94] received
+[2026-05-11 20:32:59,064: INFO/ForkPoolWorker-9] Task 3e316cea-c7d9-4bd8-8f3e-910732704c94 succeeded
+[2026-05-11 20:32:59,064: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[3e316cea-c7d9-4bd8-8f3e-910732704c94] succeeded in 0.2364027179974073s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:33:58,806: INFO/MainProcess] Task tasks.maintenance.worker_health_check[aa0385d0-a3d4-455c-80cd-17ec67890f3e] received
+[2026-05-11 20:33:59,025: INFO/ForkPoolWorker-9] Task aa0385d0-a3d4-455c-80cd-17ec67890f3e succeeded
+[2026-05-11 20:33:59,025: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[aa0385d0-a3d4-455c-80cd-17ec67890f3e] succeeded in 0.21695209800236626s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:34:45,820: INFO/MainProcess] Task tasks.maintenance.refresh_views[876f411d-84a4-4021-9bc1-d990a54bb6d8] received
+[2026-05-11 20:34:45,848: INFO/MainProcess] Task tasks.scheduled.run_due_scans[1010eb76-804d-4d5f-b34a-9ff30b1ab49e] received
+[2026-05-11 20:34:46,030: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:34:46,032: INFO/ForkPoolWorker-1] Task 1010eb76-804d-4d5f-b34a-9ff30b1ab49e succeeded
+[2026-05-11 20:34:46,032: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[1010eb76-804d-4d5f-b34a-9ff30b1ab49e] succeeded in 0.1824251850011933s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:34:46,072: INFO/ForkPoolWorker-9] Task 876f411d-84a4-4021-9bc1-d990a54bb6d8 succeeded
+[2026-05-11 20:34:46,073: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[876f411d-84a4-4021-9bc1-d990a54bb6d8] succeeded in 0.2509890080000332s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:34:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[35da4a4c-8b5b-4c53-8bcd-f87c8471f81b] received
+[2026-05-11 20:34:59,026: INFO/ForkPoolWorker-9] Task 35da4a4c-8b5b-4c53-8bcd-f87c8471f81b succeeded
+[2026-05-11 20:34:59,026: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[35da4a4c-8b5b-4c53-8bcd-f87c8471f81b] succeeded in 0.21777750199908041s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:35:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5578f49b-b5b2-43ed-ad81-af9cb537a997] received
+[2026-05-11 20:35:59,025: INFO/ForkPoolWorker-9] Task 5578f49b-b5b2-43ed-ad81-af9cb537a997 succeeded
+[2026-05-11 20:35:59,026: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[5578f49b-b5b2-43ed-ad81-af9cb537a997] succeeded in 0.21731847999762977s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:36:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[28a09bb2-10c9-492a-a44b-f8758384208e] received
+[2026-05-11 20:36:59,025: INFO/ForkPoolWorker-9] Task 28a09bb2-10c9-492a-a44b-f8758384208e succeeded
+[2026-05-11 20:36:59,025: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[28a09bb2-10c9-492a-a44b-f8758384208e] succeeded in 0.2168345190002583s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:37:58,808: INFO/MainProcess] Task tasks.maintenance.worker_health_check[c1cc82f3-67d1-4ef7-bd8f-f75c1c301890] received
+[2026-05-11 20:37:59,030: INFO/ForkPoolWorker-9] Task c1cc82f3-67d1-4ef7-bd8f-f75c1c301890 succeeded
+[2026-05-11 20:37:59,030: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[c1cc82f3-67d1-4ef7-bd8f-f75c1c301890] succeeded in 0.21870817499802797s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:38:58,809: INFO/MainProcess] Task tasks.maintenance.worker_health_check[1fb59b57-7a89-44a8-a4e9-420760a42882] received
+[2026-05-11 20:38:59,027: INFO/ForkPoolWorker-9] Task 1fb59b57-7a89-44a8-a4e9-420760a42882 succeeded
+[2026-05-11 20:38:59,028: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[1fb59b57-7a89-44a8-a4e9-420760a42882] succeeded in 0.2162402510002721s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:39:45,820: INFO/MainProcess] Task tasks.maintenance.refresh_views[ca94b42b-fb22-4123-bf52-23c56ac02e9e] received
+[2026-05-11 20:39:45,849: INFO/MainProcess] Task tasks.scheduled.run_due_scans[0ed631cd-0da7-419d-bd2e-1d6c133e155e] received
+[2026-05-11 20:39:46,152: INFO/ForkPoolWorker-1] Spawned 0 scheduled engagement(s)
+[2026-05-11 20:39:46,166: INFO/ForkPoolWorker-1] Task 0ed631cd-0da7-419d-bd2e-1d6c133e155e succeeded
+[2026-05-11 20:39:46,167: INFO/ForkPoolWorker-1] Task tasks.scheduled.run_due_scans[0ed631cd-0da7-419d-bd2e-1d6c133e155e] succeeded in 0.3149816000004648s: {'status': 'completed', 'spawned': 0}
+[2026-05-11 20:39:46,218: INFO/ForkPoolWorker-9] Task ca94b42b-fb22-4123-bf52-23c56ac02e9e succeeded
+[2026-05-11 20:39:46,219: INFO/ForkPoolWorker-9] Task tasks.maintenance.refresh_views[ca94b42b-fb22-4123-bf52-23c56ac02e9e] succeeded in 0.3930525760006276s: {'status': 'error', 'error': 'must be owner of materialized view mv_org_dashboard
+CONTEXT:  SQL statement "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_org_dashboard"
+PL/pgSQL function refresh_mv_org_dashboard() line 3 at SQL statement
+'}
+[2026-05-11 20:39:58,820: INFO/MainProcess] Task tasks.maintenance.worker_health_check[016bc7f9-820b-4394-a4e3-d0c64a247356] received
+[2026-05-11 20:39:59,080: INFO/ForkPoolWorker-9] Task 016bc7f9-820b-4394-a4e3-d0c64a247356 succeeded
+[2026-05-11 20:39:59,081: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[016bc7f9-820b-4394-a4e3-d0c64a247356] succeeded in 0.2457371329983289s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:40:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[5dfcb788-b3bb-4f6d-9356-0c7dfd2ffe4b] received
+[2026-05-11 20:40:59,030: INFO/ForkPoolWorker-9] Task 5dfcb788-b3bb-4f6d-9356-0c7dfd2ffe4b succeeded
+[2026-05-11 20:40:59,031: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[5dfcb788-b3bb-4f6d-9356-0c7dfd2ffe4b] succeeded in 0.22115211300115334s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:41:58,810: INFO/MainProcess] Task tasks.maintenance.worker_health_check[df107382-dd3b-44bb-ab83-cd6bc4bfdba9] received
+[2026-05-11 20:41:59,030: INFO/ForkPoolWorker-9] Task df107382-dd3b-44bb-ab83-cd6bc4bfdba9 succeeded
+[2026-05-11 20:41:59,031: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[df107382-dd3b-44bb-ab83-cd6bc4bfdba9] succeeded in 0.21819040699847392s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:42:58,807: INFO/MainProcess] Task tasks.maintenance.worker_health_check[72863af2-96b3-4305-807c-bc4654c559a4] received
+[2026-05-11 20:42:59,024: INFO/ForkPoolWorker-9] Task 72863af2-96b3-4305-807c-bc4654c559a4 succeeded
+[2026-05-11 20:42:59,024: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[72863af2-96b3-4305-807c-bc4654c559a4] succeeded in 0.2150934689998394s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
+[2026-05-11 20:43:58,809: INFO/MainProcess] Task tasks.maintenance.worker_health_check[df4cf61d-9b8f-40ae-ac06-041468940523] received
+[2026-05-11 20:43:59,026: INFO/ForkPoolWorker-9] Task df4cf61d-9b8f-40ae-ac06-041468940523 succeeded
+[2026-05-11 20:43:59,027: INFO/ForkPoolWorker-9] Task tasks.maintenance.worker_health_check[df4cf61d-9b8f-40ae-ac06-041468940523] succeeded in 0.21574594699995941s: {'status': 'completed', 'unhealthy_workers': 0, 'cleaned_workers': 0}
 
 worker: Warm shutdown (MainProcess)
 

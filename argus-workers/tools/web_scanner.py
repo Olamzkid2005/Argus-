@@ -188,6 +188,43 @@ class WebScanner:
         "X-Original-Forwarded-For": "127.0.0.1",
     }
 
+    # Financial / transaction paths for business logic checks
+    TRANSFER_PATHS = [
+        "/api/transfer", "/api/transactions", "/api/payment",
+        "/api/v1/transfers", "/api/send",
+    ]
+
+    # File upload endpoints
+    UPLOAD_PATHS = [
+        "/api/upload", "/api/profile/image", "/api/documents",
+        "/api/v1/upload", "/upload",
+    ]
+
+    # Rate limiting sensitive paths
+    RATE_LIMIT_PATHS = [
+        "/api/login", "/api/auth/login", "/api/reset-password",
+        "/api/transfer", "/api/payment",
+    ]
+
+    # Password reset endpoints
+    RESET_PATHS = [
+        "/api/forgot-password", "/api/reset-password", "/api/auth/reset",
+    ]
+
+    # Race condition test endpoints
+    RACE_PATHS = [
+        "/api/transfer", "/api/payment", "/api/card/fund", "/api/withdraw",
+    ]
+
+    # Sensitive response fields (BOPLA — should not appear in regular user responses)
+    SENSITIVE_RESPONSE_FIELDS = {
+        "password", "password_hash", "hashed_password", "pwd",
+        "card_number", "pan", "cvv", "cvv2", "cvc",
+        "secret", "api_key", "access_token", "refresh_token",
+        "ssn", "social_security", "pin", "credit_score",
+        "is_admin", "admin", "role", "privilege", "is_superuser",
+    }
+
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
                  llm_payload_generator=None, session: requests.Session | None = None,
                  tech_stack: list[str] | None = None, verify: bool = True):
@@ -300,23 +337,31 @@ class WebScanner:
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
 
-    def _safe_request(self, method: str, url: str, **kwargs) -> requests.Response | None:
-        """Make HTTP request with error handling. Thread-safe — uses per-thread sessions."""
+    def _safe_request(self, method: str, url: str, session: requests.Session | None = None, **kwargs) -> requests.Response | None:
+        """Make HTTP request with error handling. Thread-safe — uses per-thread sessions.
+
+        Args:
+            session: Optional pre-authenticated session. When provided, it is used
+                     instead of the thread-local session (carries cookies/auth headers).
+        """
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)  # Verify SSL certs by default
-            # Use thread-local session for thread safety during concurrent checks
-            if not hasattr(self, "_thread_session"):
-                self._thread_session = threading.local()
-            thread_session = getattr(self._thread_session, "session", None)
-            if thread_session is None:
-                thread_session = requests.Session()
-                thread_session.headers.update({
-                    "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
-                    "Accept": "*/*",
-                })
-                self._thread_session.session = thread_session
+            # Use provided session, or fall back to thread-local
+            if session is not None:
+                req_session = session
+            else:
+                if not hasattr(self, "_thread_session"):
+                    self._thread_session = threading.local()
+                req_session = getattr(self._thread_session, "session", None)
+                if req_session is None:
+                    req_session = requests.Session()
+                    req_session.headers.update({
+                        "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
+                        "Accept": "*/*",
+                    })
+                    self._thread_session.session = req_session
             # Token-bucket rate limiting with thread-safe lock
             with self._rate_lock:
                 now = time.time()
@@ -324,7 +369,7 @@ class WebScanner:
                 if wait_time > 0:
                     time.sleep(wait_time)
                 self._last_request_time = time.time()
-            resp = thread_session.request(method, url, **kwargs)
+            resp = req_session.request(method, url, **kwargs)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
             logger.debug(f"Request failed: {e}")

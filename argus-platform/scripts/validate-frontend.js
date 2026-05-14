@@ -75,7 +75,6 @@ const newPages = [
   "src/app/reports/page.tsx",
   "src/app/reports/compliance/page.tsx",
   "src/app/settings/page.tsx",
-  "src/app/collaboration/page.tsx",
   "src/app/engagements/page.tsx",
   "src/app/findings/page.tsx",
 ];
@@ -88,7 +87,6 @@ const newApiRoutes = [
   "src/app/api/engagement/[id]/timeline/route.ts",
   "src/app/api/engagement/[id]/explainability/route.ts",
   "src/app/api/tools/performance/route.ts",
-  "src/app/api/collaboration/activity/route.ts",
   "src/app/api/reports/compliance/route.ts",
   "src/app/api/settings/route.ts",
 ];

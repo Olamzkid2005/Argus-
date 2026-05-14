@@ -36,7 +36,8 @@ export async function GET(
       SELECT DISTINCT
         es.id,
         es.trace_id,
-        es.span_name,
+        es.span_name as event_type,
+        es.span_name as message,
         es.duration_ms,
         es.created_at
       FROM execution_spans es

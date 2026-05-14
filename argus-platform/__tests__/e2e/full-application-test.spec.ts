@@ -154,7 +154,6 @@ test.describe('5. All Pages Navigation', () => {
       ['/rules', 'Rules'],
       ['/analytics', 'Analytics'],
       ['/settings', 'Settings'],
-      ['/collaboration', 'Collaboration'],
       ['/reports/compliance', 'Compliance Reports'],
       ['/auth/signin', 'Sign In'],
       ['/auth/signup', 'Sign Up'],
@@ -259,18 +258,7 @@ test.describe('12. Settings Page', () => {
   });
 });
 
-// ─── TEST 13: Collaboration Page ───
-test.describe('13. Collaboration Page', () => {
-  test('should display collaboration features', async ({ page }) => {
-    await nav(page, '/collaboration');
-    await expect(page.locator('body')).toBeVisible();
-    const bodyText = await page.locator('body').innerText();
-    console.log(`  ✓ Collaboration page (${bodyText.length} chars)`);
-    await page.screenshot({ path: '/tmp/e2e-13-collab.png', fullPage: true }).catch(() => {});
-  });
-});
-
-// ─── TEST 14: Compliance Reports Page ───
+// ─── TEST 13: Compliance Reports Page ───
 test.describe('14. Compliance Reports Page', () => {
   test('should display compliance reports', async ({ page }) => {
     await nav(page, '/reports/compliance');

@@ -154,7 +154,7 @@ export default function EngagementDetailPage() {
       const res = await fetch(`/api/engagement/${engagementId}/timeline`);
       if (res.ok) {
         const data = await res.json();
-        setTimeline(data.events || data.timeline || []);
+        setTimeline(data.spans || data.events || data.timeline || []);
       }
     } catch { /* timeline optional */ }
   }, [engagementId]);

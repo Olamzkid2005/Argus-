@@ -1,6 +1,6 @@
 # Argus SOC Platform
 
-AI-powered cybersecurity operations center with autonomous vulnerability scanning, threat intelligence, and collaborative remediation workflows.
+AI-powered cybersecurity operations center with autonomous vulnerability scanning, threat intelligence, and automated remediation workflows.
 
 ## Architecture
 
@@ -279,8 +279,7 @@ Argus is an AI-powered penetration testing platform that automates security asse
 - ✅ Custom detection rule engine with YAML-based rules
 - ✅ Scheduled scans (daily/weekly/monthly recurring engagements via Celery Beat)
 - ✅ Scheduled report generation with email delivery
-- ✅ Team collaboration with assignments, comments, and approvals
-- ✅ Activity feed, agent reasoning feed, and notification system
+- ✅ Agent reasoning feed for real-time decision transparency
 - ✅ Comprehensive analytics with trend visualization
 - ✅ Multi-provider AI model selection (Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen, NVIDIA, Perplexity)
 - ✅ Webhook dispatch on critical/high severity findings
@@ -294,7 +293,6 @@ Argus is an AI-powered penetration testing platform that automates security asse
 - **Findings**: Comprehensive vulnerability management with AI analysis, verification, and evidence display
 - **Analytics**: Vulnerability trends, severity distribution, and scheduled report management
 - **Reports**: Report generation (PDF, HTML, JSON) with status tracking and sharing
-- **Collaboration**: Team management, finding discussions, assignment workflows, and approval processes
 - **Settings**: API key configuration, AI model selection, and scan aggressiveness presets
 - **Rules**: Custom YAML-based detection rule creation and management
 - **Assets**: Asset inventory with type-based filtering, risk levels, and lifecycle tracking
@@ -329,7 +327,6 @@ Argus is an AI-powered penetration testing platform that automates security asse
 - ✅ Findings (vulnerability management)
 - ✅ Analytics (trends and reports)
 - ✅ Reports (generation and management)
-- ✅ Collaboration (team, comments, assignments)
 - ✅ Settings (API keys, AI models)
 - ✅ Rules (custom detection rules)
 - ✅ Assets (inventory management)
@@ -383,19 +380,6 @@ Argus is an AI-powered penetration testing platform that automates security asse
 - `GET /api/reports` - List all reports
 - `GET /api/reports/[id]/download` - Download a report
 - `DELETE /api/reports/[id]` - Delete a report
-
-### Collaboration
-- `GET /api/collaboration/team` - Get team members
-- `POST /api/collaboration/team/invite` - Invite team member
-- `DELETE /api/collaboration/team/[id]` - Remove team member
-- `GET /api/collaboration/comments` - Get comments for finding
-- `POST /api/collaboration/comments` - Add comment
-- `GET /api/collaboration/assignments` - Get assignments
-- `POST /api/collaboration/assignments` - Create assignment
-- `GET /api/collaboration/approvals` - Get approval requests
-- `POST /api/collaboration/approvals/[id]/approve` - Approve request
-- `GET /api/collaboration/activity` - Get activity feed
-- `POST /api/collaboration/notifications/read` - Mark notifications as read
 
 ### Settings
 - `GET /api/settings` - Get user settings

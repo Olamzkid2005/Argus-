@@ -342,7 +342,7 @@ export default function ReportsPage() {
         <AnimatePresence>
           {filtered.map((report, index) => {
             const typeStyle = reportTypeConfig[report.type];
-            const statusStyle = statusConfig[report.status];
+            const statusStyle = statusConfig[report.status] || { color: "#7A7489", label: report.status || "Unknown", bg: "bg-surface-container" };
             const isReady = report.status === "ready";
 
             return (
