@@ -39,6 +39,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
 
     # Forward prev_engagement_id through the chain via budget
     if prev_engagement_id:
+        budget = dict(budget)
         budget["prev_engagement_id"] = prev_engagement_id
 
     slog.phase_header("RECON PHASE", target=target, agent_mode=agent_mode)
@@ -77,6 +78,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
             slog.dispatch("scan", task_id=scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.transition("failed", f"Failed to dispatch scan: {e}")
 
         return result
 
