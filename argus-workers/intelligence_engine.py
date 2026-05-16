@@ -819,9 +819,19 @@ class IntelligenceEngine:
             "WEAK_TLS": {"feed": "cisa_kev", "risk": "medium", "description": "Weak TLS configurations in security advisories"},
         }
 
-        matched_key = finding_type if finding_type in threat_indicators else (
-            normalized_type if normalized_type in threat_indicators else None
-        )
+        matched_key = None
+        if finding_type in threat_indicators:
+            matched_key = finding_type
+        elif normalized_type in threat_indicators:
+            matched_key = normalized_type
+        else:
+            # Normalized type may be a family name (e.g. "SQLI") not in
+            # threat_indicators directly — check if any family subtype matches.
+            subtypes = _type_families.get(normalized_type, [])
+            for st in subtypes:
+                if st in threat_indicators:
+                    matched_key = st
+                    break
         if matched_key:
             indicator = threat_indicators[matched_key].copy()
             indicator["matched_type"] = finding_type
