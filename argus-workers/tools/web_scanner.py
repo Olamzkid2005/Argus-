@@ -563,15 +563,22 @@ class WebScanner:
         if not resp:
             return
 
-        # Get Set-Cookie header - handle both single and multiple cookies
-        cookie_header = resp.headers.get("Set-Cookie")
-        if not cookie_header:
-            return
+        # Get Set-Cookie headers - use getlist for multi-value headers
+        cookie_headers = resp.raw.headers.getlist("Set-Cookie") if hasattr(resp.raw.headers, "getlist") else []
+        if not cookie_headers:
+            cookie_header = resp.headers.get("Set-Cookie")
+            if not cookie_header:
+                return
+            # Fallback: use http.cookies to parse multi-cookie headers safely
+            from http.cookies import SimpleCookie
+            try:
+                parsed = SimpleCookie(cookie_header)
+                cookie_headers = [c.output(header="", sep="").strip() for c in parsed.values()]
+            except Exception:
+                # Last resort: split on newlines if present
+                cookie_headers = cookie_header.split("\n") if "\n" in cookie_header else [cookie_header]
 
-        # Split multiple cookies (comma-separated in some implementations)
-        cookies = cookie_header.split(",") if "," in cookie_header else [cookie_header]
-
-        for cookie_str in cookies:
+        for cookie_str in cookie_headers:
             issues = []
             if "HttpOnly" not in cookie_str:
                 issues.append("Missing HttpOnly")

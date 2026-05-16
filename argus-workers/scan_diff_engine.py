@@ -38,12 +38,26 @@ class ScanDiffEngine:
     # ── Fingerprinting ─────────────────────────────────────────────
 
     @staticmethod
+    def _normalize_endpoint(endpoint: str) -> str:
+        """Normalize endpoint URL for stable fingerprinting across scans.
+
+        Strips query parameters and fragments so the same vulnerability on
+        the same path gets the same fingerprint even if query params differ
+        (e.g., ?token=abc123 vs ?token=xyz789).
+        """
+        if not endpoint:
+            return endpoint
+        from urllib.parse import urlparse
+        parsed = urlparse(endpoint)
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme else parsed.path
+
+    @staticmethod
     def _fingerprint(finding: dict) -> str:
         """Stable fingerprint for matching findings across scans.
 
         Multi-field to distinguish payload-level differences:
-          primary:   sha256(type + endpoint + payload_hash[:8])
-          fallback:  sha256(type + endpoint)
+          primary:   sha256(type + normalized_endpoint + payload_hash[:8])
+          fallback:  sha256(type + normalized_endpoint)
 
         Args:
             finding: Finding dict with type, endpoint, evidence fields
@@ -52,7 +66,7 @@ class ScanDiffEngine:
             16-character hex fingerprint string
         """
         finding_type = finding.get("type", "UNKNOWN")
-        endpoint = finding.get("endpoint", "")
+        endpoint = ScanDiffEngine._normalize_endpoint(finding.get("endpoint", ""))
 
         # Extract payload from evidence
         evidence = finding.get("evidence", {}) or {}

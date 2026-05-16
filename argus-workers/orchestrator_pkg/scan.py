@@ -51,11 +51,15 @@ def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] |
         "tech_stack": tech_stack or [],
         "target_url": target,
     }
-    # Dynamically copy all ReconContext attributes (supports any recon_signal)
+    # Dynamically copy ReconContext dataclass fields only (not methods)
     if recon_context is not None:
-        for attr in dir(recon_context):
-            if not attr.startswith("_"):
+        if hasattr(recon_context, "__dataclass_fields__"):
+            for attr in recon_context.__dataclass_fields__:
                 gate_ctx[attr] = getattr(recon_context, attr)
+        else:
+            for attr in dir(recon_context):
+                if not attr.startswith("_") and not callable(getattr(recon_context, attr)):
+                    gate_ctx[attr] = getattr(recon_context, attr)
     # Ensure boolean signals default to False
     for signal in tool_def.requires.recon_signals or []:
         if signal not in gate_ctx:

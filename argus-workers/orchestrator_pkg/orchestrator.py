@@ -304,7 +304,9 @@ class Orchestrator:
                     # Skip embedding-based dedup when payload is redacted —
                     # the __REDACTED__ placeholder would cause false matches
                     if payload and '__REDACTED__' not in str(payload):
-                        dedup_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {payload}"
+                        ftype = finding.get("type") or ""
+                    fep = finding.get("endpoint") or ""
+                    dedup_text = f"{ftype} {fep} {payload}"
                         similar = emb_svc.find_existing_similar(dedup_text)
                     else:
                         similar = None
@@ -350,7 +352,7 @@ class Orchestrator:
                 if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint"):
                     if finding.get("severity", "").upper() not in ("INFO", "LOW", ""):
                         try:
-                            emb_text = f"{finding.get('type', '')} {finding.get('endpoint', '')} {finding.get('evidence', {}).get('payload', '')}"
+                            emb_text = f"{finding.get('type') or ''} {finding.get('endpoint') or ''} {finding.get('evidence', {}).get('payload', '')}"
                             embedding = emb_svc.get_embedding(emb_text)
                             if embedding and EmbeddingService.is_valid_embedding(embedding):
                                 EmbeddingService.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
@@ -701,7 +703,7 @@ class Orchestrator:
         findings = []
         if self.finding_repo:
             try:
-                raw_findings, _ = self.finding_repo.get_findings_by_engagement(self.engagement_id)
+                raw_findings, _ = self.finding_repo.get_findings_by_engagement(self.engagement_id, limit=10000)
                 findings = [f.to_dict() if hasattr(f, "to_dict") else dict(f) if isinstance(f, dict) else f for f in raw_findings]
             except Exception as e:
                 logger.warning(f"Failed to load findings: {e}")

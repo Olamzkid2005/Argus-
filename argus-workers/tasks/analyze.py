@@ -38,7 +38,14 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                 if target and isinstance(target, str):
                     action_targets.append(target)
             if not action_targets:
-                logger.warning("Analysis actions found but no valid targets extracted for engagement=%s", engagement_id)
+                logger.warning("Analysis actions found but no valid targets extracted for engagement=%s — skipping to reporting", engagement_id)
+                ctx.state.transition("reporting", "No valid targets in analysis actions")
+                try:
+                    app.send_task('tasks.report.generate_report',
+                                  args=[engagement_id, ctx.trace_id, budget])
+                except Exception as e:
+                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                return result
             # Dispatch the downstream task BEFORE transitioning state
             try:
                 expand_task = app.send_task('tasks.recon.expand_recon',

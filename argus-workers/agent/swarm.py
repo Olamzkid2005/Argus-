@@ -538,10 +538,11 @@ class SwarmOrchestrator:
 
     @staticmethod
     def _deduplicate(findings: list[dict]) -> list[dict]:
-        """Deduplicate using evidence-weighted merge.
+        """Deduplicate using evidence-merged merge.
 
         For findings with same type+endpoint+payload fingerprint,
-        the finding with higher confidence (or richer evidence) survives.
+        evidence from both findings is merged (not discarded).
+        The higher-confidence finding's metadata survives as the base.
 
         Args:
             findings: List of finding dicts from all agents
@@ -562,12 +563,24 @@ class SwarmOrchestrator:
             existing_conf = float(existing.get("confidence", 0))
             new_conf = float(f.get("confidence", 0))
 
+            # Merge evidence from both findings
+            existing_ev = existing.get("evidence", {}) or {}
+            new_ev = f.get("evidence", {}) or {}
+            if isinstance(existing_ev, dict) and isinstance(new_ev, dict):
+                merged_evidence = {**existing_ev, **new_ev}
+            else:
+                merged_evidence = new_ev if len(str(new_ev)) > len(str(existing_ev)) else existing_ev
+
             if new_conf > existing_conf:
                 seen[fp] = f
+                seen[fp]["evidence"] = merged_evidence
             elif new_conf == existing_conf:
-                existing_evidence = len(str(existing.get("evidence", {})))
-                new_evidence = len(str(f.get("evidence", {})))
-                if new_evidence > existing_evidence:
+                existing_evidence_len = len(str(existing_ev))
+                new_evidence_len = len(str(new_ev))
+                if new_evidence_len > existing_evidence_len:
                     seen[fp] = f
+                    seen[fp]["evidence"] = merged_evidence
+                else:
+                    existing["evidence"] = merged_evidence
 
         return list(seen.values())

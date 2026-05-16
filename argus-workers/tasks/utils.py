@@ -41,7 +41,7 @@ class LlmCostTracker:
                 socket_timeout=2,
             )
         except Exception:
-            pass
+            logger.warning("Redis unavailable for LlmCostTracker — cost cap disabled for %s", engagement_id)
 
     def has_remaining_budget(self) -> bool:
         """Check if we're still within budget.
@@ -66,7 +66,7 @@ class LlmCostTracker:
                 self._redis.incrbyfloat(self._redis_key, cost)
                 self._redis.expire(self._redis_key, 86400)  # 24h TTL
             except Exception:
-                pass
+                logger.warning("Failed to record LLM cost in Redis for %s", self.engagement_id)
         return self._get_current_cost() < self.max_cost
 
     def _get_current_cost(self) -> float:
