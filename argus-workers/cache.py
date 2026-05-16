@@ -15,9 +15,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Redis configuration
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+# Redis configuration — use shared config for production, allow override for cache isolation
+from config.redis import REDIS_URL as _BASE_REDIS_URL
 CACHE_DB = int(os.getenv("CACHE_REDIS_DB", "1"))
+CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL", f"{_BASE_REDIS_URL}/{CACHE_DB}")
 
 # Lazy Redis client with auto-reconnect on failure (not module-level)
 _redis_client_instance = None
@@ -41,7 +42,7 @@ def _get_redis():
             _redis_available = False
     try:
         import redis as redis_lib
-        _redis_client_instance = redis_lib.from_url(f"{REDIS_URL}/{CACHE_DB}", socket_connect_timeout=3, socket_timeout=3)
+        _redis_client_instance = redis_lib.from_url(CACHE_REDIS_URL, socket_connect_timeout=3, socket_timeout=3)
         _redis_client_instance.ping()
         _redis_available = True
         return _redis_client_instance

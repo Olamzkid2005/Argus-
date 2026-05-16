@@ -8,7 +8,6 @@ Integrates with dead letter queue and error classification.
 import logging
 import os
 import signal
-import sys
 import threading
 import time
 
@@ -46,10 +45,6 @@ class GracefulShutdownHandler:
         )
         self.shutdown_requested = True
         self.shutdown_deadline = time.time() + self.force_exit_after
-
-        # Log current state - in Celery this will prevent new tasks
-        if hasattr(sys, "celery_worker"):
-            logger.info("Notifying Celery of shutdown")
 
         # Log active tasks
         with self._lock:
