@@ -565,7 +565,7 @@ class Orchestrator:
         self._bug_bounty_mode = bool(bug_bounty_mode)
         if scan_mode == "swarm" and _recon_ok and _llm_ok:
             scan_execution_path = "swarm"
-            findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
+            findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
         elif agent_mode_enabled and _recon_ok and _llm_ok:
             scan_execution_path = "agent"
             findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
@@ -607,6 +607,7 @@ class Orchestrator:
     def _run_swarm_scan(
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict,
+        bug_bounty_mode: bool = False,
     ) -> list[dict]:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("SWARM SCAN", targets=f"{len(targets)} target(s)")
