@@ -116,9 +116,14 @@ class CircuitBreaker:
 
             try:
                 result = func(*args, **kwargs)
-                if result:
-                    self.record_success()
+                # Success is the absence of an exception, regardless
+                # of whether the result is truthy (empty findings list
+                # is a valid outcome for a scan tool).
+                self.record_success()
                 return result
+            except CircuitOpenError:
+                # Don't record nested circuit breaks as failures
+                raise
             except Exception:
                 self.record_failure()
                 raise
