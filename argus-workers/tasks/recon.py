@@ -70,7 +70,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 slog.info("Saved recon context for scan phase")
             except Exception as e:
                 logger.error("Failed to save recon context for %s — aborting: %s", engagement_id, e)
-                ctx.state.transition("failed", f"Failed to persist recon context: {e}")
+                ctx.state.safe_transition("failed", f"Failed to persist recon context: {e}")
                 return {"phase": "recon", "status": "failed", "reason": "recon_context_save_failed"}
 
         # Dispatch asset_discovery first (non-critical — warning on failure)
@@ -96,7 +96,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
             slog.dispatch("scan", task_id=scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
-            ctx.state.transition("failed", f"Failed to dispatch scan: {e}")
+            ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
             return {"phase": "recon", "status": "failed", "reason": "scan_dispatch_failed"}
 
         # Transition state AFTER dispatch succeeds. If the process crashes
@@ -135,7 +135,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                               args=[engagement_id, ctx.trace_id, budget])
             except Exception as e:
                 logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                ctx.state.transition("failed", f"Failed to enqueue report: {e}")
+                ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
                 return {"phase": "recon_expand", "status": "failed", "reason": "report_dispatch_failed", "next_state": "failed"}
         return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets", "next_state": "reporting"}
 
@@ -169,7 +169,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
             ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
         except Exception as e:
             logger.error("Failed to transition to scanning for engagement=%s: %s", engagement_id, e, exc_info=True)
-            ctx.state.transition("failed", f"State transition failed: {e}")
+            ctx.state.safe_transition("failed", f"State transition failed: {e}")
             return result
         try:
             scan_task = app.send_task(
@@ -189,6 +189,6 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
             logger.info("Dispatched scan after expand for engagement=%s (task=%s)", engagement_id, scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan after expand for engagement=%s: %s", engagement_id, e, exc_info=True)
-            ctx.state.transition("failed", f"Failed to dispatch scan: {e}")
+            ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
         return result
 

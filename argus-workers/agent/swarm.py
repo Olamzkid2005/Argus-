@@ -82,16 +82,37 @@ class SpecialistAgent(ABC):
             self._parser = Parser()
         return self._parser
 
+    def _log_decision(self, tool_name: str, args: list, findings_count: int, success: bool):
+        """Log a tool execution decision to the decision repository."""
+        if not self.decision_repo:
+            return
+        try:
+            self.decision_repo.log_decision(
+                engagement_id=self.engagement_id,
+                phase=f"swarm_{self.DOMAIN}",
+                iteration=0,
+                tool_selected=tool_name,
+                arguments={"args": args},
+                reasoning=f"Swarm {self.DOMAIN} running {tool_name} ({'success' if success else 'failed'}, {findings_count} findings)",
+                was_fallback=False,
+                input_tokens=None,
+                output_tokens=None,
+            )
+        except Exception as e:
+            logger.debug(f"{self.DOMAIN}/log_decision failed (non-fatal): {e}")
+
     def _run_tool(self, tool_name: str, args: list, timeout: int = TOOL_TIMEOUT_DEFAULT) -> list[dict]:
         """Run a single tool and return parsed findings."""
         self.tools_attempted.add(tool_name)
         findings = []
+        success = False
         try:
             emit_swarm_agent_action(
                 self.engagement_id, self.DOMAIN, tool_name,
                 reasoning=f"Running {tool_name} with args: {' '.join(args[:4])}...",
             )
             result = self.tool_runner.run(tool_name, args, timeout=timeout)
+            success = result.success
             if result.success and result.stdout:
                 parsed = self.parser.parse(tool_name, result.stdout)
                 for p in parsed:
@@ -100,6 +121,8 @@ class SpecialistAgent(ABC):
                 logger.debug(f"{self.DOMAIN}/{tool_name} stderr: {result.stderr[:200]}")
         except Exception as e:
             logger.warning(f"{self.DOMAIN}/{tool_name} failed: {e}")
+        finally:
+            self._log_decision(tool_name, args, len(findings), success)
         return findings
 
     def _get_targets(self) -> list[str]:
@@ -518,7 +541,7 @@ class SwarmOrchestrator:
 
             done, not_done = concurrent.futures.wait(
                 futures_map, timeout=timeout,
-                return_when=concurrent.futures.FIRST_EXCEPTION,
+                return_when=concurrent.futures.ALL_COMPLETED,
             )
             for future in not_done:
                 future.cancel()
@@ -603,16 +626,28 @@ class SwarmOrchestrator:
                 merged_evidence = new_ev if len(str(new_ev)) > len(str(existing_ev)) else existing_ev
 
             if new_conf > existing_conf:
-                seen[fp] = f
-                seen[fp]["evidence"] = merged_evidence
-                seen[fp]["source_agents"] = list(existing_agents)
+                # Merge: use higher-confidence finding as base but preserve
+                # detection history from the existing finding.
+                merged = {**f}
+                merged["evidence"] = merged_evidence
+                merged["source_agents"] = list(existing_agents)
+                # Preserve detection origin from existing finding when new
+                # finding doesn't carry it (common with generic detections).
+                for key in ("source_tool", "severity", "source_agent"):
+                    if not merged.get(key) and existing.get(key):
+                        merged[key] = existing[key]
+                seen[fp] = merged
             elif new_conf == existing_conf:
                 existing_evidence_len = len(str(existing_ev))
                 new_evidence_len = len(str(new_ev))
                 if new_evidence_len > existing_evidence_len:
-                    seen[fp] = f
-                    seen[fp]["evidence"] = merged_evidence
-                    seen[fp]["source_agents"] = list(existing_agents)
+                    merged = {**f}
+                    merged["evidence"] = merged_evidence
+                    merged["source_agents"] = list(existing_agents)
+                    for key in ("source_tool", "severity", "source_agent"):
+                        if not merged.get(key) and existing.get(key):
+                            merged[key] = existing[key]
+                    seen[fp] = merged
                 else:
                     existing["evidence"] = merged_evidence
                     existing["source_agents"] = list(existing_agents)

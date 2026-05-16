@@ -45,7 +45,7 @@ def run_scan(
             from streaming import emit_thinking
             emit_thinking(engagement_id, "Recon context unavailable — running deterministic scan")
         except Exception:
-            pass
+            logger.warning("Failed to emit thinking update for engagement=%s", engagement_id)
 
     mode = "agent" if agent_mode else "deterministic"
     slog.phase_header("SCAN PHASE", targets=f"{len(targets)} target(s)", mode=mode)
@@ -76,7 +76,9 @@ def run_scan(
             ctx.state.transition("analyzing", "Scan complete")
         except Exception as e:
             logger.error("Failed to transition to analyzing for engagement=%s: %s", engagement_id, e, exc_info=True)
-            ctx.state.transition("failed", f"State transition failed: {e}")
+            ctx.state.safe_transition("failed", f"State transition failed: {e}")
+            result["status"] = "failed"
+            result["reason"] = "state_transition_failed"
             return result
         try:
             analyze_task = app.send_task(
@@ -87,7 +89,7 @@ def run_scan(
             slog.dispatch("analyze", task_id=analyze_task.id)
         except Exception as e:
             logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
-            ctx.state.transition("failed", f"Failed to dispatch analysis: {e}")
+            ctx.state.safe_transition("failed", f"Failed to dispatch analysis: {e}")
 
         return result
 

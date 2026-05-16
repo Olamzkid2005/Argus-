@@ -260,7 +260,7 @@ class ToolExecutor:
                     finding.confidence,
                     finding.endpoint,
                     Json(finding.evidence),
-                    finding.source_tool,
+                    finding.source_tool or "",
                     finding.cvss_score,
                     finding.owasp_category,
                     finding.cwe_id,

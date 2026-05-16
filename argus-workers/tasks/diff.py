@@ -81,12 +81,13 @@ def run_scan_diff(
                 engine.mark_fixed(finding_id, new_engagement_id)
 
         # Update fixed fingerprints for regression tracking
-        if diff_result[engine.CAT_FIXED]:
+        fixed_findings = diff_result.get(engine.CAT_FIXED, [])
+        if fixed_findings:
             _update_fixed_fingerprints(
                 profile_repo,
                 org_id,
                 domain,
-                diff_result[engine.CAT_FIXED],
+                fixed_findings,
             )
 
         # Store diff in profile

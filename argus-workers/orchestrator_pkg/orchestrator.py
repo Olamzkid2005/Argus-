@@ -503,6 +503,7 @@ class Orchestrator:
         db_conn = os.getenv("DATABASE_URL")
         decision_repo = AgentDecisionRepository(db_conn) if db_conn else None
         all_findings = []
+        per_target_tools = []
         budget = budget or {}
 
         for target in targets:
@@ -536,8 +537,8 @@ class Orchestrator:
                 )
 
                 agent_ran_tools = {r.tool for r in results if r.success}
-                logger.info(f"Agent ran tools: {agent_ran_tools}")
-                self._last_agent_tried_tools.update(agent_ran_tools)
+                logger.info(f"Agent ran tools for {target}: {agent_ran_tools}")
+                per_target_tools.append(agent_ran_tools)
 
                 for r in results:
                     if r.success and r.output:
@@ -548,9 +549,15 @@ class Orchestrator:
                                 all_findings.append(norm)
             except Exception as e:
                 logger.warning(f"Agent scan failed for {target}: {e} — falling back to deterministic", exc_info=True)
+                per_target_tools.append(set())
                 fallback = execute_scan_pipeline(self, [target], budget, aggressiveness, auth_config,
                                                   recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
+
+        if per_target_tools:
+            self._last_agent_tried_tools = set.intersection(*per_target_tools)
+        else:
+            self._last_agent_tried_tools = set()
 
         return all_findings
 
@@ -566,7 +573,7 @@ class Orchestrator:
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         scan_mode = job.get("scan_mode", "agent")
-        recon_context = load_recon_context(self.engagement_id)
+        recon_context = job.get("recon_context") or load_recon_context(self.engagement_id)
         agent_mode_enabled = job.get("agent_mode", True)
         auth_config = job.get("auth_config", {})
         bug_bounty_mode = job.get("bug_bounty_mode", False)
