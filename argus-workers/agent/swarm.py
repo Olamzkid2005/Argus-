@@ -48,6 +48,8 @@ class SpecialistAgent(ABC):
         recon_context: Any,
         engagement_id: str,
         decision_repo: Any = None,
+        auth_config: dict | None = None,
+        bug_bounty_mode: bool = False,
     ):
         # IMPORTANT: deep copy — never share mutable state across agents
         self.recon_context = (
@@ -57,6 +59,8 @@ class SpecialistAgent(ABC):
         self.tool_runner = tool_runner
         self.engagement_id = engagement_id
         self.decision_repo = decision_repo
+        self.auth_config = auth_config or {}
+        self.bug_bounty_mode = bug_bounty_mode
         self.findings: list[dict] = []
         self._parser = None
 
@@ -444,6 +448,7 @@ class SwarmOrchestrator:
                 recon_context=recon_context,
                 engagement_id=engagement_id,
                 decision_repo=decision_repo,
+                auth_config=auth_config,
             )
             for cls in self.SPECIALIST_CLASSES
         ]
