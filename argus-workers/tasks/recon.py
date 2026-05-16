@@ -79,6 +79,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.transition("failed", f"Failed to dispatch scan: {e}")
+            return {"phase": "recon", "status": "failed", "reason": "scan_dispatch_failed"}
 
         return result
 

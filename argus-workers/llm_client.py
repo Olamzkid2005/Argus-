@@ -87,6 +87,8 @@ class LLMClient:
         self._openai_client = None
 
         # Rate limiting: max 60 requests per minute per provider
+        # In-process rate limiter — does not coordinate across workers
+        # TODO: Replace with Redis-based rate limiter for multi-worker deployments
         self._rate_limit_max = 60
         self._rate_limit_window = 60.0
         self._request_timestamps: list[float] = []
@@ -280,6 +282,10 @@ class LLMClient:
                     )
                 logger.warning(f"LLM chat attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
+                    # If circuit breaker is open, stop retrying — it won't recover during cooldown
+                    if self._circuit_open_until and time.time() < self._circuit_open_until:
+                        logger.warning("Circuit breaker still open — aborting retries")
+                        break
                     import asyncio
                     await asyncio.sleep(2 ** attempt)  # Exponential backoff
 
@@ -415,6 +421,10 @@ class LLMClient:
                     )
                 logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
+                    # If circuit breaker is open, stop retrying — it won't recover during cooldown
+                    if self._circuit_open_until and time.time() < self._circuit_open_until:
+                        logger.warning("Circuit breaker still open — aborting retries")
+                        break
                     time.sleep(2 ** attempt)
 
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")

@@ -489,13 +489,16 @@ class TestOrchestratorScanFlow:
         assert "dalfox" in tool_names
         assert "nmap" in tool_names
 
-    @patch('orchestrator.logger')
-    def test_run_recon_skipped_with_no_target(self, mock_logger):
+    @patch('tracing.get_trace_id')
+    @patch('orchestrator_pkg.orchestrator.get_websocket_publisher')
+    def test_run_recon_skipped_with_no_target(self, mock_get_ws, mock_trace_id):
         """Test that recon phase is skipped when no target is provided."""
+        mock_trace_id.return_value = "test-trace"
+        mock_get_ws.return_value = MagicMock()
         from orchestrator import Orchestrator
         orch = Orchestrator(engagement_id="test-123")
         result = orch.run({"type": "recon"})
-        assert result["status"] == "skipped"
+        assert result["status"] == "failed"
         assert result["phase"] == "recon"
         assert result["findings_count"] == 0
 

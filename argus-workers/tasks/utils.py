@@ -124,7 +124,13 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
         if not raw:
             return None
         data = json.loads(raw)
-        return ReconContext.from_dict(data)
+        recon_context = ReconContext.from_dict(data)
+        if recon_context:
+            try:
+                r.expire(key, RECON_CONTEXT_TTL)
+            except Exception:
+                pass  # Non-critical
+        return recon_context
     finally:
         r.close()
 
@@ -164,5 +170,5 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
                     "bug_bounty_mode": bool(bbm) if bbm is not None else defaults["bug_bounty_mode"],
                 }
     except Exception:
-        logger.warning("fetch_engagement_scan_options failed for %s", engagement_id, exc_info=True)
-    return dict(defaults)
+        logger.error("fetch_engagement_scan_options failed for %s", engagement_id, exc_info=True)
+        raise

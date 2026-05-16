@@ -34,9 +34,10 @@ class TestAgentPrompts:
         )
         assert "nuclei" in prompt
         assert "sqlmap" in prompt
-        # dalfox should not appear in the AVAILABLE TOOLS section
+        # dalfox should appear with (already tried) marker in the AVAILABLE TOOLS section
         avail_section = prompt.split("=== AVAILABLE TOOLS ===")[-1] if "=== AVAILABLE TOOLS ===" in prompt else prompt
-        assert "dalfox" not in avail_section
+        assert "dalfox" in avail_section
+        assert "(already tried)" in avail_section.split("dalfox")[1]
 
     def test_prompt_under_4k_tokens(self):
         """Combined prompt should stay under 4096 tokens (~16k chars)."""

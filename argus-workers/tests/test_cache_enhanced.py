@@ -16,7 +16,7 @@ class TestWorkerCache:
     @pytest.fixture
     def mock_redis(self):
         """Create a mock Redis client"""
-        with patch("cache._redis_client") as mock_client:
+        with patch("cache._redis_client_instance") as mock_client:
             with patch("cache._redis_available", True):
                 yield mock_client
 
@@ -27,7 +27,7 @@ class TestWorkerCache:
         result = cache.get("key-001")
 
         assert result == {"data": "test"}
-        mock_redis.get.assert_called_once_with("key-001")
+        mock_redis.get.assert_called_once_with("cache:key-001")
 
     def test_get_not_found(self, mock_redis):
         """Test getting non-existent key"""
@@ -52,7 +52,7 @@ class TestWorkerCache:
         assert result is True
         mock_redis.setex.assert_called_once()
         args = mock_redis.setex.call_args[0]
-        assert args[0] == "key-004"
+        assert args[0] == "cache:key-004"
         assert args[1] == 300
         assert json.loads(args[2]) == {"data": "value"}
 
@@ -76,7 +76,7 @@ class TestWorkerCache:
         result = cache.delete("key-007")
 
         assert result is True
-        mock_redis.delete.assert_called_once_with("key-007")
+        mock_redis.delete.assert_called_once_with("cache:key-007")
 
     def test_delete_redis_error(self, mock_redis):
         """Test delete handles Redis errors"""
@@ -88,18 +88,18 @@ class TestWorkerCache:
 
     def test_clear_pattern(self, mock_redis):
         """Test clearing keys by pattern"""
-        mock_redis.keys.return_value = [b"key:1", b"key:2"]
+        mock_redis.scan.return_value = (0, [b"cache:key:1", b"cache:key:2"])
         mock_redis.delete.return_value = 2
 
         result = cache.clear_pattern("key:*")
 
         assert result == 2
-        mock_redis.keys.assert_called_once_with("key:*")
-        mock_redis.delete.assert_called_once_with(b"key:1", b"key:2")
+        mock_redis.scan.assert_called_once_with(0, match="cache:key:*", count=100)
+        mock_redis.delete.assert_called_once_with(b"cache:key:1", b"cache:key:2")
 
     def test_clear_pattern_no_keys(self, mock_redis):
         """Test clearing pattern with no matching keys"""
-        mock_redis.keys.return_value = []
+        mock_redis.scan.return_value = (0, [])
 
         result = cache.clear_pattern("key:*")
 
@@ -116,7 +116,7 @@ class TestWorkerCache:
         # Verify key generation
         expected_key_data = 'SELECT * FROM findings:["ENG-001"]'
         expected_hash = hashlib.sha256(expected_key_data.encode()).hexdigest()[:16]
-        mock_redis.get.assert_called_once_with(f"query:{expected_hash}")
+        mock_redis.get.assert_called_once_with(f"cache:query:{expected_hash}")
 
     def test_set_query_result(self, mock_redis):
         """Test caching query result"""
@@ -132,23 +132,23 @@ class TestWorkerCache:
 
     def test_invalidate_query(self, mock_redis):
         """Test invalidating queries by pattern"""
-        mock_redis.keys.return_value = [b"query:abc123", b"query:def456"]
+        mock_redis.scan.return_value = (0, [b"cache:query:abc123", b"cache:query:def456"])
         mock_redis.delete.return_value = 2
 
         result = cache.invalidate_query("findings")
 
         assert result == 2
-        mock_redis.keys.assert_called_once_with("query:*findings*")
+        mock_redis.scan.assert_called_once_with(0, match="cache:query:*findings*", count=100)
 
     def test_invalidate_table(self, mock_redis):
         """Test invalidating cached queries for a table"""
-        mock_redis.keys.return_value = [b"prefix:table:findings:suffix"]
+        mock_redis.scan.return_value = (0, [b"cache:table:findings:suffix"])
         mock_redis.delete.return_value = 1
 
         result = cache.invalidate_table("findings")
 
         assert result == 1
-        mock_redis.keys.assert_called_once_with("*table:findings*")
+        mock_redis.scan.assert_called_once_with(0, match="cache:*table:findings*", count=100)
 
     def test_get_stats_available(self, mock_redis):
         """Test getting cache stats when available"""
@@ -172,7 +172,7 @@ class TestWorkerCache:
 
     def test_redis_unavailable(self):
         """Test operations when Redis is unavailable"""
-        with patch("cache._redis_available", False):
+        with patch("cache._redis_available", False), patch("cache._get_redis", return_value=None):
             assert cache.get("key") is None
             assert cache.set("key", "value") is False
             assert cache.delete("key") is False
@@ -185,7 +185,7 @@ class TestCachedDecorator:
 
     @pytest.fixture
     def mock_redis(self):
-        with patch("cache._redis_client") as mock_client:
+        with patch("cache._redis_client_instance") as mock_client:
             with patch("cache._redis_available", True):
                 yield mock_client
 
@@ -222,6 +222,7 @@ class TestCachedDecorator:
     def test_cached_decorator_invalidation(self, mock_redis):
         """Test cached decorator invalidation helper"""
         mock_redis.get.return_value = None
+        mock_redis.scan.return_value = (0, [])
 
         @cached(key_prefix="invalidate_test")
         def my_func():
@@ -230,7 +231,7 @@ class TestCachedDecorator:
         my_func()
         my_func.cache_invalidate()
 
-        mock_redis.keys.assert_called_once_with("cache:invalidate_test:*")
+        mock_redis.scan.assert_called_once_with(0, match="cache:invalidate_test:*", count=100)
 
 
 class TestCachedQueryDecorator:
@@ -238,7 +239,7 @@ class TestCachedQueryDecorator:
 
     @pytest.fixture
     def mock_redis(self):
-        with patch("cache._redis_client") as mock_client:
+        with patch("cache._redis_client_instance") as mock_client:
             with patch("cache._redis_available", True):
                 yield mock_client
 
@@ -256,7 +257,7 @@ class TestCachedQueryDecorator:
         # Verify key is based on function name and args
         expected_key_data = 'get_findings:["ENG-001"]:{}'
         expected_hash = hashlib.sha256(expected_key_data.encode()).hexdigest()[:16]
-        mock_redis.get.assert_called_once_with(f"query:{expected_hash}")
+        mock_redis.get.assert_called_once_with(f"cache:query:{expected_hash}")
 
     def test_cached_query_miss(self, mock_redis):
         """Test cached_query computes and stores on miss"""
@@ -276,6 +277,7 @@ class TestCachedQueryDecorator:
     def test_cached_query_invalidate(self, mock_redis):
         """Test cached_query invalidation helper"""
         mock_redis.get.return_value = None
+        mock_redis.scan.return_value = (0, [])
 
         @cached_query(ttl=300)
         def get_findings():
@@ -284,7 +286,7 @@ class TestCachedQueryDecorator:
         get_findings()
         get_findings.cache_invalidate()
 
-        mock_redis.keys.assert_called_once_with("query:*")
+        mock_redis.scan.assert_called_once_with(0, match="cache:query:*", count=100)
 
 
 class TestCacheTTLPresets:

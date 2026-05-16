@@ -158,6 +158,7 @@ class WebScanner:
         ("guest", "guest"),
         ("admin", "letmein"),
     ]
+    ENABLE_CREDENTIAL_TESTING = False  # Disabled by default for safety
 
     # GraphQL endpoints to check
     GRAPHQL_ENDPOINTS = [
@@ -249,11 +250,9 @@ class WebScanner:
         self.verify = verify
         self.engagement_id = engagement_id
         self.session = session or requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-        })
+        self.session.headers.setdefault("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        self.session.headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+        self.session.headers.setdefault("Accept-Language", "en-US,en;q=0.5")
         self.findings = []
         self.discovered_parameters = None  # Initialized before parameter_discovery()
         self._last_request_time = 0.0  # For token-bucket rate limiting
@@ -341,7 +340,7 @@ class WebScanner:
         with ThreadPoolExecutor(max_workers=6) as pool:
             futures = {pool.submit(check): check.__name__ for check in checks}
             try:
-                for future in as_completed(futures, timeout=120):
+                for future in as_completed(futures, timeout=300):
                     try:
                         future.result(timeout=10)
                     except Exception as e:
@@ -407,6 +406,7 @@ class WebScanner:
             "endpoint": endpoint,
             "evidence": sanitized_evidence,
             "confidence": confidence,
+            "source_tool": "web_scanner",
         })
 
     def _detect_framework(self, response) -> str:
@@ -948,31 +948,32 @@ class WebScanner:
         for path in auth_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
 
-            # Check if endpoint exists
+                    # Check if endpoint exists
             resp = self._safe_request("GET", url)
             if resp and resp.status_code in (200, 302):
                 # Test default credentials
-                for username, password in self.DEFAULT_CREDS[:3]:  # Limit to 3
-                    login_resp = self._safe_request(
-                        "POST", url,
-                        data={"username": username, "password": password},
-                        allow_redirects=False,
-                    )
-                    if login_resp and login_resp.status_code in (200, 302):
-                        # Check if login was successful (redirect to dashboard, etc.) — wrap with str() for int values
-                        location = str(login_resp.headers.get("Location", "")).lower()
-                        if any(x in location for x in ["dashboard", "admin", "home", "welcome"]):
-                            self._add_finding(
-                                finding_type="DEFAULT_CREDENTIALS",
-                                severity="CRITICAL",
-                                endpoint=url,
-                                evidence={
-                                    "username": username,
-                                    "password": password,
-                                    "redirect_to": location,
-                                },
-                                confidence=0.7,
-                            )
+                if self.ENABLE_CREDENTIAL_TESTING:
+                    for username, password in self.DEFAULT_CREDS[:3]:  # Limit to 3
+                        login_resp = self._safe_request(
+                            "POST", url,
+                            data={"username": username, "password": password},
+                            allow_redirects=False,
+                        )
+                        if login_resp and login_resp.status_code in (200, 302):
+                            # Check if login was successful (redirect to dashboard, etc.) — wrap with str() for int values
+                            location = str(login_resp.headers.get("Location", "")).lower()
+                            if any(x in location for x in ["dashboard", "admin", "home", "welcome"]):
+                                self._add_finding(
+                                    finding_type="DEFAULT_CREDENTIALS",
+                                    severity="CRITICAL",
+                                    endpoint=url,
+                                    evidence={
+                                        "username": username,
+                                        "password": password,
+                                        "redirect_to": location,
+                                    },
+                                    confidence=0.7,
+                                )
                 break
 
     def parameter_discovery(self):
@@ -1035,10 +1036,11 @@ class WebScanner:
             discovered["form_parameters"].update(form_selects)
 
             # Extract JSON keys from inline scripts
-            json_keys = re.findall(
-                r'["\'](\w+)["\']\s*:\s*',
-                resp.text,
-            )
+            script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', resp.text, re.DOTALL | re.IGNORECASE)
+            script_content = ' '.join(script_blocks)
+            json_keys = set(re.findall(r'["\'](\w+)["\']\s*:\s*', script_content))
+            if not json_keys:
+                json_keys = set(re.findall(r'["\'](\w+)["\']\s*:\s*', resp.text)[:50])
             discovered["json_parameters"].update(json_keys)
 
             # Extract JavaScript variables that might be parameters
@@ -1206,7 +1208,7 @@ class WebScanner:
             return
 
         # Find URL parameters that accept user input
-        params = re.findall(r'[?&](\w+)=', resp.text)
+        params = re.findall(r'[?&]([\w-]+)=', resp.text)
         if not params:
             return
 

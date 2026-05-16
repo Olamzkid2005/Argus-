@@ -179,9 +179,14 @@ class IntelligenceEngine:
                 # --- Learned FP rate resolution ---
                 source_tool = finding.get("source_tool", "")
                 learned_fp = tool_fp_rates.get(source_tool)   # from tool_accuracy DB
-                stored_fp = finding.get("fp_likelihood")       # from scanner metadata
+                stored_fp = finding.get("fp_likelihood")
 
-                if learned_fp is not None and stored_fp is not None:
+                # Type guard: booleans from JSON should not cast to float 1.0/0.0
+                if isinstance(stored_fp, bool):
+                    stored_fp_val = 0.2
+                    learned_fp = None  # Force fallback to default
+                    fp_likelihood = 0.2
+                elif learned_fp is not None and stored_fp is not None:
                     try:
                         stored_fp_val = float(stored_fp)
                     except (ValueError, TypeError):
@@ -239,7 +244,7 @@ class IntelligenceEngine:
         Returns:
             Tool agreement score
         """
-        num_tools = len({f.get("source_tool") for f in findings_group})
+        num_tools = len({f.get("source_tool") or "" for f in findings_group})
 
         if num_tools >= 3:
             return 1.0
@@ -293,10 +298,15 @@ class IntelligenceEngine:
         groups = {}
         for finding in findings:
             endpoint = finding.get("endpoint") or ""
+            finding_type = finding.get("type", "").upper()
+
+            # Skip empty-type findings to prevent inflated tool agreement
+            if not finding_type:
+                continue
+
             parsed = urlparse(endpoint)
             normalized_endpoint = f"{parsed.netloc}{parsed.path}"
 
-            finding_type = finding.get("type", "").upper()
             normalized_type = finding_type
             for family, members in TYPE_FAMILIES.items():
                 if normalized_type in members:

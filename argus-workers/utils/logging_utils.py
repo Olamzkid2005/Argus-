@@ -353,12 +353,15 @@ class ScanLogger:
         msg = f"{self._prefix()}   {self._DIM}  -> [{tool}] {detail}{self._RESET}"
         self._logger.info(msg)
 
-    def llm_start(self, model: str, action: str):
+    def llm_start(self, model: str, action: str = "", **details):
         """Log an LLM call start."""
-        msg = f"{self._prefix()}   {self._MAGENTA}┌─ LLM [{model}] {action}{self._RESET}"
+        detail_str = " ".join(f"{k}={v}" for k, v in details.items()) if details else ""
+        action_part = f" {action}" if action else ""
+        detail_part = f"  ({detail_str})" if detail_str else ""
+        msg = f"{self._prefix()}   {self._MAGENTA}┌─ LLM [{model}]{action_part}{detail_part}{self._RESET}"
         self._logger.info(msg)
 
-    def llm_complete(self, model: str, duration_ms: int = 0, tokens: int = 0, cost: float = 0.0):
+    def llm_complete(self, model: str, duration_ms: int = 0, tokens: int = 0, cost: float = 0.0, **details):
         """Log an LLM call completion."""
         dur_str = f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms/1000:.1f}s"
         msg = f"{self._prefix()}   {self._MAGENTA}└─ LLM [{model}] ✓ {dur_str}"
@@ -366,6 +369,8 @@ class ScanLogger:
             msg += f", {tokens} tokens"
         if cost:
             msg += f", ${cost:.6f}"
+        if details:
+            msg += " (" + " ".join(f"{k}={v}" for k, v in details.items()) + ")"
         msg += self._RESET
         self._logger.info(msg)
 

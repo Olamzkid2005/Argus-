@@ -37,6 +37,16 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     slog = ScanLogger("report", engagement_id=engagement_id)
     slog.phase_header("REPORT PHASE")
 
+    # Idempotency check: skip if already complete
+    try:
+        current_state = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
+        if current_state == "complete":
+            logger.info("Engagement %s already complete — skipping report generation", engagement_id)
+            return {"status": "already_complete"}
+    except Exception as e:
+        logger.warning("Failed to check engagement state for idempotency: %s", e)
+        # Proceed anyway if we can't check
+
     job_extra = {}
     if budget:
         job_extra["budget"] = budget
@@ -71,10 +81,12 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
 
     # Execute with trace context
     with tracing_manager.trace_execution(engagement_id, "findings_summary", trace_id):
-        conn = connect(db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
+        conn = None
+        cursor = None
         try:
+            conn = connect(db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
             cursor.execute(
                 """
                 SELECT
@@ -98,8 +110,10 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
 
             return [dict(row) for row in cursor.fetchall()]
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
 
 def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
@@ -336,10 +350,11 @@ def generate_compliance_report(
     with tracing_manager.trace_execution(
         engagement_id, f"compliance_report_{standard}", trace_id
     ):
-        conn = connect(db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
+        conn = None
+        cursor = None
         try:
+            conn = connect(db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             # Fetch findings for the engagement
             cursor.execute(
                 """
@@ -427,8 +442,10 @@ def generate_compliance_report(
             conn.rollback()
             raise
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
 
 @app.task(bind=True, name="tasks.report.generate_full_report")
@@ -454,10 +471,11 @@ def generate_full_report(
         trace_id = tracing_manager.generate_trace_id()
 
     with tracing_manager.trace_execution(engagement_id, "full_report", trace_id):
-        conn = connect(db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
+        conn = None
+        cursor = None
         try:
+            conn = connect(db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             # 1. Query the engagement
             cursor.execute(
                 """
@@ -617,8 +635,10 @@ def generate_full_report(
             conn.rollback()
             raise
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
 
 @app.task(bind=True, name="tasks.report.get_compliance_reports")
@@ -647,10 +667,12 @@ def get_compliance_reports(
     with tracing_manager.trace_execution(
         engagement_id, "get_compliance_reports", trace_id
     ):
-        conn = connect(db_conn_string)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
+        conn = None
+        cursor = None
         try:
+            conn = connect(db_conn_string)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
             cursor.execute(
                 """
                 SELECT
@@ -669,5 +691,7 @@ def get_compliance_reports(
 
             return [dict(row) for row in cursor.fetchall()]
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()

@@ -172,9 +172,10 @@ class TestAssetDiscovery:
     def test_update_asset_risk_scores(self, mock_db):
         """Test risk score update for assets"""
         mock_conn, mock_cursor = mock_db
+        # (id, critical_count, high_count, medium_count, low_count, info_count, max_cvss)
         mock_cursor.fetchall.return_value = [
-            (1, "domain", "example.com", 10, 2, 3),
-            (2, "endpoint", "https://example.com/api", 5, 0, 1),
+            (1, 1, 0, 0, 0, 0, 0),
+            (2, 0, 0, 0, 0, 0, 0),
         ]
 
         with patch.object(asset_discovery, 'connect', return_value=mock_conn):
@@ -194,9 +195,10 @@ class TestAssetDiscovery:
     def test_update_asset_risk_scores_critical(self, mock_db):
         """Test risk score calculation maps to CRITICAL level"""
         mock_conn, mock_cursor = mock_db
-        # (id, type, identifier, finding_count, critical_count, high_count)
+        # (id, critical_count, high_count, medium_count, low_count, info_count, max_cvss)
+        # cvss=9.5 (from critical), weight=1*10=10, score=min(10, 9.5+10*0.05)=10.0 → CRITICAL
         mock_cursor.fetchall.return_value = [
-            (1, "domain", "example.com", 50, 3, 2),
+            (1, 1, 0, 0, 0, 0, 0),
         ]
 
         with patch.object(asset_discovery, 'connect', return_value=mock_conn):
@@ -208,8 +210,6 @@ class TestAssetDiscovery:
 
         assert result["status"] == "completed"
 
-        # Risk score = min(10, 3*3 + 2*1.5 + 50*0.1) = min(10, 9+3+5) = min(10, 17) = 10.0
-        # Risk level = CRITICAL because >= 7.0
         update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
         args = update_call[0][1]
         assert args[0] == 10.0
@@ -218,8 +218,10 @@ class TestAssetDiscovery:
     def test_update_asset_risk_scores_high(self, mock_db):
         """Test risk score calculation maps to HIGH level"""
         mock_conn, mock_cursor = mock_db
+        # (id, critical_count, high_count, medium_count, low_count, info_count, max_cvss)
+        # cvss=6.0 (from max_cvss), weight=1*2=2, score=min(10, 6.0+2*0.05)=6.1 → HIGH
         mock_cursor.fetchall.return_value = [
-            (1, "domain", "example.com", 10, 1, 2),
+            (1, 0, 0, 1, 0, 0, 6.0),
         ]
 
         with patch.object(asset_discovery, 'connect', return_value=mock_conn):
@@ -229,18 +231,18 @@ class TestAssetDiscovery:
                     org_id="org-456"
                 )
 
-        # Risk score = min(10, 1*3 + 2*1.5 + 10*0.1) = min(10, 3+3+1) = 7.0
-        # But >= 7.0 is CRITICAL per logic
         update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
         args = update_call[0][1]
-        assert args[0] == 7.0
-        assert args[1] == "CRITICAL"
+        assert args[0] == 6.1
+        assert args[1] == "HIGH"
 
     def test_update_asset_risk_scores_medium(self, mock_db):
         """Test risk score calculation maps to MEDIUM level"""
         mock_conn, mock_cursor = mock_db
+        # (id, critical_count, high_count, medium_count, low_count, info_count, max_cvss)
+        # cvss=4.0 (from max_cvss), weight=2*1=2, score=min(10, 4.0+2*0.05)=4.1 → MEDIUM
         mock_cursor.fetchall.return_value = [
-            (1, "domain", "example.com", 5, 0, 2),
+            (1, 0, 0, 0, 2, 0, 4.0),
         ]
 
         with patch.object(asset_discovery, 'connect', return_value=mock_conn):
@@ -250,18 +252,18 @@ class TestAssetDiscovery:
                     org_id="org-456"
                 )
 
-        # Risk score = min(10, 0*3 + 2*1.5 + 5*0.1) = min(10, 3+0.5) = 3.5
-        # Risk level = MEDIUM because >= 2.0 and < 5.0
         update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
         args = update_call[0][1]
-        assert args[0] == 3.5
+        assert args[0] == 4.1
         assert args[1] == "MEDIUM"
 
     def test_update_asset_risk_scores_low(self, mock_db):
         """Test risk score calculation maps to LOW level"""
         mock_conn, mock_cursor = mock_db
+        # (id, critical_count, high_count, medium_count, low_count, info_count, max_cvss)
+        # cvss=0.1 -> <=1.0 so scaled: 0.1*10=1.0, weight=0, score=1.0 → LOW
         mock_cursor.fetchall.return_value = [
-            (1, "domain", "example.com", 1, 0, 0),
+            (1, 0, 0, 0, 0, 0, 0.1),
         ]
 
         with patch.object(asset_discovery, 'connect', return_value=mock_conn):
@@ -271,11 +273,9 @@ class TestAssetDiscovery:
                     org_id="org-456"
                 )
 
-        # Risk score = min(10, 0 + 0 + 0.1) = 0.1
-        # Risk level = LOW because < 2.0
         update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
         args = update_call[0][1]
-        assert args[0] == 0.1
+        assert args[0] == 1.0
         assert args[1] == "LOW"
 
     def test_update_asset_risk_scores_exception(self, mock_db):

@@ -111,7 +111,7 @@ rules:
   - bugbounty
   requires_validation: true
   patterns:
-  - regex: (?i)"(role|permissions|scopes|groups|teams|roles|isAdmin|is_admin)"\s*:\s*"(admin|user|moderator|owner)
+  - regex: (?i)"(role|permissions|scopes|groups|teams|roles|isAdmin|is_admin)"\s*:\s*"(admin|user|moderator|owner)"
   test_patterns:
   - '{"role": "user", "permissions": "read"}'
   - '"isAdmin": "moderator"'

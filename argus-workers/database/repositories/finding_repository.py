@@ -136,9 +136,22 @@ class FindingRepository(BaseRepository):
             if row:
                 finding_id = str(row[0])
             else:
-                # Should not happen with DO UPDATE RETURNING, but handle gracefully
-                logger.warning("INSERT ... ON CONFLICT RETURNING returned no row for engagement=%s endpoint=%s type=%s source_tool=%s", engagement_id, endpoint, finding_type, source_tool)
-                return None
+                # Fallback: query the finding by conflict key to retrieve ID
+                try:
+                    cursor.execute(
+                        "SELECT id FROM findings WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s",
+                        (engagement_id, endpoint, finding_type, source_tool),
+                    )
+                    fallback_row = cursor.fetchone()
+                    if fallback_row:
+                        finding_id = str(fallback_row[0])
+                        logger.debug("Retrieved finding ID via fallback query for %s", engagement_id)
+                    else:
+                        logger.warning("Fallback query also returned no row for engagement=%s endpoint=%s type=%s", engagement_id, endpoint, finding_type)
+                        return None
+                except Exception as fb_err:
+                    logger.error("Fallback query failed: %s", fb_err)
+                    return None
             conn.commit()
             return finding_id
         except Exception:

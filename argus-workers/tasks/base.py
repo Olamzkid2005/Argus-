@@ -139,16 +139,18 @@ def task_context(
             )
             if _lock_acquired:
                 try:
-                    current = _get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if 'sm' in locals() else _get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
-                        sm = EngagementStateMachine(
-                            engagement_id,
-                            db_connection_string=db_conn_string,
-                            current_state=current,
-                        )
-                        sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                        if 'sm' in locals() and hasattr(sm, 'current_state'):
+                            sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                        else:
+                            new_sm = EngagementStateMachine(
+                                engagement_id,
+                                db_connection_string=db_conn_string,
+                                current_state=current,
+                            )
+                            new_sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
                         slog.phase_complete(job_type, status="failed", reason="soft_time_limit")
-                        task._failed_transition_done = True
                 except Exception as st_error:
                     logger.error("Failed to transition on soft time limit: %s", st_error)
             raise
@@ -160,19 +162,21 @@ def task_context(
         except Exception as e:
             slog.error(f"Task failed: {e}")
             if _lock_acquired:
-                current = _get_engagement_state(engagement_id, db_conn_string)
-                if current not in ("complete", "failed"):
-                    try:
-                        sm = EngagementStateMachine(
-                            engagement_id,
-                            db_connection_string=db_conn_string,
-                            current_state=current,
-                        )
-                        sm.transition("failed", f"{job_type} failed: {e}")
+                try:
+                    current = sm.current_state if 'sm' in locals() else _get_engagement_state(engagement_id, db_conn_string)
+                    if current not in ("complete", "failed"):
+                        if 'sm' in locals() and hasattr(sm, 'current_state'):
+                            sm.transition("failed", f"{job_type} failed: {e}")
+                        else:
+                            new_sm = EngagementStateMachine(
+                                engagement_id,
+                                db_connection_string=db_conn_string,
+                                current_state=current,
+                            )
+                            new_sm.transition("failed", f"{job_type} failed: {e}")
                         slog.phase_complete(job_type, status="failed", reason=str(e)[:100])
-                        task._failed_transition_done = True
-                    except Exception as sm_error:
-                        logger.error("State transition to failed error: %s", sm_error)
+                except Exception as sm_error:
+                    logger.error("State transition to failed error: %s", sm_error)
             raise
 
 

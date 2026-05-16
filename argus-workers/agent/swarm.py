@@ -60,9 +60,9 @@ class SpecialistAgent(ABC):
         self.engagement_id = engagement_id
         self.decision_repo = decision_repo
         self.auth_config = auth_config or {}
-        self.bug_bounty_mode = bug_bounty_mode
         self.findings: list[dict] = []
         self._parser = None
+        self.tools_attempted: set[str] = set()
 
     @abstractmethod
     def should_activate(self) -> bool:
@@ -83,6 +83,7 @@ class SpecialistAgent(ABC):
 
     def _run_tool(self, tool_name: str, args: list, timeout: int = TOOL_TIMEOUT_DEFAULT) -> list[dict]:
         """Run a single tool and return parsed findings."""
+        self.tools_attempted.add(tool_name)
         findings = []
         try:
             emit_swarm_agent_action(
@@ -173,7 +174,13 @@ class IDORAgent(SpecialistAgent):
             # 1. Arjun parameter discovery on API endpoints
             logger.info(f"[IDOR] Running arjun on {target}")
             try:
-                arjun_out = str(self.tool_runner.sandbox_dir / "tmp" / f"arjun_idor.json")
+                sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
+                if sandbox:
+                    arjun_out = str(sandbox / "tmp" / f"arjun_idor.json")
+                else:
+                    import tempfile
+                    import os
+                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_idor.json")
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -198,6 +205,7 @@ class IDORAgent(SpecialistAgent):
         # 3. web_scanner IDOR-focused checks on all targets
         if targets:
             try:
+                self.tools_attempted.add("web_scanner")
                 from tools.web_scanner import WebScanner
 
                 logger.info(f"[IDOR] Running web_scanner on {len(targets)} targets")
@@ -296,6 +304,7 @@ class AuthAgent(SpecialistAgent):
         # 3. Password reset / login flow testing via web_scanner
         if scan_targets:
             try:
+                self.tools_attempted.add("web_scanner")
                 from tools.web_scanner import WebScanner
 
                 logger.info(f"[Auth] Running web_scanner on {len(scan_targets)} targets")
@@ -323,17 +332,25 @@ class APIAgent(SpecialistAgent):
     DOMAIN = "api"
     PRIORITY_TOOLS = ["arjun", "nuclei", "dalfox", "sqlmap"]
 
+    @staticmethod
+    def _has_api_signals(rc) -> bool:
+        """Check for actual API signals, not just crawled paths."""
+        if not hasattr(rc, 'live_endpoints'):
+            return False
+        api_paths = [ep for ep in (rc.live_endpoints or []) if '/api/' in (ep or '').lower()]
+        return len(api_paths) >= 2
+
     def should_activate(self) -> bool:
         if not self.recon_context:
             return False
         rc = self.recon_context
         specific = (
-            (hasattr(rc, "has_api") and rc.has_api)
+            (hasattr(rc, "has_api") and rc.has_api and hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 1)
             or (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 5)
         )
         if specific:
             return True
-        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc):
+        if self._has_api_signals(rc) and hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 5:
             return True
         return False
 
@@ -355,7 +372,13 @@ class APIAgent(SpecialistAgent):
             # 1. arjun parameter discovery on API paths
             logger.info(f"[API] Running arjun on {target}")
             try:
-                arjun_out = str(self.tool_runner.sandbox_dir / "tmp" / f"arjun_api.json")
+                sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
+                if sandbox:
+                    arjun_out = str(sandbox / "tmp" / f"arjun_api.json")
+                else:
+                    import tempfile
+                    import os
+                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_api.json")
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -407,7 +430,13 @@ class APIAgent(SpecialistAgent):
             logger.info(f"[API] Running sqlmap on {target}")
             logger.warning("[API] sqlmap executing against %s — verify target is in authorized scope", target)
             try:
-                sqlmap_out = str(self.tool_runner.sandbox_dir / "tmp" / f"sqlmap_api.json")
+                sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
+                if sandbox:
+                    sqlmap_out = str(sandbox / "tmp" / f"sqlmap_api.json")
+                else:
+                    import tempfile
+                    import os
+                    sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_api.json")
                 sqlmap_findings = self._run_tool(
                     "sqlmap",
                     ["-u", target, "--json-output", sqlmap_out],
@@ -439,7 +468,9 @@ class SwarmOrchestrator:
         engagement_id: str,
         decision_repo: Any = None,
         auth_config: dict | None = None,
+        bug_bounty_mode: bool = False,
     ):
+        self.bug_bounty_mode = bug_bounty_mode
         # Deep copy happens inside each agent's __init__
         self.agents = [
             cls(
@@ -449,6 +480,7 @@ class SwarmOrchestrator:
                 engagement_id=engagement_id,
                 decision_repo=decision_repo,
                 auth_config=auth_config,
+                bug_bounty_mode=self.bug_bounty_mode,
             )
             for cls in self.SPECIALIST_CLASSES
         ]
@@ -489,34 +521,33 @@ class SwarmOrchestrator:
                 future = pool.submit(agent.run)
                 futures_map[future] = agent.DOMAIN
 
-            # Wait with a hard wall-clock timeout — agents that exceed it
-            # are cancelled (note: cancel() only stops futures that haven't
-            # started; running threads continue but their results are ignored).
-            # ALL_COMPLETE ensures one agent's failure doesn't cancel others.
             done, not_done = concurrent.futures.wait(
                 futures_map, timeout=timeout,
-                return_when=concurrent.futures.ALL_COMPLETE,
+                return_when=concurrent.futures.FIRST_EXCEPTION,
             )
             for future in not_done:
-                domain = futures_map.get(future, "?")
                 future.cancel()
+                domain = futures_map.get(future, "?")
                 logger.warning("Swarm: agent %s timed out after %ds — cancelled", domain, timeout)
                 emit_swarm_agent_complete(
                     active[0].engagement_id, domain, findings_count=0,
                 )
 
+            results = []
             for future in done:
                 domain = futures_map.get(future, "?")
                 try:
-                    findings = future.result(timeout=30)
-                    logger.info("Specialist %s returned %d findings", domain, len(findings))
-                    emit_swarm_agent_complete(
-                        active[0].engagement_id, domain, findings_count=len(findings),
-                    )
-                    all_findings.extend(findings)
-                    completed.add(domain)
+                    result = future.result(timeout=5)
+                    if result:
+                        results.append(result)
+                        logger.info("Specialist %s returned %d findings", domain, len(result))
+                        emit_swarm_agent_complete(
+                            active[0].engagement_id, domain, findings_count=len(result),
+                        )
+                        all_findings.extend(result)
+                        completed.add(domain)
                 except Exception as e:
-                    logger.error("Specialist %s failed: %s", domain, e)
+                    logger.warning("Swarm agent failed: %s", e)
                     emit_swarm_agent_complete(
                         active[0].engagement_id, domain, findings_count=0,
                     )
@@ -535,27 +566,20 @@ class SwarmOrchestrator:
             dedup_removed=dedup_removed,
         )
 
-        return deduped
+        all_tools_attempted: set[str] = set()
+        for agent in self.agents:
+            tools = getattr(agent, 'tools_attempted', set())
+            all_tools_attempted.update(tools)
+
+        return deduped, all_tools_attempted
 
     @staticmethod
     def _deduplicate(findings: list[dict]) -> list[dict]:
-        """Deduplicate using evidence-merged merge.
-
-        For findings with same type+endpoint+payload fingerprint,
-        evidence from both findings is merged (not discarded).
-        The higher-confidence finding's metadata survives as the base.
-
-        Args:
-            findings: List of finding dicts from all agents
-
-        Returns:
-            Deduplicated list
-        """
         from scan_diff_engine import ScanDiffEngine
 
         seen: dict[str, dict] = {}
         for f in findings:
-            fp = ScanDiffEngine._fingerprint(f)
+            fp = ScanDiffEngine._fallback_fingerprint(f)
             if fp not in seen:
                 seen[fp] = f
                 continue
@@ -564,7 +588,18 @@ class SwarmOrchestrator:
             existing_conf = float(existing.get("confidence", 0))
             new_conf = float(f.get("confidence", 0))
 
-            # Merge evidence from both findings
+            # Merge source_agents
+            existing_agents = set()
+            if existing.get("source_agent"):
+                existing_agents.add(existing["source_agent"])
+            if existing.get("source_agents"):
+                existing_agents.update(existing["source_agents"])
+            if f.get("source_agent"):
+                existing_agents.add(f["source_agent"])
+            if f.get("source_agents"):
+                existing_agents.update(f["source_agents"])
+
+            # Merge evidence
             existing_ev = existing.get("evidence", {}) or {}
             new_ev = f.get("evidence", {}) or {}
             if isinstance(existing_ev, dict) and isinstance(new_ev, dict):
@@ -575,13 +610,16 @@ class SwarmOrchestrator:
             if new_conf > existing_conf:
                 seen[fp] = f
                 seen[fp]["evidence"] = merged_evidence
+                seen[fp]["source_agents"] = list(existing_agents)
             elif new_conf == existing_conf:
                 existing_evidence_len = len(str(existing_ev))
                 new_evidence_len = len(str(new_ev))
                 if new_evidence_len > existing_evidence_len:
                     seen[fp] = f
                     seen[fp]["evidence"] = merged_evidence
+                    seen[fp]["source_agents"] = list(existing_agents)
                 else:
                     existing["evidence"] = merged_evidence
+                    existing["source_agents"] = list(existing_agents)
 
         return list(seen.values())

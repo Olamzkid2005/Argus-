@@ -58,6 +58,7 @@ class TestEngagementStateMachine:
             mock_connect.return_value = mock_conn
             mock_conn.cursor.return_value = mock_cursor
 
+            mock_cursor.fetchone.return_value = ("created",)
             machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, "postgresql://localhost", "created")
             machine.transition("recon", "Starting reconnaissance")
 
@@ -65,7 +66,7 @@ class TestEngagementStateMachine:
             # Verify SQL was executed
             assert mock_cursor.execute.called
             # Verify the INSERT was called with engagement_states table and valid UUID
-            insert_call = mock_cursor.execute.call_args_list[0]
+            insert_call = mock_cursor.execute.call_args_list[1]
             assert "engagement_states" in insert_call[0][0]
             assert mock_conn.commit.called
 
@@ -97,11 +98,12 @@ class TestEngagementStateMachine:
             mock_connect.return_value = mock_conn
             mock_conn.cursor.return_value = mock_cursor
 
+            mock_cursor.fetchone.return_value = ("created",)
             machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, "postgresql://localhost", "created")
             machine.transition("recon")
 
-            # Should have called execute twice: INSERT into engagement_states + UPDATE engagements
-            assert mock_cursor.execute.call_count == 2
+            # Should have called execute three times: SELECT FOR UPDATE, INSERT into engagement_states + UPDATE engagements
+            assert mock_cursor.execute.call_count == 3
             assert mock_conn.commit.called
 
     def test_get_valid_transitions_returns_correct_list(self):
@@ -113,7 +115,8 @@ class TestEngagementStateMachine:
 
             assert "recon" in valid
             assert "failed" in valid
-            assert len(valid) == 2
+            assert "paused" in valid
+            assert len(valid) == 3
 
     def test_terminal_states_have_no_transitions(self):
         """Test that terminal states have no valid transitions"""

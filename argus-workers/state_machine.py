@@ -44,7 +44,7 @@ class EngagementStateMachine:
         "recon": ["scanning", "awaiting_approval", "failed", "paused"],
         "awaiting_approval": ["scanning", "paused", "failed"],
         "scanning": ["analyzing", "failed", "paused"],
-        "analyzing": ["reporting", "recon", "failed", "paused"],  # Can loop back to recon
+        "analyzing": ["reporting", "recon", "scanning", "failed", "paused"],  # Can loop back to recon
         "reporting": ["complete", "failed", "paused"],
         "paused": ["recon", "scanning", "analyzing"],
         "failed": [],
@@ -152,6 +152,7 @@ class EngagementStateMachine:
             reason: Reason for transition
             trace_id: Distributed trace ID for causality chain
         """
+        conn = None
         conn = self._get_connection()
 
         try:
@@ -230,11 +231,12 @@ class EngagementStateMachine:
             cursor.close()
 
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             logger.error(f"Failed to persist state transition for engagement {self.engagement_id}: {e}")
             raise
         finally:
-            if not self._external_conn:
+            if conn and not self._external_conn:
                 self._release_connection(conn)
 
     def get_transition_history(self) -> list[dict]:
@@ -301,7 +303,7 @@ class EngagementStateMachine:
         self.transition(new_state, reason)
         return True
 
-    def chain_transition(self, states: list[tuple[str, str]]) -> str:
+    def chain_transition(self, states: list[tuple[str, str]], trace_id: str | None = None) -> str:
         """
         Perform multiple state transitions in a single database transaction.
         Each element of states is a (new_state, reason) tuple.
@@ -362,12 +364,13 @@ class EngagementStateMachine:
                         f"Valid transitions: {self.TRANSITIONS[current]}"
                     )
                 # Insert into engagement_states history
+                transition_id = str(uuid.uuid4())
                 cursor.execute(
                     """
-                    INSERT INTO engagement_states (engagement_id, from_state, to_state, reason, created_at)
-                    VALUES (%s, %s, %s, %s, NOW())
+                    INSERT INTO engagement_states (id, engagement_id, from_state, to_state, reason, trace_id, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
                     """,
-                    (self.engagement_id, current, new_state, reason)
+                    (transition_id, self.engagement_id, current, new_state, reason, trace_id)
                 )
                 current = new_state
 
@@ -400,17 +403,18 @@ class EngagementStateMachine:
             conn.commit()
 
             if self._ws_publisher:
-                for i, (new_state, reason) in enumerate(states):
-                    from_state = states[i - 1][0] if i > 0 else self.current_state
-                    try:
-                        self._ws_publisher.publish_state_transition(
-                            engagement_id=self.engagement_id,
-                            from_state=from_state,
-                            to_state=new_state,
-                            reason=reason,
-                        )
-                    except Exception:
-                        logger.debug("Failed to publish chain transition for %s", self.engagement_id)
+                first_from = states[0][0] if len(states) > 1 else self.current_state
+                final_to = states[-1][0]
+                final_reason = states[-1][1]
+                try:
+                    self._ws_publisher.publish_state_transition(
+                        engagement_id=self.engagement_id,
+                        from_state=first_from,
+                        to_state=final_to,
+                        reason=f"Fast-forward: {final_reason}",
+                    )
+                except Exception:
+                    logger.debug("Failed to publish chain transition for %s", self.engagement_id)
 
             self.current_state = final_state
             return final_state

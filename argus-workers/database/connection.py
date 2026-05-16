@@ -211,7 +211,10 @@ class ConnectionManager:
                 conn.commit()
         except Exception:
             if commit:
-                conn.rollback()
+                try:
+                    conn.rollback()
+                except Exception as rb_err:
+                    logger.warning("Rollback failed: %s", rb_err)
             raise
         finally:
             self.release_connection(conn)

@@ -41,7 +41,7 @@ class SettingsRepository:
 
             return row[0] if row else None
         except Exception as e:
-            print(f"Failed to get user setting: {e}")
+            logger.error("Failed to get user setting: %s", e)
             return None
         finally:
             if conn:
@@ -72,7 +72,7 @@ class SettingsRepository:
 
             return {row[0]: row[1] for row in rows if row[1]}
         except Exception as e:
-            print(f"Failed to get user settings: {e}")
+            logger.error("Failed to get user settings: %s", e)
             return {}
         finally:
             if conn:
@@ -107,7 +107,7 @@ class SettingsRepository:
 
             return True
         except Exception as e:
-            print(f"Failed to set user setting: {e}")
+            logger.error("Failed to set user setting: %s", e)
             return False
         finally:
             if conn:

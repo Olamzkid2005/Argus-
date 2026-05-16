@@ -152,6 +152,7 @@ def execute_recon_tools(
                 for p in parsed:
                     normalized = ctx._normalize_finding(p, tool_name)
                     if normalized:
+                        # Note: list.append is thread-safe under GIL
                         all_findings.append(normalized)
                         parsed_count += 1
             return tool_name, True, parsed_count, None
@@ -250,7 +251,7 @@ def execute_recon_tools(
             for name, cfg in recon_tools.items()
         }
         try:
-            for future in as_completed(futures, timeout=150):
+            for future in as_completed(futures, timeout=300):
                 tool_name, success, parsed_count, error = future.result(timeout=15)
                 if success:
                     slog.tool_complete(tool_name, success=True, findings=parsed_count)
@@ -261,8 +262,8 @@ def execute_recon_tools(
                     slog.tool_complete(tool_name, success=False)
                     _emit(tool_name, f"{tool_name} failed: {error}" if error else f"{tool_name} failed", "failed")
         except TimeoutError:
-            logger.warning("Recon tool batch timed out after 150s — some tools may not have completed")
-            slog.warn("Recon tool batch timed out after 150s")
+            logger.warning("Recon tool batch timed out after 300s — some tools may not have completed")
+            slog.warn("Recon tool batch timed out after 300s")
             # Cancel remaining futures
             for future in futures:
                 future.cancel()
@@ -348,7 +349,7 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
         f.get("endpoint", "") for f in findings if f.get("source_tool") in ("katana", "ffuf")
     ][:50]
     param_urls = [
-        f["endpoint"]
+        f.get("endpoint", "")
         for f in findings
         if "?" in f.get("endpoint", "")
         and f.get("source_tool") in ("gau", "waybackurls")

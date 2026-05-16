@@ -473,8 +473,6 @@ class ReActAgent:
                 logger.info("Agent: no more actions at iteration %d", iteration)
                 break
 
-            tried_tools.add(action.tool)
-
             # Cost guard
             total_cost_usd += getattr(action, "cost_usd", 0.0)
             if total_cost_usd > LLM_AGENT_MAX_COST_USD:
@@ -483,7 +481,7 @@ class ReActAgent:
                     f"Switching to deterministic for remaining tools."
                 )
                 for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                    if tool_name not in tried_tools:
+                    if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
                         result = self.registry.call(tool_name, target=initial_target)
                         results.append(result)
                 break
@@ -513,6 +511,7 @@ class ReActAgent:
 
             # Execute tool
             result = self.registry.call(action.tool, **action.arguments)
+            tried_tools.add(action.tool)
             results.append(result)
 
             # FIX: skip counting for tools that failed or were skipped
@@ -522,7 +521,15 @@ class ReActAgent:
             else:
                 output_content = (result.output or "").strip()
                 if len(output_content) < 30:
-                    empty_output_consecutive += 1
+                    if output_content.startswith(('{', '[')):
+                        try:
+                            import json as _json
+                            _json.loads(output_content)
+                            empty_output_consecutive = 0
+                        except (ValueError, _json.JSONDecodeError):
+                            empty_output_consecutive += 1
+                    else:
+                        empty_output_consecutive += 1
                     logger.info(
                         "Agent: %s produced little/no output (%d consecutive)",
                         action.tool,

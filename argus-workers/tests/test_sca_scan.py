@@ -13,7 +13,6 @@ class TestSCAScanning:
     """Test cases for SCA scanning functions."""
 
     # Modules that need to be mocked to prevent real imports during testing.
-    # These are applied via patch.dict so sys.modules is restored after each test.
     MOCKED_MODULES = {
         'psycopg2': MagicMock(),
         'tracing': MagicMock(),
@@ -26,18 +25,13 @@ class TestSCAScanning:
         'database.repositories.engagement_repository': MagicMock(),
     }
 
-    @pytest.fixture
-    def orchestrator(self):
-        """Create an Orchestrator instance with mocked dependencies."""
-        with patch.dict(sys.modules, self.MOCKED_MODULES):
-            from orchestrator import Orchestrator
-            return Orchestrator(engagement_id="test-engagement-123")
-
     # ── npm audit tests ──
 
     @patch('subprocess.run')
-    def test_run_npm_audit_success(self, mock_run, orchestrator):
+    def test_run_npm_audit_success(self, mock_run):
         """Test npm audit with vulnerabilities found."""
+        from orchestrator_pkg.repo_scan import run_npm_audit
+
         npm_output = {
             "vulnerabilities": {
                 "lodash": {
@@ -60,7 +54,7 @@ class TestSCAScanning:
             stderr=""
         )
 
-        findings = orchestrator._run_npm_audit("/tmp/fake_repo")
+        findings = run_npm_audit("/tmp/fake_repo")
 
         assert len(findings) == 2
         assert findings[0]['type'] == 'DEPENDENCY_VULNERABILITY'
@@ -70,8 +64,10 @@ class TestSCAScanning:
         assert 'express' in findings[1]['endpoint']
 
     @patch('subprocess.run')
-    def test_run_npm_audit_no_vulns(self, mock_run, orchestrator):
+    def test_run_npm_audit_no_vulns(self, mock_run):
         """Test npm audit with no vulnerabilities."""
+        from orchestrator_pkg.repo_scan import run_npm_audit
+
         npm_output = {"vulnerabilities": {}}
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -79,24 +75,28 @@ class TestSCAScanning:
             stderr=""
         )
 
-        findings = orchestrator._run_npm_audit("/tmp/fake_repo")
+        findings = run_npm_audit("/tmp/fake_repo")
 
         assert len(findings) == 0
 
     @patch('subprocess.run')
-    def test_run_npm_audit_failure(self, mock_run, orchestrator):
+    def test_run_npm_audit_failure(self, mock_run):
         """Test npm audit when command fails."""
+        from orchestrator_pkg.repo_scan import run_npm_audit
+
         mock_run.side_effect = Exception("npm not found")
 
-        findings = orchestrator._run_npm_audit("/tmp/fake_repo")
+        findings = run_npm_audit("/tmp/fake_repo")
 
         assert len(findings) == 0
 
     # ── pip-audit tests ──
 
     @patch('subprocess.run')
-    def test_run_pip_audit_success(self, mock_run, orchestrator):
+    def test_run_pip_audit_success(self, mock_run):
         """Test pip-audit with vulnerabilities found."""
+        from orchestrator_pkg.repo_scan import run_pip_audit
+
         pip_audit_output = [
             {
                 "name": "flask",
@@ -119,7 +119,7 @@ class TestSCAScanning:
             stderr=""
         )
 
-        findings = orchestrator._run_pip_audit("/tmp/fake_repo")
+        findings = run_pip_audit("/tmp/fake_repo")
 
         assert len(findings) == 2
         assert findings[0]['type'] == 'DEPENDENCY_VULNERABILITY'
@@ -128,19 +128,23 @@ class TestSCAScanning:
         assert findings[1]['severity'] == 'MEDIUM'
 
     @patch('subprocess.run')
-    def test_run_pip_audit_failure(self, mock_run, orchestrator):
+    def test_run_pip_audit_failure(self, mock_run):
         """Test pip-audit when command fails."""
+        from orchestrator_pkg.repo_scan import run_pip_audit
+
         mock_run.side_effect = Exception("pip-audit not found")
 
-        findings = orchestrator._run_pip_audit("/tmp/fake_repo")
+        findings = run_pip_audit("/tmp/fake_repo")
 
         assert len(findings) == 0
 
     # ── govulncheck tests ──
 
     @patch('subprocess.run')
-    def test_run_govulncheck_success(self, mock_run, orchestrator):
+    def test_run_govulncheck_success(self, mock_run):
         """Test govulncheck with vulnerabilities found."""
+        from orchestrator_pkg.repo_scan import run_govulncheck
+
         govulncheck_output = json.dumps({
             "module": "github.com/gin-gonic/gin",
             "version": "v1.7.0",
@@ -158,7 +162,7 @@ class TestSCAScanning:
             stderr=""
         )
 
-        findings = orchestrator._run_govulncheck("/tmp/fake_repo")
+        findings = run_govulncheck("/tmp/fake_repo")
 
         assert len(findings) == 1
         assert findings[0]['type'] == 'DEPENDENCY_VULNERABILITY'
@@ -166,24 +170,28 @@ class TestSCAScanning:
         assert 'gin-gonic' in findings[0]['endpoint']
 
     @patch('subprocess.run')
-    def test_run_govulncheck_no_vulns(self, mock_run, orchestrator):
+    def test_run_govulncheck_no_vulns(self, mock_run):
         """Test govulncheck with no vulnerabilities."""
+        from orchestrator_pkg.repo_scan import run_govulncheck
+
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="",
             stderr=""
         )
 
-        findings = orchestrator._run_govulncheck("/tmp/fake_repo")
+        findings = run_govulncheck("/tmp/fake_repo")
 
         assert len(findings) == 0
 
     @patch('subprocess.run')
-    def test_run_govulncheck_failure(self, mock_run, orchestrator):
+    def test_run_govulncheck_failure(self, mock_run):
         """Test govulncheck when command fails."""
+        from orchestrator_pkg.repo_scan import run_govulncheck
+
         mock_run.side_effect = Exception("govulncheck not found")
 
-        findings = orchestrator._run_govulncheck("/tmp/fake_repo")
+        findings = run_govulncheck("/tmp/fake_repo")
 
         assert len(findings) == 0
 
@@ -191,8 +199,10 @@ class TestSCAScanning:
 
     @patch('glob.glob')
     @patch('xml.etree.ElementTree.parse')
-    def test_check_maven_dependencies(self, mock_parse, mock_glob, orchestrator):
+    def test_check_maven_dependencies(self, mock_parse, mock_glob):
         """Test Maven dependency checking."""
+        from orchestrator_pkg.repo_scan import check_maven_dependencies
+
         mock_glob.return_value = ["/tmp/fake_repo/pom.xml"]
 
         # Mock XML parsing
@@ -219,7 +229,7 @@ class TestSCAScanning:
         mock_tree.getroot.return_value = mock_root
         mock_parse.return_value = mock_tree
 
-        findings = orchestrator._check_maven_dependencies("/tmp/fake_repo")
+        findings = check_maven_dependencies("/tmp/fake_repo")
 
         assert len(findings) == 2
         assert findings[0]['type'] == 'DEPENDENCY_LISTING'
@@ -234,9 +244,6 @@ class TestSCAScanning:
         repo_path.mkdir()
         (repo_path / "package.json").touch()
 
-        # Read the _execute_repo_scan method to understand detection logic
-        # The detection happens in _execute_repo_scan, not in separate methods
-        # This is more of an integration test
         assert (repo_path / "package.json").exists()
 
     def test_project_type_detection_python(self, tmp_path):

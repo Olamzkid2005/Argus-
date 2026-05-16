@@ -183,6 +183,8 @@ def validate_output(data: dict) -> dict:
             validated[field] = {
                 str(k)[:50]: str(v)[:200] for k, v in value.items()
             }
+        else:
+            validated[field] = defaults.get(field)
 
     # Validate target_url
     if not validated.get("target_url") or not validate_url(

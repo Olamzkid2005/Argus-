@@ -14,13 +14,16 @@ class TestCheckpointManager:
 
     @pytest.fixture
     def mock_db_conn(self):
-        """Create a mock psycopg2 connection"""
-        with patch("database.connection.psycopg2.connect") as mock_connect:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
-            mock_conn.cursor.return_value = mock_cursor
-            mock_connect.return_value = mock_conn
-            yield mock_connect, mock_conn, mock_cursor
+        """Create a mock DB via get_db() — CheckpointManager uses the pool, not psycopg2.connect directly"""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        mock_db = MagicMock()
+        mock_db.get_connection.return_value = mock_conn
+
+        with patch("checkpoint_manager.get_db", return_value=mock_db):
+            yield mock_db, mock_conn, mock_cursor
 
     @pytest.fixture
     def manager(self):
@@ -28,22 +31,21 @@ class TestCheckpointManager:
 
     def test_save_checkpoint(self, manager, mock_db_conn):
         """Test saving a checkpoint"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
 
         with patch("checkpoint_manager.uuid.uuid4") as mock_uuid:
             mock_uuid.return_value = "test-uuid-123"
             checkpoint_id = manager.save_checkpoint("ENG-001", "scan", {"findings": []})
 
         assert checkpoint_id == "test-uuid-123"
-        mock_connect.assert_called_once_with("postgresql://test:test@localhost:5432/test_db")
         mock_cursor.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
         mock_cursor.close.assert_called_once()
-        mock_conn.close.assert_called_once()
+        mock_db.release_connection.assert_called_once_with(mock_conn)
 
     def test_save_checkpoint_rollback_on_error(self, manager, mock_db_conn):
         """Test rollback when save fails"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with pytest.raises(Exception, match="Failed to save checkpoint"):
@@ -51,11 +53,11 @@ class TestCheckpointManager:
 
         mock_conn.rollback.assert_called_once()
         mock_cursor.close.assert_called_once()
-        mock_conn.close.assert_called_once()
+        mock_db.release_connection.assert_called_once_with(mock_conn)
 
     def test_load_checkpoint_found(self, manager, mock_db_conn):
         """Test loading an existing checkpoint"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = {
             "id": "chk-001",
             "engagement_id": "ENG-001",
@@ -73,7 +75,7 @@ class TestCheckpointManager:
 
     def test_load_checkpoint_not_found(self, manager, mock_db_conn):
         """Test loading when no checkpoint exists"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = None
 
         result = manager.load_checkpoint("ENG-999")
@@ -82,21 +84,21 @@ class TestCheckpointManager:
 
     def test_has_checkpoint_true(self, manager, mock_db_conn):
         """Test has_checkpoint returns True"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = (5,)
 
         assert manager.has_checkpoint("ENG-001") is True
 
     def test_has_checkpoint_false(self, manager, mock_db_conn):
         """Test has_checkpoint returns False"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = (0,)
 
         assert manager.has_checkpoint("ENG-001") is False
 
     def test_list_checkpoints(self, manager, mock_db_conn):
         """Test listing checkpoints"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchall.return_value = [
             {"id": "chk-002", "engagement_id": "ENG-001", "phase": "analyze", "created_at": datetime(2024, 1, 2)},
             {"id": "chk-001", "engagement_id": "ENG-001", "phase": "scan", "created_at": datetime(2024, 1, 1)},
@@ -110,17 +112,17 @@ class TestCheckpointManager:
 
     def test_delete_checkpoints(self, manager, mock_db_conn):
         """Test deleting checkpoints"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
 
         manager.delete_checkpoints("ENG-001")
 
         mock_conn.commit.assert_called_once()
         mock_cursor.close.assert_called_once()
-        mock_conn.close.assert_called_once()
+        mock_db.release_connection.assert_called_once_with(mock_conn)
 
     def test_delete_checkpoints_rollback_on_error(self, manager, mock_db_conn):
         """Test rollback on delete error"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with pytest.raises(Exception, match="Failed to delete checkpoints"):
@@ -130,7 +132,7 @@ class TestCheckpointManager:
 
     def test_resume_from_checkpoint_found(self, manager, mock_db_conn):
         """Test resuming from existing checkpoint"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         created_at = datetime(2024, 1, 1, 12, 0, 0)
         mock_cursor.fetchone.return_value = {
             "id": "chk-001",
@@ -150,7 +152,7 @@ class TestCheckpointManager:
 
     def test_resume_from_checkpoint_not_found(self, manager, mock_db_conn):
         """Test resuming when no checkpoint exists"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = None
 
         result = manager.resume_from_checkpoint("ENG-999")
@@ -158,7 +160,7 @@ class TestCheckpointManager:
 
     def test_get_resume_plan_middle_phase(self, manager, mock_db_conn):
         """Test resume plan from middle phase"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         created_at = datetime(2024, 1, 1, 12, 0, 0)
         mock_cursor.fetchone.return_value = {
             "id": "chk-001",
@@ -179,7 +181,7 @@ class TestCheckpointManager:
 
     def test_get_resume_plan_last_phase(self, manager, mock_db_conn):
         """Test resume plan from last phase"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = {
             "id": "chk-001",
             "engagement_id": "ENG-001",
@@ -195,7 +197,7 @@ class TestCheckpointManager:
 
     def test_get_resume_plan_unknown_phase(self, manager, mock_db_conn):
         """Test resume plan with unknown phase defaults to first"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = {
             "id": "chk-001",
             "engagement_id": "ENG-001",
@@ -211,7 +213,7 @@ class TestCheckpointManager:
 
     def test_get_resume_plan_no_checkpoint(self, manager, mock_db_conn):
         """Test resume plan when no checkpoint exists"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchone.return_value = None
 
         plan = manager.get_resume_plan("ENG-999")
@@ -219,7 +221,7 @@ class TestCheckpointManager:
 
     def test_cleanup_old_checkpoints(self, manager, mock_db_conn):
         """Test cleaning up old checkpoints"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.rowcount = 3
 
         deleted = manager.cleanup_old_checkpoints(max_age_days=7)
@@ -234,7 +236,7 @@ class TestCheckpointManager:
 
     def test_cleanup_old_checkpoints_rollback_on_error(self, manager, mock_db_conn):
         """Test rollback on cleanup error"""
-        mock_connect, mock_conn, mock_cursor = mock_db_conn
+        mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with pytest.raises(Exception, match="Failed to cleanup checkpoints"):

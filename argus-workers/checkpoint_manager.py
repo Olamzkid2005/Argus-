@@ -256,17 +256,17 @@ class CheckpointManager:
             next_phase = phases[current_idx + 1] if current_idx + 1 < len(phases) else None
             remaining = phases[current_idx + 1:] if next_phase else []
         else:
-            # Unknown/terminal phase — cannot resume
+            # Unknown phase — reset to beginning
             return {
                 "engagement_id": engagement_id,
-                "completed_phase": phase,
-                "next_phase": None,
+                "completed_phase": None,
+                "next_phase": "scan",
                 "partial_results": data,
-                "remaining_phases": [],
+                "remaining_phases": ["scan", "analyze", "report"],
                 "checkpoint_timestamp": checkpoint["created_at"].isoformat()
                 if checkpoint["created_at"] else None,
-                "can_resume": False,
-                "reason": f"Phase '{phase}' not recognized or is terminal",
+                "can_resume": True,
+                "reason": f"Phase '{phase}' not recognized, starting from beginning",
             }
 
         return {

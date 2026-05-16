@@ -52,6 +52,14 @@ class ScanDiffEngine:
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme else parsed.path
 
     @staticmethod
+    def _fallback_fingerprint(finding: dict) -> str:
+        """Cross-scan fallback fingerprint using type+endpoint only."""
+        finding_type = finding.get("type", "UNKNOWN")
+        endpoint = ScanDiffEngine._normalize_endpoint(finding.get("endpoint", ""))
+        key = f"{finding_type}:{endpoint}"
+        return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    @staticmethod
     def _fingerprint(finding: dict) -> str:
         """Stable fingerprint for matching findings across scans.
 
@@ -186,24 +194,37 @@ class ScanDiffEngine:
         curr_fps = set(curr.keys())
         prev_fps = set(prev.keys())
 
+        # Build fallback fingerprint maps for cross-scan matching
+        curr_fallback = {self._fallback_fingerprint(f): fp for fp, f in curr.items()}
+        prev_fallback = {self._fallback_fingerprint(f): fp for fp, f in prev.items()}
+
         # New: in current but not previous
         for fp in curr_fps - prev_fps:
             if fp in fixed_fps:
                 result[self.CAT_REGRESSED].append(curr[fp])
             else:
-                result[self.CAT_NEW].append(curr[fp])
+                # Check fallback fingerprint for cross-scan matching
+                fb_fp = self._fallback_fingerprint(curr[fp])
+                if fb_fp in prev_fallback:
+                    # Same vulnerability, different payload — classify as persistent
+                    result[self.CAT_PERSISTENT].append(curr[fp])
+                else:
+                    result[self.CAT_NEW].append(curr[fp])
 
-        # Fixed: in previous but not current
+        # Fixed: in previous but not current — cross-check via fallback fingerprint
         for fp in prev_fps - curr_fps:
+            fb_fp = self._fallback_fingerprint(prev[fp])
+            if fb_fp in curr_fallback:
+                continue  # Already accounted as persistent in the New branch
             result[self.CAT_FIXED].append(prev[fp])
 
         # Changed: in both but severity differs
         for fp in curr_fps & prev_fps:
-            if curr[fp]["severity"] != prev[fp]["severity"]:
+            if curr[fp].get("severity", "UNKNOWN") != prev[fp].get("severity", "UNKNOWN"):
                 result[self.CAT_SEVERITY_CHANGED].append({
                     "finding": curr[fp],
-                    "old_severity": prev[fp]["severity"],
-                    "new_severity": curr[fp]["severity"],
+                    "old_severity": prev[fp].get("severity", "UNKNOWN"),
+                    "new_severity": curr[fp].get("severity", "UNKNOWN"),
                 })
             else:
                 result[self.CAT_PERSISTENT].append(curr[fp])

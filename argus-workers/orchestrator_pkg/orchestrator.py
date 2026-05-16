@@ -122,23 +122,27 @@ class Orchestrator:
         db_conn = os.getenv("DATABASE_URL")
         if not db_conn:
             return []
+        conn = None
         try:
             conn = connect(db_conn)
             cursor = conn.cursor()
-            cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
-            row = cursor.fetchone()
-            if not row:
-                cursor.close(); conn.close(); return []
-            org_id = row[0]
-            cursor.execute("""
-                SELECT id, name, description, severity, category, rule_yaml, tags
-                FROM custom_rules WHERE org_id = %s AND status = 'active'
-                ORDER BY created_at DESC
-            """, (org_id,))
-            columns = [desc[0] for desc in cursor.description]
-            rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-            cursor.close(); conn.close()
-            return rules
+            try:
+                cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return []
+                org_id = row[0]
+                cursor.execute("""
+                    SELECT id, name, description, severity, category, rule_yaml, tags
+                    FROM custom_rules WHERE org_id = %s AND status = 'active'
+                    ORDER BY created_at DESC
+                """, (org_id,))
+                columns = [desc[0] for desc in cursor.description]
+                rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                return rules
+            finally:
+                cursor.close()
+                conn.close()
         except Exception as e:
             logger.warning(f"Failed to load custom rules: {e}")
             return []
@@ -168,6 +172,7 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_recon", ["target"])
         self._check_timeout()
+        self._bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
         target = job.get("target")
         if not target:
             targets_list = job.get("targets", [])
@@ -263,12 +268,14 @@ class Orchestrator:
         from database.services.embedding_service import EmbeddingService
         emb_svc = EmbeddingService(self.engagement_id)
 
+        saved_count = 0
+        failed_count = 0
         for finding in findings:
             try:
                 # Tag findings with bugbounty source when in bug bounty mode
                 # so the Intelligence Engine applies the confidence cap.
                 if self._bug_bounty_mode:
-                    finding["source"] = "bugbounty"
+                    finding["bugbounty_source"] = True
 
                 if finding.get("cvss_score") is None:
                     try:
@@ -308,15 +315,13 @@ class Orchestrator:
                     )
                 else:
                     payload = finding.get('evidence', {}).get('payload', '')
-                    # Skip embedding-based dedup when payload is redacted —
-                    # the __REDACTED__ placeholder would cause false matches
+                    ftype = finding.get("type") or ""
+                    fep = finding.get("endpoint") or ""
                     if payload and '__REDACTED__' not in str(payload):
-                        ftype = finding.get("type") or ""
-                        fep = finding.get("endpoint") or ""
                         dedup_text = f"{ftype} {fep} {payload}"
-                        similar = emb_svc.find_existing_similar(dedup_text)
                     else:
-                        similar = None
+                        dedup_text = f"{ftype} {fep}"  # Fallback: type + endpoint only
+                    similar = emb_svc.find_existing_similar(dedup_text) if dedup_text.strip() else None
                     if similar:
                         try:
                             from database.connection import db_cursor
@@ -356,6 +361,9 @@ class Orchestrator:
                             cwe_id=finding.get("cwe_id"),
                         )
 
+                if saved_id:
+                    saved_count += 1
+
                 if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint"):
                     if finding.get("severity", "").upper() not in ("INFO", "LOW", ""):
                         try:
@@ -378,9 +386,13 @@ class Orchestrator:
                     except Exception as hook_err:
                         logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
             except Exception as finding_err:
+                failed_count += 1
                 logger.warning("Failed to save finding (type=%s, endpoint=%s): %s",
                                finding.get("type", "?"), finding.get("endpoint", "?"), finding_err)
                 continue
+
+        if failed_count > 0:
+            logger.error("_save_findings: %d of %d findings failed to save", failed_count, len(findings))
 
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column.
@@ -532,14 +544,11 @@ class Orchestrator:
                             norm = self._normalize_finding(p, r.tool)
                             if norm:
                                 all_findings.append(norm)
-            except (TimeoutError, ConnectionError, OSError) as e:
-                logger.warning(f"Agent scan aborted for {target}: {e}. Falling back.")
+            except Exception as e:
+                logger.warning(f"Agent scan failed for {target}: {e} — falling back to deterministic", exc_info=True)
                 fallback = execute_scan_pipeline(self, [target], budget, aggressiveness, auth_config,
                                                   recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
-            except Exception:
-                logger.error(f"Agent scan failed for {target} — re-raising", exc_info=True)
-                raise
 
         return all_findings
 
@@ -561,7 +570,11 @@ class Orchestrator:
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
         _llm_ok = self.llm_client is not None and self.llm_client.is_available()
-        _recon_ok = recon_context is not None
+        _recon_ok = recon_context is not None and (
+            hasattr(recon_context, 'live_endpoints') and recon_context.live_endpoints or
+            hasattr(recon_context, 'tech_stack') and recon_context.tech_stack or
+            hasattr(recon_context, 'subdomains') and recon_context.subdomains
+        )
         self._bug_bounty_mode = bool(bug_bounty_mode)
         self._agent_mode_enabled = bool(agent_mode_enabled)
         if scan_mode == "swarm" and _recon_ok and _llm_ok:
@@ -572,9 +585,15 @@ class Orchestrator:
             findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
         else:
             scan_execution_path = "deterministic"
+            if scan_mode == "swarm":
+                logger.warning("Swarm mode requested but %s — falling back to deterministic",
+                               "LLM unavailable" if not _llm_ok else "recon context unavailable")
+            elif agent_mode_enabled:
+                logger.warning("Agent mode requested but %s — falling back to deterministic",
+                               "LLM unavailable" if not _llm_ok else "recon context unavailable")
             findings = self._run_deterministic_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
 
-        findings = self._maybe_run_browser_scanner(targets, recon_context, findings)
+        self._maybe_run_browser_scanner(targets, recon_context, findings)
 
         slog.info(f"Scan mode: {scan_mode}, total findings: {len(findings)}")
         findings_count = len(findings)
@@ -587,6 +606,15 @@ class Orchestrator:
                 from tasks.llm_review import run_llm_review
                 run_llm_review.delay(engagement_id=self.engagement_id, budget=job.get("budget", {}), trace_id=get_trace_id())
                 logger.info(f"Enqueued LLM review for engagement {self.engagement_id}")
+                try:
+                    self.ws_publisher.publish_scanner_activity(
+                        engagement_id=self.engagement_id, tool_name="LLM Review",
+                        activity="review_enqueued", status="completed",
+                        target=str(targets),
+                        details="LLM review dispatched for post-scan analysis",
+                    )
+                except Exception:
+                    pass
             except Exception as e:
                 logger.warning(f"Failed to enqueue LLM review (non-fatal): {e}")
 
@@ -630,19 +658,25 @@ class Orchestrator:
             engagement_id=self.engagement_id,
             decision_repo=decision_repo,
             auth_config=auth_config,
+            bug_bounty_mode=bug_bounty_mode,
         )
-        swarm_findings = swarm.run(timeout=1800)
+        swarm_result = swarm.run(timeout=1800)
+        if isinstance(swarm_result, tuple):
+            swarm_findings, swarm_tools_executed = swarm_result
+        else:
+            swarm_findings = swarm_result
+            swarm_tools_executed = set()
         slog.info(f"Swarm returned {len(swarm_findings)} findings")
-        logger.info("Swarm returned %d findings", len(swarm_findings))
-        swarm_tools: set[str] = set()
-        for f in swarm_findings:
-            st = f.get("source_tool") or f.get("tool")
-            if st:
-                swarm_tools.add(st)
+        logger.info("Swarm returned %d findings, executed tools: %s", len(swarm_findings), swarm_tools_executed)
         tech_stack = recon_context.tech_stack if recon_context else None
+        remaining = self.get_remaining_time()
+        adjusted_aggressiveness = aggressiveness
+        if remaining < 600:
+            adjusted_aggressiveness = "default"
+            logger.info("Only %ds remaining — reducing safety net aggressiveness to default", remaining)
         safety_findings = execute_scan_pipeline(
-            self, targets, budget, aggressiveness, auth_config, tech_stack,
-            skip_tools=swarm_tools,
+            self, targets, budget, adjusted_aggressiveness, auth_config, tech_stack,
+            skip_tools=swarm_tools_executed,
         )
         slog.tool_complete("swarm", success=True, findings=len(swarm_findings))
         return swarm_findings + safety_findings
@@ -718,7 +752,7 @@ class Orchestrator:
         findings = []
         if self.finding_repo:
             try:
-                raw_findings, _ = self.finding_repo.get_findings_by_engagement(self.engagement_id, limit=10000)
+                raw_findings, _ = self.finding_repo.get_findings_by_engagement(self.engagement_id, limit=100000)
                 findings = [f.to_dict() if hasattr(f, "to_dict") else dict(f) if isinstance(f, dict) else f for f in raw_findings]
             except Exception as e:
                 logger.warning(f"Failed to load findings: {e}")
@@ -880,13 +914,22 @@ class Orchestrator:
 
         actions = evaluation.get("actions", [])
         next_state = "reporting"
+        approved_actions = []
+        denied_actions = []
         for action in actions:
             can_continue, reason = budget_mgr.can_continue(action)
             if can_continue:
                 budget_mgr.consume(action)
-                next_state = "recon"
+                approved_actions.append(action)
             else:
-                logger.info(f"Budget exhausted: {reason}")
+                logger.info(f"Budget exhausted for action {action.get('type')}: {reason}")
+                denied_actions.append(action)
+
+        if approved_actions and not denied_actions:
+            next_state = "recon"
+        elif approved_actions:
+            next_state = "recon"
+            logger.info("Deferred %d action(s): budget exhausted", len(denied_actions))
 
         slog.tool_complete("orchestrator.run_analysis", success=True, findings=len(evaluation.get("scored_findings", [])))
         slog.info(f"Next state: {next_state}, actions: {len(actions)}")
@@ -928,7 +971,7 @@ class Orchestrator:
                     if not db_url:
                         raise OSError("DATABASE_URL not set — cannot query findings for SBOM")
                     fr = FindingRepository(db_url)
-                    all_findings, _ = fr.get_findings_by_engagement(self.engagement_id)
+                    all_findings, _ = fr.get_findings_by_engagement(self.engagement_id, limit=10000)
                     sbom_json = generate_sbom_from_findings(
                         engagement_id=self.engagement_id, findings=all_findings,
                         target_url=job.get("target", ""), repo_url=job.get("repo_url", ""),

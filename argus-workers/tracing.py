@@ -7,6 +7,7 @@ for distributed tracing across all worker components.
 Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2
 """
 import json
+import logging
 import os
 import threading
 import time
@@ -18,6 +19,8 @@ from typing import Any
 
 from database.connection import connect
 from utils.validation import validate_uuid
+
+logger = logging.getLogger(__name__)
 
 
 class TracingError(Exception):
@@ -158,7 +161,7 @@ class StructuredLogger:
                 engagement_id = validate_uuid(engagement_id, "engagement_id")
             except ValueError:
                 # Non-fatal: skip DB logging for invalid UUIDs
-                print(f"Failed to store log: invalid engagement_id UUID: '{engagement_id}'")
+                logger.error("Failed to store log: invalid engagement_id UUID: '%s'", engagement_id)
                 return
 
         try:
@@ -184,7 +187,7 @@ class StructuredLogger:
                 conn.close()
         except Exception as e:
             # Don't fail execution if logging fails
-            print(f"Failed to store log: {e}")
+            logger.error("Failed to store log: %s", e)
 
     def log_job_started(self, job_type: str, engagement_id: str, target: str = None) -> None:
         """
@@ -351,7 +354,7 @@ class ExecutionSpan:
                 conn.close()
         except Exception as e:
             # Don't fail execution if span storage fails
-            print(f"Failed to store span: {e}")
+            logger.error("Failed to store span: %s", e)
 
     def record_span(self, span_name: str, duration_ms: int, trace_id: str = None) -> None:
         """

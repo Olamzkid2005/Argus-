@@ -40,6 +40,12 @@ def run_scan(
     except Exception as e:
         logger.error("Failed to load recon context for engagement=%s: %s", engagement_id, e, exc_info=True)
         recon_context = None
+        # Notify UI
+        try:
+            from streaming import emit_thinking
+            emit_thinking(engagement_id, "Recon context unavailable — running deterministic scan")
+        except Exception:
+            pass
 
     mode = "agent" if agent_mode else "deterministic"
     slog.phase_header("SCAN PHASE", targets=f"{len(targets)} target(s)", mode=mode)

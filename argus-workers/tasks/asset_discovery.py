@@ -30,21 +30,21 @@ def run_asset_discovery(
     """
     db_conn_string = os.getenv("DATABASE_URL")
 
-    # Self-resolve org_id from engagement
-    org_id = None
-    try:
-        from database.connection import db_cursor
+    # Self-resolve org_id from engagement if not already provided
+    if org_id is None:
+        try:
+            from database.connection import db_cursor
 
-        with db_cursor() as cursor:
-            cursor.execute(
-                "SELECT org_id FROM engagements WHERE id = %s", (engagement_id,)
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT org_id FROM engagements WHERE id = %s", (engagement_id,)
+                )
+                row = cursor.fetchone()
+                org_id = str(row[0]) if row else None
+        except Exception as e:
+            logger.warning(
+                "Could not resolve org_id for engagement %s: %s", engagement_id, e
             )
-            row = cursor.fetchone()
-            org_id = str(row[0]) if row else None
-    except Exception as e:
-        logger.warning(
-            "Could not resolve org_id for engagement %s: %s", engagement_id, e
-        )
 
     if not org_id:
         logger.warning(

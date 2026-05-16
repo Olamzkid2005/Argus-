@@ -9,6 +9,7 @@ Auto-closes fixed findings and fires webhooks for actionable changes.
 """
 
 import contextlib
+import json
 import logging
 import os
 
@@ -75,7 +76,9 @@ def run_scan_diff(
 
         # Auto-close fixed findings
         for finding in diff_result.get(engine.CAT_FIXED, []):
-            engine.mark_fixed(finding["id"], new_engagement_id)
+            finding_id = finding.get("id")
+            if finding_id:
+                engine.mark_fixed(finding_id, new_engagement_id)
 
         # Update fixed fingerprints for regression tracking
         if diff_result[engine.CAT_FIXED]:
@@ -154,7 +157,6 @@ def _update_fixed_fingerprints(
     fps = [
         ScanDiffEngine._fingerprint(f)
         for f in fixed_findings
-        if f.get("id")
     ]
     if not fps:
         return
@@ -165,23 +167,16 @@ def _update_fixed_fingerprints(
 
         conn = connect(os.getenv("DATABASE_URL"))
         cursor = conn.cursor()
-        for fp in fps:
-            cursor.execute(
-                """
-                UPDATE target_profiles
-                SET fixed_finding_fingerprints = jsonb_set(
-                    COALESCE(
-                        fixed_finding_fingerprints, '[]'::jsonb
-                    ),
-                    '{-1}',
-                    to_jsonb(%s),
-                    true
-                ),
+        cursor.execute(
+            """
+            UPDATE target_profiles
+            SET fixed_finding_fingerprints =
+                COALESCE(fixed_finding_fingerprints, '[]'::jsonb) || %s::jsonb,
                 updated_at = NOW()
-                WHERE org_id = %s AND target_domain = %s
-                """,
-                (fp, org_id, domain),
-            )
+            WHERE org_id = %s AND target_domain = %s
+            """,
+            (json.dumps(fps), org_id, domain),
+        )
         conn.commit()
     except Exception as e:
         logger.warning(

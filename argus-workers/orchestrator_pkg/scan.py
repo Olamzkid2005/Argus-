@@ -251,7 +251,13 @@ def execute_scan_tools(
         # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:
             try:
-                arjun_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "arjun.json")
+                sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+                if sandbox:
+                    arjun_out = str(sandbox / "tmp" / "arjun.json")
+                else:
+                    import tempfile
+                    import os
+                    arjun_out = os.path.join(tempfile.gettempdir(), "arjun.json")
                 arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
                 arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
                 _run_scan_tool(ctx, "arjun",
@@ -297,7 +303,13 @@ def execute_scan_tools(
 
         # Build sqlmap command
         if "sqlmap" not in _skip:
-            sqlmap_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "sqlmap.json")
+            sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+            if sandbox:
+                sqlmap_out = str(sandbox / "tmp" / "sqlmap.json")
+            else:
+                import tempfile
+                import os
+                sqlmap_out = os.path.join(tempfile.gettempdir(), "sqlmap.json")
             sqlmap_cmd = ["-u", target, "--json-output", sqlmap_out]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
@@ -314,14 +326,26 @@ def execute_scan_tools(
 
         # Build commix command
         if "commix" not in _skip and _should_run_tool("commix", tech_stack=tech_stack):
-            commix_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "commix.json")
+            sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+            if sandbox:
+                commix_out = str(sandbox / "tmp" / "commix.json")
+            else:
+                import tempfile
+                import os
+                commix_out = os.path.join(tempfile.gettempdir(), "commix.json")
             scan_jobs.append(("commix",
                 ["--url", target, "--batch", "--json-output", commix_out],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
         # Build testssl command
         if "testssl" not in _skip and _should_run_tool("testssl", target=target):
-            testssl_out = str(ctx.tool_runner.sandbox_dir / "tmp" / "testssl.json")
+            sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+            if sandbox:
+                testssl_out = str(sandbox / "tmp" / "testssl.json")
+            else:
+                import tempfile
+                import os
+                testssl_out = os.path.join(tempfile.gettempdir(), "testssl.json")
             scan_jobs.append(("testssl",
                 ["--jsonfile", testssl_out, target],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
@@ -334,7 +358,7 @@ def execute_scan_tools(
                     for name, args, timeout in scan_jobs
                 }
                 try:
-                    for future in as_completed(futures, timeout=TOOL_TIMEOUT_LONG + 60):
+                    for future in as_completed(futures, timeout=max(TOOL_TIMEOUT_LONG + 60, 900)):
                         try:
                             future.result(timeout=30)
                         except Exception as e:

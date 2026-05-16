@@ -3,13 +3,13 @@
 import os
 
 # Timeouts (seconds)
-HARD_TIMEOUT_SECONDS = 3600          # 1 hour max engagement time
+HARD_TIMEOUT_SECONDS = 7200          # 2 hours — recon + scan + analyze can exceed 1 hour
 TOOL_TIMEOUT_DEFAULT = 180           # 3 minutes default tool timeout
 TOOL_TIMEOUT_SHORT = 60              # 1 minute for quick tools
 TOOL_TIMEOUT_LONG = 300              # 5 minutes for heavy tools
 
 # Rate limiting
-RATE_LIMIT_DELAY_MS = int(os.getenv("ARGUS_RATE_LIMIT_DELAY_MS", "20"))
+RATE_LIMIT_DELAY_MS = int(os.getenv("ARGUS_RATE_LIMIT_DELAY_MS", "200"))
 MAX_CONCURRENT_REQUESTS = int(os.getenv("ARGUS_MAX_CONCURRENT", "20"))
 
 # Content limits
@@ -65,6 +65,8 @@ LLM_AGENT_MAX_TOKENS_REPORT = 3000         # tokens for final report
 LLM_AGENT_CONTEXT_MAX_TOKENS = 3500        # max context passed to LLM
 
 # ── LLM Agent Cost Guard ────────────────────────────────────────────────
+# LLM cost constants — model-specific. Adjust when changing LLM provider/model.
+# Current values: gpt-4o-mini pricing ($0.150/1M input, $0.600/1M output)
 LLM_AGENT_MAX_COST_USD = float(os.getenv("LLM_AGENT_MAX_COST_USD", "0.25"))
 LLM_AGENT_COST_PER_1K_INPUT = 0.000150     # gpt-4o-mini input cost
 LLM_AGENT_COST_PER_1K_OUTPUT = 0.000600    # gpt-4o-mini output cost

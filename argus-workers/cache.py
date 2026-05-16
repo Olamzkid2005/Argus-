@@ -244,7 +244,7 @@ def cached(key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | N
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Generate cache key
-            key = f"cache:{key_prefix}:{':'.join(map(str, args))}"
+            key = f"{key_prefix}:{':'.join(map(str, args))}"
 
             # Try cache first
             cached_value = cache.get(key)
@@ -260,7 +260,7 @@ def cached(key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | N
             return result
 
         # Attach invalidation helper
-        wrapper.cache_invalidate = lambda: cache.clear_pattern(f"cache:{key_prefix}:*")
+        wrapper.cache_invalidate = lambda: cache.clear_pattern(f"{key_prefix}:*")
 
         return wrapper
     return decorator
