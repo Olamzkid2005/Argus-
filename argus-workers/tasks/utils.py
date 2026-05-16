@@ -95,8 +95,11 @@ def save_recon_context(engagement_id: str, ctx, redis_url: str = None):
     """
     import redis as redis_module
     r = redis_module.from_url(redis_url or os.getenv("REDIS_URL", "redis://localhost:6379"))
-    key = RECON_CONTEXT_KEY.format(engagement_id=engagement_id)
-    r.setex(key, RECON_CONTEXT_TTL, json.dumps(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx.__dict__))
+    try:
+        key = RECON_CONTEXT_KEY.format(engagement_id=engagement_id)
+        r.setex(key, RECON_CONTEXT_TTL, json.dumps(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx.__dict__))
+    finally:
+        r.close()
 
 
 def load_recon_context(engagement_id: str, redis_url: str = None) -> object | None:
@@ -115,12 +118,15 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
     from models.recon_context import ReconContext
 
     r = redis_module.from_url(redis_url or os.getenv("REDIS_URL", "redis://localhost:6379"))
-    key = RECON_CONTEXT_KEY.format(engagement_id=engagement_id)
-    raw = r.get(key)
-    if not raw:
-        return None
-    data = json.loads(raw)
-    return ReconContext.from_dict(data)
+    try:
+        key = RECON_CONTEXT_KEY.format(engagement_id=engagement_id)
+        raw = r.get(key)
+        if not raw:
+            return None
+        data = json.loads(raw)
+        return ReconContext.from_dict(data)
+    finally:
+        r.close()
 
 
 def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:

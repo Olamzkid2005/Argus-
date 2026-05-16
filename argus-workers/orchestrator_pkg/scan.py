@@ -110,12 +110,17 @@ def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
 def _is_reachable(target: str) -> bool:
     hostname = target.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
     try:
-        ipaddress.ip_address(hostname)
+        ip = ipaddress.ip_address(hostname)
+        # Block private / link-local / loopback IPs to prevent internal network scanning
+        if ip.is_private or ip.is_loopback or ip.is_link_local:
+            logger.warning(f'Target {target} resolves to private IP {ip} — skipping')
+            return False
         return True
     except ValueError:
         pass
     if hostname in ('localhost', '127.0.0.1', '::1'):
-        return True
+        logger.warning(f'Target {target} resolves to loopback — skipping')
+        return False
     try:
         socket.setdefaulttimeout(5)
         socket.getaddrinfo(hostname, None)

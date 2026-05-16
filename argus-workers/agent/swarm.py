@@ -484,43 +484,36 @@ class SwarmOrchestrator:
                 future = pool.submit(agent.run)
                 futures_map[future] = agent.DOMAIN
 
-            try:
-                for future in as_completed(futures_map, timeout=timeout):
-                    domain = futures_map[future]
-                    try:
-                        findings = future.result(timeout=30)
-                        logger.info(
-                            "Specialist %s returned %d findings",
-                            domain,
-                            len(findings),
-                        )
-                        emit_swarm_agent_complete(
-                            active[0].engagement_id,
-                            domain,
-                            findings_count=len(findings),
-                        )
-                        all_findings.extend(findings)
-                        completed.add(domain)
-                    except Exception as e:
-                        logger.error(
-                            "Specialist %s failed: %s", domain, e
-                        )
-                        emit_swarm_agent_complete(
-                            active[0].engagement_id,
-                            domain,
-                            findings_count=0,
-                        )
-            except concurrent.futures.TimeoutError:
-                logger.warning(
-                    "Swarm timed out after %ds — %d/%d agents completed: %s",
-                    timeout, len(completed), len(active),
-                    list(completed),
+            # Wait with a hard wall-clock timeout — agents that exceed it
+            # are cancelled (note: cancel() only stops futures that haven't
+            # started; running threads continue but their results are ignored).
+            done, not_done = concurrent.futures.wait(
+                futures_map, timeout=timeout,
+                return_when=concurrent.futures.FIRST_EXCEPTION,
+            )
+            for future in not_done:
+                domain = futures_map.get(future, "?")
+                future.cancel()
+                logger.warning("Swarm: agent %s timed out after %ds — cancelled", domain, timeout)
+                emit_swarm_agent_complete(
+                    active[0].engagement_id, domain, findings_count=0,
                 )
-                # Cancel any still-running futures
-                for future, domain in list(futures_map.items()):
-                    if domain not in completed:
-                        future.cancel()
-                        logger.warning("Swarm: cancelled hanging agent %s", domain)
+
+            for future in done:
+                domain = futures_map.get(future, "?")
+                try:
+                    findings = future.result(timeout=30)
+                    logger.info("Specialist %s returned %d findings", domain, len(findings))
+                    emit_swarm_agent_complete(
+                        active[0].engagement_id, domain, findings_count=len(findings),
+                    )
+                    all_findings.extend(findings)
+                    completed.add(domain)
+                except Exception as e:
+                    logger.error("Specialist %s failed: %s", domain, e)
+                    emit_swarm_agent_complete(
+                        active[0].engagement_id, domain, findings_count=0,
+                    )
 
         deduped = self._deduplicate(all_findings)
         dedup_removed = len(all_findings) - len(deduped)

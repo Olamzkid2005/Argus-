@@ -139,6 +139,13 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         from tasks.utils import fetch_engagement_scan_options
 
         opts = fetch_engagement_scan_options(engagement_id)
+        # Transition first so if it fails, no orphaned downstream task
+        try:
+            ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
+        except Exception as e:
+            logger.error("Failed to transition to scanning for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.transition("failed", f"State transition failed: {e}")
+            return result
         try:
             scan_task = app.send_task(
                 'tasks.scan.run_scan',
@@ -154,7 +161,6 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                 ],
             )
             slog.dispatch("scan", task_id=scan_task.id)
-            ctx.state.transition("scanning", "Expanded recon complete — auto-advancing to scan")
             logger.info("Dispatched scan after expand for engagement=%s (task=%s)", engagement_id, scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan after expand for engagement=%s: %s", engagement_id, e, exc_info=True)

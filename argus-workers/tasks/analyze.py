@@ -80,5 +80,6 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                               args=[engagement_id, ctx.trace_id, budget])
             except Exception as e:
                 logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                ctx.state.transition("failed", f"Failed to enqueue report: {e}")
 
         return result

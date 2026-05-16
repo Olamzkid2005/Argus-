@@ -262,9 +262,9 @@ class Orchestrator:
         from database.services.embedding_service import EmbeddingService
         emb_svc = EmbeddingService(self.engagement_id)
 
-        try:
-            for finding in findings:
-                if not finding.get("cvss_score"):
+        for finding in findings:
+            try:
+                if finding.get("cvss_score") is None:
                     try:
                         from cvss_calculator import estimate_cvss
                         finding["cvss_score"] = estimate_cvss(
@@ -286,6 +286,7 @@ class Orchestrator:
 
                 SECRET_TOOLS = {"gitleaks", "trufflehog", "secret-scan"}
                 st = finding.get("tool") or finding.get("source_tool") or "unknown"
+                saved_id = None
                 if st in SECRET_TOOLS or finding.get("type", "").startswith("COMMITTED_SECRET"):
                     saved_id = self.finding_repo.upsert_secret_finding(
                         engagement_id=self.engagement_id,
@@ -305,8 +306,8 @@ class Orchestrator:
                     # the __REDACTED__ placeholder would cause false matches
                     if payload and '__REDACTED__' not in str(payload):
                         ftype = finding.get("type") or ""
-                    fep = finding.get("endpoint") or ""
-                    dedup_text = f"{ftype} {fep} {payload}"
+                        fep = finding.get("endpoint") or ""
+                        dedup_text = f"{ftype} {fep} {payload}"
                         similar = emb_svc.find_existing_similar(dedup_text)
                     else:
                         similar = None
@@ -370,8 +371,10 @@ class Orchestrator:
                         })
                     except Exception as hook_err:
                         logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
-        except Exception as e:
-            logger.error(f"Failed to save findings: {e}")
+            except Exception as finding_err:
+                logger.warning("Failed to save finding (type=%s, endpoint=%s): %s",
+                               finding.get("type", "?"), finding.get("endpoint", "?"), finding_err)
+                continue
 
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column.
@@ -469,7 +472,8 @@ class Orchestrator:
                     logger.warning(f"Connection release failed after saving remediation fix for finding {finding_id}: {close_err}")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
-                            authorized_scope=None, auth_config=None, bug_bounty_mode=False):
+                            authorized_scope=None, auth_config=None, bug_bounty_mode=False,
+                            budget=None):
         from agent import AgentResult, create_phase_agent
         from database.repositories.agent_decision_repository import (
             AgentDecisionRepository,
@@ -479,6 +483,7 @@ class Orchestrator:
         db_conn = os.getenv("DATABASE_URL")
         decision_repo = AgentDecisionRepository(db_conn) if db_conn else None
         all_findings = []
+        budget = budget or {}
 
         for target in targets:
             try:
@@ -523,7 +528,7 @@ class Orchestrator:
                                 all_findings.append(norm)
             except (TimeoutError, ConnectionError, OSError) as e:
                 logger.warning(f"Agent scan aborted for {target}: {e}. Falling back.")
-                fallback = execute_scan_pipeline(self, [target], {}, aggressiveness, auth_config,
+                fallback = execute_scan_pipeline(self, [target], budget, aggressiveness, auth_config,
                                                   recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
             except Exception:
@@ -640,7 +645,7 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("AGENT SCAN", targets=f"{len(targets)} target(s)")
         emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
-        findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config, bug_bounty_mode=bug_bounty_mode)
+        findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config, bug_bounty_mode=bug_bounty_mode, budget=budget)
         agent_tried = getattr(self, "_last_agent_tried_tools", set())
         logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
         tech_stack = recon_context.tech_stack if recon_context else None

@@ -148,14 +148,14 @@ class ScanDiffEngine:
 
     def diff(
         self,
-        prev_id: str,
+        prev_id: str | None,
         curr_id: str,
         profile: dict | None = None,
     ) -> dict:
         """Compare findings between two engagements.
 
         Args:
-            prev_id: Previous engagement ID (must exist)
+            prev_id: Previous engagement ID. None means first scan (no previous).
             curr_id: Current engagement ID (must exist)
             profile: Optional target profile for fixed/regressed detection
 
@@ -163,6 +163,14 @@ class ScanDiffEngine:
             Diff dict with categories: new, fixed, regressed, persistent,
             severity_changed, and summary stats.
         """
+        if prev_id is None:
+            return {
+                "new": [], "fixed": [], "regressed": [],
+                "persistent": [], "severity_changed": [],
+                "summary": {"new_count": 0, "fixed_count": 0, "regressed_count": 0,
+                            "persistent_count": 0, "severity_changed_count": 0,
+                            "action_required": False, "total_current": 0, "total_previous": 0},
+            }
         prev = self._load_findings(prev_id)
         curr = self._load_findings(curr_id)
         fixed_fps = self._load_fixed_fingerprints(profile)

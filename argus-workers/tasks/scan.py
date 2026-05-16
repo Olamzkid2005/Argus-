@@ -64,7 +64,14 @@ def run_scan(
             ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
 
-        # Dispatch downstream task BEFORE transitioning state to avoid stuck engagements
+        # Transition state BEFORE dispatching downstream to prevent orphaned tasks.
+        # If transition fails, no task is dispatched and engagement correctly stays failed.
+        try:
+            ctx.state.transition("analyzing", "Scan complete")
+        except Exception as e:
+            logger.error("Failed to transition to analyzing for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.transition("failed", f"State transition failed: {e}")
+            return result
         try:
             analyze_task = app.send_task(
                 "tasks.analyze.run_analysis",
@@ -72,7 +79,6 @@ def run_scan(
             )
             result["analysis_task_id"] = analyze_task.id
             slog.dispatch("analyze", task_id=analyze_task.id)
-            ctx.state.transition("analyzing", "Scan complete")
         except Exception as e:
             logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.transition("failed", f"Failed to dispatch analysis: {e}")
