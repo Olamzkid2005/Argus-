@@ -35,8 +35,8 @@ class ScopeValidator:
         """
         self.engagement_id = engagement_id
         self._scope = self._parse_scope(authorized_scope)
-        slog = ScanLogger("scope_validator", engagement_id=engagement_id)
         if self._scope["domains"] or self._scope["ipRanges"]:
+            slog = ScanLogger("scope_validator", engagement_id=engagement_id)
             slog.info(f"Scope loaded: {len(self._scope['domains'])} domains, {len(self._scope['ipRanges'])} IP ranges")
 
     def _parse_scope(self, scope) -> dict:
@@ -95,21 +95,40 @@ class ScopeValidator:
 
     def _extract_hostname(self, target: str) -> str:
         """Extract hostname from URL or raw hostname."""
+        import ipaddress
+
         target = target.strip().lower()
 
         if target.startswith(("http://", "https://")):
             return urlparse(target).hostname or target
 
+        # Check if it's a valid IPv6 address (contains multiple colons)
+        if target.count(":") > 1:
+            try:
+                ipaddress.IPv6Address(target)
+                return target
+            except ipaddress.AddressValueError:
+                pass
+
         return target.split("/")[0].split(":")[0]
 
     def _matches_domain(self, hostname: str) -> bool:
-        """Check if hostname matches any authorized domain (with wildcard support)."""
+        """Check if hostname matches any authorized domain (with wildcard support).
+
+        Wildcard domains (*.example.com) must match exactly one subdomain level.
+        'sub.example.com' matches, but 'xsub.example.com' does NOT.
+        """
+        hostname = hostname.lower()
         for domain in self._scope.get("domains", []):
-            if fnmatch.fnmatch(hostname, domain):
-                return True
+            domain = domain.lower()
             if hostname == domain:
                 return True
-            if hostname.endswith("." + domain.lstrip("*.")):
+            if domain.startswith("*."):
+                # Wildcard: match exactly one DNS label
+                suffix = domain[1:]  # ".example.com"
+                if hostname.endswith(suffix) and hostname.count(".") == domain.count("."):
+                    return True
+            elif fnmatch.fnmatch(hostname, domain):
                 return True
         return False
 

@@ -487,9 +487,10 @@ class SwarmOrchestrator:
             # Wait with a hard wall-clock timeout — agents that exceed it
             # are cancelled (note: cancel() only stops futures that haven't
             # started; running threads continue but their results are ignored).
+            # ALL_COMPLETE ensures one agent's failure doesn't cancel others.
             done, not_done = concurrent.futures.wait(
                 futures_map, timeout=timeout,
-                return_when=concurrent.futures.FIRST_EXCEPTION,
+                return_when=concurrent.futures.ALL_COMPLETE,
             )
             for future in not_done:
                 domain = futures_map.get(future, "?")

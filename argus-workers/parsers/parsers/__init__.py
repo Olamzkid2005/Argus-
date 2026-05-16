@@ -55,6 +55,6 @@ for module_info in pkgutil.iter_modules([str(_this_dir)]):
                 # Make it available at package level
                 globals()[attr_name] = attr
     except Exception as e:
-        logger.warning(f"Failed to load parser module '{module_name}': {e}")
+        logger.error(f"Failed to load parser module '{module_name}': {e}")
 
 __all__ = ["BaseParser", "ParserError"] + list(_parser_registry.keys())
