@@ -321,11 +321,36 @@ class EngagementStateMachine:
         if not states:
             return self.current_state
 
+        if self.current_state in ("complete", "failed"):
+            logger.warning(
+                "chain_transition called on engagement %s in terminal state %s — skipping",
+                self.engagement_id, self.current_state,
+            )
+            return self.current_state
+
         conn = self._get_connection()
         cursor = None
         try:
             cursor = conn.cursor()
-            current = self.current_state
+
+            # Lock the engagement row to prevent concurrent state transitions
+            cursor.execute(
+                "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
+                (self.engagement_id,)
+            )
+            locked_row = cursor.fetchone()
+            if not locked_row:
+                raise ValueError(f"Engagement {self.engagement_id} not found")
+
+            db_current = locked_row[0]
+            if db_current in ("complete", "failed"):
+                logger.warning(
+                    "chain_transition: engagement %s already in terminal state %s — skipping",
+                    self.engagement_id, db_current,
+                )
+                return db_current
+
+            current = db_current
             for new_state, reason in states:
                 if new_state not in self.STATES:
                     raise ValueError(f"Invalid state: {new_state}")
@@ -344,12 +369,18 @@ class EngagementStateMachine:
                 )
                 current = new_state
 
-            # Update the engagement's current status
+            # Update the engagement's current status with WHERE guard
             final_state = states[-1][0]
             cursor.execute(
-                "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s",
-                (final_state, self.engagement_id)
+                "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s AND status = %s",
+                (final_state, self.engagement_id, db_current)
             )
+
+            if cursor.rowcount == 0:
+                conn.rollback()
+                raise InvalidStateTransition(
+                    f"Concurrent state change detected for engagement {self.engagement_id}"
+                )
 
             # If looping through analyze→recon in the chain, increment budget
             for from_s, to_s in states:
