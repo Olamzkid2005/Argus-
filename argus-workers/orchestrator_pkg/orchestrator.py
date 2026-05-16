@@ -563,6 +563,7 @@ class Orchestrator:
         _llm_ok = self.llm_client is not None and self.llm_client.is_available()
         _recon_ok = recon_context is not None
         self._bug_bounty_mode = bool(bug_bounty_mode)
+        self._agent_mode_enabled = bool(agent_mode_enabled)
         if scan_mode == "swarm" and _recon_ok and _llm_ok:
             scan_execution_path = "swarm"
             findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
@@ -674,7 +675,7 @@ class Orchestrator:
         mode = "deterministic"
         if not recon_context:
             mode += " (no recon context)"
-        elif not getattr(self, "agent_mode_enabled", True):
+        elif not getattr(self, "_agent_mode_enabled", True):
             mode += " (agent mode disabled)"
         else:
             mode += " (LLM unavailable)"
