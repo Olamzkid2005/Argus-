@@ -29,12 +29,14 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         if actions:
             slog.info(f"{len(actions)} action(s) generated — processing")
             _dispatched = 0
+            _attempted = 0
             # Route each action type to the correct downstream task
             for action in actions:
                 action_type = action.get("type", "") if isinstance(action, dict) else ""
                 if action_type == "deep_scan":
                     targets = action.get("targets", []) if isinstance(action, dict) else []
                     if targets:
+                        _attempted += 1
                         try:
                             deep_task = app.send_task('tasks.scan.deep_scan',
                                           args=[engagement_id, targets, budget, ctx.trace_id])
@@ -47,6 +49,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                 elif action_type == "auth_focused_scan":
                     endpoints = action.get("endpoints", []) if isinstance(action, dict) else []
                     if endpoints:
+                        _attempted += 1
                         try:
                             auth_task = app.send_task('tasks.scan.auth_focused_scan',
                                           args=[engagement_id, endpoints, budget, ctx.trace_id])
@@ -62,6 +65,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                     if isinstance(action, dict):
                         target = action.get("target") or action.get("arguments", {}).get("target")
                     if target and isinstance(target, str):
+                        _attempted += 1
                         try:
                             expand_task = app.send_task('tasks.recon.expand_recon',
                                           args=[engagement_id, [target], budget, ctx.trace_id])
@@ -75,14 +79,18 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                         logger.warning("Action %s has no valid targets for engagement=%s", action_type, engagement_id)
 
             if _dispatched == 0:
-                logger.info("All %d action(s) had empty/invalid targets for engagement=%s — advancing to reporting", len(actions), engagement_id)
-                ctx.state.transition("reporting", "No actionable targets — advancing to report")
-                try:
-                    app.send_task('tasks.report.generate_report',
-                                  args=[engagement_id, ctx.trace_id, budget])
-                except Exception as e:
-                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                    ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
+                if _attempted > 0:
+                    logger.error("All %d attempted action(s) failed to dispatch for engagement=%s — transitioning to failed", _attempted, engagement_id)
+                    ctx.state.safe_transition("failed", f"All {_attempted} action dispatch(es) failed")
+                else:
+                    logger.info("All %d action(s) had empty/invalid targets for engagement=%s — advancing to reporting", len(actions), engagement_id)
+                    ctx.state.transition("reporting", "No actionable targets — advancing to report")
+                    try:
+                        app.send_task('tasks.report.generate_report',
+                                      args=[engagement_id, ctx.trace_id, budget])
+                    except Exception as e:
+                        logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                        ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
             else:
                 # Transition to "recon" (not "scanning") so the loop budget
                 # counter increments in state_machine.py (analyzing→recon).
