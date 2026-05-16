@@ -55,8 +55,8 @@ def build_task_args(
             kwargs.get("aggressiveness"),
             kwargs.get("bug_bounty_mode"),
         ],
-        # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None)
-        "scan": [engagement_id, [target], budget, trace_id, agent_mode, kwargs.get("scan_mode"), kwargs.get("aggressiveness")],
+        # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None)
+        "scan": [engagement_id, [target], budget, trace_id, agent_mode, kwargs.get("scan_mode"), kwargs.get("aggressiveness"), kwargs.get("bug_bounty_mode")],
         # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None)
         "analyze": [engagement_id, budget, trace_id],
         # tasks.report.generate_report(self, engagement_id, trace_id=None, budget=None)
@@ -65,8 +65,8 @@ def build_task_args(
         "repo_scan": [engagement_id, repo_url, budget, trace_id],
         "compliance_report": [engagement_id, kwargs.get("standard")],
         "full_report": [engagement_id, kwargs.get("report_id", "")],
-        # tasks.asset_discovery.run_asset_discovery(self, engagement_id, target, trace_id=None, ...)
-        "asset_discovery": [engagement_id, target, trace_id],
+        # tasks.asset_discovery.run_asset_discovery(self, engagement_id, target, trace_id=None, org_id=None)
+        "asset_discovery": [engagement_id, target, trace_id, kwargs.get("org_id")],
         "asset_risk_scoring": [engagement_id],
         "bugbounty_report": [
             engagement_id,

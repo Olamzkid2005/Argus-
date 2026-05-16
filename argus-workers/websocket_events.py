@@ -75,6 +75,15 @@ class WebSocketEventPublisher:
             self._redis = redis.from_url(self.redis_url)
         return self._redis
 
+    def close(self):
+        """Close the Redis connection explicitly."""
+        if self._redis is not None:
+            try:
+                self._redis.close()
+            except Exception:
+                pass
+            self._redis = None
+
     def _get_channel(self, engagement_id: str) -> str:
         """Get Redis channel name for an engagement"""
         return f"ws:engagement:{engagement_id}"

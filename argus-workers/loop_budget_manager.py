@@ -44,8 +44,8 @@ class LoopBudgetManager:
             if self.current_cycles >= self.max_cycles:
                 return False, "cycles_exceeded"
 
-        # Check depth for deep_scan actions
-        if action_type == "deep_scan" and self.current_depth >= self.max_depth:
+        # Check depth for deep_scan and auth_focused_scan actions
+        if action_type in ("deep_scan", "auth_focused_scan") and self.current_depth >= self.max_depth:
             return False, "depth_exceeded"
 
         return True, "within_budget"
@@ -62,7 +62,7 @@ class LoopBudgetManager:
         # Increment appropriate counter
         if action_type == "recon_expand":
             self.current_cycles += 1
-        elif action_type == "deep_scan":
+        elif action_type in ("deep_scan", "auth_focused_scan"):
             self.current_depth += 1
 
     def get_status(self) -> dict:

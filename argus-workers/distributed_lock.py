@@ -1,10 +1,18 @@
 """
 Distributed Lock - Prevents multiple workers from processing same engagement
 """
+import logging
 import time
 import uuid
 
 import redis
+
+logger = logging.getLogger(__name__)
+
+
+class LockAcquisitionError(Exception):
+    """Raised when a distributed lock cannot be acquired (transient, retryable)."""
+    pass
 
 
 class DistributedLock:
@@ -116,6 +124,12 @@ class DistributedLock:
         if engagement_id in self.held_locks:
             del self.held_locks[engagement_id]
 
+        if result != 1:
+            logger.warning(
+                "Failed to release lock for engagement %s — lock may have expired or is held by another worker",
+                engagement_id,
+            )
+
         return result == 1
 
     def extend(self, engagement_id: str) -> bool:
@@ -216,9 +230,15 @@ class DistributedLock:
                 )
                 if consecutive_failures >= 3:
                     logger.error(
-                        "Lost lock for engagement %s after %d failed extend attempts",
+                        "Lost lock for engagement %s after %d failed extend attempts — force-deleting stale key",
                         engagement_id, consecutive_failures,
                     )
+                    force_key = f"engagement_lock:{engagement_id}"
+                    try:
+                        self.redis_client.delete(force_key)
+                        logger.info("Force-deleted stale lock key for engagement %s", engagement_id)
+                    except Exception as del_err:
+                        logger.error("Failed to force-delete stale lock key for %s: %s", engagement_id, del_err)
                     break
                 # Retry more frequently after failure
                 interval = max(5, interval // 2)
@@ -250,7 +270,7 @@ class LockContext:
 
         if not self.acquired:
             holder = self.lock.get_lock_holder(self.engagement_id)
-            raise Exception(
+            raise LockAcquisitionError(
                 f"Failed to acquire lock for engagement {self.engagement_id}. "
                 f"Held by worker: {holder}"
             )

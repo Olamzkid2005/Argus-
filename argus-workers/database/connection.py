@@ -14,8 +14,6 @@ from typing import Any, Optional
 
 import psycopg2
 from psycopg2 import pool
-from psycopg2.extensions import cursor as psycopg2_cursor
-
 logger = logging.getLogger(__name__)
 
 
@@ -246,19 +244,6 @@ class ConnectionManager:
                 self._pool.closeall()
                 self._pool = None
                 logger.info("Database pool closed")
-
-
-class SlowQueryCursor(psycopg2_cursor):
-    """Cursor that logs slow queries"""
-
-    def execute(self, query, vars=None):
-        start = time.time()
-        try:
-            return super().execute(query, vars)
-        finally:
-            elapsed_ms = (time.time() - start) * 1000
-            if elapsed_ms > 500:
-                logger.warning(f"Slow query ({elapsed_ms:.1f}ms): {query[:200]}")
 
 
 # Singleton instance

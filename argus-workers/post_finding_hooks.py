@@ -68,12 +68,14 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict
     - Global webhooks (engagement_id IS NULL) within the same org
     - Have events array that includes 'finding_discovered' or is empty (all events)
     """
-    from database.connection import connect
+    from database.connection import connect, get_db
 
-    conn = connect(db_conn_string)
-    cursor = conn.cursor()
-
+    conn = None
+    cursor = None
     try:
+        # Use connection pool to avoid max_connection exhaustion
+        conn = get_db().get_connection()
+        cursor = conn.cursor()
         cursor.execute(
             """
             SELECT w.id, w.webhook_url
@@ -97,8 +99,10 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict
         logger.warning(f"Failed to query webhooks: {e}")
         return []
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            get_db().release_connection(conn)
 
 
 def _dispatch(url: str, payload: dict, webhook_id: str, db_conn_string: str) -> None:
@@ -125,9 +129,9 @@ def _dispatch(url: str, payload: dict, webhook_id: str, db_conn_string: str) -> 
 def _mark_triggered(webhook_id: str, db_conn_string: str, success: bool = True) -> None:
     """Update last_triggered timestamp on the webhook record."""
     try:
-        from database.connection import connect
+        from database.connection import get_db
 
-        conn = connect(db_conn_string)
+        conn = get_db().get_connection()
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE webhooks SET last_triggered = NOW() WHERE id = %s",
@@ -135,6 +139,6 @@ def _mark_triggered(webhook_id: str, db_conn_string: str, success: bool = True) 
         )
         conn.commit()
         cursor.close()
-        conn.close()
+        get_db().release_connection(conn)
     except Exception as e:
         logger.warning("Failed to update webhook last_triggered: %s", e)

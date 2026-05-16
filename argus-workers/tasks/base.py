@@ -79,7 +79,7 @@ def task_context(
             result = ctx.orchestrator.run_recon(ctx.job)
             ctx.state.transition("scanning", "...")
     """
-    from distributed_lock import DistributedLock, LockContext
+    from distributed_lock import DistributedLock, LockAcquisitionError, LockContext
     from orchestrator import Orchestrator
     from state_machine import EngagementStateMachine
     from tracing import TracingManager
@@ -151,6 +151,11 @@ def task_context(
                         task._failed_transition_done = True
                 except Exception as st_error:
                     logger.error("Failed to transition on soft time limit: %s", st_error)
+            raise
+        except LockAcquisitionError:
+            # Lock contention is transient — don't mark engagement as failed.
+            # Let Celery retry the task instead.
+            slog.warning("Lock acquisition failed for %s — will retry", engagement_id)
             raise
         except Exception as e:
             slog.error(f"Task failed: {e}")

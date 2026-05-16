@@ -28,7 +28,7 @@ load_dotenv()
 
 # Ensure DATABASE_URL is available for tasks
 if not os.getenv("DATABASE_URL"):
-    # Try to read from the platform .env.local
+    # Try to read from the platform .env.local (development fallback only)
     platform_env = os.path.join(
         os.path.dirname(PROJECT_ROOT), "argus-platform", ".env.local"
     )
@@ -41,6 +41,8 @@ if not os.getenv("DATABASE_URL"):
                     if key == "DATABASE_URL":
                         os.environ[key] = value.strip()
                         break
+    else:
+        logger.debug("Fallback .env.local not found at %s — DATABASE_URL must be set via environment", platform_env)
 
 logging.basicConfig(
     level=logging.INFO,
