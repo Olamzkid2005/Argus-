@@ -23,7 +23,7 @@ if PROJECT_ROOT not in sys.path:
 
 # Ensure tool binaries are in PATH for worker subprocesses
 _venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin")
-_go_bin = os.path.expanduser("~/go/bin")
+_go_bin = os.environ.get("GO_BIN_PATH", os.path.expanduser("~/go/bin"))
 _current_path = os.environ.get("PATH", "")
 for _bin_dir in [_venv_bin, _go_bin]:
     if _bin_dir not in _current_path and os.path.isdir(_bin_dir):
@@ -62,7 +62,7 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", f"{REDIS_URL}/1")
 
 # Ensure required environment variables are set
 if not os.getenv("DATABASE_URL"):
-    # Try to read from platform .env.local
+    # Try to read from platform .env.local (development fallback only)
     platform_root = os.path.dirname(os.path.abspath(__file__))
     platform_env = os.path.join(
         os.path.dirname(platform_root), "argus-platform", ".env.local"
@@ -79,6 +79,8 @@ if not os.getenv("DATABASE_URL"):
                             break
         except OSError as e:
             logger.warning("Failed to read DATABASE_URL from %s: %s", platform_env, e)
+    else:
+        logger.warning("DATABASE_URL not set and fallback .env.local not found at %s", platform_env)
 
 # Create Celery application
 app = Celery(

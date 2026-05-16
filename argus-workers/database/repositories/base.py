@@ -155,14 +155,17 @@ class BaseRepository:
         Args:
             connection: Optional external connection (or connection string) for transaction support.
                        If not provided, uses the shared connection pool.
+                       NOTE: If a string URL is passed, a new connection is created every time
+                       _get_connection() is called and should be managed externally.
         """
         self._external_conn = connection
 
     def _get_connection(self, org_id: str | None = None):
         """Get a database connection (external or from pool)"""
         if self._external_conn:
-            # If it's a string, create a connection from it
             if isinstance(self._external_conn, str):
+                # String connection — create a fresh connection each time.
+                # These are NOT returned to the pool; the caller must close them.
                 return psycopg2.connect(self._external_conn)
             # Otherwise assume it's a connection object
             return self._external_conn
@@ -304,7 +307,11 @@ class BaseRepository:
             if unauthorized:
                 raise
 
-        set_clauses = [f"{key} = %s" for key in updates]
+        # Don't force updated_at if caller provides it
+        if "updated_at" not in updates:
+            set_clauses = [f"{key} = %s" for key in updates] + ["updated_at = NOW()"]
+        else:
+            set_clauses = [f"{key} = %s" for key in updates]
         values = list(updates.values()) + [id]
 
         conn = self._get_connection()
@@ -313,7 +320,7 @@ class BaseRepository:
         try:
             query = f"""
                 UPDATE {self.table_name}
-                SET {", ".join(set_clauses)}, updated_at = NOW()
+                SET {", ".join(set_clauses)}
                 WHERE {self.id_column} = %s
                 RETURNING *
             """
@@ -322,6 +329,10 @@ class BaseRepository:
             if not self._external_conn:
                 conn.commit()
             return dict(row) if row else None
+        except Exception:
+            if not self._external_conn and conn:
+                conn.rollback()
+            raise
         finally:
             cursor.close()
             if not self._external_conn:

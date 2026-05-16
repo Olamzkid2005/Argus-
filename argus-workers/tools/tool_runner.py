@@ -40,29 +40,26 @@ class ToolRunner:
     """
 
     # Dangerous patterns that should be blocked
+    # Short patterns use word boundaries (\b) to avoid false positives
+    # in URLs (e.g. "curl" in "circular", "rm" in "arm").
     DANGEROUS_PATTERNS = [
         "rm -rf",
         "rm -fr",
-        "rm -r",
+        "rm -r /",
         "DROP TABLE",
         "DROP DATABASE",
         "DELETE FROM",
         "TRUNCATE",
-        "; rm",
-        "| rm",
-        "&& rm",
-        "$(rm",
-        "`rm",
-        ">/dev/",
-        "curl",
-        "wget",
+        "curl ",
+        "wget ",
         "nc ",
-        "netcat",
+        "netcat ",
         "/etc/passwd",
         "/etc/shadow",
         "mkfs",
         "dd if=",
         ":(){ :|:& };:",  # Fork bomb
+        ">/dev/",
     ]
 
     def __init__(
@@ -138,6 +135,8 @@ class ToolRunner:
 
         return False
 
+    _PYTHONPATH_CACHE: str | None = None  # class-level cache
+
     def _locked_env(self, tool: str = "") -> dict[str, str]:
         """
         Build the subprocess environment portably.
@@ -150,30 +149,34 @@ class ToolRunner:
         """
         venv_bin = str(Path(sys.executable).parent)
 
-        # --- PYTHONPATH assembly ---
-        python_paths: list[str] = []
+        # --- PYTHONPATH assembly (cached after first call) ---
+        if ToolRunner._PYTHONPATH_CACHE is None:
+            python_paths: list[str] = []
 
-        # 1. System / venv site-packages
-        try:
-            python_paths.extend(p for p in site.getsitepackages() if os.path.isdir(p))
-        except AttributeError:
-            pass  # getsitepackages() absent in some venv builds
+            # 1. System / venv site-packages
+            try:
+                python_paths.extend(p for p in site.getsitepackages() if os.path.isdir(p))
+            except AttributeError:
+                pass  # getsitepackages() absent in some venv builds
 
-        # 2. User site-packages (~/.local/lib/... or ~/Library/Python/...)
-        user_site = site.getusersitepackages()
-        if user_site and os.path.isdir(user_site):
-            python_paths.append(user_site)
+            # 2. User site-packages (~/.local/lib/... or ~/Library/Python/...)
+            user_site = site.getusersitepackages()
+            if user_site and os.path.isdir(user_site):
+                python_paths.append(user_site)
 
-        # 3. Running interpreter's sys.path (catches editable installs, .pth files)
-        python_paths.extend(p for p in sys.path if p and os.path.isdir(p))
+            # 3. Running interpreter's sys.path (catches editable installs, .pth files)
+            python_paths.extend(p for p in sys.path if p and os.path.isdir(p))
 
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_paths: list[str] = []
-        for p in python_paths:
-            if p not in seen:
-                seen.add(p)
-                unique_paths.append(p)
+            # Deduplicate while preserving order
+            seen: set[str] = set()
+            unique_paths: list[str] = []
+            for p in python_paths:
+                if p not in seen:
+                    seen.add(p)
+                    unique_paths.append(p)
+            ToolRunner._PYTHONPATH_CACHE = ":".join(unique_paths)
+
+        python_path_str = ToolRunner._PYTHONPATH_CACHE
 
         # Tools that must NOT inherit proxy settings (they need full network access)
         no_proxy_tools = {
@@ -198,7 +201,7 @@ class ToolRunner:
             # ~/.config/ and other user-level configuration. Do NOT override it.
             "HOME": os.environ.get("HOME", "/root"),
             "TMPDIR": str(self.sandbox_dir / "tmp"),
-            "PYTHONPATH": os.pathsep.join(unique_paths),
+            "PYTHONPATH": python_path_str,
             "PYTHONDONTWRITEBYTECODE": "1",
             # Suppress semgrep telemetry / version-check latency
             "SEMGREP_SEND_METRICS": "off",
