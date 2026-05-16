@@ -58,23 +58,8 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         ctx.state.transition("recon", "Starting reconnaissance")
         result = ctx.orchestrator.run_recon(ctx.job)
 
-        # Save recon context so scan can load it (Bug 1: was never saved)
-        if result.get("recon_context"):
-            try:
-                from tasks.utils import save_recon_context
-                ctx_data = result["recon_context"]
-                if isinstance(ctx_data, dict):
-                    from models.recon_context import ReconContext
-                    ctx_data = ReconContext.from_dict(ctx_data)
-                save_recon_context(engagement_id, ctx_data)
-                slog.info("Saved recon context for scan phase")
-            except Exception as e:
-                logger.error("Failed to save recon context for %s — aborting: %s", engagement_id, e)
-                ctx.state.safe_transition("failed", f"Failed to persist recon context: {e}")
-                return {"phase": "recon", "status": "failed", "reason": "recon_context_save_failed"}
-
-        # Dispatch asset_discovery if recon_context save didn't abort us
-        # (non-critical — only a warning on failure, doesn't abort the scan)
+        # Dispatch asset_discovery (non-critical — only a warning on failure,
+        # doesn't abort the scan)
         try:
             asset_task = app.send_task(
                 'tasks.asset_discovery.run_asset_discovery',
@@ -99,6 +84,21 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
             return {"phase": "recon", "status": "failed", "reason": "scan_dispatch_failed"}
+
+        # Save recon context AFTER scan dispatch so a crash between dispatch
+        # and save does not leave the engagement stuck in "recon" — the scan
+        # task handles a missing context gracefully (falls back to deterministic).
+        if result.get("recon_context"):
+            try:
+                from tasks.utils import save_recon_context
+                ctx_data = result["recon_context"]
+                if isinstance(ctx_data, dict):
+                    from models.recon_context import ReconContext
+                    ctx_data = ReconContext.from_dict(ctx_data)
+                save_recon_context(engagement_id, ctx_data)
+                slog.info("Saved recon context for scan phase")
+            except Exception as e:
+                logger.warning("Failed to save recon context for %s — scan will fall back to deterministic: %s", engagement_id, e)
 
         # Transition state AFTER dispatch succeeds. If the process crashes
         # between dispatch and this transition, the scan task handles

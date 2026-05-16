@@ -317,7 +317,8 @@ class Orchestrator:
                         cwe_id=finding.get("cwe_id"),
                     )
                 else:
-                    payload = finding.get('evidence', {}).get('payload', '')
+                    evidence_obj = finding.get('evidence') or {}
+                    payload = evidence_obj.get('payload', '') if isinstance(evidence_obj, dict) else ''
                     ftype = finding.get("type") or ""
                     fep = finding.get("endpoint") or ""
                     if payload and '__REDACTED__' not in str(payload):
@@ -369,7 +370,9 @@ class Orchestrator:
 
                 if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint") and finding.get("severity", "").upper() not in ("INFO", "LOW", ""):
                         try:
-                            emb_text = f"{finding.get('type') or ''} {finding.get('endpoint') or ''} {finding.get('evidence', {}).get('payload', '')}"
+                            emb_evidence = finding.get('evidence') or {}
+                            emb_payload = emb_evidence.get('payload', '') if isinstance(emb_evidence, dict) else ''
+                            emb_text = f"{finding.get('type') or ''} {finding.get('endpoint') or ''} {emb_payload}"
                             embedding = emb_svc.get_embedding(emb_text)
                             if embedding and EmbeddingService.is_valid_embedding(embedding):
                                 EmbeddingService.store_embedding(saved_id, self.engagement_id, embedding, emb_text)

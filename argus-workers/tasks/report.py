@@ -36,26 +36,6 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     slog = ScanLogger("report", engagement_id=engagement_id)
     slog.phase_header("REPORT PHASE")
 
-    # Idempotency check: skip if already complete.
-    # Uses SELECT FOR UPDATE to prevent TOCTOU races between concurrent
-    # generate_report calls (e.g., manual trigger + auto trigger).
-    try:
-        conn = connect(os.getenv("DATABASE_URL"))
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
-            (engagement_id,),
-        )
-        row = cursor.fetchone()
-        if row and row[0] == "complete":
-            conn.rollback()
-            logger.info("Engagement %s already complete — skipping report generation", engagement_id)
-            return {"status": "already_complete"}
-        conn.rollback()
-    except Exception as e:
-        logger.error("Failed to check engagement state for idempotency: %s — aborting", e)
-        return {"status": "error", "reason": f"Could not verify engagement state: {e}"}
-
     job_extra = {}
     if budget:
         job_extra["budget"] = budget
@@ -64,6 +44,12 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         job_extra=job_extra,
         trace_id=trace_id, current_state="reporting"
     ) as ctx:
+        # Idempotency check INSIDE the lock — if another task already completed
+        # this engagement, skip duplicate work.
+        if ctx.state.current_state in ("complete", "failed"):
+            logger.info("Engagement %s already in terminal state '%s' — skipping report generation", engagement_id, ctx.state.current_state)
+            return {"status": "already_complete"}
+
         result = ctx.orchestrator.run_reporting(ctx.job)
         transitioned = ctx.state.safe_transition("complete", "Report generated")
         if not transitioned:

@@ -205,5 +205,5 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
             logger.error("Engagement %s not found for scan options — returning defaults", engagement_id)
             return defaults
     except Exception:
-        logger.error("fetch_engagement_scan_options failed for %s", engagement_id, exc_info=True)
-        raise
+        logger.error("fetch_engagement_scan_options failed for %s — returning defaults", engagement_id, exc_info=True)
+        return defaults

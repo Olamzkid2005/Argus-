@@ -532,43 +532,49 @@ class SwarmOrchestrator:
 
         all_findings: list[dict] = []
         completed: set[str] = set()
-        futures_map: dict[concurrent.futures.Future, str] = {}
+        per_agent_timeout = max(timeout // max(len(active), 1), 300)  # at least 5 min per agent
 
         with ThreadPoolExecutor(max_workers=len(active)) as pool:
+            futures_map: dict[concurrent.futures.Future, str] = {}
             for agent in active:
                 future = pool.submit(agent.run)
                 futures_map[future] = agent.DOMAIN
 
-            done, not_done = concurrent.futures.wait(
-                futures_map, timeout=timeout,
-                return_when=concurrent.futures.ALL_COMPLETED,
-            )
-            for future in not_done:
-                future.cancel()
-                domain = futures_map.get(future, "?")
-                logger.warning("Swarm: agent %s timed out after %ds — cancelled", domain, timeout)
-                emit_swarm_agent_complete(
-                    active[0].engagement_id, domain, findings_count=0,
-                )
+            try:
+                for future in concurrent.futures.as_completed(
+                    futures_map, timeout=timeout,
+                ):
+                    domain = futures_map.get(future, "?")
+                    try:
+                        result = future.result(timeout=per_agent_timeout)
+                        if result:
+                            logger.info("Specialist %s returned %d findings", domain, len(result))
+                            emit_swarm_agent_complete(
+                                active[0].engagement_id, domain, findings_count=len(result),
+                            )
+                            all_findings.extend(result)
+                            completed.add(domain)
+                        else:
+                            logger.info("Specialist %s returned no findings", domain)
+                            emit_swarm_agent_complete(
+                                active[0].engagement_id, domain, findings_count=0,
+                            )
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("Swarm: agent %s timed out per-task (%ds)", domain, per_agent_timeout)
+                        emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
+                    except Exception as e:
+                        logger.warning("Swarm agent %s failed: %s", domain, e)
+                        emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
+            except concurrent.futures.TimeoutError:
+                remaining = set(futures_map.values()) - completed
+                for domain in remaining:
+                    logger.warning("Swarm: agent %s timed out — global timeout reached", domain)
+                    emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
 
-            results = []
-            for future in done:
-                domain = futures_map.get(future, "?")
-                try:
-                    result = future.result(timeout=5)
-                    if result:
-                        results.append(result)
-                        logger.info("Specialist %s returned %d findings", domain, len(result))
-                        emit_swarm_agent_complete(
-                            active[0].engagement_id, domain, findings_count=len(result),
-                        )
-                        all_findings.extend(result)
-                        completed.add(domain)
-                except Exception as e:
-                    logger.warning("Swarm agent failed: %s", e)
-                    emit_swarm_agent_complete(
-                        active[0].engagement_id, domain, findings_count=0,
-                    )
+            # Cancel any remaining futures (best-effort — may not stop running threads)
+            for future, domain in futures_map.items():
+                if domain not in completed:
+                    future.cancel()
 
         deduped = self._deduplicate(all_findings)
         dedup_removed = len(all_findings) - len(deduped)

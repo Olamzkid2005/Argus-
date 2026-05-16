@@ -300,7 +300,7 @@ class IntelligenceEngine:
         groups = {}
         for finding in findings:
             endpoint = finding.get("endpoint") or ""
-            finding_type = finding.get("type", "").upper()
+            finding_type = (finding.get("type") or "").upper()
 
             # Skip empty-type findings to prevent inflated tool agreement
             if not finding_type:

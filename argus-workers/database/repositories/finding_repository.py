@@ -84,6 +84,8 @@ class FindingRepository(BaseRepository):
                 return None  # Return None to signal the finding was NOT saved
 
             source_tool = source_tool or ""
+            endpoint = endpoint or ""
+            finding_type = finding_type or ""
             # First, check if a legacy row with source_tool IS NULL exists for
             # this (engagement_id, endpoint, type) and update it in-place.
             # This handles the migration from NULL to '' source_tool values.
