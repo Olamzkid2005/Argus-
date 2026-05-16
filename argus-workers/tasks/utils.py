@@ -55,6 +55,11 @@ class LlmCostTracker:
         """Compatibility alias for LLMService — checks if budget exceeded."""
         return not self.has_remaining_budget()
 
+    @property
+    def total(self) -> float:
+        """Compatibility alias for LLMService — returns current total cost."""
+        return self._get_current_cost()
+
     def record_llm_call(self, cost: float) -> bool:
         """Record an LLM call cost.
 
