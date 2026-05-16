@@ -69,6 +69,13 @@ class EngagementStateMachine:
         # a frontend event so the orchestrator doesn't need duplicate publish calls.
         self._ws_publisher = None
 
+        if current_state == "awaiting_approval":
+            logger.warning(
+                "Engagement %s has deprecated 'awaiting_approval' state — mapping to 'recon'",
+                engagement_id,
+            )
+            current_state = "recon"
+
         if current_state not in self.STATES:
             raise ValueError(f"Invalid state: {current_state}")
 
