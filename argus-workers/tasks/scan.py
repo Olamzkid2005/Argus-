@@ -56,7 +56,8 @@ def run_scan(
     with task_context(self, engagement_id, "scan",
                       job_extra=job_extra,
                       trace_id=trace_id) as ctx:
-        ctx.state.transition("scanning", "Starting scan")
+        if ctx.state.current_state != "scanning":
+            ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
 
         # Dispatch downstream task BEFORE transitioning state to avoid stuck engagements

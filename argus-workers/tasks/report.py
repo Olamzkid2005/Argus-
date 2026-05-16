@@ -46,7 +46,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         trace_id=trace_id, current_state="reporting"
     ) as ctx:
         result = ctx.orchestrator.run_reporting(ctx.job)
-        ctx.state.transition("complete", "Report generated")
+        ctx.state.safe_transition("complete", "Report generated")
         slog.phase_complete("report", status="completed")
         return result
 
