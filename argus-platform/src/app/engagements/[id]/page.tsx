@@ -62,7 +62,6 @@ interface TimelineEvent {
 const STATUS_COLORS: Record<string, string> = {
   created: "text-yellow-500 bg-yellow-500/10 border-yellow-500/30",
   recon: "text-blue-500 bg-blue-500/10 border-blue-500/30",
-  awaiting_approval: "text-orange-500 bg-orange-500/10 border-orange-500/30",
   scanning: "text-purple-500 bg-purple-500/10 border-purple-500/30",
   analyzing: "text-indigo-500 bg-indigo-500/10 border-indigo-500/30",
   reporting: "text-cyan-500 bg-cyan-500/10 border-cyan-500/30",

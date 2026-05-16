@@ -37,17 +37,24 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     slog.phase_header("REPORT PHASE")
 
     # Idempotency check: skip if already complete.
-    # Mitigated TOCTOU: safe_transition on line ~60 skips if no valid
-    # outgoing transition from complete (terminal state), so a double-run
-    # in rare timing conditions is harmless — it just produces a no-op.
+    # Uses SELECT FOR UPDATE to prevent TOCTOU races between concurrent
+    # generate_report calls (e.g., manual trigger + auto trigger).
     try:
-        current_state = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
-        if current_state == "complete":
+        conn = connect(os.getenv("DATABASE_URL"))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
+            (engagement_id,),
+        )
+        row = cursor.fetchone()
+        if row and row[0] == "complete":
+            conn.rollback()
             logger.info("Engagement %s already complete — skipping report generation", engagement_id)
             return {"status": "already_complete"}
+        conn.rollback()
     except Exception as e:
-        logger.warning("Failed to check engagement state for idempotency: %s", e)
-        # Proceed anyway if we can't check
+        logger.error("Failed to check engagement state for idempotency: %s — aborting", e)
+        return {"status": "error", "reason": f"Could not verify engagement state: {e}"}
 
     job_extra = {}
     if budget:

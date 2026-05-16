@@ -190,18 +190,35 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = None
-            if loop and loop.is_running():
-                # Already in an event loop — cannot run_until_complete on a
-                # running loop. Use create_task + wait instead.
-                future = asyncio.ensure_future(detector.analyze_async(
-                    test_url=finding.get("endpoint", ""),
-                    vuln_class=finding.get("type", "UNKNOWN"),
-                    payload=payload,
-                    response=response,
-                    max_response_chars=llm_review_max_response_chars,
-                ))
-                loop.run_until_complete(asyncio.wait([future]))
-                result = future.result()
+
+            if loop is not None:
+                # Running loop detected (e.g. with nest_asyncio) — run in a
+                # separate thread via run_coroutine_threadsafe to avoid
+                # blocking the existing loop.
+                import concurrent.futures
+                import threading
+                done = threading.Event()
+                result_container = {}
+
+                def _run_in_new_loop():
+                    inner = asyncio.new_event_loop()
+                    try:
+                        res = inner.run_until_complete(detector.analyze_async(
+                            test_url=finding.get("endpoint", ""),
+                            vuln_class=finding.get("type", "UNKNOWN"),
+                            payload=payload,
+                            response=response,
+                            max_response_chars=llm_review_max_response_chars,
+                        ))
+                        result_container["result"] = res
+                    finally:
+                        inner.close()
+                        done.set()
+
+                thread = threading.Thread(target=_run_in_new_loop, daemon=True)
+                thread.start()
+                thread.join(timeout=llm_review_timeout)
+                result = result_container.get("result")
             else:
                 result = asyncio.run(detector.analyze_async(
                     test_url=finding.get("endpoint", ""),

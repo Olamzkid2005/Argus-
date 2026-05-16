@@ -68,16 +68,9 @@ PHASES: list[Phase] = [
         tool_phases=("recon",),
     ),
     Phase(
-        id="awaiting_approval",
-        display_name="Awaiting Approval",
-        order=2,
-        estimated_minutes=1,
-        step_id="fingerprinting",
-    ),
-    Phase(
         id="scanning",
         display_name="Scanning",
-        order=3,
+        order=2,
         estimated_minutes=10,
         step_id="vuln_mapping",
         tool_phases=("scan", "deep_scan", "repo_scan"),
@@ -85,14 +78,14 @@ PHASES: list[Phase] = [
     Phase(
         id="analyzing",
         display_name="Analysis",
-        order=4,
+        order=3,
         estimated_minutes=5,
         tool_phases=("analyze",),
     ),
     Phase(
         id="reporting",
         display_name="Report Generation",
-        order=5,
+        order=4,
         estimated_minutes=2,
         step_id="reporting",
         tool_phases=("report",),
@@ -100,7 +93,7 @@ PHASES: list[Phase] = [
     Phase(
         id="complete",
         display_name="Complete",
-        order=6,
+        order=5,
         is_terminal=True,
     ),
     Phase(
@@ -128,8 +121,7 @@ PHASES: list[Phase] = [
 # does not import the full state machine module.
 TRANSITIONS: dict[str, list[str]] = {
     "created": ["recon", "failed", "paused"],
-    "recon": ["scanning", "awaiting_approval", "failed", "paused"],
-    "awaiting_approval": ["scanning", "paused", "failed"],
+    "recon": ["scanning", "failed", "paused"],
     "scanning": ["analyzing", "failed", "paused"],
     "analyzing": ["reporting", "recon", "failed", "paused"],
     "reporting": ["complete", "failed", "paused"],

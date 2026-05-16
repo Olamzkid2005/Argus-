@@ -131,7 +131,6 @@ const useURLHistory = () => {
 const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
   created: { color: "text-blue-500", bg: "bg-blue-500/10", label: "Created" },
   recon: { color: "text-amber-500", bg: "bg-amber-500/10", label: "Recon" },
-  awaiting_approval: { color: "text-purple-500", bg: "bg-purple-500/10", label: "Awaiting Approval" },
   scanning: { color: "text-primary", bg: "bg-primary/10", label: "Scanning" },
   analyzing: { color: "text-cyan-500", bg: "bg-cyan-500/10", label: "Analyzing" },
   reporting: { color: "text-pink-500", bg: "bg-pink-500/10", label: "Reporting" },
@@ -489,7 +488,7 @@ export default function EngagementsPage() {
   };
 
   const getScanProgress = (status: string) => {
-    const order = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+    const order = ["created", "recon", "scanning", "analyzing", "reporting", "complete"];
     const idx = order.indexOf(status);
     if (idx === -1) return 0;
     return Math.round(((idx + 1) / order.length) * 100);

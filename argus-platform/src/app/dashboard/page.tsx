@@ -88,7 +88,6 @@ export default function DashboardPage() {
     const urlId = new URL(window.location.href).searchParams.get("engagement");
     return !!(urlId || localStorage.getItem("argus:active_engagement"));
   });
-  const [isApproving, setIsApproving] = useState(false);
   const [currentState, setCurrentState] = useState<string>(() => {
     if (typeof window === "undefined") return "created";
     const storedState = localStorage.getItem("argus:active_state");
@@ -595,26 +594,6 @@ export default function DashboardPage() {
     const interval = setInterval(fetchState, 3000);
     return () => clearInterval(interval);
   }, [engagementId, handleEngagementAccessDenied]);
-
-  const handleApprove = async () => {
-    if (!engagementId || isApproving) return;
-    setIsApproving(true);
-    try {
-      const response = await fetch(`/api/engagement/${engagementId}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to approve engagement");
-      setCurrentState("scanning");
-      showToast("success", "Findings approved! Scan job queued.");
-    } catch (err) {
-      showToast("error", err instanceof Error ? err.message : "Failed to approve");
-    } finally {
-      setIsApproving(false);
-    }
-  };
-
   const wsFindings = useMemo(() => {
     const filtered = events.filter(e => e.type === "finding_discovered");
     // Only show findings from the active scan
@@ -662,7 +641,7 @@ export default function DashboardPage() {
 
   // Calculate scan progress percentage from status
   const getScanProgress = (status: string) => {
-    const order = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+    const order = ["created", "recon", "scanning", "analyzing", "reporting", "complete"];
     const idx = order.indexOf(status);
     if (idx === -1) return 0;
     return Math.round(((idx + 1) / order.length) * 100);
@@ -839,16 +818,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex gap-3">
-                {currentState === "awaiting_approval" && (
-                  <button
-                    onClick={handleApprove}
-                    disabled={isApproving}
-                    className="px-6 py-2 bg-primary text-on-primary font-bold text-[10px] tracking-widest uppercase hover:opacity-90 transition-all duration-300 disabled:opacity-50 rounded-lg shadow-glow"
-                  >
-                    {isApproving ? "Authorizing..." : "Authorize Execution"}
-                  </button>
-                )}
-                {["recon", "awaiting_approval", "scanning", "analyzing", "reporting"].includes(currentState) && (
+                {["recon", "scanning", "analyzing", "reporting"].includes(currentState) && (
                   <button
                     onClick={() => handleStop(engagementId)}
                     disabled={stoppingId === engagementId}

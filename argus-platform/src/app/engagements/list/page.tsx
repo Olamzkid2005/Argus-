@@ -35,7 +35,6 @@ interface Engagement {
 const statusColors: Record<string, string> = {
   created: "bg-blue-500/20 text-blue-400",
   recon: "bg-yellow-500/20 text-yellow-400",
-  awaiting_approval: "bg-purple-500/20 text-purple-400",
   scanning: "bg-orange-500/20 text-orange-400",
   analyzing: "bg-cyan-500/20 text-cyan-400",
   reporting: "bg-pink-500/20 text-pink-400",
@@ -45,7 +44,7 @@ const statusColors: Record<string, string> = {
 };
 
   const getScanProgress = (status: string) => {
-    const order = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+    const order = ["created", "recon", "scanning", "analyzing", "reporting", "complete"];
     const idx = order.indexOf(status);
     if (idx === -1) return 0;
     return Math.round(((idx + 1) / order.length) * 100);

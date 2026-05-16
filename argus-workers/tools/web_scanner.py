@@ -22,6 +22,7 @@ Integrates advanced web scanning capabilities:
 import contextlib
 import json
 import logging
+import os
 import re
 import socket
 import threading
@@ -229,7 +230,7 @@ class WebScanner:
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
                  llm_payload_generator=None, session: requests.Session | None = None,
                  tech_stack: list[str] | None = None, verify: bool = True,
-                 engagement_id: str = ""):
+                 engagement_id: str = "", user_agent: str = ""):
         """
         Initialize web scanner.
 
@@ -241,6 +242,7 @@ class WebScanner:
             tech_stack: Detected technology stack from recon (e.g. ["WordPress", "PHP", "jQuery"])
             verify: Verify SSL certificates
             engagement_id: Engagement ID for log/trace correlation
+            user_agent: Custom User-Agent string (falls back to WEB_SCANNER_USER_AGENT env or default)
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
@@ -249,7 +251,9 @@ class WebScanner:
         self.verify = verify
         self.engagement_id = engagement_id
         self.session = session or requests.Session()
-        self.session.headers.setdefault("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        _default_ua = "Argus-Scanner/1.0 (security-automation)"
+        _ua = user_agent or os.environ.get("WEB_SCANNER_USER_AGENT", _default_ua)
+        self.session.headers.setdefault("User-Agent", _ua)
         self.session.headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
         self.session.headers.setdefault("Accept-Language", "en-US,en;q=0.5")
         self.findings = []

@@ -36,7 +36,7 @@ export async function POST(
       const currentStatus = statusCheck.rows[0].status;
 
       // Only allow stopping in-progress engagements
-      const stoppableStates = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting"];
+      const stoppableStates = ["created", "recon", "scanning", "analyzing", "reporting"];
       if (!stoppableStates.includes(currentStatus)) {
         return NextResponse.json(
           { error: `Cannot stop engagement with status: ${currentStatus}` },

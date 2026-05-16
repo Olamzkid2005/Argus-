@@ -61,10 +61,11 @@ class LLMService:
         )
     """
 
-    def __init__(self, llm_client: LLMClient, config: LLMServiceConfig | None = None):
+    def __init__(self, llm_client: LLMClient, config: LLMServiceConfig | None = None,
+                 cost_tracker: "CostTracker" = None):
         self._client = llm_client
         self._config = config or LLMServiceConfig()
-        self._cost_tracker = CostTracker(max_cost_usd=self._config.max_cost_usd)
+        self._cost_tracker = cost_tracker or CostTracker(max_cost_usd=self._config.max_cost_usd)
 
     def is_available(self) -> bool:
         """Check if the underlying LLM client is available for use."""

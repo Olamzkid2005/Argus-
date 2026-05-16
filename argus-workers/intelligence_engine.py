@@ -272,7 +272,9 @@ class IntelligenceEngine:
         Returns:
             Evidence strength score (0.6-1.0)
         """
-        evidence_strength = finding.get("evidence_strength") or "MINIMAL"
+        evidence_strength = finding.get("evidence_strength")
+        if evidence_strength is None or evidence_strength == "":
+            evidence_strength = "MINIMAL"
         evidence_strength = str(evidence_strength).upper()
 
         scores = {
@@ -287,7 +289,7 @@ class IntelligenceEngine:
     def _group_findings_for_agreement(self, findings: list[dict]) -> dict:
         """Group findings that represent the same vulnerability family for tool agreement."""
         type_families = {
-            "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS"],
+            "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS", "CROSS_SITE_SCRIPTING"],
             "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "ERROR_SQLI"],
             "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
             "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
@@ -792,8 +794,22 @@ class IntelligenceEngine:
         finding_type = finding.get("type", "").upper()
         endpoint = finding.get("endpoint", "")
 
-        # Simple keyword-based threat feed simulation
-        # In production, this would query MISP, AlienVault OTX, etc.
+        # Map subtypes to canonical families so RELFECTED_XSS → XSS etc.
+        _type_families = {
+            "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS", "CROSS_SITE_SCRIPTING"],
+            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "ERROR_SQLI"],
+            "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
+            "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
+            "SSRF": ["SSRF", "OPEN_REDIRECT"],
+            "INFO": ["INFO", "INFORMATION_DISCLOSURE", "DIRECTORY_LISTING"],
+        }
+        _type_to_family = {}
+        for family, subtypes in _type_families.items():
+            for st in subtypes:
+                _type_to_family[st] = family
+
+        normalized_type = _type_to_family.get(finding_type, finding_type)
+
         threat_indicators = {
             "SQL_INJECTION": {"feed": "exploitdb", "risk": "high", "description": "SQL injection commonly exploited in the wild"},
             "COMMAND_INJECTION": {"feed": "exploitdb", "risk": "critical", "description": "Command injection frequently exploited"},
@@ -803,8 +819,11 @@ class IntelligenceEngine:
             "WEAK_TLS": {"feed": "cisa_kev", "risk": "medium", "description": "Weak TLS configurations in security advisories"},
         }
 
-        if finding_type in threat_indicators:
-            indicator = threat_indicators[finding_type].copy()
+        matched_key = finding_type if finding_type in threat_indicators else (
+            normalized_type if normalized_type in threat_indicators else None
+        )
+        if matched_key:
+            indicator = threat_indicators[matched_key].copy()
             indicator["matched_type"] = finding_type
             indicator["endpoint"] = endpoint
             hits.append(indicator)

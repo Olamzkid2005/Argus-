@@ -33,7 +33,7 @@ export async function DELETE(
       }
 
       const currentStatus = check.rows[0]?.status;
-      const activeStates = ["recon", "awaiting_approval", "scanning", "analyzing", "reporting"];
+      const activeStates = ["recon", "scanning", "analyzing", "reporting"];
       if (activeStates.includes(currentStatus)) {
         await client.query("ROLLBACK");
         return NextResponse.json(

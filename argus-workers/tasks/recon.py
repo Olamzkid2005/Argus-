@@ -73,16 +73,16 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 ctx.state.safe_transition("failed", f"Failed to persist recon context: {e}")
                 return {"phase": "recon", "status": "failed", "reason": "recon_context_save_failed"}
 
-        # Dispatch asset_discovery first (non-critical — warning on failure)
-        try:
-            asset_task = app.send_task(
-                'tasks.asset_discovery.run_asset_discovery',
-                args=[engagement_id, target, ctx.trace_id],
-                countdown=5,
-            )
-            slog.dispatch("asset_discovery", task_id=asset_task.id)
-        except Exception as e:
-            logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
+            # Dispatch asset_discovery only after save succeeds (prevents zombie tasks)
+            try:
+                asset_task = app.send_task(
+                    'tasks.asset_discovery.run_asset_discovery',
+                    args=[engagement_id, target, ctx.trace_id],
+                    countdown=5,
+                )
+                slog.dispatch("asset_discovery", task_id=asset_task.id)
+            except Exception as e:
+                logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
         # Dispatch scan BEFORE transitioning state. If dispatch fails the
         # engagement transitions directly to "failed" — no orphaned state.

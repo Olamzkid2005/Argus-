@@ -29,7 +29,6 @@ class EngagementStateMachine:
     STATES = [
         "created",
         "recon",
-        "awaiting_approval",
         "scanning",
         "analyzing",
         "reporting",
@@ -41,10 +40,9 @@ class EngagementStateMachine:
     # Valid state transitions
     TRANSITIONS = {
         "created": ["recon", "failed", "paused"],
-        "recon": ["scanning", "awaiting_approval", "failed", "paused"],
-        "awaiting_approval": ["scanning", "paused", "failed"],
+        "recon": ["scanning", "failed", "paused"],
         "scanning": ["analyzing", "failed", "paused"],
-        "analyzing": ["reporting", "recon", "scanning", "failed", "paused"],  # Can loop back to recon
+        "analyzing": ["reporting", "recon", "scanning", "failed", "paused"],
         "reporting": ["complete", "failed", "paused"],
         "paused": ["recon", "scanning", "analyzing"],
         "failed": [],
@@ -403,7 +401,7 @@ class EngagementStateMachine:
             conn.commit()
 
             if self._ws_publisher:
-                first_from = states[0][0] if len(states) > 1 else self.current_state
+                first_from = self.current_state
                 final_to = states[-1][0]
                 final_reason = states[-1][1]
                 try:

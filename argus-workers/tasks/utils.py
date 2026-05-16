@@ -47,6 +47,14 @@ class LlmCostTracker:
         """
         return self._get_current_cost() < self.max_cost
 
+    def add(self, cost: float):
+        """Compatibility alias for LLMService — records LLM cost."""
+        self.record_llm_call(cost)
+
+    def exceeded(self) -> bool:
+        """Compatibility alias for LLMService — checks if budget exceeded."""
+        return not self.has_remaining_budget()
+
     def record_llm_call(self, cost: float) -> bool:
         """Record an LLM call cost.
 

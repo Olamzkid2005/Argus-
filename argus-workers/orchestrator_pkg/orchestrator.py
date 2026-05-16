@@ -580,9 +580,11 @@ class Orchestrator:
 
         _llm_ok = self.llm_client is not None and self.llm_client.is_available()
         _recon_ok = recon_context is not None and (
-            hasattr(recon_context, 'live_endpoints') and recon_context.live_endpoints or
-            hasattr(recon_context, 'tech_stack') and recon_context.tech_stack or
-            hasattr(recon_context, 'subdomains') and recon_context.subdomains
+            (hasattr(recon_context, 'live_endpoints') and recon_context.live_endpoints) or
+            (hasattr(recon_context, 'tech_stack') and recon_context.tech_stack) or
+            (hasattr(recon_context, 'subdomains') and recon_context.subdomains) or
+            (hasattr(recon_context, 'crawled_paths') and recon_context.crawled_paths) or
+            (hasattr(recon_context, 'parameter_bearing_urls') and recon_context.parameter_bearing_urls)
         )
         self._bug_bounty_mode = bool(bug_bounty_mode)
         self._agent_mode_enabled = bool(agent_mode_enabled)
@@ -795,12 +797,20 @@ class Orchestrator:
         snapshot["org_id"] = org_id
         evaluation = engine.evaluate(snapshot, org_id=org_id)
 
+        # ── Shared per-engagement cost tracker ──
+        from tasks.utils import LlmCostTracker
+        from config.constants import LLM_MAX_COST_PER_ENGAGEMENT
+        engagement_cost_tracker = LlmCostTracker(
+            engagement_id=self.engagement_id,
+            max_cost=LLM_MAX_COST_PER_ENGAGEMENT,
+        )
+
         synthesis = {}
         if self.llm_client and self.llm_client.is_available():
             try:
                 from llm_service import LLMService
                 from llm_synthesizer import LLMSynthesizer
-                llm_svc = LLMService(self.llm_client)
+                llm_svc = LLMService(self.llm_client, cost_tracker=engagement_cost_tracker)
                 recon_ctx = load_recon_context(self.engagement_id)
                 synthesizer = LLMSynthesizer(llm_svc)
                 synthesis = synthesizer.synthesize(
@@ -816,23 +826,16 @@ class Orchestrator:
         # ── PoC Generation for HIGH/CRITICAL findings ──
         try:
             from poc_generator import PoCGenerator
-            from tasks.utils import LlmCostTracker
 
             poc_gen = PoCGenerator(llm_client=self.llm_client)
             scored = evaluation.get("scored_findings", [])
 
-            cost_tracker = None
             llm_svc = None
             if self.llm_client and self.llm_client.is_available():
                 from llm_service import LLMService
-                llm_svc = LLMService(llm_client=self.llm_client)
-                from config.constants import LLM_MAX_COST_PER_ENGAGEMENT
-                cost_tracker = LlmCostTracker(
-                    engagement_id=self.engagement_id,
-                    max_cost=LLM_MAX_COST_PER_ENGAGEMENT,
-                )
+                llm_svc = LLMService(llm_client=self.llm_client, cost_tracker=engagement_cost_tracker)
 
-            if cost_tracker and llm_svc:
+            if engagement_cost_tracker and llm_svc:
                 from concurrent.futures import ThreadPoolExecutor
 
                 poc_futures = []
@@ -841,7 +844,7 @@ class Orchestrator:
                     for finding in scored[:10]:
                         future = pool.submit(
                             poc_gen.generate,
-                            finding, llm_svc, cost_tracker,
+                            finding, llm_svc, engagement_cost_tracker,
                         )
                         poc_futures.append((finding, future))
 

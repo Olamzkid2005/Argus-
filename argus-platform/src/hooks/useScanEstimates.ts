@@ -46,7 +46,7 @@ const AGGRESSIVENESS_MULTIPLIERS: Record<string, number> = {
   high: 1.3,
 };
 
-const STATE_ORDER = ["created", "recon", "awaiting_approval", "scanning", "analyzing", "reporting", "complete"];
+const STATE_ORDER = ["created", "recon", "scanning", "analyzing", "reporting", "complete"];
 
 function getPhaseLabel(id: string): string {
   switch (id) {
@@ -67,8 +67,8 @@ function getStepStatus(stepId: string, currentState: string): "pending" | "in_pr
   const currentIdx = STATE_ORDER.indexOf(currentState);
 
   if (stepId === "recon") {
-    if (currentState === "recon" || currentState === "awaiting_approval") return "in_progress";
-    if (currentIdx > STATE_ORDER.indexOf("awaiting_approval")) return "completed";
+    if (currentState === "recon") return "in_progress";
+    if (currentIdx > STATE_ORDER.indexOf("recon")) return "completed";
   }
   if (stepId === "fingerprinting") {
     if (currentState === "scanning") return "in_progress";
