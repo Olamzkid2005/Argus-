@@ -26,13 +26,15 @@ class TestWorkerHealthMonitor:
     @pytest.fixture
     def monitor(self, mock_redis):
         """Fixture providing a WorkerHealthMonitor with mocked Redis and system info"""
-        with patch("health_monitor.redis.from_url", return_value=mock_redis):
-            with patch("os.getpid", return_value=12345):
-                with patch("os.uname") as mock_uname:
-                    mock_uname.return_value = Mock(nodename="testhost")
-                    m = WorkerHealthMonitor(worker_id="worker-1", redis_url="redis://mock:6379")
-                    m._redis = mock_redis
-                    yield m
+        with (
+            patch("health_monitor.redis.from_url", return_value=mock_redis),
+            patch("os.getpid", return_value=12345),
+            patch("os.uname") as mock_uname,
+        ):
+            mock_uname.return_value = Mock(nodename="testhost")
+            m = WorkerHealthMonitor(worker_id="worker-1", redis_url="redis://mock:6379")
+            m._redis = mock_redis
+            yield m
 
     @pytest.fixture
     def mock_process(self):

@@ -179,7 +179,7 @@ def test_run_scan_marks_failed_when_analyze_enqueue_raises(
     mock_app.send_task.side_effect = RuntimeError("broker down")
 
     with (
-        patch.object(scan_module, "task_context", side_effect=lambda *a, **kw: _CapturingContext(ctx)),
+        patch.object(scan_module, "task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
         patch.object(scan_module, "app", mock_app),
         patch("tasks.utils.load_recon_context", return_value=None),
     ):

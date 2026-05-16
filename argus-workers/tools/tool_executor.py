@@ -15,7 +15,7 @@ from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser, ParserError
 from tools.models import ToolResult
 from tools.scope_validator import ScopeValidator, ScopeViolationError
-from tools.tool_runner import SecurityException, ToolRunner
+from tools.tool_runner import SecurityError, ToolRunner
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ class ToolExecutor:
                 "error": "parser_failed",
                 "message": "Failed to parse tool output",
                 "tool": tool_name,
-                "duration_ms": int((time.time() - start_time) * 1000),
+                "duration_ms": int((_time.time() - start_time) * 1000),
             }
 
         # Normalize findings
@@ -163,10 +163,10 @@ class ToolExecutor:
                 # Tool failed, retry
                 attempt += 1
                 if attempt < max_retries:
-                    time.sleep(backoff_seconds)
+                    _time.sleep(backoff_seconds)
                     backoff_seconds *= 2  # Exponential backoff
 
-            except SecurityException as e:
+            except SecurityError as e:
                 logger.warning("Security violation for %s (non-retryable): %s", tool_name, e)
                 return ToolResult(
                     success=False,
@@ -177,7 +177,7 @@ class ToolExecutor:
             except Exception as e:
                 attempt += 1
                 if attempt < max_retries:
-                    time.sleep(backoff_seconds)
+                    _time.sleep(backoff_seconds)
                     backoff_seconds *= 2
                 else:
                     logger.error("Tool %s failed after %d attempts: %s", tool_name, max_retries, e, exc_info=True)
@@ -219,7 +219,7 @@ class ToolExecutor:
             except ParserError as e:
                 attempt += 1
                 if attempt < max_retries:
-                    time.sleep(backoff_seconds)
+                    _time.sleep(backoff_seconds)
                     backoff_seconds += 1  # Linear backoff
                 else:
                     logger.error(f"Parser failed for {tool_name} after {max_retries} attempts: {e}", exc_info=True)

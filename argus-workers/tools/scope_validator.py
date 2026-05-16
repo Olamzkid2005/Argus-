@@ -7,9 +7,9 @@ import json
 import logging
 from urllib.parse import urlparse
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 
 class ScopeViolationError(Exception):

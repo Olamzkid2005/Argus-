@@ -17,7 +17,9 @@ from datetime import UTC, datetime
 
 from celery_app import app
 from database.connection import connect
+from distributed_lock import DistributedLock, LockContext
 from orchestrator import Orchestrator
+from state_machine import EngagementStateMachine
 from tracing import TracingManager
 from utils.validation import validate_uuid
 
@@ -72,9 +74,6 @@ def _load_license_policy():
 
 
 LICENSE_POLICY = _load_license_policy()
-
-from distributed_lock import DistributedLock, LockContext
-from state_machine import EngagementStateMachine
 
 
 @app.task(
@@ -560,7 +559,7 @@ def run_govulncheck(repo_path):
 
 def scan_git_history_for_secrets(repo_path):
     """Scan git history for committed secrets."""
-    MAX_GIT_OUTPUT_BYTES = 100 * 1024 * 1024  # 100MB
+    max_git_output_bytes = 100 * 1024 * 1024  # 100MB
     findings = []
 
     try:
@@ -587,9 +586,9 @@ def scan_git_history_for_secrets(repo_path):
         for line in process.stdout:
             line_bytes = len(line.encode("utf-8"))
             total_bytes += line_bytes
-            if total_bytes > MAX_GIT_OUTPUT_BYTES:
+            if total_bytes > max_git_output_bytes:
                 logger.warning(
-                    f"Git history scan: exceeded {MAX_GIT_OUTPUT_BYTES} bytes ({total_bytes}), truncating"
+                    f"Git history scan: exceeded {max_git_output_bytes} bytes ({total_bytes}), truncating"
                 )
                 process.kill()
                 break

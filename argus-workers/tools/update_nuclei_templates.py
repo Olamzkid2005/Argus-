@@ -11,9 +11,9 @@ import os
 import subprocess
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 NUCLEI_BINARY = "nuclei"
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "tool_assets" / "nuclei-templates"

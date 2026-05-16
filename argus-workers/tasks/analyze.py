@@ -16,8 +16,9 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
     """
     Execute analysis phase for an engagement
     """
-    from tasks.base import _get_engagement_state
     import os
+
+    from tasks.base import _get_engagement_state
     current = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
     if current != "analyzing":
         logger.info("Engagement %s not in analyzing state (got %s) — skipping analyze", engagement_id, current)

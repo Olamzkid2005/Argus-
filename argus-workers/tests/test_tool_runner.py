@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.tool_runner import SecurityException, ToolRunner
+from tools.tool_runner import SecurityError, ToolRunner
 
 
 class TestToolRunner:
@@ -38,7 +38,7 @@ class TestToolRunner:
 
     def test_run_blocks_dangerous_commands(self):
         """Test that dangerous commands are blocked"""
-        with pytest.raises(SecurityException):
+        with pytest.raises(SecurityError):
             self.runner.run("rm", ["-rf", "/"])
 
     def test_run_executes_safe_command(self):

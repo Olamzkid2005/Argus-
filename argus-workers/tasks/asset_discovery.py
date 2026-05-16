@@ -149,7 +149,7 @@ def update_asset_risk_scores(self, org_id: str):
     db_conn_string = os.getenv("DATABASE_URL")
 
     # Severity penalty weights — mirrors security-rating.ts
-    SEVERITY_WEIGHTS = {
+    severity_weights = {
         "CRITICAL": 10.0,
         "HIGH": 5.0,
         "MEDIUM": 2.0,
@@ -158,7 +158,7 @@ def update_asset_risk_scores(self, org_id: str):
     }
 
     # Estimate CVSS per severity — mirrors attack_graph._estimate_cvss
-    SEVERITY_CVSS = {
+    severity_cvss = {
         "CRITICAL": 9.5,
         "HIGH": 7.5,
         "MEDIUM": 5.0,
@@ -211,23 +211,23 @@ def update_asset_risk_scores(self, org_id: str):
             else:
                 # Pick the CVSS equivalent of the highest severity present
                 if critical_count > 0:
-                    cvss_based = SEVERITY_CVSS["CRITICAL"]
+                    cvss_based = severity_cvss["CRITICAL"]
                 elif high_count > 0:
-                    cvss_based = SEVERITY_CVSS["HIGH"]
+                    cvss_based = severity_cvss["HIGH"]
                 elif medium_count > 0:
-                    cvss_based = SEVERITY_CVSS["MEDIUM"]
+                    cvss_based = severity_cvss["MEDIUM"]
                 elif low_count > 0:
-                    cvss_based = SEVERITY_CVSS["LOW"]
+                    cvss_based = severity_cvss["LOW"]
                 else:
-                    cvss_based = SEVERITY_CVSS["INFO"]
+                    cvss_based = severity_cvss["INFO"]
 
             # Apply severity-weight penalty (same method as security-rating.ts)
             total_weight = (
-                critical_count * SEVERITY_WEIGHTS["CRITICAL"]
-                + high_count * SEVERITY_WEIGHTS["HIGH"]
-                + medium_count * SEVERITY_WEIGHTS["MEDIUM"]
-                + low_count * SEVERITY_WEIGHTS["LOW"]
-                + info_count * SEVERITY_WEIGHTS["INFO"]
+                critical_count * severity_weights["CRITICAL"]
+                + high_count * severity_weights["HIGH"]
+                + medium_count * severity_weights["MEDIUM"]
+                + low_count * severity_weights["LOW"]
+                + info_count * severity_weights["INFO"]
             )
 
             # Final score blends CVSS base with volume penalty, clamped to 0–10

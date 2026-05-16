@@ -15,9 +15,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Bug-Reaper Platform Templates (copied from generate_report.py)
@@ -384,7 +384,7 @@ def format_steps(steps_input: Any) -> str:
     if isinstance(steps_input, list):
         return "\n".join(f"{i+1}. {step}" for i, step in enumerate(steps_input))
     elif isinstance(steps_input, str):
-        lines = [l.strip() for l in steps_input.strip().split("\n") if l.strip()]
+        lines = [line.strip() for line in steps_input.strip().split("\n") if line.strip()]
         formatted = []
         for i, line in enumerate(lines):
             if re.match(r"^\d+\.", line):
@@ -762,7 +762,7 @@ class BugBountyReportGenerator:
 def main():
     """
     CLI entry point for generating bug bounty reports.
-    
+
     Usage:
         python -m tools.bugbounty_report_generator \\
             --findings findings.json \\

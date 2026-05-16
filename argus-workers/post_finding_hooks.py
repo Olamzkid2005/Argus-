@@ -68,7 +68,7 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict
     - Global webhooks (engagement_id IS NULL) within the same org
     - Have events array that includes 'finding_discovered' or is empty (all events)
     """
-    from database.connection import connect, get_db
+    from database.connection import get_db
 
     conn = None
     cursor = None

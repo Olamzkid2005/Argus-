@@ -278,7 +278,7 @@ class TestReActAgent:
         from agent_loop import AgentResult, ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
-        registry.register("nuclei", lambda target="": AgentResult(tool="nuclei", success=True, output="ok"),
+        registry.register("nuclei", lambda _target="": AgentResult(tool="nuclei", success=True, output="ok"),
                          {"name": "nuclei", "description": "Nuclei scanner"})
 
         agent = ReActAgent(registry, max_iterations=3)
@@ -302,7 +302,7 @@ class TestReActAgent:
         from agent_loop import AgentResult, ReActAgent, ToolRegistry
 
         registry = ToolRegistry()
-        registry.register("nuclei", lambda target="": AgentResult(tool="nuclei", success=True, output="ok"),
+        registry.register("nuclei", lambda _target="": AgentResult(tool="nuclei", success=True, output="ok"),
                          {"name": "nuclei", "description": "Nuclei"})
 
         agent = ReActAgent(registry, max_iterations=3)

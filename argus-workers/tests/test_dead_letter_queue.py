@@ -23,7 +23,7 @@ class TestDeadLetterQueue:
             yield mock_redis
 
     @pytest.fixture
-    def dlq(self, mock_redis):
+    def dlq(self, mock_redis):  # noqa: ARG002
         return DeadLetterQueue(redis_url="redis://localhost:6379/0")
 
     def test_enqueue_success(self, dlq, mock_redis):

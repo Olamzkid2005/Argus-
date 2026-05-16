@@ -35,9 +35,11 @@ class TestSecurityAudit:
 
     def test_check_environment_variables_missing_required(self, audit):
         """Test detecting missing required variables"""
-        with patch.dict(os.environ, {"NEXTAUTH_SECRET": ""}, clear=False):
-            with patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False):
-                audit.check_environment_variables()
+        with (
+            patch.dict(os.environ, {"NEXTAUTH_SECRET": ""}, clear=False),
+            patch.dict(os.environ, {"DATABASE_URL": ""}, clear=False),
+        ):
+            audit.check_environment_variables()
 
         required_findings = [f for f in audit.findings if f.check_id == "ENV-002"]
         assert len(required_findings) >= 1
@@ -105,9 +107,11 @@ class TestSecurityAudit:
         mock_stat = Mock()
         mock_stat.st_mode = 0o644  # world-readable
 
-        with patch("os.walk", return_value=[(".", [], [".env"])]):
-            with patch("os.stat", return_value=mock_stat):
-                audit.check_file_permissions()
+        with (
+            patch("os.walk", return_value=[(".", [], [".env"])]),
+            patch("os.stat", return_value=mock_stat),
+        ):
+            audit.check_file_permissions()
 
         finding = [f for f in audit.findings if f.check_id == "FILE-001"]
         assert len(finding) >= 1
@@ -118,9 +122,11 @@ class TestSecurityAudit:
         mock_stat = Mock()
         mock_stat.st_mode = 0o600  # owner only
 
-        with patch("os.walk", return_value=[(".", [], [".env"])]):
-            with patch("os.stat", return_value=mock_stat):
-                audit.check_file_permissions()
+        with (
+            patch("os.walk", return_value=[(".", [], [".env"])]),
+            patch("os.stat", return_value=mock_stat),
+        ):
+            audit.check_file_permissions()
 
         finding = [f for f in audit.findings if f.check_id == "FILE-001"]
         assert len(finding) == 0
@@ -128,9 +134,11 @@ class TestSecurityAudit:
     def test_check_dependencies_pinned(self, audit):
         """Test detecting pinned dependency versions"""
         req_content = "requests==2.28.1\nnumpy==1.23.0\n"
-        with patch("os.path.exists", return_value=True):
-            with patch("builtins.open", mock_open(read_data=req_content)):
-                audit.check_dependencies()
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("builtins.open", mock_open(read_data=req_content)),
+        ):
+            audit.check_dependencies()
 
         finding = [f for f in audit.findings if f.check_id == "DEP-001"]
         assert len(finding) == 1
@@ -146,9 +154,11 @@ class TestSecurityAudit:
 
     def test_check_ssl_tls_missing_in_production(self, audit):
         """Test missing TLS config in production is flagged"""
-        with patch.dict(os.environ, {"NODE_ENV": "production"}, clear=False):
-            with patch.dict(os.environ, {"SSL_CERT_PATH": "", "TLS_ENABLED": ""}, clear=False):
-                audit.check_ssl_tls()
+        with (
+            patch.dict(os.environ, {"NODE_ENV": "production"}, clear=False),
+            patch.dict(os.environ, {"SSL_CERT_PATH": "", "TLS_ENABLED": ""}, clear=False),
+        ):
+            audit.check_ssl_tls()
 
         finding = [f for f in audit.findings if f.check_id == "TLS-001"]
         assert len(finding) == 1
@@ -181,15 +191,17 @@ class TestSecurityAudit:
 
     def test_run_all_checks(self, audit):
         """Test run_all_checks executes all checks and returns findings"""
-        with patch.object(audit, "check_environment_variables") as mock_env:
-            with patch.object(audit, "check_database_security") as mock_db:
-                with patch.object(audit, "check_celery_security") as mock_celery:
-                    with patch.object(audit, "check_file_permissions") as mock_file:
-                        with patch.object(audit, "check_dependencies") as mock_dep:
-                            with patch.object(audit, "check_ssl_tls") as mock_ssl:
-                                with patch.object(audit, "check_rate_limiting") as mock_rate:
-                                    audit.findings = [SecurityFinding("info", "test", "title", "desc", "fix", "TEST-001")]
-                                    result = audit.run_all_checks()
+        with (
+            patch.object(audit, "check_environment_variables") as mock_env,
+            patch.object(audit, "check_database_security") as mock_db,
+            patch.object(audit, "check_celery_security") as mock_celery,
+            patch.object(audit, "check_file_permissions") as mock_file,
+            patch.object(audit, "check_dependencies") as mock_dep,
+            patch.object(audit, "check_ssl_tls") as mock_ssl,
+            patch.object(audit, "check_rate_limiting") as mock_rate,
+        ):
+            audit.findings = [SecurityFinding("info", "test", "title", "desc", "fix", "TEST-001")]
+            result = audit.run_all_checks()
 
         assert result is audit.findings
         mock_env.assert_called_once()
@@ -243,7 +255,7 @@ class TestSecurityAudit:
 
     @patch("security_audit.sys.exit")
     @patch("builtins.print")
-    def test_main_exits_error_on_critical(self, mock_print, mock_exit):
+    def test_main_exits_error_on_critical(self, _mock_print, mock_exit):
         """Test main exits with error code when critical findings exist"""
         mock_exit.side_effect = SystemExit
         with patch.object(SecurityAudit, "run_all_checks", return_value=[
@@ -257,7 +269,7 @@ class TestSecurityAudit:
 
     @patch("security_audit.sys.exit")
     @patch("builtins.print")
-    def test_main_exits_ok(self, mock_print, mock_exit):
+    def test_main_exits_ok(self, _mock_print, mock_exit):
         """Test main exits with 0 when no critical/high findings"""
         with patch.object(SecurityAudit, "run_all_checks", return_value=[
             SecurityFinding("medium", "config", "Med", "Desc", "Fix", "M-001")

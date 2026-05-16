@@ -8,10 +8,10 @@ agent reads a typed candidate list instead of raw prose.
 Mirrors DeepSec's FileRecord contract pattern — typed, structured, sortable.
 """
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class CandidateSource(str, Enum):
+class CandidateSource(StrEnum):
     """Source tool that flagged the candidate vulnerability."""
     NUCLEI_CVE     = "nuclei_cve"        # confirmed CVE template match
     NUCLEI_MISC    = "nuclei_misc"        # misconfiguration template

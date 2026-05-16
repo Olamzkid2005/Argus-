@@ -15,7 +15,6 @@ import dataclasses
 from typing import (
     Generic,
     TypeVar,
-    Union,
     final,
 )
 
@@ -39,7 +38,7 @@ class Err(Generic[E]):
     error: E
 
 
-Result = Union[Ok[T], Err[E]]
+Result = Ok[T] | Err[E]
 """
 Result type — either Ok[T] with a value or Err[E] with an error.
 

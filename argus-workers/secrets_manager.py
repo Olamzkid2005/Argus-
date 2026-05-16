@@ -8,7 +8,6 @@ Falls back to environment variables for local development.
 import logging
 import os
 import threading
-from functools import lru_cache
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -55,7 +54,6 @@ class SecretsManager:
                 logger.warning("boto3 not installed, AWS Secrets Manager unavailable")
         return self._aws_client
 
-    @lru_cache(maxsize=128)
     def get_secret(self, key: str, default: str | None = None) -> str | None:
         """
         Retrieve a secret by key.
@@ -125,10 +123,8 @@ class SecretsManager:
         """Invalidate secret cache"""
         if key:
             self._cache.pop(key, None)
-            self.get_secret.cache_clear()
         else:
             self._cache.clear()
-            self.get_secret.cache_clear()
 
 
 # Singleton instance

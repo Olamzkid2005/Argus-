@@ -16,9 +16,9 @@ Cost-controlled: uses a cheap model, max 500 output tokens, and only
 fires on parser miss — zero cost for scans where parsers work correctly.
 """
 
-import json
 import logging
 import os
+from contextlib import suppress
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +109,8 @@ class LLMParserFallback:
             return []
 
         is_available = False
-        try:
+        with suppress(Exception):
             is_available = self._llm_service.is_available()  # type: ignore[union-attr]
-        except Exception:
-            pass
 
         if not is_available:
             slog.llm_result("LLM service not available")
@@ -160,11 +158,11 @@ class LLMParserFallback:
                 finding["ai_generated"] = True
                 # Post-hoc validation: discard findings with empty type, missing endpoint,
                 # or severity outside the allowed set
-                VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                valid_severities = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
                 ftype = str(finding.get("type", "")).strip()
                 fseverity = str(finding.get("severity", "")).strip().upper()
                 fendpoint = str(finding.get("endpoint", "")).strip()
-                if not ftype or fseverity not in VALID_SEVERITIES or not fendpoint:
+                if not ftype or fseverity not in valid_severities or not fendpoint:
                     logger.debug(
                         "LLMParserFallback: discarded hallucinated/invalid finding "
                         "type=%r severity=%r endpoint=%r",

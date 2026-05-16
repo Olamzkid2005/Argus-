@@ -10,6 +10,7 @@ Supports event batching and severity-based filtering.
 Requirements: 31.2, 31.3, 31.4
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -78,10 +79,8 @@ class WebSocketEventPublisher:
     def close(self):
         """Close the Redis connection explicitly."""
         if self._redis is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._redis.close()
-            except Exception:
-                pass
             self._redis = None
 
     def _get_channel(self, engagement_id: str) -> str:

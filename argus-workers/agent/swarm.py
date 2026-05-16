@@ -14,13 +14,13 @@ import concurrent.futures
 import copy
 import logging
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from streaming import (
-    emit_swarm_agent_started,
     emit_swarm_agent_action,
     emit_swarm_agent_complete,
+    emit_swarm_agent_started,
     emit_swarm_merge_complete,
 )
 from utils.logging_utils import ScanLogger
@@ -60,6 +60,7 @@ class SpecialistAgent(ABC):
         self.engagement_id = engagement_id
         self.decision_repo = decision_repo
         self.auth_config = auth_config or {}
+        self.bug_bounty_mode = bug_bounty_mode
         self.findings: list[dict] = []
         self._parser = None
         self.tools_attempted: set[str] = set()
@@ -161,9 +162,7 @@ class IDORAgent(SpecialistAgent):
         )
         if specific:
             return True
-        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc):
-            return True
-        return False
+        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc))
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -176,11 +175,11 @@ class IDORAgent(SpecialistAgent):
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / f"arjun_idor.json")
+                    arjun_out = str(sandbox / "tmp" / "arjun_idor.json")
                 else:
-                    import tempfile
                     import os
-                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_idor.json")
+                    import tempfile
+                    arjun_out = os.path.join(tempfile.gettempdir(), "arjun_idor.json")
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -244,9 +243,7 @@ class AuthAgent(SpecialistAgent):
         )
         if specific:
             return True
-        if hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc):
-            return True
-        return False
+        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc))
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -350,9 +347,7 @@ class APIAgent(SpecialistAgent):
         )
         if specific:
             return True
-        if self._has_api_signals(rc) and hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 5:
-            return True
-        return False
+        return bool(self._has_api_signals(rc) and hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 5)
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -374,11 +369,11 @@ class APIAgent(SpecialistAgent):
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / f"arjun_api.json")
+                    arjun_out = str(sandbox / "tmp" / "arjun_api.json")
                 else:
-                    import tempfile
                     import os
-                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_api.json")
+                    import tempfile
+                    arjun_out = os.path.join(tempfile.gettempdir(), "arjun_api.json")
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -432,11 +427,11 @@ class APIAgent(SpecialistAgent):
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
-                    sqlmap_out = str(sandbox / "tmp" / f"sqlmap_api.json")
+                    sqlmap_out = str(sandbox / "tmp" / "sqlmap_api.json")
                 else:
-                    import tempfile
                     import os
-                    sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_api.json")
+                    import tempfile
+                    sqlmap_out = os.path.join(tempfile.gettempdir(), "sqlmap_api.json")
                 sqlmap_findings = self._run_tool(
                     "sqlmap",
                     ["-u", target, "--json-output", sqlmap_out],

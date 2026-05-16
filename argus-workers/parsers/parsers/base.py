@@ -43,8 +43,7 @@ class BaseParser(ABC):
         """
         # Default: parse all and yield from (not true streaming — override in subclass)
         findings = self.parse(raw_output)
-        for finding in findings:
-            yield finding
+        yield from findings
         # Free memory after yielding all findings
         del findings
 

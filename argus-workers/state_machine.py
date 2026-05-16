@@ -15,7 +15,7 @@ from utils.validation import validate_uuid
 logger = logging.getLogger(__name__)
 
 
-class InvalidStateTransition(Exception):
+class InvalidStateTransitionError(Exception):
     """Raised when invalid state transition is attempted"""
     pass
 
@@ -103,7 +103,7 @@ class EngagementStateMachine:
             trace_id: Distributed trace ID for causality chain
 
         Raises:
-            InvalidStateTransition: If transition is invalid
+            InvalidStateTransitionError: If transition is invalid
         """
         # Validate new state
         if new_state not in self.STATES:
@@ -111,7 +111,7 @@ class EngagementStateMachine:
 
         # Check if transition is valid
         if not self.can_transition_to(new_state):
-            raise InvalidStateTransition(
+            raise InvalidStateTransitionError(
                 f"Invalid transition from {self.current_state} to {new_state}. "
                 f"Valid transitions: {self.TRANSITIONS[self.current_state]}"
             )
@@ -178,7 +178,7 @@ class EngagementStateMachine:
                 # Update our local state to match DB before continuing
                 self.current_state = current_db_state
                 if to_state not in self.TRANSITIONS.get(current_db_state, []):
-                    raise InvalidStateTransition(
+                    raise InvalidStateTransitionError(
                         f"Race: engagement {self.engagement_id} is {current_db_state}, "
                         f"cannot transition to {to_state}. "
                         f"Another worker changed state from {from_state}."
@@ -212,7 +212,7 @@ class EngagementStateMachine:
                 # Someone else changed state after our FOR UPDATE lock —
                 # this shouldn't happen, but guard against it
                 conn.rollback()
-                raise InvalidStateTransition(
+                raise InvalidStateTransitionError(
                     f"Concurrent state change detected for engagement {self.engagement_id}"
                 )
 
@@ -318,7 +318,7 @@ class EngagementStateMachine:
             The final state after all transitions
 
         Raises:
-            InvalidStateTransition: If any transition in the chain is invalid
+            InvalidStateTransitionError: If any transition in the chain is invalid
         """
         if not states:
             return self.current_state
@@ -359,7 +359,7 @@ class EngagementStateMachine:
                 if new_state not in self.STATES:
                     raise ValueError(f"Invalid state: {new_state}")
                 if new_state not in self.TRANSITIONS.get(current, []):
-                    raise InvalidStateTransition(
+                    raise InvalidStateTransitionError(
                         f"Invalid transition from {current} to {new_state}. "
                         f"Valid transitions: {self.TRANSITIONS[current]}"
                     )
@@ -383,7 +383,7 @@ class EngagementStateMachine:
 
             if cursor.rowcount == 0:
                 conn.rollback()
-                raise InvalidStateTransition(
+                raise InvalidStateTransitionError(
                     f"Concurrent state change detected for engagement {self.engagement_id}"
                 )
 

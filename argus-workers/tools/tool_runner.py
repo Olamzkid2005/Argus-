@@ -4,6 +4,7 @@ Tool Runner - Executes security tools safely in sandboxed environment
 Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 20.4, 21.1, 21.2, 22.1
 """
 
+import contextlib
 import logging
 import os
 import select
@@ -13,8 +14,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 from cache import cache
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
@@ -26,8 +25,10 @@ from tools.models import ToolResult
 from tracing import ExecutionSpan, StructuredLogger, get_trace_id
 from utils.logging_utils import ScanLogger
 
+logger = logging.getLogger(__name__)
 
-class SecurityException(Exception):
+
+class SecurityError(Exception):
     """Raised when dangerous payload is detected"""
 
     pass
@@ -160,10 +161,8 @@ class ToolRunner:
             python_paths: list[str] = []
 
             # 1. System / venv site-packages
-            try:
+            with contextlib.suppress(AttributeError):
                 python_paths.extend(p for p in site.getsitepackages() if os.path.isdir(p))
-            except AttributeError:
-                pass  # getsitepackages() absent in some venv builds
 
             # 2. User site-packages (~/.local/lib/... or ~/Library/Python/...)
             user_site = site.getusersitepackages()
@@ -229,7 +228,7 @@ class ToolRunner:
     def _validate_tool_name(self, tool: str) -> str:
         """Validate tool name does not contain path traversal or shell metacharacters."""
         if not tool or "/" in tool or "\\" in tool or ".." in tool:
-            raise SecurityException(
+            raise SecurityError(
                 f"Invalid tool name blocked (path traversal): {tool!r}"
             )
         return tool
@@ -294,7 +293,7 @@ class ToolRunner:
             ToolResult with stdout, stderr, returncode, success
 
         Raises:
-            SecurityException: If dangerous payload detected
+            SecurityError: If dangerous payload detected
             subprocess.TimeoutExpired: If execution times out
         """
         # Cache check
@@ -307,7 +306,7 @@ class ToolRunner:
 
         # Safety check
         if self.is_dangerous(tool, args):
-            raise SecurityException(
+            raise SecurityError(
                 f"Blocked dangerous payload: {tool} {' '.join(args)}"
             )
 
@@ -315,19 +314,20 @@ class ToolRunner:
         tmp_dir = self.sandbox_dir / "tmp"
         tmp_dir.mkdir(exist_ok=True)
 
+        env = self._locked_env(tool)
+
         # Detect and redact sensitive arguments (API tokens, passwords) that would
         # otherwise be visible in /proc/<pid>/cmdline. Instead of passing them as
         # CLI flags, inject them as environment variables (TOOL_TOKEN, TOOL_SECRET).
         sensitive_prefixes = ("--api-token", "--token", "--password", "--secret", "--key", "--auth")
         sanitized_args = []
-        token_values = []
         i = 0
         while i < len(args):
             if any(args[i].startswith(p) for p in sensitive_prefixes):
                 flag = args[i]
                 value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
                 if value:
-                    env[f"TOOL_{flag.lstrip('--').upper().replace('-', '_')}"] = value
+                    env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = value
                     sanitized_args.append(flag)
                     sanitized_args.append("__REDACTED__")
                     i += 2
@@ -344,16 +344,13 @@ class ToolRunner:
 
         # Execute with span tracing
         with self.span_recorder.span(ExecutionSpan.SPAN_TOOL_EXECUTION, {"tool": tool}):
-            # Get env with tool-specific proxy settings
-            env = self._locked_env(tool)
-
             # Resolve tool binary path for tools not in locked PATH
             tool_path = self._resolve_tool_path(tool)
 
             try:
                 # Execute with locked environment
                 # Limit captured output to prevent OOM from large tool output
-                MAX_OUTPUT_BYTES = 10 * 1024 * 1024  # 10MB
+                max_output_bytes = 10 * 1024 * 1024  # 10MB
                 result = subprocess.run(
                     [tool_path] + args,
                     capture_output=True,
@@ -363,19 +360,19 @@ class ToolRunner:
                     env=env,
                 )
                 # Truncate oversized output to prevent memory exhaustion
-                if len(result.stdout) > MAX_OUTPUT_BYTES:
-                    logger.warning("Truncating stdout for %s (%d bytes > %d limit)", tool, len(result.stdout), MAX_OUTPUT_BYTES)
-                    result.stdout = result.stdout[:MAX_OUTPUT_BYTES]
-                if len(result.stderr) > MAX_OUTPUT_BYTES:
-                    logger.warning("Truncating stderr for %s (%d bytes > %d limit)", tool, len(result.stderr), MAX_OUTPUT_BYTES)
-                    result.stderr = result.stderr[:MAX_OUTPUT_BYTES]
+                if len(result.stdout) > max_output_bytes:
+                    logger.warning("Truncating stdout for %s (%d bytes > %d limit)", tool, len(result.stdout), max_output_bytes)
+                    result.stdout = result.stdout[:max_output_bytes]
+                if len(result.stderr) > max_output_bytes:
+                    logger.warning("Truncating stderr for %s (%d bytes > %d limit)", tool, len(result.stderr), max_output_bytes)
+                    result.stderr = result.stderr[:max_output_bytes]
 
                 # Calculate duration
                 duration_ms = int((time.time() - start_time) * 1000)
 
                 # Determine success
                 # Tool-specific exit codes that mean "findings present, not an error"
-                FINDINGS_EXIT_CODES = {
+                findings_exit_codes = {
                     "semgrep": {1},
                     "bandit": {1},
                     "gitleaks": {1},
@@ -385,7 +382,7 @@ class ToolRunner:
                 }
                 success = (
                     result.returncode == 0
-                    or result.returncode in FINDINGS_EXIT_CODES.get(tool, set())
+                    or result.returncode in findings_exit_codes.get(tool, set())
                 )
 
                 # Record tool metrics (Requirement 22.1)
@@ -519,7 +516,7 @@ class ToolRunner:
                 flag = args[i]
                 value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
                 if value:
-                    env[f"TOOL_{flag.lstrip('--').upper().replace('-', '_')}"] = value
+                    env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = value
                     sanitized_args.append(flag)
                     sanitized_args.append("__REDACTED__")
                     i += 2
@@ -541,7 +538,7 @@ class ToolRunner:
         )
 
         stdout_lines = []
-        MAX_STREAMING_BYTES = 50 * 1024 * 1024  # 50MB — stop reading after this
+        max_streaming_bytes = 50 * 1024 * 1024  # 50MB — stop reading after this
         total_bytes = 0
         start = time.time()
 
@@ -556,10 +553,10 @@ class ToolRunner:
                     line = proc.stdout.readline()
                     if line:
                         total_bytes += len(line.encode("utf-8"))
-                        if total_bytes > MAX_STREAMING_BYTES:
+                        if total_bytes > max_streaming_bytes:
                             logger.warning(
                                 "Streaming output for %s exceeded %d byte limit — killing process",
-                                tool, MAX_STREAMING_BYTES,
+                                tool, max_streaming_bytes,
                             )
                             proc.kill()
                             break
@@ -786,7 +783,7 @@ class ToolRunner:
     def run_with_circuit_breaker(
         self, tool: str, args: list[str], timeout: int = 180
     ) -> ToolResult:
-        slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
+        ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         """
         Execute tool with circuit breaker protection.
 
@@ -802,7 +799,7 @@ class ToolRunner:
 
         Raises:
             CircuitOpenError: If circuit breaker is open
-            SecurityException: If dangerous payload detected
+            SecurityError: If dangerous payload detected
         """
         breaker = self._circuit_breaker_mgr.get_breaker(
             tool, self._failure_threshold, self._cooldown_seconds
@@ -817,7 +814,7 @@ class ToolRunner:
             result = self.run(tool, args, timeout)
             breaker.record_success()
             return result
-        except SecurityException:
+        except SecurityError:
             # Safety successes should not count as failures
             raise
         except Exception:

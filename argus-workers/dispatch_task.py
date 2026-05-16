@@ -14,15 +14,17 @@ import logging
 import os
 import sys
 
+logger = logging.getLogger(__name__)
+
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
-from celery_app import app
-from job_schema import TASK_NAME_MAP, JobMessage
+from celery_app import app  # noqa: E402
+from job_schema import TASK_NAME_MAP, JobMessage  # noqa: E402
 
 load_dotenv()
 
@@ -48,7 +50,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
-logger = logging.getLogger(__name__)
 
 
 def dispatch_task(task_name: str, args: list, task_id: str = None) -> dict:

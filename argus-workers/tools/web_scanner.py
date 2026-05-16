@@ -19,6 +19,7 @@ Integrates advanced web scanning capabilities:
 - Debug endpoint detection
 - Sensitive file detection
 """
+import contextlib
 import json
 import logging
 import re
@@ -31,10 +32,6 @@ import requests
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-logger = logging.getLogger(__name__)
-
-import contextlib
-
 from config.constants import (
     LLM_MAX_GENERATED_PAYLOADS,
     MAX_PAGES_TO_CRAWL,
@@ -44,6 +41,8 @@ from config.constants import (
 )
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 
 class WebScanner:
@@ -262,7 +261,7 @@ class WebScanner:
     @staticmethod
     def _redact_for_llm(text: str) -> str:
         """Redact sensitive data before sending to LLM provider.
-        
+
         Strips potential secrets (tokens, passwords, keys, internal URLs)
         from HTTP response snippets to prevent data exfiltration.
         """
@@ -848,9 +847,8 @@ class WebScanner:
 
         for method in methods:
             resp = self._safe_request(method, self.target_url)
-            if resp and resp.status_code not in (405, 404, 403, 501):
-                # TRACE method specifically is dangerous
-                if method == "TRACE":
+            # TRACE method specifically is dangerous
+            if resp and resp.status_code not in (405, 404, 403, 501) and method == "TRACE":
                     self._add_finding(
                         finding_type="HTTP_VERB_TAMPERING",
                         severity="MEDIUM",
@@ -1307,9 +1305,7 @@ class WebScanner:
                 has_evaluation = " 49 " in test_resp.text or ">49<" in test_resp.text
 
                 # Also verify it's NOT error or part of another word
-                if has_evaluation:
-                    # Do a sanity check - ensure it's actual output, not error message
-                    if "error" not in test_resp.text.lower() and "undefined" not in test_resp.text.lower():
+                if has_evaluation and "error" not in test_resp.text.lower() and "undefined" not in test_resp.text.lower():
                         self._add_finding(
                             finding_type="SSTI",
                             severity="CRITICAL",
@@ -1754,7 +1750,7 @@ class WebScanner:
             barrier = threading.Barrier(5, timeout=5)
             barrier_broken = [False]  # Mutable to capture from thread closures
 
-            def _race_request():
+            def _race_request(barrier=barrier, barrier_broken=barrier_broken, url=url, payload=payload):
                 try:
                     barrier.wait(timeout=5)
                 except threading.BrokenBarrierError:
@@ -1824,8 +1820,8 @@ class WebScanner:
 
     def check_predictable_identifiers(self):
         """Detect predictable object IDs via entropy analysis of sequential requests."""
-        from collections import Counter as _Counter
         import math as _math
+        from collections import Counter as _Counter
 
         # Find URLs with numeric ID patterns
         resp = self._safe_request("GET", self.target_url)

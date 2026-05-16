@@ -11,9 +11,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 # Tool cache directory
 TOOL_CACHE_DIR = Path("/tmp/argus_tool_cache")

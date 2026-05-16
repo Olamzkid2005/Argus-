@@ -18,9 +18,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 SPA_FRAMEWORKS = {"react", "vue", "angular", "next.js", "nuxt", "svelte", "ember", "backbone"}
 
@@ -58,7 +58,7 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
             timeout=timeout,
         )
     except FileNotFoundError:
-        slog.warn(f"Python interpreter not found")
+        slog.warn("Python interpreter not found")
         logger.warning(f"Python interpreter not found at {sys.executable}")
         return []
     except subprocess.TimeoutExpired:
@@ -74,7 +74,7 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
 
     stdout = result.stdout.strip()
     if not stdout:
-        slog.debug(f"Browser scan returned empty output")
+        slog.debug("Browser scan returned empty output")
         logger.debug(f"Browser scan returned empty output for {target_url}")
         return []
 

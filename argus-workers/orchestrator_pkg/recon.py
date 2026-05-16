@@ -4,6 +4,7 @@ Reconnaissance execution logic extracted from Orchestrator.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
@@ -287,10 +288,8 @@ def execute_recon_tools(
             _db_conn = ctx.db_connection_string
         # Fallback: try getting org_id from orchestrator
         if not _org_id and hasattr(ctx, "_get_org_id"):
-            try:
+            with contextlib.suppress(Exception):
                 _org_id = ctx._get_org_id()
-            except Exception:
-                pass
 
         domain = urlparse(target).netloc
         if _org_id and domain:

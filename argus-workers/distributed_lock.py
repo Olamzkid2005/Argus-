@@ -149,7 +149,6 @@ class DistributedLock:
 
         # Use SET with XX (update only if exists) to refresh TTL atomically
         # This is simpler and safer than the Lua script approach
-        from redis.client import NEVER_DECODE
         result = self.redis_client.set(
             lock_key,
             self.worker_id,

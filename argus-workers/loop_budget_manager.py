@@ -40,9 +40,8 @@ class LoopBudgetManager:
         action_type = action.get("type")
 
         # Check cycles for recon_expand actions
-        if action_type == "recon_expand":
-            if self.current_cycles >= self.max_cycles:
-                return False, "cycles_exceeded"
+        if action_type == "recon_expand" and self.current_cycles >= self.max_cycles:
+            return False, "cycles_exceeded"
 
         # Check depth for deep_scan and auth_focused_scan actions
         if action_type in ("deep_scan", "auth_focused_scan") and self.current_depth >= self.max_depth:

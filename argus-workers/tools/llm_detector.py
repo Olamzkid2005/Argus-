@@ -15,9 +15,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -116,7 +116,7 @@ If NOT vulnerable:
         vuln_class: str,
         payload: str,
         response: Any,
-        context: dict | None = None,
+        _context: dict | None = None,
         max_response_chars: int = 3000,
     ) -> LLMAnalysisResult | None:
         """
@@ -206,12 +206,12 @@ If NOT vulnerable:
 
     def analyze_sync(
         self,
-        test_url: str,
-        vuln_class: str,
-        payload: str,
-        response: Any,
-        context: dict | None = None,
-        max_response_chars: int = 3000,
+        _test_url: str,
+        _vuln_class: str,
+        _payload: str,
+        _response: Any,
+        _context: dict | None = None,
+        _max_response_chars: int = 3000,
     ) -> LLMAnalysisResult | None:
         """
         Synchronous version of analyze_async.

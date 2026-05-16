@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from state_machine import EngagementStateMachine, InvalidStateTransition
+from state_machine import EngagementStateMachine, InvalidStateTransitionError
 
 # Valid UUID for testing (matches the format UUID columns expect)
 TEST_ENGAGEMENT_ID = "550e8400-e29b-41d4-a716-446655440000"
@@ -24,15 +24,19 @@ class TestEngagementStateMachine:
 
     def test_initialization_with_invalid_state_raises_error(self):
         """Test initialization with invalid state raises ValueError"""
-        with patch('state_machine.psycopg2.connect'):
-            with pytest.raises(ValueError):
-                EngagementStateMachine(TEST_ENGAGEMENT_ID, "postgresql://localhost", "invalid_state")
+        with (
+            patch('state_machine.psycopg2.connect'),
+            pytest.raises(ValueError),
+        ):
+            EngagementStateMachine(TEST_ENGAGEMENT_ID, "postgresql://localhost", "invalid_state")
 
     def test_initialization_with_invalid_uuid_raises_error(self):
         """Test initialization with non-UUID string raises ValueError"""
-        with patch('state_machine.psycopg2.connect'):
-            with pytest.raises(ValueError, match="not a valid UUID"):
-                EngagementStateMachine("not-a-uuid", "postgresql://localhost", "created")
+        with (
+            patch('state_machine.psycopg2.connect'),
+            pytest.raises(ValueError, match="not a valid UUID"),
+        ):
+            EngagementStateMachine("not-a-uuid", "postgresql://localhost", "created")
 
     def test_can_transition_to_valid_state(self):
         """Test can_transition_to returns True for valid transitions"""
@@ -71,11 +75,11 @@ class TestEngagementStateMachine:
             assert mock_conn.commit.called
 
     def test_transition_to_invalid_state_raises_error(self):
-        """Test transition to invalid state raises InvalidStateTransition"""
+        """Test transition to invalid state raises InvalidStateTransitionError"""
         with patch('state_machine.psycopg2.connect'):
             machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, "postgresql://localhost", "created")
 
-            with pytest.raises(InvalidStateTransition):
+            with pytest.raises(InvalidStateTransitionError):
                 machine.transition("complete")
 
     def test_loop_back_transition_allowed(self):
@@ -140,9 +144,11 @@ class TestEngagementStateMachine:
 
     def test_uuid_is_validated_on_construction(self):
         """Test that non-UUID strings are rejected at construction time"""
-        with patch('state_machine.psycopg2.connect'):
-            with pytest.raises(ValueError, match="not a valid UUID"):
-                EngagementStateMachine("eng-123", "postgresql://localhost", "created")
+        with (
+            patch('state_machine.psycopg2.connect'),
+            pytest.raises(ValueError, match="not a valid UUID"),
+        ):
+            EngagementStateMachine("eng-123", "postgresql://localhost", "created")
 
     def test_get_transition_history_executes_correct_query(self):
         """Test get_transition_history uses correct SQL"""

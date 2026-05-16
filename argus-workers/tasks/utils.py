@@ -5,6 +5,7 @@ Provides:
 - Redis-based ReconContext persistence across the recon → scan boundary
 - LlmCostTracker for per-engagement LLM budget tracking
 """
+import contextlib
 import json
 import logging
 import os
@@ -126,10 +127,8 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
         data = json.loads(raw)
         recon_context = ReconContext.from_dict(data)
         if recon_context:
-            try:
+            with contextlib.suppress(Exception):
                 r.expire(key, RECON_CONTEXT_TTL)
-            except Exception:
-                pass  # Non-critical
         return recon_context
     finally:
         r.close()

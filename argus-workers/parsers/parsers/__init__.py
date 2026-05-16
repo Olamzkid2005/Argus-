@@ -11,9 +11,9 @@ import logging
 import pkgutil
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from parsers.parsers.base import BaseParser, ParserError  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 # Auto-discover all parser modules in this package
 _parser_registry: dict[str, type[BaseParser]] = {}

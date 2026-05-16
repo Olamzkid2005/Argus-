@@ -16,9 +16,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 # CycloneDX specification version
 SPEC_VERSION = "1.5"
@@ -89,7 +89,7 @@ def generate_sbom_from_findings(
     vulnerabilities = []
     purl_index = 1
 
-    for pkg_key, pkg in seen_packages.items():
+    for _pkg_key, pkg in seen_packages.items():
         purl = f"pkg:generic/{pkg['name']}@{pkg['version']}" if pkg["version"] else f"pkg:generic/{pkg['name']}"
         component = {
             "type": "library",

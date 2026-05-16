@@ -19,10 +19,9 @@ import requests
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
 
+logger = logging.getLogger(__name__)
 
 # Payloads that attempt to override or extract system instructions
 PROMPT_INJECTION_PAYLOADS = [

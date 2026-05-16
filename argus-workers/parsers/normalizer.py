@@ -299,7 +299,7 @@ class FindingNormalizer:
             raise FindingValidationError(f"Normalization failed: {e}") from e
 
     def _normalize_type(
-        self, raw_type: str, source_tool: str, raw_finding: dict = None
+        self, raw_type: str, _source_tool: str, raw_finding: dict = None
     ) -> str:
         """
         Normalize vulnerability type names
@@ -403,13 +403,11 @@ class FindingNormalizer:
             elif current_idx >= 3:
                 current_idx = 2
 
-        if requires_auth:
-            if current_idx >= 4:
-                current_idx = 3
+        if requires_auth and current_idx >= 4:
+            current_idx = 3
 
-        if is_public_api:
-            if current_idx == 2:
-                current_idx = 3
+        if is_public_api and current_idx == 2:
+            current_idx = 3
 
         # Clamp index to valid range (fix 6.2)
         current_idx = max(0, min(current_idx, len(severity_order) - 1))

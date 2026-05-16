@@ -10,11 +10,12 @@ import time
 from collections.abc import Generator
 from functools import lru_cache
 
+from feature_flags import is_enabled
+
 # Import all parser classes from the extracted parsers/parsers/ package.
 # The inline definitions were moved to parsers/parsers/*.py to make the module
 # easier to navigate and test in isolation.
 from parsers.parsers.base import ParserError
-from feature_flags import is_enabled
 from tracing import ExecutionSpan, StructuredLogger
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class Parser:
     @lru_cache(maxsize=1)
     def _build_parsers() -> dict:
         """Build parser registry (cached, invalidated upon request).
-        
+
         Call _invalidate_parser_cache() to force re-discovery after hot-reload.
         """
         from parsers.parsers import _parser_registry

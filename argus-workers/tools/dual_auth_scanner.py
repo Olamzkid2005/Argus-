@@ -17,9 +17,9 @@ import requests
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 
 class DualAuthScanner:
@@ -218,7 +218,7 @@ class DualAuthScanner:
             # Phase C: Also try parsing JSON responses for ID fields
             try:
                 data = resp.json()
-                self._extract_ids_from_json(data, discovered, resource_type_hint=None)
+                self._extract_ids_from_json(data, discovered, _resource_type_hint=None)
             except (json.JSONDecodeError, ValueError):
                 pass
 
@@ -248,7 +248,7 @@ class DualAuthScanner:
         self,
         data,
         discovered: dict,
-        resource_type_hint: str | None = None,
+        _resource_type_hint: str | None = None,
     ) -> None:
         """Recursively extract ID values from JSON structures."""
         if isinstance(data, dict):
@@ -393,8 +393,8 @@ class DualAuthScanner:
             data_str = json.dumps(data).lower()
             exposed_fields = []
             # Shared source of truth with WebScanner.SENSITIVE_RESPONSE_FIELDS
-            from tools.web_scanner import WebScanner as _WS
-            sensitive_fields = _WS.SENSITIVE_RESPONSE_FIELDS
+            from tools.web_scanner import WebScanner
+            sensitive_fields = WebScanner.SENSITIVE_RESPONSE_FIELDS
             for field in sensitive_fields:
                 if f'"{field}"' in data_str:
                     exposed_fields.append(field)

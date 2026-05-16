@@ -56,7 +56,7 @@ def generate_bugbounty_report(
         logger.error(f"Failed to fetch data for engagement {engagement_id}: {e}")
         # Exponential backoff with jitter to prevent retry storms
         countdown = min(30 * (2 ** self.request.retries), 300) + random.uniform(0, 10)
-        raise self.retry(exc=e, countdown=countdown)
+        raise self.retry(exc=e, countdown=countdown) from e
 
     if not findings:
         logger.warning(f"No findings found for engagement {engagement_id}")

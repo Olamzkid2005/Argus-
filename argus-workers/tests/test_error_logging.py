@@ -6,7 +6,7 @@ class TestErrorLogging:
     """Verify that operational paths log warnings instead of crashing or silently swallowing errors."""
 
     @patch("tools.port_scanner.is_enabled", return_value=True)
-    def test_port_scanner_missing_tool_logs_warning(self, mock_is_enabled):
+    def test_port_scanner_missing_tool_logs_warning(self, _mock_is_enabled):
         """Missing tools should produce warning logs, not silent failures."""
         from tools.port_scanner import PortScanner
 
@@ -22,7 +22,7 @@ class TestErrorLogging:
         assert result.open_ports == []
 
     @patch("tools.port_scanner.is_enabled", return_value=True)
-    def test_port_scanner_returns_empty_on_missing_naabu(self, mock_is_enabled):
+    def test_port_scanner_returns_empty_on_missing_naabu(self, _mock_is_enabled):
         """When naabu is unavailable, scan returns empty result without crashing."""
         from tools.port_scanner import PortScanner
 
@@ -37,10 +37,10 @@ class TestErrorLogging:
         assert result.target == "example.com"
 
     @patch("tools.port_scanner.is_enabled", return_value=True)
-    def test_port_scanner_continues_without_nmap(self, mock_is_enabled):
+    def test_port_scanner_continues_without_nmap(self, _mock_is_enabled):
         """When only nmap is missing, scan should still return naabu results."""
-        from tools.tool_runner import ToolResult
         from tools.port_scanner import PortScanner
+        from tools.tool_runner import ToolResult
 
         scanner = PortScanner()
         # Mock tool_runner.run() so naabu succeeds with fake output
@@ -54,7 +54,7 @@ class TestErrorLogging:
         assert result.open_ports[0].port == 80
 
     @patch("tools.port_scanner.is_enabled", return_value=False)
-    def test_port_scanner_disabled_flag(self, mock_is_enabled):
+    def test_port_scanner_disabled_flag(self, _mock_is_enabled):
         """When PORT_SCANNER feature flag is off, scan returns empty without checking tools."""
         from tools.port_scanner import PortScanner
 

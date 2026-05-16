@@ -15,8 +15,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Redis configuration — use shared config for production, allow override for cache isolation
-from config.redis import REDIS_URL as _BASE_REDIS_URL
+# Redis configuration — use shared config for production, override allow cache isolation
+import contextlib  # noqa: E402
+
+from config.redis import REDIS_URL as _BASE_REDIS_URL  # noqa: E402
+
 CACHE_DB = int(os.getenv("CACHE_REDIS_DB", "1"))
 CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL", f"{_BASE_REDIS_URL}/{CACHE_DB}")
 
@@ -34,10 +37,8 @@ def _get_redis():
             return _redis_client_instance
         except Exception:
             logger.warning("Redis connection lost — reconnecting")
-            try:
+            with contextlib.suppress(Exception):
                 _redis_client_instance.close()
-            except Exception:
-                pass
             _redis_client_instance = None
             _redis_available = False
     try:
@@ -139,7 +140,7 @@ class WorkerCache:
         self,
         query: str,
         params: tuple | None = None,
-        ttl: int | None = None
+        _ttl: int | None = None
     ) -> Any | None:
         """
         Get cached query result.

@@ -5,6 +5,7 @@ Stores failed tasks for later inspection and replay.
 Uses Redis for temporary storage and PostgreSQL for persistence.
 """
 
+import contextlib
 import json
 import logging
 from dataclasses import asdict, dataclass
@@ -59,10 +60,8 @@ class DeadLetterQueue:
     def close(self):
         """Close the Redis connection explicitly."""
         if self._redis is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._redis.close()
-            except Exception:
-                pass
             self._redis = None
 
     def enqueue(

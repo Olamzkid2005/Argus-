@@ -21,7 +21,6 @@ class TestSecretsManager:
         sm._vault_client = None
         sm._aws_client = None
         sm._cache = {}
-        sm.get_secret.cache_clear()
         return sm
 
     def test_init(self, manager):
@@ -36,9 +35,11 @@ class TestSecretsManager:
         mock_client = MagicMock()
         mock_hvac.Client.return_value = mock_client
 
-        with patch.dict(os.environ, {"VAULT_ADDR": "http://vault:8200", "VAULT_TOKEN": "token123"}, clear=False):
-            with patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_hvac if name == "hvac" else __builtins__.__import__(name, *args, **kwargs)):
-                client = manager._get_vault_client()
+        with (
+            patch.dict(os.environ, {"VAULT_ADDR": "http://vault:8200", "VAULT_TOKEN": "token123"}, clear=False),
+            patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_hvac if name == "hvac" else __builtins__.__import__(name, *args, **kwargs)),
+        ):
+            client = manager._get_vault_client()
 
         assert client is mock_client
         mock_hvac.Client.assert_called_once_with(url="http://vault:8200", token="token123")
@@ -55,9 +56,11 @@ class TestSecretsManager:
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
 
-        with patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=False):
-            with patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_boto3 if name == "boto3" else __builtins__.__import__(name, *args, **kwargs)):
-                client = manager._get_aws_client()
+        with (
+            patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=False),
+            patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_boto3 if name == "boto3" else __builtins__.__import__(name, *args, **kwargs)),
+        ):
+            client = manager._get_aws_client()
 
         assert client is mock_client
         mock_boto3.client.assert_called_once_with("secretsmanager", region_name="us-west-2")
@@ -150,23 +153,17 @@ class TestSecretsManager:
     def test_invalidate_cache_single_key(self, manager):
         """Test invalidating cache for a single key"""
         manager._cache = {"key1": "val1", "key2": "val2"}
-
-        with patch.object(SecretsManager.get_secret, "cache_clear") as mock_clear:
-            manager.invalidate_cache("key1")
+        manager.invalidate_cache("key1")
 
         assert "key1" not in manager._cache
         assert "key2" in manager._cache
-        mock_clear.assert_called_once()
 
     def test_invalidate_cache_all(self, manager):
         """Test invalidating entire cache"""
         manager._cache = {"key1": "val1", "key2": "val2"}
-
-        with patch.object(SecretsManager.get_secret, "cache_clear") as mock_clear:
-            manager.invalidate_cache()
+        manager.invalidate_cache()
 
         assert manager._cache == {}
-        mock_clear.assert_called_once()
 
     def test_get_secret_vault_unauthenticated(self, manager):
         """Test Vault fallback when not authenticated"""

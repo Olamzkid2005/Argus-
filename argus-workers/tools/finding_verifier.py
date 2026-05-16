@@ -33,7 +33,7 @@ XSS_TEST_PAYLOADS = [
 async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = None, engagement_id: str = "") -> dict:
     """
     Verify SQL injection by differential response analysis.
-    
+
     Compares response to a benign variant of the payload. If the benign
     variant doesn't trigger SQL error markers but the original does, the
     finding is likely a true positive.
@@ -75,11 +75,11 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
                 result["verified"] = True
                 result["confidence"] = "high"
                 result["reason"] = f"SQL error markers in original only: {original_markers}"
-                slog.info(f"SQLi verified (high conf): markers in original only")
+                slog.info("SQLi verified (high conf): markers in original only")
             elif original_markers and benign_markers:
                 result["confidence"] = "medium"
                 result["reason"] = f"SQL markers in both: original={original_markers}, benign={benign_markers}"
-                slog.info(f"SQLi potential (medium conf): markers in both")
+                slog.info("SQLi potential (medium conf): markers in both")
             elif not original_markers and not benign_markers:
                 result["verified"] = True  # Could be blind/boolean-based
                 result["confidence"] = "low"
@@ -101,7 +101,7 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
 async def verify_xss(endpoint: str, payload: str, param: str | None = None, engagement_id: str = "") -> dict:
     """
     Verify XSS by checking if payload is reflected in response.
-    
+
     Note: This catches reflected XSS. DOM-based XSS requires browser
     instrumentation and won't be detected here.
     """
@@ -164,7 +164,7 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None, enga
 async def verify_open_redirect(endpoint: str, engagement_id: str = "") -> dict:
     """
     Verify open redirect by following the redirect chain.
-    
+
     Checks if the final destination is an external domain.
     """
     slog = ScanLogger("finding_verifier", engagement_id=engagement_id)
@@ -225,7 +225,7 @@ VERIFIERS = {
 async def verify_finding(finding: dict, engagement_id: str = "") -> dict:
     """
     Verify a finding using the appropriate verifier based on finding type.
-    
+
     Returns the finding with verification metadata added.
     """
     import functools

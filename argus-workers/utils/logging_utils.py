@@ -5,6 +5,7 @@ Redacts sensitive information from logs to prevent credential leakage.
 """
 import logging
 import re
+import time as _time
 from typing import Any
 
 # Patterns for sensitive data that should be redacted
@@ -82,7 +83,7 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
         return data
 
     # Keys that are always sensitive
-    SENSITIVE_KEYS = {
+    sensitive_keys = {
         'password', 'secret', 'token', 'api_key', 'apikey', 'private_key',
         'access_token', 'refresh_token', 'auth_token', 'bearer_token',
         'connection_string', 'database_url', 'db_url', 'credential',
@@ -95,7 +96,7 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
         # Check if this key is sensitive
         key_lower = key.lower()
 
-        if key_lower in SENSITIVE_KEYS:
+        if key_lower in sensitive_keys:
             # Redact the value
             if isinstance(value, str):
                 result[key] = '[REDACTED]'
@@ -208,8 +209,6 @@ def setup_logging():
 
 
 # ── Standardized Console Logging Utilities ──────────────────────────────
-
-import time as _time
 
 
 class ScanLogger:

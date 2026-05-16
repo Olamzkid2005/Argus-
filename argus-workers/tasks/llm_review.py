@@ -88,25 +88,25 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     # Check if LLM review is enabled
     try:
         from config.constants import (
-            LLM_REVIEW_CONFIDENCE_THRESHOLD,
-            LLM_REVIEW_MAX_PER_ENGAGEMENT,
-            LLM_REVIEW_MAX_RESPONSE_CHARS,
-            LLM_REVIEW_MIN_CONFIDENCE,
+            llm_review_confidence_threshold,
+            llm_review_max_per_engagement,
+            llm_review_max_response_chars,
+            llm_review_min_confidence,
         )
     except ImportError:
-        LLM_REVIEW_CONFIDENCE_THRESHOLD = 0.7
-        LLM_REVIEW_MIN_CONFIDENCE = 0.3
-        LLM_REVIEW_MAX_PER_ENGAGEMENT = 20
-        LLM_REVIEW_MAX_RESPONSE_CHARS = 3000
+        llm_review_confidence_threshold = 0.7
+        llm_review_min_confidence = 0.3
+        llm_review_max_per_engagement = 20
+        llm_review_max_response_chars = 3000
 
     # Load feature flag dynamically from Redis (set via UI Settings page)
     try:
         from llm_client import load_llm_setting
-        LLM_REVIEW_ENABLED = load_llm_setting("llm_review_enabled", "true") == "true"
+        llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
     except ImportError:
-        LLM_REVIEW_ENABLED = True
+        llm_review_enabled = True
 
-    if not LLM_REVIEW_ENABLED:
+    if not llm_review_enabled:
         slog.info("LLM review disabled via config")
         return {"status": "skipped", "reason": "LLM_REVIEW_ENABLED=False"}
 
@@ -123,10 +123,9 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         return {"status": "skipped", "reason": "Finding repository unavailable"}
 
     # Initialize budget manager
-    budget_mgr = None
     try:
         from loop_budget_manager import LoopBudgetManager
-        budget_mgr = LoopBudgetManager(engagement_id, budget or {})
+        LoopBudgetManager(engagement_id, budget or {})
     except Exception as e:
         slog.warning(f"Budget manager not available: {e}")
 
@@ -134,16 +133,16 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     try:
         candidate_findings = repo.find_unreviewed_low_confidence(
             engagement_id=engagement_id,
-            threshold=LLM_REVIEW_CONFIDENCE_THRESHOLD,
-            min_confidence=LLM_REVIEW_MIN_CONFIDENCE,
-            limit=LLM_REVIEW_MAX_PER_ENGAGEMENT,
+            threshold=llm_review_confidence_threshold,
+            min_confidence=llm_review_min_confidence,
+            limit=llm_review_max_per_engagement,
         )
     except Exception as e:
         slog.error(f"Failed to load candidate findings: {e}")
         return {"status": "error", "error": str(e)}
 
     if not candidate_findings:
-        slog.info(f"No candidate findings for LLM review")
+        slog.info("No candidate findings for LLM review")
         return {"status": "completed", "analyzed": 0, "total": 0}
 
     slog.info(f"LLM review: {len(candidate_findings)} candidate findings")
@@ -186,7 +185,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                     vuln_class=finding.get("type", "UNKNOWN"),
                     payload=payload,
                     response=response,
-                    max_response_chars=LLM_REVIEW_MAX_RESPONSE_CHARS,
+                    max_response_chars=llm_review_max_response_chars,
                 ))
                 loop.run_until_complete(asyncio.wait([future]))
                 result = future.result()
@@ -196,7 +195,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                     vuln_class=finding.get("type", "UNKNOWN"),
                     payload=payload,
                     response=response,
-                    max_response_chars=LLM_REVIEW_MAX_RESPONSE_CHARS,
+                    max_response_chars=llm_review_max_response_chars,
                 ))
 
             if result is None:
@@ -268,8 +267,9 @@ def _replay_request(endpoint: str, evidence: dict):
         Response object or None on failure
     """
     try:
-        import requests
         from urllib.parse import urlencode
+
+        import requests
 
         headers = {"User-Agent": "Argus-LLM-Review/1.0"}
         timeout = 15

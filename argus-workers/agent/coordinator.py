@@ -122,9 +122,9 @@ def create_phase_agent(
     if tool_runner:
         # Read real descriptions and parameter schemas from SSOT
         try:
-            from tool_definitions import TOOLS as TOOL_DEFS
+            from tool_definitions import TOOLS
         except ImportError:
-            TOOL_DEFS = {}
+            TOOLS = {}  # noqa: N806
 
         for tool_name in phase_tools:
             def make_runner(tn):
@@ -137,7 +137,7 @@ def create_phase_agent(
                 run_tool.__name__ = tn
                 return run_tool
 
-            tool_def = TOOL_DEFS.get(tool_name)
+            tool_def = TOOLS.get(tool_name)
             if tool_def:
                 description = tool_def.description
                 try:

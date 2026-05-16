@@ -1,3 +1,4 @@
+import contextlib
 import json
 
 from parsers.parsers.base import BaseParser
@@ -7,10 +8,8 @@ class WhatwebParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
         findings = []
         items = None
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             items = json.loads(raw_output)
-        except json.JSONDecodeError:
-            pass
         if isinstance(items, list):
             entries = items
         elif isinstance(items, dict):

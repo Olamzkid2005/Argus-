@@ -6,9 +6,9 @@ import uuid
 
 from psycopg2.extras import Json, RealDictCursor
 
-logger = logging.getLogger(__name__)
-
 from database.repositories.base import BaseRepository
+
+logger = logging.getLogger(__name__)
 
 
 class FindingRepository(BaseRepository):

@@ -41,7 +41,7 @@ class AIExplainabilityRepository:
                 cursor.execute(query, (cluster_id, explanation, model_version, token_count))
                 result = cursor.fetchone()
                 self.db.commit()
-                return dict(zip([desc[0] for desc in cursor.description], result)) if result else None
+                return dict(zip([desc[0] for desc in cursor.description], result, strict=False)) if result else None
         except Exception as e:
             self.db.rollback()
             logger.error("Failed to create AI explanation: %s", e)
@@ -64,7 +64,7 @@ class AIExplainabilityRepository:
                 cursor.execute(query, (cluster_id, json.dumps(trace_data)))
                 result = cursor.fetchone()
                 self.db.commit()
-                return dict(zip([desc[0] for desc in cursor.description], result)) if result else None
+                return dict(zip([desc[0] for desc in cursor.description], result, strict=False)) if result else None
         except Exception as e:
             self.db.rollback()
             logger.error("Failed to create explainability trace: %s", e)
@@ -84,7 +84,7 @@ class AIExplainabilityRepository:
                 row = cursor.fetchone()
                 if row:
                     columns = [desc[0] for desc in cursor.description]
-                    return dict(zip(columns, row))
+                    return dict(zip(columns, row, strict=False))
                 return None
         except Exception as e:
             logger.error("Failed to get AI explanation: %s", e)
@@ -104,7 +104,7 @@ class AIExplainabilityRepository:
                 row = cursor.fetchone()
                 if row:
                     columns = [desc[0] for desc in cursor.description]
-                    record = dict(zip(columns, row))
+                    record = dict(zip(columns, row, strict=False))
                     if isinstance(record.get("trace_data"), str):
                         record["trace_data"] = json.loads(record["trace_data"])
                     return record

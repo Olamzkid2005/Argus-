@@ -38,7 +38,7 @@ class GracefulShutdownHandler:
         )
         logger.info("Graceful shutdown handlers registered")
 
-    def _handle_shutdown(self, signum, frame):
+    def _handle_shutdown(self, signum, _frame):
         """Handle shutdown signal"""
         logger.warning(
             f"Received signal {signum}, initiating graceful shutdown..."

@@ -286,7 +286,7 @@ class IntelligenceEngine:
 
     def _group_findings_for_agreement(self, findings: list[dict]) -> dict:
         """Group findings that represent the same vulnerability family for tool agreement."""
-        TYPE_FAMILIES = {
+        type_families = {
             "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS"],
             "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "ERROR_SQLI"],
             "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
@@ -308,7 +308,7 @@ class IntelligenceEngine:
             normalized_endpoint = f"{parsed.netloc}{parsed.path}"
 
             normalized_type = finding_type
-            for family, members in TYPE_FAMILIES.items():
+            for family, members in type_families.items():
                 if normalized_type in members:
                     normalized_type = family
                     break

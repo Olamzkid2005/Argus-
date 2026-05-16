@@ -560,7 +560,7 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
     """
 
     # Bug-Reaper's priority-ordered hunting classes with their associated tools
-    PRIORITY_ORDER = [
+    priority_order = [
         ("idor", ["arjun", "jwt_tool", "web_scanner"],
          "Test every ?id=, ?user_id=, /api/*/[id] endpoint with two-account swap"),
         ("auth-bypass", ["jwt_tool", "web_scanner"],
@@ -588,7 +588,7 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
     # Find the first priority class where none of its tools have run yet
     kb_root = Path(__file__).parent / "bugbounty_knowledge"
 
-    for vuln_class, tools, quick_win in PRIORITY_ORDER:
+    for vuln_class, tools, quick_win in priority_order:
         if not any(t in tried_tools for t in tools):
             ref_file = kb_root / "vulnerabilities" / f"{vuln_class}.md"
             if ref_file.exists():
@@ -612,7 +612,6 @@ QUICK WIN: {quick_win}
 # USER PROMPT BUILDER
 # ---------------------------------------------------------------------------
 
-import re
 
 
 def _sanitize_for_prompt(value: str) -> str:
@@ -775,8 +774,8 @@ def build_tool_selection_prompt(
 
     # ── Token budget enforcement (truncate from tail) ──────────────
     # Approx 4 chars per token. Leave 100 tokens for response.
-    MAX_CHARS = 3400 * 4
-    if len(prompt) > MAX_CHARS:
+    max_chars = 3400 * 4
+    if len(prompt) > max_chars:
         # Find the observation history section and truncate it
         obs_marker = "=== WHAT THOSE TOOLS FOUND ==="
         mid = prompt.find(obs_marker)
@@ -808,7 +807,7 @@ def build_observation_summary(tool_name: str, result) -> str:
             f"(tool ran cleanly, target may be clean for this check)"
         )
 
-    lines = [l.strip() for l in output.split("\n") if l.strip()]
+    lines = [line.strip() for line in output.split("\n") if line.strip()]
 
     # Count JSON-line findings (nuclei, dalfox, naabu, etc.)
     json_lines = []
@@ -834,7 +833,7 @@ def build_observation_summary(tool_name: str, result) -> str:
     preview_lines = lines[:8]
     more = len(lines) - 8
     summary = f"{tool_name}: completed — {len(lines)} output lines\n"
-    summary += "\n".join(f"  {l[:200]}" for l in preview_lines)
+    summary += "\n".join(f"  {line[:200]}" for line in preview_lines)
     if more > 0:
         summary += f"\n  ... and {more} more lines"
     return summary

@@ -7,6 +7,7 @@ import json
 import logging
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from types import SimpleNamespace
 
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
@@ -20,13 +21,13 @@ from tools.web_scanner import WebScanner
 from utils.logging_utils import ScanLogger
 
 from .utils import get_nuclei_templates_path
-from types import SimpleNamespace
 
 # Module-level flag to avoid repeated import inside the per-target loop
 try:
     from feature_flags import is_enabled as _feature_enabled
 except ImportError:
-    _feature_enabled = lambda name, default=False: False
+    def _feature_enabled(name, default=False):
+        return False
 
 logger = logging.getLogger(__name__)
 
@@ -255,8 +256,8 @@ def execute_scan_tools(
                 if sandbox:
                     arjun_out = str(sandbox / "tmp" / "arjun.json")
                 else:
-                    import tempfile
                     import os
+                    import tempfile
                     arjun_out = os.path.join(tempfile.gettempdir(), "arjun.json")
                 arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
                 arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
@@ -307,8 +308,8 @@ def execute_scan_tools(
             if sandbox:
                 sqlmap_out = str(sandbox / "tmp" / "sqlmap.json")
             else:
-                import tempfile
                 import os
+                import tempfile
                 sqlmap_out = os.path.join(tempfile.gettempdir(), "sqlmap.json")
             sqlmap_cmd = ["-u", target, "--json-output", sqlmap_out]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
@@ -330,8 +331,8 @@ def execute_scan_tools(
             if sandbox:
                 commix_out = str(sandbox / "tmp" / "commix.json")
             else:
-                import tempfile
                 import os
+                import tempfile
                 commix_out = os.path.join(tempfile.gettempdir(), "commix.json")
             scan_jobs.append(("commix",
                 ["--url", target, "--batch", "--json-output", commix_out],
@@ -343,8 +344,8 @@ def execute_scan_tools(
             if sandbox:
                 testssl_out = str(sandbox / "tmp" / "testssl.json")
             else:
-                import tempfile
                 import os
+                import tempfile
                 testssl_out = os.path.join(tempfile.gettempdir(), "testssl.json")
             scan_jobs.append(("testssl",
                 ["--jsonfile", testssl_out, target],

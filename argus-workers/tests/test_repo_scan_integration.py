@@ -128,7 +128,7 @@ class TestRepoScan:
     # ── Test 4: State machine transitions for repo scan ──
 
     @patch("tasks.recon.run_recon.delay")
-    def test_repo_scan_chain_dispatches_correctly(self, mock_run_recon):
+    def test_repo_scan_chain_dispatches_correctly(self, _mock_run_recon):
         """Verify the task chain dispatches correctly after repo scan."""
         from orchestrator import Orchestrator
 

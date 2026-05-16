@@ -9,9 +9,9 @@ Requires: pgvector extension installed on PostgreSQL
 import logging
 import os
 
-logger = logging.getLogger(__name__)
-
 from database.connection import db_cursor, get_db
+
+logger = logging.getLogger(__name__)
 
 
 class PGVectorRepository:
@@ -59,7 +59,7 @@ class PGVectorRepository:
         finding_id: str,
         engagement_id: str,
         embedding: list[float],
-        text_content: str,
+        _text_content: str,
     ) -> bool:
         """
         Store embedding for a finding
@@ -306,7 +306,7 @@ class PGVectorRepository:
         self,
         text_content: str,
         engagement_id: str,
-        threshold: float,
+        _threshold: float,
         limit: int,
     ) -> list[dict]:
         """

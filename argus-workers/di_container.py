@@ -40,14 +40,14 @@ class OutputProvider:
     Default no-op implementation — override to store in DB or S3.
     """
 
-    async def write(self, step_name: str, content: str) -> None:
+    async def write(self, _step_name: str, content: str) -> None:
         """Write output for a step."""
 
-    async def read(self, step_name: str) -> str | None:
+    async def read(self, _step_name: str) -> str | None:
         """Read output for a step. Returns None if not found."""
         return None
 
-    async def exists(self, step_name: str) -> bool:
+    async def exists(self, _step_name: str) -> bool:
         """Check if output exists for a step."""
         return False
 
@@ -58,7 +58,7 @@ class TemplateProvider:
     Default no-op implementation — override to load from files/DB.
     """
 
-    async def load(self, template_name: str, variables: dict[str, str]) -> str:
+    async def load(self, template_name: str, _variables: dict[str, str]) -> str:
         """Load and render a template."""
         return f"Template: {template_name}"
 

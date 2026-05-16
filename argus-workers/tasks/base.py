@@ -125,14 +125,14 @@ def task_context(
                 sm._ws_publisher = get_websocket_publisher()
                 ctx.state = sm
 
-                slog.info(f"Lock acquired, state machine initialized")
+                slog.info("Lock acquired, state machine initialized")
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
                 ctx.orchestrator = orchestrator
 
                 yield ctx
-        except SoftTimeLimitExceeded as ste:
-            slog.error(f"Soft time limit exceeded — transitioning to failed")
+        except SoftTimeLimitExceeded:
+            slog.error("Soft time limit exceeded — transitioning to failed")
             logger.warning(
                 "Soft time limit exceeded for %s engagement %s — transitioning to failed",
                 job_type, engagement_id,
@@ -212,7 +212,7 @@ def task_error_boundary(
 
     try:
         yield
-    except SoftTimeLimitExceeded as ste:
+    except SoftTimeLimitExceeded:
         slog.error(f"Soft time limit exceeded in {phase_name}")
         logger.warning(
             "Soft time limit exceeded in %s for engagement %s — transitioning to failed",

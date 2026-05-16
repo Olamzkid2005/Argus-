@@ -101,7 +101,7 @@ class StructuredToolResult:
     # ── Convenience constructors ──────────────────────────────────────────────
 
     @classmethod
-    def not_installed(cls, tool_name: str, command: list[str], target: str = "") -> ToolResult:
+    def not_installed(cls, tool_name: str, command: list[str], target: str = "") -> StructuredToolResult:
         return cls(
             tool_name=tool_name,
             command=command,
@@ -124,7 +124,7 @@ class StructuredToolResult:
         target: str = "",
         sandbox_dir: str = "",
         effective_env: dict[str, str] | None = None,
-    ) -> ToolResult:
+    ) -> StructuredToolResult:
         tb = traceback.format_exc()
         error_type = type(exc).__name__
         status = ToolStatus.IMPORT_ERROR if isinstance(exc, ModuleNotFoundError) else ToolStatus.EXCEPTION
@@ -162,7 +162,7 @@ class StructuredToolResult:
         command: list[str],
         limit_seconds: int,
         target: str = "",
-    ) -> ToolResult:
+    ) -> StructuredToolResult:
         result = cls(
             tool_name=tool_name,
             command=command,

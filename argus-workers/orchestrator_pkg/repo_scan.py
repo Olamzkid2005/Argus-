@@ -430,7 +430,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 try:
                     with open(fpath, errors="ignore") as fh:
                         content = fh.read(5000)
-                    populated = [l.strip() for l in content.split("\n") if "=" in l and l.strip() and not l.strip().startswith("#")]
+                    populated = [line.strip() for line in content.split("\n") if "=" in line and line.strip() and not line.strip().startswith("#")]
                     if populated:
                         masked = []
                         for line in populated[:10]:
@@ -442,7 +442,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                             "endpoint": f"file:{rel}",
                             "evidence": {
                                 "file": rel,
-                                "populated_keys": [l.split("=")[0].strip() for l in populated[:20]],
+                                "populated_keys": [line.split("=")[0].strip() for line in populated[:20]],
                                 "lines": masked,
                                 "count": len(populated),
                             },
@@ -973,12 +973,12 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
         _rules_registry = os.path.join(os.path.dirname(os.path.dirname(__file__)), "semgrep_rules", "registry")
         def _resolve_semgrep_config(cfg: str) -> list:
             """Resolve a semgrep config name to local file paths."""
-            INDEX = {
+            index = {
                 "p/php":        ["php-ssl.yaml", "php-xss.yaml", "php-sqli.yaml", "php-csrf.yaml", "php-xxe.yaml", "php-rce.yaml", "php-session.yaml", "php-security.yaml"],
                 "p/javascript": ["javascript-security.yaml"],
                 "p/secrets":    ["secrets.yaml"],
             }
-            files = INDEX.get(cfg, [])
+            files = index.get(cfg, [])
             if files:
                 return [os.path.join(_rules_registry, f) for f in files if os.path.isfile(os.path.join(_rules_registry, f))]
             return [cfg] if os.path.isfile(cfg) or os.path.isdir(cfg) else []
@@ -1011,12 +1011,10 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             semgrep_cmd = ["--json"] + exclude_args
             for config in registry_configs:
                 semgrep_cmd.extend(["--config", config])
-            rules_used = 0
-            for config in custom_configs:
+            for rules_used, config in enumerate(custom_configs):
                 if rules_used >= custom_rule_limit:
                     break
                 semgrep_cmd.extend(["--config", config])
-                rules_used += 1
             semgrep_cmd.append(temp_dir)
 
             semgrep_result = orchestrator.tool_runner.run(

@@ -15,9 +15,9 @@ import re
 import time
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 # Try to import config constants (graceful if not available)
 try:

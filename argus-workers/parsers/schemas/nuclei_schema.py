@@ -14,7 +14,7 @@ NUCLEI_OPTIONAL_FIELDS = {"matcher-name", "extracted-results", "curl-command", "
 def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
     """
     Validate a single nuclei finding line.
-    
+
     Returns the validated dict (possibly with defaults filled in)
     or None if the data is invalid.
     """

@@ -3,10 +3,7 @@ Tests for SCA (Software Composition Analysis) scanning functions.
 """
 
 import json
-import sys
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 class TestSCAScanning:
@@ -213,13 +210,13 @@ class TestSCAScanning:
         # Set up mock returns for findall and find
         mock_root.findall.return_value = [mock_dep1, mock_dep2]
 
-        mock_dep1.find.side_effect = lambda x, ns: {
+        mock_dep1.find.side_effect = lambda x, _ns: {
             'maven:groupId': MagicMock(text='org.springframework'),
             'maven:artifactId': MagicMock(text='spring-core'),
             'maven:version': MagicMock(text='4.3.0'),
         }.get(x)
 
-        mock_dep2.find.side_effect = lambda x, ns: {
+        mock_dep2.find.side_effect = lambda x, _ns: {
             'maven:groupId': MagicMock(text='com.google.guava'),
             'maven:artifactId': MagicMock(text='guava'),
             'maven:version': MagicMock(text='20.0'),

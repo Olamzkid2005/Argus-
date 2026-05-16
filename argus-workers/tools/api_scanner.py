@@ -15,10 +15,10 @@ from urllib.parse import urljoin
 import requests
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
-logger = logging.getLogger(__name__)
-
 from config.constants import LLM_MAX_GENERATED_PAYLOADS
 from utils.logging_utils import ScanLogger
+
+logger = logging.getLogger(__name__)
 
 
 class APISecurityScanner:
@@ -311,9 +311,7 @@ class APISecurityScanner:
         for path in common_paths:
             url = urljoin(self.target_url, path)
             resp = self._safe_request("GET", url)
-            if resp and resp.status_code in (200, 401, 403):
-                # Check for verbose error messages
-                if resp.status_code in (401, 403) and len(resp.text) > 50:
+            if resp and resp.status_code in (401, 403) and len(resp.text) > 50:
                     self._add_finding(
                         finding_type="VERBOSE_API_ERROR",
                         severity="LOW",

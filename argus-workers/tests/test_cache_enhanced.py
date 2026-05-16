@@ -16,9 +16,11 @@ class TestWorkerCache:
     @pytest.fixture
     def mock_redis(self):
         """Create a mock Redis client"""
-        with patch("cache._redis_client_instance") as mock_client:
-            with patch("cache._redis_available", True):
-                yield mock_client
+        with (
+            patch("cache._redis_client_instance") as mock_client,
+            patch("cache._redis_available", True),
+        ):
+            yield mock_client
 
     def test_get_success(self, mock_redis):
         """Test getting cached value"""
@@ -185,9 +187,11 @@ class TestCachedDecorator:
 
     @pytest.fixture
     def mock_redis(self):
-        with patch("cache._redis_client_instance") as mock_client:
-            with patch("cache._redis_available", True):
-                yield mock_client
+        with (
+            patch("cache._redis_client_instance") as mock_client,
+            patch("cache._redis_available", True),
+        ):
+            yield mock_client
 
     def test_cached_decorator_cache_hit(self, mock_redis):
         """Test cached decorator returns cached value"""
@@ -239,9 +243,11 @@ class TestCachedQueryDecorator:
 
     @pytest.fixture
     def mock_redis(self):
-        with patch("cache._redis_client_instance") as mock_client:
-            with patch("cache._redis_available", True):
-                yield mock_client
+        with (
+            patch("cache._redis_client_instance") as mock_client,
+            patch("cache._redis_available", True),
+        ):
+            yield mock_client
 
     def test_cached_query_hit(self, mock_redis):
         """Test cached_query returns cached result"""

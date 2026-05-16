@@ -263,10 +263,12 @@ class TestCheckpointContext:
 
     def test_context_manager_does_not_save_on_exception(self, mock_manager):
         """Test checkpoint not saved when exception occurs"""
-        with pytest.raises(ValueError, match="test error"):
-            with CheckpointContext(mock_manager, "ENG-001", "scan") as ctx:
-                ctx.add_result("findings", ["f1"])
-                raise ValueError("test error")
+        with (
+            pytest.raises(ValueError, match="test error"),
+            CheckpointContext(mock_manager, "ENG-001", "scan") as ctx,
+        ):
+            ctx.add_result("findings", ["f1"])
+            raise ValueError("test error")
 
         mock_manager.save_checkpoint.assert_not_called()
 

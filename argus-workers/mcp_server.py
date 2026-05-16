@@ -16,7 +16,7 @@ class ToolSchema:
     """JSON Schema definition for a tool parameter."""
     def __init__(self, name: str, type: str, description: str = "",
                  required: bool = False, enum: list[str] = None,
-                 default: Any = None, flag: str = None, **kwargs):
+                 default: Any = None, flag: str = None, **_kwargs):
         self.name = name
         self.type = type
         self.description = description
@@ -120,7 +120,7 @@ class MCPServer:
             return
 
         # Blocklist of dangerous command patterns for YAML-defined tools
-        BLOCKED_COMMAND_PATTERNS = {
+        blocked_command_patterns = {
             "sh", "bash", "zsh", "dash", "/bin/sh", "/bin/bash",
             "rm", "mv", "cp", "dd", "mkfs", "chmod", "chown",
             "nc", "netcat", "curl", "wget", "telnet", "ssh",
@@ -137,13 +137,13 @@ class MCPServer:
                         command = data.get("command", data["name"])
                         # Validate command: no path traversal, no shell injection
                         cmd_basename = os.path.basename(command)
-                        if ".." in command or "/" not in command and command in BLOCKED_COMMAND_PATTERNS:
+                        if ".." in command or "/" not in command and command in blocked_command_patterns:
                             logger.warning(
                                 "Blocked potentially dangerous tool command in %s: %s",
                                 yaml_file, command,
                             )
                             continue
-                        if cmd_basename.lower() in BLOCKED_COMMAND_PATTERNS or cmd_basename.lower() in {"sh", "bash", "zsh", "dash"}:
+                        if cmd_basename.lower() in blocked_command_patterns or cmd_basename.lower() in {"sh", "bash", "zsh", "dash"}:
                             logger.warning(
                                 "Blocked shell interpreter command in %s: %s",
                                 yaml_file, command,

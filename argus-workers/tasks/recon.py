@@ -94,7 +94,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
 
     valid_targets = [t for t in targets if t and isinstance(t, str)]
     if not valid_targets:
-        slog.info(f"expand_recon called with empty/invalid targets, transitioning to reporting")
+        slog.info("expand_recon called with empty/invalid targets, transitioning to reporting")
         logger.warning(f"expand_recon called with empty/invalid targets for engagement {engagement_id}, transitioning to reporting")
         from tasks.base import task_context
         with task_context(self, engagement_id, "recon_expand",

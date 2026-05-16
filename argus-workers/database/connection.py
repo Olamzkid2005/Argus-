@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import psycopg2
 from psycopg2 import pool
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,10 +77,8 @@ class ConnectionManager:
         if (
             "pgbouncer" in conn_string
             or os.getenv("USE_PGBOUNCER", "false").lower() == "true"
-        ):
-            # In transaction mode, we must avoid session-level features
-            if self._pgbouncer_mode == "transaction":
-                # Add options to disable session features
+        ) and self._pgbouncer_mode == "transaction":
+            # Add options to disable session features
                 if "?" not in conn_string:
                     conn_string += "?"
                 else:
@@ -149,7 +148,7 @@ class ConnectionManager:
                         raise DatabaseConnectionError(
                             f"Timed out waiting for database connection "
                             f"after {timeout}s (pool max={self._max_connections})"
-                        )
+                        ) from None
                     time.sleep(0.1)
                     continue
             wait_time = (time.time() - wait_start) * 1000
@@ -220,7 +219,7 @@ class ConnectionManager:
             self.release_connection(conn)
 
     @contextmanager
-    def cursor(self, commit: bool = True, org_id: str | None = None):
+    def cursor(self, _commit: bool = True, org_id: str | None = None):
         """
         Context manager for automatic cursor and connection lifecycle.
 

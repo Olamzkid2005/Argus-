@@ -212,7 +212,7 @@ class BaseTask(app.Task):
     retry_kwargs = {"max_retries": 3}
     retry_backoff = True
 
-    def on_failure(self, exc, task_id, args, kwargs, einfo):
+    def on_failure(self, exc, task_id, args, kwargs, _einfo):
         """Called when task fails"""
         # Ensure project root is in sys.path (needed for forked/spawned workers on macOS)
         if PROJECT_ROOT not in sys.path:
@@ -297,13 +297,13 @@ class BaseTask(app.Task):
 
         logger.error(f"Task {task_id} failed: {exc}")
 
-    def on_retry(self, exc, task_id, args, kwargs, einfo):
+    def on_retry(self, exc, task_id, _args, _kwargs, _einfo):
         """Called when task is retried"""
         logger.warning(
             f"Task {task_id} retrying (attempt {self.request.retries}): {exc}"
         )
 
-    def on_success(self, retval, task_id, args, kwargs):
+    def on_success(self, _retval, task_id, _args, _kwargs):
         """Called when task succeeds"""
         logger.info(f"Task {task_id} succeeded")
 

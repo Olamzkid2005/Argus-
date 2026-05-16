@@ -41,13 +41,13 @@ def recon_context():
 @pytest.fixture
 def tool_registry():
     registry = ToolRegistry()
-    registry.register("nuclei", lambda target="", **kw: AgentResult(tool="nuclei", success=True, output="[vuln] XSS found", findings=[{"type": "XSS"}]),
+    registry.register("nuclei", lambda _target="", **_kw: AgentResult(tool="nuclei", success=True, output="[vuln] XSS found", findings=[{"type": "XSS"}]),
                       {"name": "nuclei", "description": "Vuln scanner", "parameters": [{"name": "target", "required": True}]})
-    registry.register("arjun", lambda target="", **kw: AgentResult(tool="arjun", success=True, output="[param] id found", findings=[{"type": "PARAM"}]),
+    registry.register("arjun", lambda _target="", **_kw: AgentResult(tool="arjun", success=True, output="[param] id found", findings=[{"type": "PARAM"}]),
                       {"name": "arjun", "description": "Param discovery", "parameters": [{"name": "target", "required": True}]})
-    registry.register("dalfox", lambda target="", **kw: AgentResult(tool="dalfox", success=True, output="[xss] reflected", findings=[{"type": "XSS"}]),
+    registry.register("dalfox", lambda _target="", **_kw: AgentResult(tool="dalfox", success=True, output="[xss] reflected", findings=[{"type": "XSS"}]),
                       {"name": "dalfox", "description": "XSS scanner", "parameters": [{"name": "target", "required": True}]})
-    registry.register("sqlmap", lambda target="", **kw: AgentResult(tool="sqlmap", success=True, output="[sqli] time-based", findings=[{"type": "SQLI"}]),
+    registry.register("sqlmap", lambda _target="", **_kw: AgentResult(tool="sqlmap", success=True, output="[sqli] time-based", findings=[{"type": "SQLI"}]),
                       {"name": "sqlmap", "description": "SQLi scanner", "parameters": [{"name": "target", "required": True}]})
     return registry
 
@@ -60,7 +60,7 @@ class TestFullAgentScan:
         mock_llm = Mock()
         mock_llm.is_available.return_value = True
         decision_iter = iter(MOCK_SCAN_DECISIONS)
-        mock_llm.chat_sync.side_effect = lambda *a, **kw: next(decision_iter)
+        mock_llm.chat_sync.side_effect = lambda *_a, **_kw: next(decision_iter)
 
         agent = ReActAgent(tool_registry, llm_client=mock_llm, engagement_id="test-123", phase="scan")
         results = agent.run(task="scan: http://test.local", recon_context=recon_context)
@@ -88,7 +88,7 @@ class TestFullAgentScan:
         """Agent should stop after max_iterations even if more tools available."""
         registry = ToolRegistry()
         for i in range(10):
-            registry.register(f"tool_{i}", lambda target="", **kw: AgentResult(tool="", success=True, output="ok"),
+            registry.register(f"tool_{i}", lambda _target="", **_kw: AgentResult(tool="", success=True, output="ok"),
                               {"name": f"tool_{i}", "description": "", "parameters": []})
 
         agent = ReActAgent(registry, max_iterations=3)
@@ -124,7 +124,7 @@ class TestFullAgentScan:
     def test_missing_recon_context_uses_deterministic(self):
         """When recon_context is None, agent should use deterministic fallback."""
         registry = ToolRegistry()
-        registry.register("nuclei", lambda target="", **kw: AgentResult(tool="nuclei", success=True, output="ok"),
+        registry.register("nuclei", lambda _target="", **_kw: AgentResult(tool="nuclei", success=True, output="ok"),
                           {"name": "nuclei", "description": "Vuln scanner", "parameters": []})
 
         agent = ReActAgent(registry, phase="scan")

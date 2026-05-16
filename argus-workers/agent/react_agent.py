@@ -32,7 +32,6 @@ from .agent_action import AgentAction
 from .agent_prompts import (
     BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT,
     REPO_TOOL_SELECTION_SYSTEM_PROMPT,
-    TOOL_SELECTION_SYSTEM_PROMPT,
     _load_bugbounty_context,
     build_observation_summary,
     build_tech_aware_system_prompt,
@@ -107,15 +106,15 @@ class ReActAgent:
 
     def add_to_history(self, role: str, content: str, data: dict = None):
         """Add an entry to the agent's history/context.
-        
+
         Content is truncated to 2000 chars to prevent unbounded token growth
         from large tool outputs (nuclei can produce thousands of JSON lines).
         """
-        MAX_HISTORY_ENTRY = 2000
+        max_history_entry = 2000
         self.history.append(
             {
                 "role": role,
-                "content": content[:MAX_HISTORY_ENTRY],
+                "content": content[:max_history_entry],
                 "data": data or {},
                 "timestamp": time.time(),
             }
@@ -155,9 +154,9 @@ class ReActAgent:
 
         # Import SSOT so we can read real descriptions
         try:
-            from tool_definitions import TOOLS as TOOL_DEFS
+            from tool_definitions import TOOLS
         except ImportError:
-            TOOL_DEFS = {}
+            TOOLS = {}  # noqa: N806
 
         phase_tools = self.PHASE_TOOLS.get(self._phase, [])
 
@@ -175,7 +174,7 @@ class ReActAgent:
 
             if self.registry.get_tool(tool_name) is None:
                 # Pull real description and parameters from SSOT
-                tool_def = TOOL_DEFS.get(tool_name)
+                tool_def = TOOLS.get(tool_name)
                 if tool_def:
                     description = tool_def.description
                     try:
@@ -214,15 +213,14 @@ class ReActAgent:
         if self._mode == "bugbounty":
             return BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT
 
-        if recon_context and hasattr(recon_context, "scan_type"):
-            if recon_context.scan_type == "repo":
-                return REPO_TOOL_SELECTION_SYSTEM_PROMPT
+        if recon_context and hasattr(recon_context, "scan_type") and recon_context.scan_type == "repo":
+            return REPO_TOOL_SELECTION_SYSTEM_PROMPT
 
         return build_tech_aware_system_prompt(recon_context)
 
     def _call_llm_for_action(
         self,
-        task: str,
+        _task: str,
         context: str,
         tried_tools: set,
         recon_context: Any,
@@ -336,8 +334,7 @@ class ReActAgent:
             return None
 
         for tool_name in phase_tools:
-            if tool_name not in tried_tools:
-                if self.registry.get_tool(tool_name) is not None:
+            if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
                     return AgentAction(
                         tool_name, {"target": task}, f"Phase tool: {tool_name}"
                     )
@@ -367,8 +364,8 @@ class ReActAgent:
         target = action.arguments.get("target", "")
         if target:
             try:
-                from urllib.parse import urlparse
                 import ipaddress
+                from urllib.parse import urlparse
                 hostname = urlparse(target).hostname
                 if hostname:
                     try:
@@ -427,7 +424,7 @@ class ReActAgent:
     def run(
         self,
         task: str,
-        initial_context: dict = None,
+        initial_context: dict = None,  # noqa: ARG002
         recon_context: Any = None,
     ) -> list[AgentResult]:
         """

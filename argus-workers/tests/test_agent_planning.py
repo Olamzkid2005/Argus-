@@ -17,9 +17,9 @@ class TestPlanNextAction:
     @pytest.fixture
     def agent(self):
         registry = ToolRegistry()
-        registry.register("nuclei", lambda target="", **kw: AgentResult(tool="nuclei", success=True, output="ok"),
+        registry.register("nuclei", lambda _target="", **_kw: AgentResult(tool="nuclei", success=True, output="ok"),
                           {"name": "nuclei", "description": "Vuln scanner", "parameters": []})
-        registry.register("dalfox", lambda target="", **kw: AgentResult(tool="dalfox", success=True, output="ok"),
+        registry.register("dalfox", lambda _target="", **_kw: AgentResult(tool="dalfox", success=True, output="ok"),
                           {"name": "dalfox", "description": "XSS scanner", "parameters": []})
         return ReActAgent(registry)
 
@@ -122,7 +122,7 @@ class TestReActAgentRun:
     @pytest.fixture
     def agent(self):
         registry = ToolRegistry()
-        registry.register("nuclei", lambda target="", **kw: AgentResult(tool="nuclei", success=True, output="ok"),
+        registry.register("nuclei", lambda _target="", **_kw: AgentResult(tool="nuclei", success=True, output="ok"),
                           {"name": "nuclei", "description": "Vuln scanner", "parameters": []})
         return ReActAgent(registry, max_iterations=5)
 

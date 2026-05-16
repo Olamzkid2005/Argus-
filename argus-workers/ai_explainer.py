@@ -241,15 +241,14 @@ class AIExplainer:
         if not explanation or not cluster:
             return False
 
-        known_types = {f.get("type", "").upper() for f in cluster.get("findings", []) if f.get("type")}
-        known_endpoints = {f.get("endpoint", "").lower() for f in cluster.get("findings", []) if f.get("endpoint")}
+        {f.get("type", "").upper() for f in cluster.get("findings", []) if f.get("type")}
+        {f.get("endpoint", "").lower() for f in cluster.get("findings", []) if f.get("endpoint")}
 
         explanation_lower = explanation.lower()
 
         # Check: no new vulnerability types mentioned that aren't in input
         declared_type = cluster.get("vulnerability_type", "").upper()
-        if declared_type and declared_type not in explanation_lower and declared_type.replace("_", " ").lower() not in explanation_lower:
-            if "sql" in declared_type.lower() or "xss" in declared_type.lower() or "rce" in declared_type.lower() or "ssrf" in declared_type.lower():
+        if declared_type and declared_type not in explanation_lower and declared_type.replace("_", " ").lower() not in explanation_lower and ("sql" in declared_type.lower() or "xss" in declared_type.lower() or "rce" in declared_type.lower() or "ssrf" in declared_type.lower()):
                 logger.debug("Explanation doesn't mention primary vulnerability type '%s' — may still be valid", declared_type)
 
         # Check: don't invent CVE IDs not in input

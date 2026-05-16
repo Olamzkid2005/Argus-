@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Standalone browser scan worker — runs Playwright in its own process."""
+import contextlib
 import json
 import logging
 import sys
@@ -39,8 +40,8 @@ def _validate_url(url: str) -> str:
             raise ValueError(
                 f"Blocked cloud metadata endpoint ({hostname} → {resolved_ip})"
             )
-    except _socket.gaierror:
-        raise ValueError(f"DNS resolution failed for {hostname}: {url[:80]}")
+    except _socket.gaierror as e:
+        raise ValueError(f"DNS resolution failed for {hostname}: {url[:80]}") from e
     except ValueError:
         raise  # re-raise our own ValueError
 
@@ -90,10 +91,8 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
             logger.warning(f"Browser scan failed: {e}")
         finally:
             if browser:
-                try:
+                with contextlib.suppress(Exception):
                     browser.close()
-                except Exception:
-                    pass
     slog.tool_complete("browser_scan", findings=len(findings))
     return findings
 

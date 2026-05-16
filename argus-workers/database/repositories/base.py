@@ -160,7 +160,7 @@ class BaseRepository:
         """
         self._external_conn = connection
 
-    def _get_connection(self, org_id: str | None = None):
+    def _get_connection(self, _org_id: str | None = None):
         """Get a database connection (external or from pool)"""
         if self._external_conn:
             if isinstance(self._external_conn, str):

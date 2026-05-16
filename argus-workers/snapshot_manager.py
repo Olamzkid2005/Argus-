@@ -1,6 +1,7 @@
 """
 Snapshot Manager - Creates immutable state snapshots for decision-making
 """
+import logging
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -9,6 +10,8 @@ import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 
 from database.connection import connect
+
+logger = logging.getLogger(__name__)
 
 
 class SnapshotManager:

@@ -22,12 +22,12 @@ from __future__ import annotations
 import os
 import shutil
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import final
 
 # ── Signal quality tiers for findings prioritization ──
 
-class SignalQuality(str, Enum):
+class SignalQuality(StrEnum):
     """Signal quality tier for a tool's findings reliability."""
     CONFIRMED  = "confirmed"   # nuclei CVE hit — nearly always real
     PROBABLE   = "probable"    # dalfox/sqlmap — tool confirmed the vuln

@@ -23,7 +23,7 @@ jobs:
           cache-dependency-path: argus-platform/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Lint
         run: npm run lint --if-present
@@ -69,6 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check for secrets in code
         uses: gitleaks/gitleaks-action@v2

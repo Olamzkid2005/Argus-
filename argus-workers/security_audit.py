@@ -55,11 +55,9 @@ class SecurityAudit:
 
         for var in sensitive_vars:
             value = os.getenv(var)
-            if value:
-                # Check if using default/weak values
-                if any(weak in value.lower() for weak in ["password", "secret", "localhost", "default"]):
-                    if "localhost" not in value.lower():
-                        self.findings.append(SecurityFinding(
+            # Check if using default/weak values
+            if value and any(weak in value.lower() for weak in ["password", "secret", "localhost", "default"]) and "localhost" not in value.lower():
+                self.findings.append(SecurityFinding(
                             severity="medium",
                             category="config",
                             title=f"Potentially weak {var}",

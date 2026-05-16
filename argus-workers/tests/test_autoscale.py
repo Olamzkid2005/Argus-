@@ -7,7 +7,6 @@ import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
 from autoscale import AutoscaleConfig, CeleryAutoscale
 
 
@@ -48,13 +47,15 @@ class TestCeleryAutoscale:
     @pytest.fixture
     def scaler(self, mock_redis, mock_control):
         """Fixture providing a CeleryAutoscale with mocked dependencies"""
-        with patch("autoscale.redis.from_url", return_value=mock_redis):
-            with patch("autoscale.Control", return_value=mock_control):
-                config = AutoscaleConfig(min_workers=2, max_workers=10, target_queue_depth=10)
-                s = CeleryAutoscale(config)
-                yield s
+        with (
+            patch("autoscale.redis.from_url", return_value=mock_redis),
+            patch("autoscale.Control", return_value=mock_control),
+        ):
+            config = AutoscaleConfig(min_workers=2, max_workers=10, target_queue_depth=10)
+            s = CeleryAutoscale(config)
+            yield s
 
-    def test_init(self, scaler, mock_redis, mock_control):
+    def test_init(self, scaler, _mock_redis, _mock_control):
         """Test autoscale initialization"""
         assert scaler.config.min_workers == 2
         assert scaler.config.max_workers == 10
@@ -137,23 +138,27 @@ class TestCeleryAutoscale:
         target = scaler.calculate_target_workers(depths)
         assert target == scaler.config.max_workers
 
-    def test_scale_workers_scale_up(self, scaler, mock_control):
+    def test_scale_workers_scale_up(self, scaler, _mock_control):
         """Test scaling up when target > current"""
         scaler.current_workers = 2
-        with patch.object(scaler, "get_active_worker_count", return_value=2):
-            with patch.object(scaler, "_start_workers") as mock_start:
-                scaler.scale_workers(5)
+        with (
+            patch.object(scaler, "get_active_worker_count", return_value=2),
+            patch.object(scaler, "_start_workers") as mock_start,
+        ):
+            scaler.scale_workers(5)
 
         mock_start.assert_called_once_with(3)
         assert scaler.last_scale_up > 0
         assert scaler.current_workers == 5
 
-    def test_scale_workers_scale_down(self, scaler, mock_control):
+    def test_scale_workers_scale_down(self, scaler, _mock_control):
         """Test scaling down when target < current"""
         scaler.current_workers = 8
-        with patch.object(scaler, "get_active_worker_count", return_value=8):
-            with patch.object(scaler, "_stop_workers") as mock_stop:
-                scaler.scale_workers(3)
+        with (
+            patch.object(scaler, "get_active_worker_count", return_value=8),
+            patch.object(scaler, "_stop_workers") as mock_stop,
+        ):
+            scaler.scale_workers(3)
 
         mock_stop.assert_called_once_with(5)
         assert scaler.last_scale_down > 0
@@ -162,10 +167,12 @@ class TestCeleryAutoscale:
     def test_scale_workers_no_change(self, scaler):
         """Test no scaling when target == current"""
         scaler.current_workers = 4
-        with patch.object(scaler, "get_active_worker_count", return_value=4):
-            with patch.object(scaler, "_start_workers") as mock_start:
-                with patch.object(scaler, "_stop_workers") as mock_stop:
-                    scaler.scale_workers(4)
+        with (
+            patch.object(scaler, "get_active_worker_count", return_value=4),
+            patch.object(scaler, "_start_workers") as mock_start,
+            patch.object(scaler, "_stop_workers") as mock_stop,
+        ):
+            scaler.scale_workers(4)
 
         mock_start.assert_not_called()
         mock_stop.assert_not_called()
@@ -174,9 +181,11 @@ class TestCeleryAutoscale:
         """Test scale up respects cooldown"""
         scaler.current_workers = 2
         scaler.last_scale_up = time.time()
-        with patch.object(scaler, "get_active_worker_count", return_value=2):
-            with patch.object(scaler, "_start_workers") as mock_start:
-                scaler.scale_workers(10)
+        with (
+            patch.object(scaler, "get_active_worker_count", return_value=2),
+            patch.object(scaler, "_start_workers") as mock_start,
+        ):
+            scaler.scale_workers(10)
 
         mock_start.assert_not_called()
 
@@ -184,9 +193,11 @@ class TestCeleryAutoscale:
         """Test scale down respects cooldown"""
         scaler.current_workers = 10
         scaler.last_scale_down = time.time()
-        with patch.object(scaler, "get_active_worker_count", return_value=10):
-            with patch.object(scaler, "_stop_workers") as mock_stop:
-                scaler.scale_workers(2)
+        with (
+            patch.object(scaler, "get_active_worker_count", return_value=10),
+            patch.object(scaler, "_stop_workers") as mock_stop,
+        ):
+            scaler.scale_workers(2)
 
         mock_stop.assert_not_called()
 
@@ -244,8 +255,10 @@ class TestCeleryAutoscale:
             if sleep_calls >= 2:
                 raise SystemExit("end test")
 
-        with patch("autoscale.time.sleep", side_effect=fake_sleep):
-            with pytest.raises(SystemExit):
-                scaler.run(interval=30)
+        with (
+            patch("autoscale.time.sleep", side_effect=fake_sleep),
+            pytest.raises(SystemExit),
+        ):
+            scaler.run(interval=30)
 
         assert scaler.scale_workers.call_count >= 1

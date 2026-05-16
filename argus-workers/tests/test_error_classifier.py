@@ -238,7 +238,7 @@ class TestLogClassifiedError:
 
     @patch("error_classifier.logger")
     @patch("error_classifier.send_alert")
-    def test_log_with_extra_context(self, mock_send_alert, mock_logger):
+    def test_log_with_extra_context(self, _mock_send_alert, mock_logger):
         """Test logging with extra context"""
         classification = ErrorClassification(
             category=ErrorCategory.EXTERNAL,
@@ -263,7 +263,7 @@ class TestSendAlert:
     @patch("error_classifier.os.getenv")
     @patch("requests.post")
     @patch("error_classifier.logger")
-    def test_send_alert_with_webhook(self, mock_logger, mock_post, mock_getenv):
+    def test_send_alert_with_webhook(self, _mock_logger, mock_post, mock_getenv):
         """Test sending alert via webhook"""
         mock_getenv.return_value = "https://hooks.example.com/alerts"
 

@@ -13,14 +13,13 @@ from typing import Any
 from psycopg2.extras import RealDictCursor
 
 from celery_app import app
-from database.connection import connect
-
-logger = logging.getLogger(__name__)
-
 from compliance_reporting import ComplianceReportGenerator
+from database.connection import connect
 from tasks.base import task_context
 from tracing import TracingManager
 from utils.validation import validate_uuid
+
+logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="tasks.report.generate_report")
@@ -152,7 +151,7 @@ def generate_scheduled_reports(self):
     Generate all due scheduled reports and send them via email.
     Called by a periodic Celery beat schedule.
     """
-    db_conn_string = os.getenv("DATABASE_URL")
+    os.getenv("DATABASE_URL")
     conn = None
     cursor = None
     try:

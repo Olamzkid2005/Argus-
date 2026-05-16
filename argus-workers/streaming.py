@@ -220,7 +220,6 @@ class StreamManager(EventBus):
 
     def evict_stale_engagements(self, max_engagement_age_seconds: int = 86400):
         """Evict history for engagements older than the given age."""
-        import time as _time
         with self._lock:
             cutoff = datetime.now(UTC).timestamp() - max_engagement_age_seconds
             stale = []
