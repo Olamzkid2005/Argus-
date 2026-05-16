@@ -28,35 +28,50 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         actions = result.get("actions", [])
         result.get("next_state", "reporting")
         if actions:
-            slog.info(f"{len(actions)} action(s) generated — re-entering recon")
-            # Extract targets from analysis actions so expand_recon receives real targets
-            action_targets = []
+            slog.info(f"{len(actions)} action(s) generated — processing")
+            # Route each action type to the correct downstream task
             for action in actions:
-                target = None
-                if isinstance(action, dict):
-                    target = action.get("target") or action.get("arguments", {}).get("target")
-                if target and isinstance(target, str):
-                    action_targets.append(target)
-            if not action_targets:
-                logger.warning("Analysis actions found but no valid targets extracted for engagement=%s — skipping to reporting", engagement_id)
-                ctx.state.transition("reporting", "No valid targets in analysis actions")
-                try:
-                    app.send_task('tasks.report.generate_report',
-                                  args=[engagement_id, ctx.trace_id, budget])
-                except Exception as e:
-                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                return result
-            # Dispatch the downstream task BEFORE transitioning state
-            try:
-                expand_task = app.send_task('tasks.recon.expand_recon',
-                              args=[engagement_id, action_targets, budget, ctx.trace_id])
-                slog.dispatch("expand_recon", task_id=expand_task.id)
-                ctx.state.transition("recon", "Additional targets discovered")
-                logger.info("Dispatched expand_recon for engagement=%s with %d targets (task=%s)",
-                           engagement_id, len(action_targets), expand_task.id)
-            except Exception as e:
-                logger.error("Failed to enqueue expand_recon for engagement=%s: %s", engagement_id, e, exc_info=True)
-                ctx.state.transition("failed", f"Failed to dispatch expand_recon: {e}")
+                action_type = action.get("type", "") if isinstance(action, dict) else ""
+                if action_type == "deep_scan":
+                    targets = action.get("targets", []) if isinstance(action, dict) else []
+                    if targets:
+                        try:
+                            deep_task = app.send_task('tasks.scan.deep_scan',
+                                          args=[engagement_id, targets, budget, ctx.trace_id])
+                            slog.dispatch("deep_scan", task_id=deep_task.id)
+                            logger.info("Dispatched deep_scan for engagement=%s with %d targets (task=%s)",
+                                       engagement_id, len(targets), deep_task.id)
+                        except Exception as e:
+                            logger.error("Failed to enqueue deep_scan for %s: %s", engagement_id, e, exc_info=True)
+                elif action_type == "auth_focused_scan":
+                    endpoints = action.get("endpoints", []) if isinstance(action, dict) else []
+                    if endpoints:
+                        try:
+                            auth_task = app.send_task('tasks.scan.auth_focused_scan',
+                                          args=[engagement_id, endpoints, budget, ctx.trace_id])
+                            slog.dispatch("auth_focused_scan", task_id=auth_task.id)
+                            logger.info("Dispatched auth_focused_scan for engagement=%s (task=%s)",
+                                       engagement_id, auth_task.id)
+                        except Exception as e:
+                            logger.error("Failed to enqueue auth_focused_scan for %s: %s", engagement_id, e, exc_info=True)
+                else:
+                    # Default: extract targets and expand recon
+                    target = None
+                    if isinstance(action, dict):
+                        target = action.get("target") or action.get("arguments", {}).get("target")
+                    if target and isinstance(target, str):
+                        try:
+                            expand_task = app.send_task('tasks.recon.expand_recon',
+                                          args=[engagement_id, [target], budget, ctx.trace_id])
+                            slog.dispatch("expand_recon", task_id=expand_task.id)
+                            logger.info("Dispatched expand_recon for engagement=%s with target %s (task=%s)",
+                                       engagement_id, target, expand_task.id)
+                        except Exception as e:
+                            logger.error("Failed to enqueue expand_recon for %s: %s", engagement_id, e, exc_info=True)
+                    else:
+                        logger.warning("Action %s has no valid targets for engagement=%s", action_type, engagement_id)
+
+            ctx.state.transition("recon", "Additional actions dispatched")
         else:
             slog.info("No actions — advancing to reporting")
             ctx.state.transition("reporting", "Analysis complete")

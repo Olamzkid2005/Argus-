@@ -434,6 +434,7 @@ class SwarmOrchestrator:
         recon_context: Any,
         engagement_id: str,
         decision_repo: Any = None,
+        auth_config: dict | None = None,
     ):
         # Deep copy happens inside each agent's __init__
         self.agents = [
@@ -446,6 +447,7 @@ class SwarmOrchestrator:
             )
             for cls in self.SPECIALIST_CLASSES
         ]
+        self.auth_config = auth_config or {}
 
     def run(self, timeout: int = 1800) -> list[dict]:
         """Run all active specialists in parallel and merge findings.

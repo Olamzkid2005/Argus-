@@ -615,6 +615,7 @@ class Orchestrator:
             recon_context=recon_context,
             engagement_id=self.engagement_id,
             decision_repo=decision_repo,
+            auth_config=auth_config,
         )
         swarm_findings = swarm.run(timeout=1800)
         slog.info(f"Swarm returned {len(swarm_findings)} findings")
