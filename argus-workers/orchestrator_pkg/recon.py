@@ -328,10 +328,10 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
         return ReconContext(target_url=target)
 
     live_endpoints = [
-        f["endpoint"] for f in findings if f.get("source_tool") == "httpx"
+        f.get("endpoint", "") for f in findings if f.get("source_tool") == "httpx"
     ]
     subdomains = [
-        f["endpoint"]
+        f.get("endpoint", "")
         for f in findings
         if f.get("source_tool") in ("amass", "subfinder")
     ]
@@ -342,10 +342,10 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
         str(t)
         for f in findings
         if f.get("source_tool") == "whatweb"
-        for t in f.get("evidence", {}).get("plugins", {})
+        for t in (f.get("evidence", {}) if isinstance(f.get("evidence"), dict) else {}).get("plugins", {})
     ]
     crawled_paths = [
-        f["endpoint"] for f in findings if f.get("source_tool") in ("katana", "ffuf")
+        f.get("endpoint", "") for f in findings if f.get("source_tool") in ("katana", "ffuf")
     ][:50]
     param_urls = [
         f["endpoint"]

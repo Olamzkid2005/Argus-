@@ -182,15 +182,20 @@ class IntelligenceEngine:
                 stored_fp = finding.get("fp_likelihood")       # from scanner metadata
 
                 if learned_fp is not None and stored_fp is not None:
-                    # Weighted blend: 60% historical from tool_accuracy,
-                    # 40% current scan signal from scanner metadata
-                    fp_likelihood = 0.6 * learned_fp + 0.4 * float(stored_fp)
+                    try:
+                        stored_fp_val = float(stored_fp)
+                    except (ValueError, TypeError):
+                        stored_fp_val = 0.2
+                    fp_likelihood = 0.6 * learned_fp + 0.4 * stored_fp_val
                 elif learned_fp is not None:
                     fp_likelihood = learned_fp
                 elif stored_fp is not None:
-                    fp_likelihood = float(stored_fp)
+                    try:
+                        fp_likelihood = float(stored_fp)
+                    except (ValueError, TypeError):
+                        fp_likelihood = 0.2
                 else:
-                    fp_likelihood = 0.2  # unchanged default
+                    fp_likelihood = 0.2
 
                 # Clamp fp_likelihood to prevent division instability
                 fp_likelihood = max(0.001, min(1.0, fp_likelihood))
@@ -287,7 +292,8 @@ class IntelligenceEngine:
 
         groups = {}
         for finding in findings:
-            parsed = urlparse(finding.get("endpoint", ""))
+            endpoint = finding.get("endpoint") or ""
+            parsed = urlparse(endpoint)
             normalized_endpoint = f"{parsed.netloc}{parsed.path}"
 
             finding_type = finding.get("type", "").upper()
@@ -370,10 +376,8 @@ class IntelligenceEngine:
         Returns:
             True if low coverage detected
         """
-        # Count unique endpoints
-        endpoints = {f.get("endpoint") for f in findings}
+        endpoints = {f.get("endpoint") for f in findings if f.get("endpoint")}
 
-        # Low coverage if fewer than 5 unique endpoints
         return len(endpoints) < 5
 
     def suggest_new_targets(self, findings: list[dict]) -> list[str]:
