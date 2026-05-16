@@ -159,16 +159,20 @@ If NOT vulnerable:
             )
             content_type = headers.get("Content-Type", "unknown")
 
-            # Build prompt
+            # Build prompt — escape curly braces in payload/body to prevent
+            # KeyError when payload contains { like {{7*7}} (SSTI payloads)
+            def _escape_format(s: str) -> str:
+                return s.replace("{", "{{").replace("}", "}}")
+
             prompt_text = self.ANALYSIS_PROMPT.format(
-                vuln_class=vuln_class,
-                payload=payload[:200],
-                test_url=test_url,
+                vuln_class=_escape_format(vuln_class),
+                payload=_escape_format(payload[:200]),
+                test_url=_escape_format(test_url),
                 status_code=status_code,
-                content_type=content_type,
-                headers=header_str or "none",
+                content_type=_escape_format(content_type),
+                headers=_escape_format(header_str or "none"),
                 max_chars=max_response_chars,
-                body_snippet=body_snippet,
+                body_snippet=_escape_format(body_snippet),
             )
 
             messages = [
