@@ -193,9 +193,8 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
 
             if loop is not None:
                 # Running loop detected (e.g. with nest_asyncio) — run in a
-                # separate thread via run_coroutine_threadsafe to avoid
+                # separate thread with a fresh event loop to avoid
                 # blocking the existing loop.
-                import concurrent.futures
                 import threading
                 done = threading.Event()
                 result_container = {}
