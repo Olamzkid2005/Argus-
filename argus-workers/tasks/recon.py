@@ -71,7 +71,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         try:
             scan_task = app.send_task(
                 'tasks.scan.run_scan',
-                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness],
+                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness, bug_bounty_mode],
                 task_id=f"scan-{engagement_id}",
             )
             slog.dispatch("scan", task_id=scan_task.id)
@@ -148,6 +148,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                     opts["agent_mode"],
                     opts["scan_mode"],
                     opts["aggressiveness"],
+                    opts.get("bug_bounty_mode"),
                 ],
             )
             slog.dispatch("scan", task_id=scan_task.id)

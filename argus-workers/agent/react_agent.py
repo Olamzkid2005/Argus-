@@ -451,7 +451,7 @@ class ReActAgent:
 
         self._ensure_phase_tools()
         self.add_to_history("system", f"Task: {task}")
-        initial_target = task.split(":")[-1].strip() if ":" in task else task
+        initial_target = task.split(":", 1)[-1].strip() if ":" in task else task
 
         for iteration in range(self.max_iterations):
             if self._cancelled:

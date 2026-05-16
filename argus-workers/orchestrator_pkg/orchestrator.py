@@ -467,7 +467,7 @@ class Orchestrator:
                     logger.warning(f"Connection release failed after saving remediation fix for finding {finding_id}: {close_err}")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
-                            authorized_scope=None, auth_config=None):
+                            authorized_scope=None, auth_config=None, bug_bounty_mode=False):
         from agent import AgentResult, create_phase_agent
         from database.repositories.agent_decision_repository import (
             AgentDecisionRepository,
@@ -484,6 +484,7 @@ class Orchestrator:
                     phase="scan", tool_runner=self.tool_runner,
                     engagement_id=self.engagement_id, llm_client=self.llm_client,
                     decision_repo=decision_repo,
+                    mode="bugbounty" if bug_bounty_mode else None,
                 )
                 if authorized_scope:
                     scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
@@ -544,6 +545,7 @@ class Orchestrator:
         recon_context = load_recon_context(self.engagement_id)
         agent_mode_enabled = job.get("agent_mode", True)
         auth_config = job.get("auth_config", {})
+        bug_bounty_mode = job.get("bug_bounty_mode", False)
 
         _llm_ok = self.llm_client is not None and self.llm_client.is_available()
         _recon_ok = recon_context is not None
@@ -552,7 +554,7 @@ class Orchestrator:
             findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
         elif agent_mode_enabled and _recon_ok and _llm_ok:
             scan_execution_path = "agent"
-            findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
+            findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
         else:
             scan_execution_path = "deterministic"
             findings = self._run_deterministic_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
@@ -630,12 +632,12 @@ class Orchestrator:
 
     def _run_agent_scan(
         self, targets: list[str], recon_context,
-        budget: dict, aggressiveness: str, auth_config: dict,
+        budget: dict, aggressiveness: str, auth_config: dict, bug_bounty_mode: bool = False,
     ) -> list[dict]:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("AGENT SCAN", targets=f"{len(targets)} target(s)")
         emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
-        findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config)
+        findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config, bug_bounty_mode=bug_bounty_mode)
         agent_tried = getattr(self, "_last_agent_tried_tools", set())
         logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
         tech_stack = recon_context.tech_stack if recon_context else None

@@ -133,6 +133,7 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
         "scan_mode": "agent",
         "aggressiveness": "default",
         "agent_mode": True,
+        "bug_bounty_mode": False,
     }
     try:
         from database.connection import db_cursor
@@ -142,19 +143,20 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
         with db_cursor() as cursor:
             cursor.execute(
                 """
-                SELECT scan_mode, scan_aggressiveness, agent_mode
+                SELECT scan_mode, scan_aggressiveness, agent_mode, bug_bounty_mode
                 FROM engagements WHERE id = %s
                 """,
                 (eid,),
             )
             row = cursor.fetchone()
             if row:
-                sm, sa, am = row[0], row[1], row[2]
+                sm, sa, am, bbm = row[0], row[1], row[2], row[3]
                 return {
                     "scan_mode": (sm or defaults["scan_mode"]) if isinstance(sm, str) else defaults["scan_mode"],
                     "aggressiveness": (sa or defaults["aggressiveness"]) if isinstance(sa, str) else defaults["aggressiveness"],
                     "agent_mode": bool(am) if am is not None else defaults["agent_mode"],
+                    "bug_bounty_mode": bool(bbm) if bbm is not None else defaults["bug_bounty_mode"],
                 }
     except Exception:
-        logger.debug("fetch_engagement_scan_options failed for %s", engagement_id, exc_info=True)
+        logger.warning("fetch_engagement_scan_options failed for %s", engagement_id, exc_info=True)
     return dict(defaults)

@@ -64,6 +64,7 @@ class FindingRepository(BaseRepository):
         finding_id = str(uuid.uuid4())
 
         try:
+            source_tool = source_tool or ""
             cursor.execute(
                 """
                 INSERT INTO findings (
@@ -75,7 +76,7 @@ class FindingRepository(BaseRepository):
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
                 )
                 ON CONFLICT (engagement_id, endpoint, type, source_tool)
-                DO UPDATE SET id = findings.id  -- no-op update to force RETURNING
+                DO UPDATE SET id = findings.id
                 RETURNING id
                 """,
                 (
@@ -127,6 +128,7 @@ class FindingRepository(BaseRepository):
         Insert or update a secret finding.
 
         Deduplicates by (engagement_id, type, endpoint) fingerprint.
+        Uses ON CONFLICT to prevent TOCTOU races between the SELECT and INSERT.
         If the same secret already exists, updates last_seen_at instead of
         creating a duplicate. Prevents unbounded growth on repeated scans.
 
@@ -145,49 +147,35 @@ class FindingRepository(BaseRepository):
         """
         conn = self._get_connection()
         cursor = conn.cursor()
+        source_tool = source_tool or ""
 
         try:
             cursor.execute(
                 """
-                WITH existing AS (
-                    SELECT id FROM findings
-                    WHERE engagement_id = %s
-                      AND type = %s
-                      AND endpoint = %s
-                      AND source_tool IN ('gitleaks', 'trufflehog', 'secret-scan')
+                INSERT INTO findings (
+                    id, engagement_id, type, severity, confidence,
+                    endpoint, evidence, source_tool, cvss_score,
+                    verified, created_at, last_seen_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    FALSE, NOW(), NOW()
                 )
-                UPDATE findings
-                SET last_seen_at = NOW(),
-                    severity = %s,
-                    confidence = %s,
-                    evidence = %s,
-                    cvss_score = %s
-                WHERE id IN (TABLE existing)
+                ON CONFLICT (engagement_id, endpoint, type, source_tool)
+                DO UPDATE SET
+                    last_seen_at = NOW(),
+                    severity = EXCLUDED.severity,
+                    confidence = EXCLUDED.confidence,
+                    evidence = EXCLUDED.evidence,
+                    cvss_score = EXCLUDED.cvss_score
                 RETURNING id
                 """,
-                (engagement_id, finding_type, endpoint, severity, confidence, Json(evidence), cvss_score)
+                (
+                    str(uuid.uuid4()), engagement_id, finding_type, severity,
+                    confidence, endpoint, Json(evidence), source_tool, cvss_score,
+                )
             )
             row = cursor.fetchone()
-            if row:
-                finding_id = str(row[0])
-            else:
-                finding_id = str(uuid.uuid4())
-                cursor.execute(
-                    """
-                    INSERT INTO findings (
-                        id, engagement_id, type, severity, confidence,
-                        endpoint, evidence, source_tool, cvss_score,
-                        verified, created_at, last_seen_at
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        FALSE, NOW(), NOW()
-                    )
-                    """,
-                    (
-                        finding_id, engagement_id, finding_type, severity,
-                        confidence, endpoint, Json(evidence), source_tool, cvss_score,
-                    )
-                )
+            finding_id = str(row[0]) if row else None
             conn.commit()
             return finding_id
         except Exception:

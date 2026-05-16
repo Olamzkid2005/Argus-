@@ -4,6 +4,7 @@ Celery tasks for scanning phase
 Requirements: 4.3, 4.4, 20.1, 20.2, 20.3
 """
 import logging
+import os
 
 from celery_app import app
 from tasks.base import task_context
@@ -21,6 +22,7 @@ def run_scan(
     agent_mode: bool = True,
     scan_mode: str | None = None,
     aggressiveness: str | None = None,
+    bug_bounty_mode: bool | None = None,
 ):
     """
     Execute scanning phase for an engagement
@@ -52,6 +54,8 @@ def run_scan(
         job_extra["scan_mode"] = scan_mode
     if aggressiveness is not None:
         job_extra["aggressiveness"] = aggressiveness
+    if bug_bounty_mode is not None:
+        job_extra["bug_bounty_mode"] = bug_bounty_mode
 
     with task_context(self, engagement_id, "scan",
                       job_extra=job_extra,
@@ -94,6 +98,7 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
         "agent_mode": opts["agent_mode"],
         "scan_mode": opts["scan_mode"],
         "aggressiveness": opts["aggressiveness"],
+        "bug_bounty_mode": opts.get("bug_bounty_mode", False),
     }
     with task_context(self, engagement_id, "deep_scan",
                       job_extra=job_extra,
@@ -119,6 +124,7 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
         "agent_mode": opts["agent_mode"],
         "scan_mode": opts["scan_mode"],
         "aggressiveness": opts["aggressiveness"],
+        "bug_bounty_mode": opts.get("bug_bounty_mode", False),
     }
     with task_context(self, engagement_id, "auth_focused_scan",
                       job_extra=job_extra,
