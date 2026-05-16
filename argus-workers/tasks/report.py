@@ -139,10 +139,13 @@ def generate_scheduled_reports(self):
     Called by a periodic Celery beat schedule.
     """
     db_conn_string = os.getenv("DATABASE_URL")
-    conn = connect(db_conn_string)
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-
+    conn = None
+    cursor = None
     try:
+        from database.connection import get_db
+        conn = get_db().get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
         # Find all due scheduled reports
         cursor.execute(
             """
@@ -192,12 +195,10 @@ def generate_scheduled_reports(self):
                         report["org_id"],
                         report["created_by"],
                         report["id"],
-                        str(
-                            {
-                                "recipients": report["email_recipients"],
-                                "report_name": report["name"],
-                            }
-                        ),
+                        str({
+                            "recipients": report["email_recipients"],
+                            "report_name": report["name"],
+                        }),
                     ),
                 )
 
@@ -209,8 +210,10 @@ def generate_scheduled_reports(self):
 
         return {"processed": len(due_reports)}
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            get_db().release_connection(conn)
 
 
 def _generate_report_data(
