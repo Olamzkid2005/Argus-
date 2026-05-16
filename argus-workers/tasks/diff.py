@@ -86,19 +86,6 @@ def run_scan_diff(
                 diff_result[engine.CAT_FIXED],
             )
 
-        # Fire webhooks for actionable findings
-        if diff_result["summary"]["action_required"]:
-            try:
-                from post_finding_hooks import fire_diff_webhooks
-
-                fire_diff_webhooks(
-                    diff_result, org_id, new_engagement_id
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to fire diff webhooks: %s", e
-                )
-
         # Store diff in profile
         if domain:
             engine.store_diff_in_profile(org_id, domain, diff_result)
