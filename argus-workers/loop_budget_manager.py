@@ -22,10 +22,12 @@ class LoopBudgetManager:
         config = config or {}
         self.max_cycles = config.get("max_cycles", 5)
         self.max_depth = config.get("max_depth", 3)
+        self.max_llm_reviews = config.get("max_llm_reviews", 50)
 
         # Initialize current values
         self.current_cycles = 0
         self.current_depth = 0
+        self.current_llm_reviews = 0
 
     def can_continue(self, action: dict) -> tuple[bool, str]:
         """
@@ -47,6 +49,10 @@ class LoopBudgetManager:
         if action_type in ("deep_scan", "auth_focused_scan") and self.current_depth >= self.max_depth:
             return False, "depth_exceeded"
 
+        # Separate budget for LLM review — independent of intelligence engine cycles
+        if action_type == "llm_review" and self.current_llm_reviews >= self.max_llm_reviews:
+            return False, "llm_reviews_exceeded"
+
         return True, "within_budget"
 
     def consume(self, action: dict):
@@ -63,6 +69,8 @@ class LoopBudgetManager:
             self.current_cycles += 1
         elif action_type in ("deep_scan", "auth_focused_scan"):
             self.current_depth += 1
+        elif action_type == "llm_review":
+            self.current_llm_reviews += 1
 
     def get_status(self) -> dict:
         """
@@ -83,12 +91,18 @@ class LoopBudgetManager:
                 "max": self.max_depth,
                 "remaining": self.max_depth - self.current_depth,
             },
+            "llm_reviews": {
+                "current": self.current_llm_reviews,
+                "max": self.max_llm_reviews,
+                "remaining": self.max_llm_reviews - self.current_llm_reviews,
+            },
         }
 
     def reset(self):
         """Reset current values to zero"""
         self.current_cycles = 0
         self.current_depth = 0
+        self.current_llm_reviews = 0
 
     def load_from_db(self, db_data: dict):
         """
@@ -99,6 +113,7 @@ class LoopBudgetManager:
         """
         self.current_cycles = db_data.get("current_cycles", 0)
         self.current_depth = db_data.get("current_depth", 0)
+        self.current_llm_reviews = db_data.get("current_llm_reviews", 0)
 
     def to_dict(self) -> dict:
         """
@@ -111,6 +126,8 @@ class LoopBudgetManager:
             "engagement_id": self.engagement_id,
             "max_cycles": self.max_cycles,
             "max_depth": self.max_depth,
+            "max_llm_reviews": self.max_llm_reviews,
             "current_cycles": self.current_cycles,
             "current_depth": self.current_depth,
+            "current_llm_reviews": self.current_llm_reviews,
         }

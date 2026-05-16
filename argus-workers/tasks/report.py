@@ -36,7 +36,10 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     slog = ScanLogger("report", engagement_id=engagement_id)
     slog.phase_header("REPORT PHASE")
 
-    # Idempotency check: skip if already complete
+    # Idempotency check: skip if already complete.
+    # Mitigated TOCTOU: safe_transition on line ~60 skips if no valid
+    # outgoing transition from complete (terminal state), so a double-run
+    # in rare timing conditions is harmless — it just produces a no-op.
     try:
         current_state = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
         if current_state == "complete":
@@ -55,7 +58,13 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         trace_id=trace_id, current_state="reporting"
     ) as ctx:
         result = ctx.orchestrator.run_reporting(ctx.job)
-        ctx.state.safe_transition("complete", "Report generated")
+        transitioned = ctx.state.safe_transition("complete", "Report generated")
+        if not transitioned:
+            logger.warning(
+                "Engagement %s could not transition to 'complete' from state '%s' — "
+                "may be stuck in 'reporting'",
+                engagement_id, ctx.state.current_state,
+            )
         slog.phase_complete("report", status="completed")
         return result
 
@@ -151,7 +160,6 @@ def generate_scheduled_reports(self):
     Generate all due scheduled reports and send them via email.
     Called by a periodic Celery beat schedule.
     """
-    os.getenv("DATABASE_URL")
     conn = None
     cursor = None
     try:
@@ -403,6 +411,9 @@ def generate_compliance_report(
             )
             org_row = cursor.fetchone()
             org_id = org_row["org_id"] if org_row else None
+
+            if not org_id:
+                raise ValueError(f"No org_id found for engagement {engagement_id} — cannot generate compliance report")
 
             # Store report in database
             cursor.execute(

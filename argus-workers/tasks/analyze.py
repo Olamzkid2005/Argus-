@@ -16,14 +16,6 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
     """
     Execute analysis phase for an engagement
     """
-    import os
-
-    from tasks.base import _get_engagement_state
-    current = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
-    if current != "analyzing":
-        logger.info("Engagement %s not in analyzing state (got %s) — skipping analyze", engagement_id, current)
-        return {"status": "skipped", "reason": f"state_is_{current}"}
-
     from utils.logging_utils import ScanLogger
     slog = ScanLogger("analyze", engagement_id=engagement_id)
     slog.phase_header("ANALYZE PHASE")
@@ -83,22 +75,20 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                         logger.warning("Action %s has no valid targets for engagement=%s", action_type, engagement_id)
 
             if _dispatched == 0:
-                # Check if we had any actions at all
-                if actions:
-                    # We had actions but none could be dispatched — this is a failure
-                    logger.error("All action dispatches failed for engagement=%s — transitioning to failed", engagement_id)
-                    ctx.state.transition("failed", "All action dispatches failed")
-                else:
-                    logger.error("All %d action(s) had empty/invalid targets for engagement=%s — transitioning to reporting", len(actions), engagement_id)
-                    ctx.state.transition("reporting", "No actionable targets — advancing to report")
-                    try:
-                        app.send_task('tasks.report.generate_report',
-                                      args=[engagement_id, ctx.trace_id, budget])
-                    except Exception as e:
-                        logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                        ctx.state.transition("failed", f"Failed to enqueue report: {e}")
+                logger.info("All %d action(s) had empty/invalid targets for engagement=%s — advancing to reporting", len(actions), engagement_id)
+                ctx.state.transition("reporting", "No actionable targets — advancing to report")
+                try:
+                    app.send_task('tasks.report.generate_report',
+                                  args=[engagement_id, ctx.trace_id, budget])
+                except Exception as e:
+                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                    ctx.state.transition("failed", f"Failed to enqueue report: {e}")
             else:
-                ctx.state.transition("scanning", f"{_dispatched} action(s) dispatched")
+                # Transition to "recon" (not "scanning") so the loop budget
+                # counter increments in state_machine.py (analyzing→recon).
+                # The dispatched expand_recon/deep_scan tasks will advance
+                # state to scanning automatically.
+                ctx.state.transition("recon", f"{_dispatched} action(s) dispatched — looping through recon")
         else:
             slog.info("No actions — advancing to reporting")
             ctx.state.transition("reporting", "Analysis complete")

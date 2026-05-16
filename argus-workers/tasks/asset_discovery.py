@@ -60,12 +60,18 @@ def run_asset_discovery(
     with tracing_manager.trace_execution(engagement_id, "asset_discovery", trace_id):
         assets_discovered = []
 
+        conn = None
+        cursor = None
         try:
             conn = connect(db_conn_string)
             cursor = conn.cursor()
 
             # Discover domain asset
-            domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+            # Use urlparse to safely extract netloc, handling URLs with
+            # embedded credentials (user:pass@host), ports, etc.
+            from urllib.parse import urlparse
+            parsed = urlparse(target)
+            domain = parsed.netloc or parsed.path.split("/")[0]
             cursor.execute(
                 """
                 INSERT INTO assets (org_id, engagement_id, asset_type, identifier, display_name, attributes, lifecycle_status)
@@ -110,8 +116,6 @@ def run_asset_discovery(
             )
 
             conn.commit()
-            cursor.close()
-            conn.close()
 
             return {
                 "status": "completed",
@@ -121,11 +125,18 @@ def run_asset_discovery(
             }
 
         except Exception as e:
+            if conn:
+                conn.rollback()
             return {
                 "status": "failed",
                 "error": str(e),
                 "trace_id": trace_id,
             }
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
 
 @app.task(bind=True, name="tasks.asset_discovery.update_asset_risk_scores")

@@ -58,28 +58,51 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         ctx.state.transition("recon", "Starting reconnaissance")
         result = ctx.orchestrator.run_recon(ctx.job)
 
+        # Save recon context so scan can load it (Bug 1: was never saved)
+        if result.get("recon_context"):
+            try:
+                from tasks.utils import save_recon_context
+                ctx_data = result["recon_context"]
+                if isinstance(ctx_data, dict):
+                    from models.recon_context import ReconContext
+                    ctx_data = ReconContext.from_dict(ctx_data)
+                save_recon_context(engagement_id, ctx_data)
+                slog.info("Saved recon context for scan phase")
+            except Exception as e:
+                logger.error("Failed to save recon context for %s — aborting: %s", engagement_id, e)
+                ctx.state.transition("failed", f"Failed to persist recon context: {e}")
+                return {"phase": "recon", "status": "failed", "reason": "recon_context_save_failed"}
+
+        # Dispatch asset_discovery first (non-critical — warning on failure)
         try:
             asset_task = app.send_task(
                 'tasks.asset_discovery.run_asset_discovery',
                 args=[engagement_id, target, ctx.trace_id],
                 countdown=5,
-                task_id=f"asset_discovery-{engagement_id}",
             )
             slog.dispatch("asset_discovery", task_id=asset_task.id)
         except Exception as e:
             logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
+        # Dispatch scan BEFORE transitioning state. If dispatch fails the
+        # engagement transitions directly to "failed" — no orphaned state.
+        # If dispatch succeeds, the scan task itself transitions to "scanning"
+        # (see scan.py:69-70), so there's no gap.
         try:
             scan_task = app.send_task(
                 'tasks.scan.run_scan',
                 args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness, bug_bounty_mode],
-                task_id=f"scan-{engagement_id}",
             )
             slog.dispatch("scan", task_id=scan_task.id)
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.transition("failed", f"Failed to dispatch scan: {e}")
             return {"phase": "recon", "status": "failed", "reason": "scan_dispatch_failed"}
+
+        # Transition state AFTER dispatch succeeds. If the process crashes
+        # between dispatch and this transition, the scan task handles
+        # transitioning to "scanning" itself (scan.py line 69-70).
+        ctx.state.transition("scanning", "Recon complete — scan dispatched")
 
         return result
 
@@ -137,7 +160,6 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
             except Exception as e:
                 logger.warning("Failed to save expanded recon context: %s", e)
 
-        # Dispatch downstream task BEFORE transitioning state
         # Load scan flags from DB (expand_recon is not dispatched with full job payload)
         from tasks.utils import fetch_engagement_scan_options
 

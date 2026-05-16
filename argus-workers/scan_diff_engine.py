@@ -60,6 +60,22 @@ class ScanDiffEngine:
         return hashlib.sha256(key.encode()).hexdigest()[:16]
 
     @staticmethod
+    def _has_payload(finding: dict) -> bool:
+        """Check if a finding has a meaningful evidence payload.
+
+        Returns True if the finding's evidence contains a non-empty,
+        non-None payload string. Used to distinguish payload-bearing
+        findings from fallback-only entries.
+        """
+        evidence = finding.get("evidence", {}) or {}
+        payload = ""
+        if isinstance(evidence, dict):
+            payload = evidence.get("payload", "")
+        elif isinstance(evidence, str):
+            payload = evidence
+        return bool(payload and payload != "None")
+
+    @staticmethod
     def _fingerprint(finding: dict) -> str:
         """Stable fingerprint for matching findings across scans.
 
@@ -203,11 +219,22 @@ class ScanDiffEngine:
             if fp in fixed_fps:
                 result[self.CAT_REGRESSED].append(curr[fp])
             else:
-                # Check fallback fingerprint for cross-scan matching
+                # Check fallback fingerprint for cross-scan matching.
+                # Fallback is only valid when one or both sides lack a payload.
+                # If BOTH sides have payloads, different primary fingerprints
+                # mean genuinely different findings — not the same vuln.
                 fb_fp = self._fallback_fingerprint(curr[fp])
                 if fb_fp in prev_fallback:
-                    # Same vulnerability, different payload — classify as persistent
-                    result[self.CAT_PERSISTENT].append(curr[fp])
+                    prev_fp = prev_fallback[fb_fp]
+                    prev_finding = prev[prev_fp]
+                    curr_has_payload = self._has_payload(curr[fp])
+                    prev_has_payload = self._has_payload(prev_finding)
+                    if curr_has_payload and prev_has_payload:
+                        # Both sides have payloads — different FP = different finding
+                        result[self.CAT_NEW].append(curr[fp])
+                    else:
+                        # One or both sides missing payload — likely same vulnerability
+                        result[self.CAT_PERSISTENT].append(curr[fp])
                 else:
                     result[self.CAT_NEW].append(curr[fp])
 

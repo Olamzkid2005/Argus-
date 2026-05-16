@@ -2,6 +2,7 @@
 Finding repository for database operations on vulnerability findings
 """
 import logging
+import os
 import uuid
 
 from psycopg2.extras import Json, RealDictCursor
@@ -9,6 +10,8 @@ from psycopg2.extras import Json, RealDictCursor
 from database.repositories.base import BaseRepository
 
 logger = logging.getLogger(__name__)
+
+MAX_FINDINGS_PER_ENGAGEMENT = int(os.getenv("MAX_FINDINGS_PER_ENGAGEMENT", "50000"))
 
 
 class FindingRepository(BaseRepository):
@@ -64,6 +67,22 @@ class FindingRepository(BaseRepository):
         finding_id = str(uuid.uuid4())
 
         try:
+            # Soft limit check to prevent unbounded storage growth.
+            # TOCTOU is acceptable here — two concurrent inserts may slightly
+            # exceed the cap, which is better than holding a FOR UPDATE lock
+            # on the engagement row and serializing all inserts.
+            cursor.execute(
+                "SELECT COUNT(*) FROM findings WHERE engagement_id = %s",
+                (engagement_id,)
+            )
+            count = cursor.fetchone()[0]
+            if count >= MAX_FINDINGS_PER_ENGAGEMENT:
+                logger.warning(
+                    "Engagement %s has %d findings (limit %d) — skipping new finding",
+                    engagement_id, count, MAX_FINDINGS_PER_ENGAGEMENT
+                )
+                return None  # Return None to signal the finding was NOT saved
+
             source_tool = source_tool or ""
             # First, check if a legacy row with source_tool IS NULL exists for
             # this (engagement_id, endpoint, type) and update it in-place.
@@ -290,6 +309,7 @@ class FindingRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
+            conn.rollback()  # Release FOR UPDATE locks immediately
             if not self._external_conn:
                 self._release_connection(conn)
 

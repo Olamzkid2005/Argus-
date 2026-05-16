@@ -13,9 +13,10 @@ class TestFindingDedup:
         """Test creating a unique finding succeeds and returns new ID."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        # First fetchone (after UPDATE legacy check) returns None → no legacy row.
-        # Second fetchone (after INSERT) returns the new UUID.
-        mock_cursor.fetchone.side_effect = [None, ("new-uuid",)]
+        # First fetchone (COUNT(*) soft limit check) returns (0,) — within limit.
+        # Second fetchone (after UPDATE legacy check) returns None → no legacy row.
+        # Third fetchone (after INSERT) returns the new UUID.
+        mock_cursor.fetchone.side_effect = [(0,), None, ("new-uuid",)]
         mock_conn.cursor.return_value = mock_cursor
 
         repo = FindingRepository()
@@ -42,9 +43,10 @@ class TestFindingDedup:
         """Test creating a duplicate returns existing finding ID via ON CONFLICT RETURNING."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        # First fetchone (after UPDATE legacy check) returns None → no legacy row.
-        # Second fetchone (after INSERT with ON CONFLICT) returns existing id via RETURNING.
-        mock_cursor.fetchone.side_effect = [None, ("existing-id",)]
+        # First fetchone (COUNT(*) soft limit check) returns (0,) — within limit.
+        # Second fetchone (after UPDATE legacy check) returns None → no legacy row.
+        # Third fetchone (after INSERT with ON CONFLICT) returns existing id via RETURNING.
+        mock_cursor.fetchone.side_effect = [(0,), None, ("existing-id",)]
         mock_conn.cursor.return_value = mock_cursor
 
         repo = FindingRepository()
@@ -69,7 +71,7 @@ class TestFindingDedup:
         """Test that commit is called after successful insert."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.side_effect = [None, ("new-uuid",)]
+        mock_cursor.fetchone.side_effect = [(0,), None, ("new-uuid",)]
         mock_conn.cursor.return_value = mock_cursor
 
         repo = FindingRepository()
@@ -115,7 +117,7 @@ class TestFindingDedup:
         """Test that the returned ID is always a string."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.side_effect = [None, ("some-uuid",)]
+        mock_cursor.fetchone.side_effect = [(0,), None, ("some-uuid",)]
         mock_conn.cursor.return_value = mock_cursor
 
         repo = FindingRepository()

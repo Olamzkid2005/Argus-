@@ -124,29 +124,31 @@ class Orchestrator:
         if not db_conn:
             return []
         conn = None
+        cursor = None
         try:
             conn = connect(db_conn)
             cursor = conn.cursor()
-            try:
-                cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
-                row = cursor.fetchone()
-                if not row:
-                    return []
-                org_id = row[0]
-                cursor.execute("""
-                    SELECT id, name, description, severity, category, rule_yaml, tags
-                    FROM custom_rules WHERE org_id = %s AND status = 'active'
-                    ORDER BY created_at DESC
-                """, (org_id,))
-                columns = [desc[0] for desc in cursor.description]
-                rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-                return rules
-            finally:
-                cursor.close()
-                conn.close()
+            cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+            row = cursor.fetchone()
+            if not row:
+                return []
+            org_id = row[0]
+            cursor.execute("""
+                SELECT id, name, description, severity, category, rule_yaml, tags
+                FROM custom_rules WHERE org_id = %s AND status = 'active'
+                ORDER BY created_at DESC
+            """, (org_id,))
+            columns = [desc[0] for desc in cursor.description]
+            rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+            return rules
         except Exception as e:
             logger.warning(f"Failed to load custom rules: {e}")
             return []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     def run(self, job: dict) -> dict:
         if self.start_time is None:

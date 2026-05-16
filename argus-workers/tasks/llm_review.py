@@ -110,6 +110,12 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         slog.info("LLM review disabled via config")
         return {"status": "skipped", "reason": "LLM_REVIEW_ENABLED=False"}
 
+    # Load live replay setting once to avoid per-finding Redis lookups
+    try:
+        live_replay_enabled = load_llm_setting("llm_review_live_replay", "false") == "true"
+    except Exception:
+        live_replay_enabled = False
+
     # Get LLM detector
     detector = _get_llm_detector()
     if not detector:
@@ -123,9 +129,10 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         return {"status": "skipped", "reason": "Finding repository unavailable"}
 
     # Initialize budget manager
+    budget_manager = None
     try:
         from loop_budget_manager import LoopBudgetManager
-        LoopBudgetManager(engagement_id, budget or {})
+        budget_manager = LoopBudgetManager(engagement_id, budget or {})
     except Exception as e:
         slog.warning(f"Budget manager not available: {e}")
 
@@ -150,9 +157,15 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     # Analyze each finding
     analyzed_count = 0
     confirmed_count = 0
-    budget_exhausted = False
 
     for finding in candidate_findings:
+        if budget_manager:
+            can_continue, _ = budget_manager.can_continue({"type": "llm_review"})
+            if not can_continue:
+                slog.info("LLM review budget exhausted — stopping")
+                break
+            budget_manager.consume({"type": "llm_review"})
+
         slog.tool_start("LLM Review", [f"finding={finding.get('id', '?')[:8]}..."])
 
         try:
@@ -161,7 +174,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             payload = evidence.get("payload", "")
 
             # Replay HTTP request to get fresh response
-            response = _replay_request(finding.get("endpoint", ""), evidence)
+            response = _replay_request(finding.get("endpoint", ""), evidence, live_replay_enabled)
             if not response:
                 slog.tool_result("LLM Review", f"Skipping finding {finding.get('id', '?')[:8]}: no response")
                 continue
@@ -241,31 +254,39 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             slog.warning(f"LLM review failed for finding {finding.get('id', '?')[:8]}: {e}")
             continue
 
-    slog.info(f"LLM review complete: {analyzed_count} analyzed, {confirmed_count} confirmed, {'budget exhausted' if budget_exhausted else 'all processed'}")
+    # LLM review uses its own budget (llm_review_max_per_engagement cap),
+    # not the intelligence engine's recon_expand cycles.
+    budget_was_exhausted = False
+    slog.info(f"LLM review complete: {analyzed_count} analyzed, {confirmed_count} confirmed, {'budget exhausted' if budget_was_exhausted else 'all candidates processed'}")
 
     return {
         "status": "completed",
         "analyzed": analyzed_count,
         "confirmed": confirmed_count,
         "total_candidates": len(candidate_findings),
-        "budget_exhausted": budget_exhausted,
+        "budget_exhausted": budget_was_exhausted,
     }
 
 
-def _replay_request(endpoint: str, evidence: dict):
+def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = False):
     """
     Replay an HTTP request to get a fresh response for analysis.
 
-    Constructs a simple GET/POST request based on evidence data.
-    Falls back to a basic GET if evidence is insufficient.
+    Requires LLM_REVIEW_LIVE_REPLAY to be explicitly enabled.
+    Falls back to stored evidence if disabled or on failure.
 
     Args:
         endpoint: Target URL
         evidence: Finding evidence dict (may contain payload, request, response)
+        live_replay_enabled: Pre-loaded feature flag to avoid per-call Redis lookup
 
     Returns:
         Response object or None on failure
     """
+    if not live_replay_enabled:
+        logger.debug("Live replay disabled — using stored evidence for endpoint %s", endpoint)
+        return None
+
     try:
         from urllib.parse import urlencode
 
@@ -276,8 +297,7 @@ def _replay_request(endpoint: str, evidence: dict):
 
         payload = evidence.get("payload", "")
         if payload and payload.strip():
-            # URL-encode payload to prevent malformed requests
-            test_url = f"{endpoint}?q={urlencode({'q': payload}).split('=')[1]}"
+            test_url = f"{endpoint}?{urlencode({'q': payload})}"
             resp = requests.get(test_url, headers=headers, timeout=timeout, allow_redirects=True)
         else:
             # No payload — still try to GET the endpoint for analysis
