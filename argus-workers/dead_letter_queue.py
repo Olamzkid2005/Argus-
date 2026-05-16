@@ -56,6 +56,15 @@ class DeadLetterQueue:
             self._redis = redis.from_url(self.redis_url)
         return self._redis
 
+    def close(self):
+        """Close the Redis connection explicitly."""
+        if self._redis is not None:
+            try:
+                self._redis.close()
+            except Exception:
+                pass
+            self._redis = None
+
     def enqueue(
         self,
         task_id: str,
@@ -144,12 +153,13 @@ class DeadLetterQueue:
 
                 tasks = []
                 main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
+                task_id_set = {
+                    tid.decode() if isinstance(tid, bytes) else tid
+                    for tid in task_ids
+                }
                 for raw_task in self.redis.zrange(main_key, 0, -1):
                     task = json.loads(raw_task)
-                    if task["task_id"] in [
-                        tid.decode() if isinstance(tid, bytes) else tid
-                        for tid in task_ids
-                    ]:
+                    if task["task_id"] in task_id_set:
                         tasks.append(task)
                 return tasks
             else:

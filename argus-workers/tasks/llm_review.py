@@ -123,9 +123,10 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         return {"status": "skipped", "reason": "Finding repository unavailable"}
 
     # Initialize budget manager
+    budget_mgr = None
     try:
         from loop_budget_manager import LoopBudgetManager
-        LoopBudgetManager(engagement_id, budget or {})
+        budget_mgr = LoopBudgetManager(engagement_id, budget or {})
     except Exception as e:
         slog.warning(f"Budget manager not available: {e}")
 
@@ -178,14 +179,17 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             except RuntimeError:
                 loop = None
             if loop and loop.is_running():
-                # Already in an event loop (e.g. gevent worker or async Celery)
-                result = loop.run_until_complete(detector.analyze_async(
+                # Already in an event loop — cannot run_until_complete on a
+                # running loop. Use create_task + wait instead.
+                future = asyncio.ensure_future(detector.analyze_async(
                     test_url=finding.get("endpoint", ""),
                     vuln_class=finding.get("type", "UNKNOWN"),
                     payload=payload,
                     response=response,
                     max_response_chars=LLM_REVIEW_MAX_RESPONSE_CHARS,
                 ))
+                loop.run_until_complete(asyncio.wait([future]))
+                result = future.result()
             else:
                 result = asyncio.run(detector.analyze_async(
                     test_url=finding.get("endpoint", ""),
@@ -265,13 +269,15 @@ def _replay_request(endpoint: str, evidence: dict):
     """
     try:
         import requests
+        from urllib.parse import urlencode
 
         headers = {"User-Agent": "Argus-LLM-Review/1.0"}
         timeout = 15
 
         payload = evidence.get("payload", "")
         if payload and payload.strip():
-            test_url = f"{endpoint}?q={payload}"
+            # URL-encode payload to prevent malformed requests
+            test_url = f"{endpoint}?q={urlencode({'q': payload}).split('=')[1]}"
             resp = requests.get(test_url, headers=headers, timeout=timeout, allow_redirects=True)
         else:
             # No payload — still try to GET the endpoint for analysis

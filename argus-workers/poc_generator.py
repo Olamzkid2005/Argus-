@@ -157,10 +157,11 @@ class PoCGenerator:
         vuln_type = finding.get("type", "UNKNOWN").upper()
         # Find matching template
         template = DEFAULT_TEMPLATE
-        for template_key in POC_TEMPLATES:
-            if template_key in vuln_type or vuln_type in template_key:
-                template = POC_TEMPLATES[template_key]
-                break
+        if vuln_type and vuln_type != "UNKNOWN":
+            for template_key in POC_TEMPLATES:
+                if template_key in vuln_type or vuln_type in template_key:
+                    template = POC_TEMPLATES[template_key]
+                    break
 
         evidence = finding.get("evidence", {})
         if isinstance(evidence, str):

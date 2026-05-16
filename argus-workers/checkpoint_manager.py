@@ -251,23 +251,34 @@ class CheckpointManager:
         # Define phase ordering
         phases = ["recon", "scan", "analyze", "report"]
 
-        try:
+        if phase in phases:
             current_idx = phases.index(phase)
-        except ValueError:
-            current_idx = 0
-
-        next_phase = phases[current_idx + 1] if current_idx + 1 < len(phases) else None
+            next_phase = phases[current_idx + 1] if current_idx + 1 < len(phases) else None
+            remaining = phases[current_idx + 1:] if next_phase else []
+        else:
+            # Unknown/terminal phase — cannot resume
+            return {
+                "engagement_id": engagement_id,
+                "completed_phase": phase,
+                "next_phase": None,
+                "partial_results": data,
+                "remaining_phases": [],
+                "checkpoint_timestamp": checkpoint["created_at"].isoformat()
+                if checkpoint["created_at"] else None,
+                "can_resume": False,
+                "reason": f"Phase '{phase}' not recognized or is terminal",
+            }
 
         return {
             "engagement_id": engagement_id,
             "completed_phase": phase,
             "next_phase": next_phase,
             "partial_results": data,
-            "remaining_phases": phases[current_idx + 1 :] if next_phase else [],
+            "remaining_phases": remaining,
             "checkpoint_timestamp": checkpoint["created_at"].isoformat()
             if checkpoint["created_at"]
             else None,
-            "can_resume": True,
+            "can_resume": next_phase is not None,
         }
 
     def cleanup_old_checkpoints(self, max_age_days: int = 7) -> int:

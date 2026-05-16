@@ -43,20 +43,80 @@ class EmbeddingService:
 
     # ── Embedding API ──────────────────────────────────────────────────────
 
+    def _api_key(self) -> str | None:
+        """Lazy-load and cache the LLM API key."""
+        if self._llm_client is None:
+            try:
+                from llm_client import LLMClient
+                self._llm_client = LLMClient()
+            except Exception:
+                return None
+        return getattr(self._llm_client, "api_key", None)
+
+    def _call_embedding_api(self, text: str) -> list[float] | None:
+        """Call the embedding API and return embedding or None."""
+        api_key = self._api_key()
+        if not api_key:
+            return None
+        try:
+            import httpx
+
+            if api_key.startswith("sk-or-"):
+                url = "https://openrouter.ai/api/v1/embeddings"
+                model = "openai/text-embedding-3-small"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+                    "X-Title": "Argus Pentest Platform",
+                }
+            else:
+                url = "https://api.openai.com/v1/embeddings"
+                model = "text-embedding-3-small"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                }
+
+            resp = httpx.post(
+                url,
+                headers=headers,
+                json={"model": model, "input": text},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["data"][0]["embedding"]
+        except Exception as e:
+            logger.debug("Embedding API failed (non-fatal): %s", e)
+        return None
+
     def get_embedding(self, text: str) -> list[float] | None:
         """Generate embedding vector for text via OpenAI or OpenRouter.
 
-        Caches the LLMClient on first call.
+        Falls back to PGVectorRepository's hash-based fallback if the API
+        call fails or no API key is configured.
         """
-        api_key = None
-        try:
-            if self._llm_client is None:
-                from llm_client import LLMClient
-                self._llm_client = LLMClient()
-            api_key = self._llm_client.api_key
-        except Exception:
-            pass
+        embedding = self._call_embedding_api(text)
+        if embedding:
+            return embedding
 
+        from database.repositories.pgvector_repository import PGVectorRepository
+        pg = PGVectorRepository()
+        return pg.generate_embedding_fallback(text) if hasattr(pg, 'generate_embedding_fallback') else None
+
+    def get_embeddings_batch(self, texts: list[str]) -> list[list[float] | None]:
+        """Generate embedding vectors for multiple texts in a single API call.
+
+        OpenAI embeddings API supports `input: [...]` for batch requests.
+        Returns a list the same length as texts; failed items fall back to
+        individual API calls, then to hash-based fallback.
+        """
+        if not texts:
+            return []
+
+        # Try batch API call
+        api_key = self._api_key()
         if api_key:
             try:
                 import httpx
@@ -81,74 +141,17 @@ class EmbeddingService:
                 resp = httpx.post(
                     url,
                     headers=headers,
-                    json={"model": model, "input": text},
-                    timeout=15,
+                    json={"model": model, "input": texts},
+                    timeout=30,
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    return data["data"][0]["embedding"]
+                    return [d["embedding"] for d in data["data"]]
             except Exception as e:
-                logger.debug("Embedding API failed (non-fatal): %s", e)
+                logger.debug("Batch embedding API failed (non-fatal): %s", e)
 
-        from database.repositories.pgvector_repository import PGVectorRepository
-        return PGVectorRepository()._generate_embedding_fallback(text)
-
-    def get_embeddings_batch(self, texts: list[str]) -> list[list[float] | None]:
-        """Generate embedding vectors for multiple texts in a single API call.
-
-        OpenAI embeddings API supports `input: [...]` for batch requests.
-        Returns a list the same length as texts; failed items are None.
-        """
-        if not texts:
-            return []
-
-        api_key = None
-        try:
-            if self._llm_client is None:
-                from llm_client import LLMClient
-                self._llm_client = LLMClient()
-            api_key = self._llm_client.api_key
-        except Exception:
-            pass
-
-        if not api_key:
-            from database.repositories.pgvector_repository import PGVectorRepository
-            pg = PGVectorRepository()
-            return [pg._generate_embedding_fallback(t) for t in texts]
-
-        try:
-            import httpx
-
-            if api_key.startswith("sk-or-"):
-                url = "https://openrouter.ai/api/v1/embeddings"
-                model = "openai/text-embedding-3-small"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
-                    "X-Title": "Argus Pentest Platform",
-                }
-            else:
-                url = "https://api.openai.com/v1/embeddings"
-                model = "text-embedding-3-small"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                }
-
-            resp = httpx.post(
-                url,
-                headers=headers,
-                json={"model": model, "input": texts},
-                timeout=30,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return [d["embedding"] for d in data["data"]]
-        except Exception as e:
-            logger.debug("Batch embedding API failed (non-fatal): %s", e)
-
-        return [None] * len(texts)
+        # Fall back to individual calls (which each fall back to hash)
+        return [self.get_embedding(t) for t in texts]
 
     # ── Similarity Search ──────────────────────────────────────────────────
 

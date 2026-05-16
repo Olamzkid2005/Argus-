@@ -41,6 +41,7 @@ class SnapshotManager:
         conn = None
         cursor = None
         max_retries = 3
+        retry_delay = 1  # seconds, doubles each attempt
         import time
 
         for attempt in range(max_retries):
@@ -134,11 +135,13 @@ class SnapshotManager:
                 if conn:
                     conn.rollback()
                 # Retry on serialization failures (40001) — concurrent modification
-                if conn and hasattr(conn, 'get_dsn_parameters'):
+                if conn:
                     try:
                         from psycopg2.errorcodes import SERIALIZATION_FAILURE
                         pgcode = getattr(e, 'pgcode', None)
                         if pgcode == SERIALIZATION_FAILURE and attempt < max_retries - 1:
+                            logger.info("Snapshot serialization failure (attempt %d/%d), retrying in %ds",
+                                        attempt + 1, max_retries, retry_delay * (2 ** attempt))
                             time.sleep(retry_delay * (2 ** attempt))
                             continue
                     except Exception:
