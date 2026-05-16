@@ -396,7 +396,7 @@ def emit_swarm_agent_action(
     domain: str,
     tool: str,
     reasoning: str,
-    iteration: int,
+    iteration: int = 0,
 ):
     """Emit a swarm agent tool selection action."""
     get_stream_manager().publish(Event(
