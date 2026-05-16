@@ -3,44 +3,12 @@ Celery tasks for scanning phase
 
 Requirements: 4.3, 4.4, 20.1, 20.2, 20.3
 """
-import json
 import logging
-import os
-import time
 
 from celery_app import app
 from tasks.base import task_context
 
 logger = logging.getLogger(__name__)
-
-
-# #region agent log
-def _debug_scan_task_ndjson(
-    hypothesis_id: str, location: str, message: str, data: dict | None = None
-) -> None:
-    try:
-        with open(
-            "/Users/mac/Documents/Argus-/.cursor/debug-70a9cd.log",
-            "a",
-            encoding="utf-8",
-        ) as _df:
-            _df.write(
-                json.dumps(
-                    {
-                        "sessionId": "70a9cd",
-                        "hypothesisId": hypothesis_id,
-                        "location": location,
-                        "message": message,
-                        "data": data or {},
-                        "timestamp": int(time.time() * 1000),
-                    },
-                    default=str,
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-# #endregion
 
 
 @app.task(bind=True, name="tasks.scan.run_scan", soft_time_limit=2400, time_limit=3600)
@@ -71,27 +39,6 @@ def run_scan(
         logger.error("Failed to load recon context for engagement=%s: %s", engagement_id, e, exc_info=True)
         recon_context = None
 
-    # #region agent log
-    _n_ep = (
-        len(recon_context.live_endpoints)
-        if recon_context and hasattr(recon_context, "live_endpoints")
-        else 0
-    )
-    _debug_scan_task_ndjson(
-        "H2",
-        "tasks/scan.py:run_scan",
-        "recon_context_task_layer",
-        {
-            "engagement_id": engagement_id,
-            "trace_id_in": trace_id,
-            "celery_task_id": getattr(self.request, "id", None),
-            "recon_loaded": recon_context is not None,
-            "live_endpoints_count": _n_ep,
-            "agent_mode": agent_mode,
-        },
-    )
-    # #endregion
-
     mode = "agent" if agent_mode else "deterministic"
     slog.phase_header("SCAN PHASE", targets=f"{len(targets)} target(s)", mode=mode)
 
@@ -109,35 +56,8 @@ def run_scan(
     with task_context(self, engagement_id, "scan",
                       job_extra=job_extra,
                       trace_id=trace_id) as ctx:
-        # #region agent log
-        _debug_scan_task_ndjson(
-            "H3",
-            "tasks/scan.py:run_scan",
-            "task_context_ready",
-            {
-                "engagement_id": engagement_id,
-                "ctx_trace_id": ctx.trace_id,
-                "celery_task_id": getattr(self.request, "id", None),
-            },
-        )
-        # #endregion
         ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
-
-        # #region agent log
-        _debug_scan_task_ndjson(
-            "H1",
-            "tasks/scan.py:run_scan",
-            "orchestrator_run_scan_returned",
-            {
-                "engagement_id": engagement_id,
-                "ctx_trace_id": ctx.trace_id,
-                "result_status": result.get("status"),
-                "result_findings_count": result.get("findings_count"),
-                "result_trace_id": result.get("trace_id"),
-            },
-        )
-        # #endregion
 
         # Dispatch downstream task BEFORE transitioning state to avoid stuck engagements
         try:
@@ -147,33 +67,9 @@ def run_scan(
             )
             result["analysis_task_id"] = analyze_task.id
             slog.dispatch("analyze", task_id=analyze_task.id)
-            # #region agent log
-            _debug_scan_task_ndjson(
-                "H3",
-                "tasks/scan.py:run_scan",
-                "analysis_dispatched",
-                {
-                    "engagement_id": engagement_id,
-                    "ctx_trace_id": ctx.trace_id,
-                    "analysis_task_id": analyze_task.id,
-                },
-            )
-            # #endregion
             ctx.state.transition("analyzing", "Scan complete")
         except Exception as e:
             logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
-            # #region agent log
-            _debug_scan_task_ndjson(
-                "H3",
-                "tasks/scan.py:run_scan",
-                "analysis_dispatch_failed",
-                {
-                    "engagement_id": engagement_id,
-                    "ctx_trace_id": ctx.trace_id,
-                    "error_type": type(e).__name__,
-                },
-            )
-            # #endregion
             ctx.state.transition("failed", f"Failed to dispatch analysis: {e}")
 
         return result

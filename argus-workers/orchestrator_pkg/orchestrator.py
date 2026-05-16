@@ -46,36 +46,6 @@ from .repo_scan import execute_repo_scan
 
 logger = logging.getLogger(__name__)
 
-# #region agent log
-def _debug_pipeline_ndjson(
-    hypothesis_id: str, location: str, message: str, data: dict | None = None
-) -> None:
-    """Append one NDJSON line for pipeline debug analysis (no secrets)."""
-    try:
-        with open(
-            "/Users/mac/Documents/Argus-/.cursor/debug-70a9cd.log",
-            "a",
-            encoding="utf-8",
-        ) as _df:
-            _df.write(
-                json.dumps(
-                    {
-                        "sessionId": "70a9cd",
-                        "hypothesisId": hypothesis_id,
-                        "location": location,
-                        "message": message,
-                        "data": data or {},
-                        "timestamp": int(time.time() * 1000),
-                    },
-                    default=str,
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-# #endregion
-
-
 class EngagementTimeoutError(Exception):
     """Raised when engagement exceeds hard timeout"""
 
@@ -400,18 +370,6 @@ class Orchestrator:
                         logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
         except Exception as e:
             logger.error(f"Failed to save findings: {e}")
-            # #region agent log
-            _debug_pipeline_ndjson(
-                "H_SAVE",
-                "orchestrator.py:_save_findings",
-                "save_findings_exception",
-                {
-                    "engagement_id": self.engagement_id,
-                    "error_type": type(e).__name__,
-                    "error_message": str(e)[:500],
-                },
-            )
-            # #endregion
 
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column.
@@ -589,21 +547,6 @@ class Orchestrator:
 
         _llm_ok = self.llm_client is not None and self.llm_client.is_available()
         _recon_ok = recon_context is not None
-        # #region agent log
-        _debug_pipeline_ndjson(
-            "H4",
-            "orchestrator.py:run_scan",
-            "scan_branch_inputs",
-            {
-                "engagement_id": self.engagement_id,
-                "trace_id": get_trace_id(),
-                "scan_mode": scan_mode,
-                "agent_mode_enabled": agent_mode_enabled,
-                "recon_context_loaded": _recon_ok,
-                "llm_client_available": _llm_ok,
-            },
-        )
-        # #endregion
         if scan_mode == "swarm" and _recon_ok and _llm_ok:
             scan_execution_path = "swarm"
             findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
@@ -618,32 +561,7 @@ class Orchestrator:
 
         slog.info(f"Scan mode: {scan_mode}, total findings: {len(findings)}")
         findings_count = len(findings)
-        # #region agent log
-        _debug_pipeline_ndjson(
-            "H4",
-            "orchestrator.py:run_scan",
-            "scan_branch_selected",
-            {
-                "engagement_id": self.engagement_id,
-                "trace_id": get_trace_id(),
-                "scan_execution_path": scan_execution_path,
-                "findings_count_pre_persist": findings_count,
-            },
-        )
-        # #endregion
         self._save_findings(findings)
-        # #region agent log
-        _debug_pipeline_ndjson(
-            "H_PERSIST",
-            "orchestrator.py:run_scan",
-            "post_save_findings",
-            {
-                "engagement_id": self.engagement_id,
-                "trace_id": get_trace_id(),
-                "findings_count_pre_persist": findings_count,
-            },
-        )
-        # #endregion
 
         from llm_client import load_llm_setting
         llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
