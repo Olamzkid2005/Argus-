@@ -294,11 +294,16 @@ def _get_engagement_state(engagement_id: str, db_conn_string: str = None) -> str
         from utils.validation import validate_uuid
         valid_id = validate_uuid(engagement_id, "engagement_id")
         conn = connect(db_conn_string)
-        cursor = conn.cursor()
-        cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return row[0] if row else "created"
-    except Exception:
+        try:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
+                row = cursor.fetchone()
+                return row[0] if row else "created"
+            finally:
+                cursor.close()
+        finally:
+            conn.close()
+    except (ValueError, OSError):
+        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
         return "created"
