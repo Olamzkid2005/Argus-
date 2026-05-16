@@ -186,6 +186,29 @@ class FindingRepository(BaseRepository):
         source_tool = source_tool or ""
 
         try:
+            # Handle legacy rows with source_tool IS NULL (pre-migration)
+            cursor.execute(
+                """
+                UPDATE findings
+                SET last_seen_at = NOW(),
+                    severity = %s,
+                    confidence = %s,
+                    evidence = %s,
+                    cvss_score = %s
+                WHERE engagement_id = %s
+                  AND type = %s
+                  AND endpoint = %s
+                  AND source_tool IS NULL
+                RETURNING id
+                """,
+                (severity, confidence, Json(evidence), cvss_score,
+                 engagement_id, finding_type, endpoint),
+            )
+            row = cursor.fetchone()
+            if row:
+                conn.commit()
+                return str(row[0])
+
             cursor.execute(
                 """
                 INSERT INTO findings (
