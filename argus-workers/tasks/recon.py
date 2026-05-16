@@ -147,20 +147,6 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                       trace_id=trace_id, current_state="recon") as ctx:
         result = ctx.orchestrator.run_recon(ctx.job)
 
-        # Save updated recon context to Redis so scan can read it
-        if result.get("recon_context"):
-            try:
-                from tasks.utils import save_recon_context
-                ctx_data = result["recon_context"]
-                if isinstance(ctx_data, dict):
-                    from models.recon_context import ReconContext
-                    ctx_data = ReconContext.from_dict(ctx_data)
-                save_recon_context(engagement_id, ctx_data)
-                slog.info("Saved expanded recon context")
-                logger.info("Saved expanded recon context for %s", engagement_id)
-            except Exception as e:
-                logger.warning("Failed to save expanded recon context: %s", e)
-
         # Load scan flags from DB (expand_recon is not dispatched with full job payload)
         from tasks.utils import fetch_engagement_scan_options
 
@@ -191,5 +177,23 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         except Exception as e:
             logger.error("Failed to enqueue scan after expand for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
+            return result
+
+        # Save updated recon context AFTER scan dispatch so a crash between
+        # dispatch and save does not leave the engagement stuck — the scan
+        # task handles a missing context gracefully (falls back to deterministic).
+        if result.get("recon_context"):
+            try:
+                from tasks.utils import save_recon_context
+                ctx_data = result["recon_context"]
+                if isinstance(ctx_data, dict):
+                    from models.recon_context import ReconContext
+                    ctx_data = ReconContext.from_dict(ctx_data)
+                save_recon_context(engagement_id, ctx_data)
+                slog.info("Saved expanded recon context")
+                logger.info("Saved expanded recon context for %s", engagement_id)
+            except Exception as e:
+                logger.warning("Failed to save expanded recon context for %s — scan will fall back to deterministic: %s", engagement_id, e)
+
         return result
 

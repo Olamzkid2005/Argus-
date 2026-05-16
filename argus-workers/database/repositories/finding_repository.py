@@ -218,6 +218,8 @@ class FindingRepository(BaseRepository):
         conn = self._get_connection()
         cursor = conn.cursor()
         source_tool = source_tool or ""
+        endpoint = endpoint or ""
+        finding_type = finding_type or ""
 
         try:
             # Handle legacy rows with source_tool IS NULL (pre-migration)
