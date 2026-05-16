@@ -53,6 +53,29 @@ class EmbeddingService:
                 return None
         return getattr(self._llm_client, "api_key", None)
 
+    @staticmethod
+    def _build_embedding_request(api_key: str) -> dict:
+        """Build URL, headers for embedding API based on API key prefix."""
+        if api_key.startswith("sk-or-"):
+            return {
+                "url": "https://openrouter.ai/api/v1/embeddings",
+                "model": "openai/text-embedding-3-small",
+                "headers": {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+                    "X-Title": "Argus Pentest Platform",
+                },
+            }
+        return {
+            "url": "https://api.openai.com/v1/embeddings",
+            "model": "text-embedding-3-small",
+            "headers": {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        }
+
     def _call_embedding_api(self, text: str) -> list[float] | None:
         """Call the embedding API and return embedding or None."""
         api_key = self._api_key()
@@ -61,27 +84,11 @@ class EmbeddingService:
         try:
             import httpx
 
-            if api_key.startswith("sk-or-"):
-                url = "https://openrouter.ai/api/v1/embeddings"
-                model = "openai/text-embedding-3-small"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
-                    "X-Title": "Argus Pentest Platform",
-                }
-            else:
-                url = "https://api.openai.com/v1/embeddings"
-                model = "text-embedding-3-small"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                }
-
+            req = self._build_embedding_request(api_key)
             resp = httpx.post(
-                url,
-                headers=headers,
-                json={"model": model, "input": text},
+                req["url"],
+                headers=req["headers"],
+                json={"model": req["model"], "input": text},
                 timeout=15,
             )
             if resp.status_code == 200:
@@ -90,6 +97,13 @@ class EmbeddingService:
         except Exception as e:
             logger.debug("Embedding API failed (non-fatal): %s", e)
         return None
+
+    def _pgvector_repo(self):
+        """Lazy-loaded PGVectorRepository instance."""
+        if self._pgvector is None:
+            from database.repositories.pgvector_repository import PGVectorRepository
+            self._pgvector = PGVectorRepository()
+        return self._pgvector
 
     def get_embedding(self, text: str) -> list[float] | None:
         """Generate embedding vector for text via OpenAI or OpenRouter.
@@ -101,8 +115,7 @@ class EmbeddingService:
         if embedding:
             return embedding
 
-        from database.repositories.pgvector_repository import PGVectorRepository
-        pg = PGVectorRepository()
+        pg = self._pgvector_repo()
         return pg.generate_embedding_fallback(text) if hasattr(pg, 'generate_embedding_fallback') else None
 
     def get_embeddings_batch(self, texts: list[str]) -> list[list[float] | None]:
@@ -121,27 +134,11 @@ class EmbeddingService:
             try:
                 import httpx
 
-                if api_key.startswith("sk-or-"):
-                    url = "https://openrouter.ai/api/v1/embeddings"
-                    model = "openai/text-embedding-3-small"
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
-                        "X-Title": "Argus Pentest Platform",
-                    }
-                else:
-                    url = "https://api.openai.com/v1/embeddings"
-                    model = "text-embedding-3-small"
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    }
-
+                req = self._build_embedding_request(api_key)
                 resp = httpx.post(
-                    url,
-                    headers=headers,
-                    json={"model": model, "input": texts},
+                    req["url"],
+                    headers=req["headers"],
+                    json={"model": req["model"], "input": texts},
                     timeout=30,
                 )
                 if resp.status_code == 200:

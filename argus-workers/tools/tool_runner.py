@@ -39,28 +39,29 @@ class ToolRunner:
     MVP implementation uses subprocess with locked environment.
     """
 
-    # Dangerous patterns that should be blocked
-    # Short patterns use word boundaries (\b) to avoid false positives
-    # in URLs (e.g. "curl" in "circular", "rm" in "arm").
+    # Dangerous patterns that should be blocked.
+    # Uses regex word boundaries (\b) for short patterns to avoid false
+    # positives in URLs (e.g. "curl" in "circular", "rm" in "armament").
+    # Must be kept in sync with _is_dangerous().
     DANGEROUS_PATTERNS = [
-        "rm -rf",
-        "rm -fr",
-        "rm -r /",
-        "DROP TABLE",
-        "DROP DATABASE",
-        "DELETE FROM",
-        "TRUNCATE",
-        "curl ",
-        "wget ",
-        "nc ",
-        "netcat ",
-        "/etc/passwd",
-        "/etc/shadow",
-        "mkfs",
-        "dd if=",
-        ":(){ :|:& };:",  # Fork bomb
-        ">/dev/",
+        # File/disk destruction
+        "rm -rf", "rm -fr", "rm -r /", "mkfs", "dd if=",
+        # Fork bomb
+        ":(){ :|:& };:",
+        # Shell command chaining (via injection)
+        "; rm", "| rm", "&& rm", "$(rm", "`rm",
+        # Redirection to devices
+        ">/dev/", ">/dev/null",
+        # Database destruction
+        "DROP TABLE", "DROP DATABASE", "DELETE FROM", "TRUNCATE",
     ]
+
+    # Short tool names that are dangerous when used standalone.
+    # These require word-boundary matching to avoid URL false positives.
+    DANGEROUS_TOOLS = {"curl", "wget", "nc", "netcat"}
+
+    # Sensitive file paths (checked via substring — "/etc/passwd" in URL is always suspicious)
+    DANGEROUS_PATHS = ["/etc/passwd", "/etc/shadow"]
 
     def __init__(
         self,
@@ -115,9 +116,9 @@ class ToolRunner:
         Returns:
             True if dangerous pattern detected, False otherwise
         """
-        # Check tool name against blocked tools (exact match only)
-        BLOCKED_TOOLS = {"curl", "wget", "nc", "netcat"}
-        if tool in BLOCKED_TOOLS:
+        # Check tool name against blocked tools (exact match — these are
+        # standalone dangerous binaries, not args where false positives occur)
+        if tool in self.DANGEROUS_TOOLS:
             return True
 
         # Check args and full command for dangerous patterns
@@ -131,6 +132,11 @@ class ToolRunner:
                 pattern_lower in args_str.lower()
                 or pattern_lower in full_command.lower()
             ):
+                return True
+
+        # Check for sensitive file paths (exact substring)
+        for path in self.DANGEROUS_PATHS:
+            if path.lower() in args_str.lower() or path.lower() in full_command.lower():
                 return True
 
         return False
