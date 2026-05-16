@@ -65,6 +65,42 @@ class FindingRepository(BaseRepository):
 
         try:
             source_tool = source_tool or ""
+            # First, check if a legacy row with source_tool IS NULL exists for
+            # this (engagement_id, endpoint, type) and update it in-place.
+            # This handles the migration from NULL to '' source_tool values.
+            cursor.execute(
+                """
+                UPDATE findings
+                SET source_tool = %s,
+                    severity = %s,
+                    confidence = %s,
+                    evidence = %s,
+                    cvss_score = %s,
+                    owasp_category = %s,
+                    cwe_id = %s,
+                    evidence_strength = %s,
+                    tool_agreement_level = %s,
+                    fp_likelihood = %s,
+                    updated_at = NOW()
+                WHERE engagement_id = %s
+                  AND endpoint = %s
+                  AND type = %s
+                  AND source_tool IS NULL
+                RETURNING id
+                """,
+                (
+                    source_tool, severity, confidence, Json(evidence),
+                    cvss_score, owasp_category, cwe_id,
+                    evidence_strength, tool_agreement_level, fp_likelihood,
+                    engagement_id, endpoint, finding_type,
+                )
+            )
+            row = cursor.fetchone()
+            if row:
+                conn.commit()
+                return str(row[0])
+
+            # No legacy row found — do the standard INSERT with ON CONFLICT
             cursor.execute(
                 """
                 INSERT INTO findings (

@@ -350,6 +350,8 @@ class EngagementStateMachine:
                 )
                 return db_current
 
+            # Sync local state with DB to ensure websocket events use the correct from_state
+            self.current_state = db_current
             current = db_current
             for new_state, reason in states:
                 if new_state not in self.STATES:

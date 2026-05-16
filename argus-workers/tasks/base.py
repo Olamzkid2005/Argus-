@@ -108,7 +108,7 @@ def task_context(
         redis_url=redis_url,
     )
 
-    slog.phase_start(job_type, target=job_extra.get("target", "") if job_extra else "")
+    slog.phase_start(job_type, target=(job_extra or {}).get("target", ""))
 
     with tracing_manager.trace_execution(engagement_id, job_type, trace_id):
         lock = DistributedLock(redis_url)

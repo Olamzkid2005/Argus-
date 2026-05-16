@@ -101,6 +101,7 @@ class Orchestrator:
         self.stream = get_stream_manager()
         self._register_mcp_tools()
         self._last_agent_tried_tools = set()
+        self._bug_bounty_mode = False
 
     def _register_mcp_tools(self):
         from tool_definitions import build_mcp_tool_definitions
@@ -264,6 +265,11 @@ class Orchestrator:
 
         for finding in findings:
             try:
+                # Tag findings with bugbounty source when in bug bounty mode
+                # so the Intelligence Engine applies the confidence cap.
+                if self._bug_bounty_mode:
+                    finding["source"] = "bugbounty"
+
                 if finding.get("cvss_score") is None:
                     try:
                         from cvss_calculator import estimate_cvss
@@ -556,6 +562,7 @@ class Orchestrator:
 
         _llm_ok = self.llm_client is not None and self.llm_client.is_available()
         _recon_ok = recon_context is not None
+        self._bug_bounty_mode = bool(bug_bounty_mode)
         if scan_mode == "swarm" and _recon_ok and _llm_ok:
             scan_execution_path = "swarm"
             findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)

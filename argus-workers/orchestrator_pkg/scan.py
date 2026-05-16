@@ -108,7 +108,14 @@ def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
 
 
 def _is_reachable(target: str) -> bool:
-    hostname = target.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
+    # Use urlparse for reliable hostname extraction (handles IPv6, userinfo, etc.)
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(target)
+        hostname = parsed.hostname or target
+    except Exception:
+        hostname = target.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
+
     try:
         ip = ipaddress.ip_address(hostname)
         # Block private / link-local / loopback IPs to prevent internal network scanning
@@ -229,7 +236,7 @@ def execute_scan_tools(
         except Exception as e:
             logger.debug(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 
-    for target in targets:
+    for target_idx, target in enumerate(targets):
         # Skip None/empty targets
         if not target:
             continue
@@ -239,7 +246,7 @@ def execute_scan_tools(
             slog.info(f"Target {target} unreachable, skipping")
             continue
 
-        slog.target_start(target, index=targets.index(target)+1, total=len(targets))
+        slog.target_start(target, index=target_idx+1, total=len(targets))
 
         # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:

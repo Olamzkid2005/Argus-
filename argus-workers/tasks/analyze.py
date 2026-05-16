@@ -26,9 +26,9 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         result = ctx.orchestrator.run_analysis(ctx.job)
 
         actions = result.get("actions", [])
-        result.get("next_state", "reporting")
         if actions:
             slog.info(f"{len(actions)} action(s) generated — processing")
+            _dispatched = 0
             # Route each action type to the correct downstream task
             for action in actions:
                 action_type = action.get("type", "") if isinstance(action, dict) else ""
@@ -39,6 +39,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                             deep_task = app.send_task('tasks.scan.deep_scan',
                                           args=[engagement_id, targets, budget, ctx.trace_id])
                             slog.dispatch("deep_scan", task_id=deep_task.id)
+                            _dispatched += 1
                             logger.info("Dispatched deep_scan for engagement=%s with %d targets (task=%s)",
                                        engagement_id, len(targets), deep_task.id)
                         except Exception as e:
@@ -50,6 +51,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                             auth_task = app.send_task('tasks.scan.auth_focused_scan',
                                           args=[engagement_id, endpoints, budget, ctx.trace_id])
                             slog.dispatch("auth_focused_scan", task_id=auth_task.id)
+                            _dispatched += 1
                             logger.info("Dispatched auth_focused_scan for engagement=%s (task=%s)",
                                        engagement_id, auth_task.id)
                         except Exception as e:
@@ -64,6 +66,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                             expand_task = app.send_task('tasks.recon.expand_recon',
                                           args=[engagement_id, [target], budget, ctx.trace_id])
                             slog.dispatch("expand_recon", task_id=expand_task.id)
+                            _dispatched += 1
                             logger.info("Dispatched expand_recon for engagement=%s with target %s (task=%s)",
                                        engagement_id, target, expand_task.id)
                         except Exception as e:
@@ -71,7 +74,11 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                     else:
                         logger.warning("Action %s has no valid targets for engagement=%s", action_type, engagement_id)
 
-            ctx.state.transition("recon", "Additional actions dispatched")
+            if _dispatched == 0:
+                logger.error("All action dispatches failed for engagement=%s — transitioning to failed", engagement_id)
+                ctx.state.transition("failed", "All action dispatches failed")
+            else:
+                ctx.state.transition("recon", f"{_dispatched} action(s) dispatched")
         else:
             slog.info("No actions — advancing to reporting")
             ctx.state.transition("reporting", "Analysis complete")

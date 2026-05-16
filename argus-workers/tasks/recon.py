@@ -111,6 +111,8 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                               args=[engagement_id, ctx.trace_id, budget])
             except Exception as e:
                 logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                ctx.state.transition("failed", f"Failed to enqueue report: {e}")
+                return {"phase": "recon_expand", "status": "failed", "reason": "report_dispatch_failed", "next_state": "failed"}
         return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets", "next_state": "reporting"}
 
     slog.phase_header("EXPAND RECON", targets=f"{len(valid_targets)} targets")
