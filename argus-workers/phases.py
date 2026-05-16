@@ -123,7 +123,7 @@ TRANSITIONS: dict[str, list[str]] = {
     "created": ["recon", "failed", "paused"],
     "recon": ["scanning", "failed", "paused"],
     "scanning": ["analyzing", "failed", "paused"],
-    "analyzing": ["reporting", "recon", "failed", "paused"],
+    "analyzing": ["reporting", "recon", "scanning", "failed", "paused"],
     "reporting": ["complete", "failed", "paused"],
     "paused": ["recon", "scanning", "analyzing"],
     "failed": [],
