@@ -160,7 +160,7 @@ export default function AssetsPage() {
     switch (level.toUpperCase()) {
       case "CRITICAL": return "#FF4444";
       case "HIGH": return "#FF8800";
-      case "MEDIUM": return "#FFFDD0";
+      case "MEDIUM": return "#F59E0B";
       case "LOW": return "#00CED1";
       default: return "#888";
     }

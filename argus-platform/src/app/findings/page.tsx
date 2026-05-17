@@ -78,8 +78,8 @@ const severityConfig = {
 };
 
 function EvidenceBlock({ data }: { data: any }) {
-  if (data == null) return null;
   const [copied, setCopied] = useState(false);
+  if (data == null) return null;
   const code = typeof data === "string" ? data : JSON.stringify(data, null, 2);
   const handleCopy = () => {
     navigator.clipboard.writeText(code);

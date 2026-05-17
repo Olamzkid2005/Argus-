@@ -192,8 +192,6 @@ export default function EngagementsPage() {
         })
         .catch(() => {})
         .finally(() => setSettingsLoading(false));
-    } else if (status === "unauthenticated") {
-      setSettingsLoading(false);
     }
   }, [status]);
 

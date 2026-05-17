@@ -83,7 +83,7 @@ export default function MonitoringPage() {
       const response = await fetch("/api/assets");
       if (!response.ok) throw new Error("Failed to load profiles");
       const data = await response.json();
-      const activeTargets = (data.data || []).filter(
+      const activeTargets = (data.assets || []).filter(
         (a: Record<string, unknown>) => a.asset_type === "domain" && a.risk_level !== "INFO"
       );
 
@@ -95,14 +95,14 @@ export default function MonitoringPage() {
             const diff = await res.json();
             return {
               target_domain: domain,
-              total_scans: (asset.attributes as Record<string, number>)?.total_scans || 0,
-              last_scan_at: (asset.attributes as Record<string, string>)?.last_scan_at || "",
-              last_findings_count: (asset.attributes as Record<string, number>)?.last_findings_count || 0,
+              total_scans: (asset as Record<string, number>)?.total_scans || 0,
+              last_scan_at: (asset as Record<string, string>)?.last_scan_at || "",
+              last_findings_count: (asset as Record<string, number>)?.last_findings_count || 0,
               last_diff_summary: diff?.summary || null,
-              known_endpoints: (asset.attributes as Record<string, string[]>)?.known_endpoints || [],
-              best_tools: (asset.attributes as Record<string, Array<{ tool: string; finding_count: number }>>)?.best_tools || [],
-              noisy_tools: (asset.attributes as Record<string, string[]>)?.noisy_tools || [],
-              confirmed_finding_types: (asset.attributes as Record<string, string[]>)?.confirmed_finding_types || [],
+              known_endpoints: [],
+              best_tools: [],
+              noisy_tools: [],
+              confirmed_finding_types: [],
             };
           }
         } catch {
@@ -126,12 +126,12 @@ export default function MonitoringPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadDiff = async (assetId: string, domain: string) => {
+  const loadDiff = async (assetIdOrDomain: string, domain: string) => {
     setSelectedDomain(domain);
     setDiffLoading(true);
     setDiffData(null);
     try {
-      const response = await fetch(`/api/monitoring/diff/${assetId}`);
+      const response = await fetch(`/api/monitoring/diff/${assetIdOrDomain}`);
       if (!response.ok) throw new Error("Failed to load diff");
       const data = await response.json();
       setDiffData(data);
@@ -217,8 +217,7 @@ export default function MonitoringPage() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3, delay: idx * 0.05 }}
                       onClick={() => {
-                        const asset = profiles.find((p) => p.target_domain === profile.target_domain);
-                        if (asset) loadDiff(asset.target_domain, profile.target_domain);
+                        loadDiff(profile.target_domain, profile.target_domain);
                       }}
                       className={`w-full text-left p-4 rounded-lg border transition-all duration-300 ${
                         selectedDomain === profile.target_domain
