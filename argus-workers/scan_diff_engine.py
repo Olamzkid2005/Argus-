@@ -303,6 +303,9 @@ class ScanDiffEngine:
     ) -> bool:
         """Mark a finding as fixed (soft-delete + record in engagement).
 
+        Uses SELECT ... FOR UPDATE to prevent concurrent diff tasks from
+        racing on the same finding row and corrupting audit trails.
+
         Args:
             finding_id: UUID of finding to mark fixed
             closed_in_engagement_id: Engagement where the finding was confirmed fixed
@@ -316,6 +319,17 @@ class ScanDiffEngine:
 
             conn = connect(self.db_url)
             cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM findings
+                WHERE id = %s AND status != 'fixed'
+                FOR UPDATE
+                """,
+                (finding_id,),
+            )
+            if not cursor.fetchone():
+                conn.rollback()
+                return False
             cursor.execute(
                 """
                 UPDATE findings
