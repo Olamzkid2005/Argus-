@@ -44,7 +44,7 @@ class EngagementStateMachine:
         "scanning": ["analyzing", "failed", "paused"],
         "analyzing": ["reporting", "recon", "scanning", "failed", "paused"],
         "reporting": ["complete", "failed", "paused"],
-        "paused": ["recon", "scanning", "analyzing"],
+        "paused": ["recon", "scanning", "analyzing", "reporting", "failed"],
         "failed": [],
         "complete": [],
     }
@@ -392,17 +392,16 @@ class EngagementStateMachine:
                 )
 
             # If looping through analyze→recon in the chain, increment budget
-            for from_s, to_s in states:
-                if from_s == "analyzing" and to_s == "recon":
-                    cursor.execute(
-                        """
-                        UPDATE loop_budgets
-                        SET current_cycles = current_cycles + 1, updated_at = NOW()
-                        WHERE engagement_id = %s
-                        """,
-                        (self.engagement_id,)
-                    )
-                    break
+            recon_loop_count = sum(1 for f, t in states if f == "analyzing" and t == "recon")
+            if recon_loop_count > 0:
+                cursor.execute(
+                    """
+                    UPDATE loop_budgets
+                    SET current_cycles = current_cycles + %s, updated_at = NOW()
+                    WHERE engagement_id = %s
+                    """,
+                    (recon_loop_count, self.engagement_id),
+                )
 
             conn.commit()
 

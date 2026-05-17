@@ -782,12 +782,12 @@ class Orchestrator:
             from database.connection import db_cursor
             with db_cursor() as cursor:
                 cursor.execute(
-                    "SELECT current_cycles, current_depth FROM loop_budgets WHERE engagement_id = %s",
+                    "SELECT current_cycles, current_depth, current_llm_reviews FROM loop_budgets WHERE engagement_id = %s",
                     (self.engagement_id,),
                 )
                 row = cursor.fetchone()
                 if row:
-                    budget_mgr.load_from_db({"current_cycles": row[0], "current_depth": row[1]})
+                    budget_mgr.load_from_db({"current_cycles": row[0], "current_depth": row[1], "current_llm_reviews": row[2] or 0})
         except Exception:
             logger.debug("Could not load loop budget from DB for %s", self.engagement_id)
         engine = IntelligenceEngine(db_conn)
