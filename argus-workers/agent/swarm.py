@@ -643,17 +643,19 @@ class SwarmOrchestrator:
             else:
                 merged_evidence = new_ev if len(str(new_ev)) > len(str(existing_ev)) else existing_ev
 
+            # Keys that should NOT be carried over from the existing finding
+            # (the new finding's values take priority).
+            _overwrite_keys = {"confidence", "evidence", "source_agent", "source_agents", "source_tool"}
+
             if new_conf > existing_conf:
                 # Merge: use higher-confidence finding as base but preserve
-                # detection history from the existing finding.
+                # all metadata from the existing finding that the new one lacks.
                 merged = {**f}
                 merged["evidence"] = merged_evidence
                 merged["source_agents"] = list(existing_agents)
-                # Preserve detection origin from existing finding when new
-                # finding doesn't carry it (common with generic detections).
-                for key in ("source_tool", "severity", "source_agent"):
-                    if not merged.get(key) and existing.get(key):
-                        merged[key] = existing[key]
+                for key, value in existing.items():
+                    if key not in _overwrite_keys and not merged.get(key):
+                        merged[key] = value
                 seen[fp] = merged
             elif new_conf == existing_conf:
                 existing_evidence_len = len(str(existing_ev))
@@ -662,9 +664,9 @@ class SwarmOrchestrator:
                     merged = {**f}
                     merged["evidence"] = merged_evidence
                     merged["source_agents"] = list(existing_agents)
-                    for key in ("source_tool", "severity", "source_agent"):
-                        if not merged.get(key) and existing.get(key):
-                            merged[key] = existing[key]
+                    for key, value in existing.items():
+                        if key not in _overwrite_keys and not merged.get(key):
+                            merged[key] = value
                     seen[fp] = merged
                 else:
                     existing["evidence"] = merged_evidence

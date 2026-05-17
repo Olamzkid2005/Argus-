@@ -309,10 +309,19 @@ class IntelligenceEngine:
             parsed = urlparse(endpoint)
             normalized_endpoint = f"{parsed.netloc}{parsed.path}" if endpoint else ""
 
-            # If endpoint is empty, use finding ID or a per-type counter for
-            # grouping to prevent unrelated findings from sharing the same key
+            # If endpoint is empty, derive a more specific key from evidence
+            # to prevent unrelated findings (e.g., different packages) from
+            # sharing the same group key and inflating tool agreement.
             if not normalized_endpoint:
-                normalized_endpoint = f"_no_endpoint_{finding_type}"
+                evidence = finding.get("evidence") or {}
+                if isinstance(evidence, dict):
+                    pkg = evidence.get("package") or evidence.get("name") or evidence.get("module") or evidence.get("cve_id")
+                    if pkg:
+                        normalized_endpoint = f"_pkg_{pkg}"
+                    else:
+                        normalized_endpoint = f"_no_endpoint_{finding_type}"
+                else:
+                    normalized_endpoint = f"_no_endpoint_{finding_type}"
 
             normalized_type = finding_type
             for family, members in type_families.items():

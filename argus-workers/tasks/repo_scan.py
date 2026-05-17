@@ -192,6 +192,7 @@ def run_repo_scan(
                         opts["agent_mode"],
                         opts["scan_mode"],
                         opts["aggressiveness"],
+                        opts["bug_bounty_mode"],
                     ],
                 )
 

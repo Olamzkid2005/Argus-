@@ -558,7 +558,7 @@ class Orchestrator:
                 all_findings.extend(fallback)
 
         if per_target_tools:
-            self._last_agent_tried_tools = set.intersection(*per_target_tools)
+            self._last_agent_tried_tools = set.union(*per_target_tools)
         else:
             self._last_agent_tried_tools = set()
 
@@ -824,13 +824,15 @@ class Orchestrator:
                 logger.warning(f"LLM synthesis failed (non-fatal): {e}")
 
         # ── PoC Generation for HIGH/CRITICAL findings ──
+        # Define shared vars before try so developer fix section always has them in scope
+        llm_svc = None
+        scored = []
         try:
             from poc_generator import PoCGenerator
 
             poc_gen = PoCGenerator(llm_client=self.llm_client)
             scored = evaluation.get("scored_findings", [])
 
-            llm_svc = None
             if self.llm_client and self.llm_client.is_available():
                 from llm_service import LLMService
                 llm_svc = LLMService(llm_client=self.llm_client, cost_tracker=engagement_cost_tracker)
@@ -866,7 +868,6 @@ class Orchestrator:
             )
 
         # ── Developer Fix Generation for MEDIUM+ findings ──
-        llm_svc = None
         try:
             from developer_fix_assistant import (
                 DeveloperFixAssistant,
@@ -877,7 +878,7 @@ class Orchestrator:
             )
 
             # Re-use engagement_cost_tracker and llm_svc from PoC section
-            if engagement_cost_tracker and llm_svc:
+            if engagement_cost_tracker and llm_svc is not None:
                 from concurrent.futures import (
                     ThreadPoolExecutor,
                 )
