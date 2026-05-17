@@ -158,7 +158,7 @@ def execute_recon_tools(
                         # Note: list.append is thread-safe under GIL
                         all_findings.append(normalized)
                         parsed_count += 1
-            return tool_name, True, parsed_count, None
+            return tool_name, bool(result and result.success), parsed_count, None
         except Exception as e:
             logger.warning(f"Recon tool {tool_name} failed: {e}")
             return tool_name, False, 0, str(e)

@@ -307,7 +307,12 @@ class IntelligenceEngine:
                 continue
 
             parsed = urlparse(endpoint)
-            normalized_endpoint = f"{parsed.netloc}{parsed.path}"
+            normalized_endpoint = f"{parsed.netloc}{parsed.path}" if endpoint else ""
+
+            # If endpoint is empty, use finding ID or a per-type counter for
+            # grouping to prevent unrelated findings from sharing the same key
+            if not normalized_endpoint:
+                normalized_endpoint = f"_no_endpoint_{finding_type}"
 
             normalized_type = finding_type
             for family, members in type_families.items():

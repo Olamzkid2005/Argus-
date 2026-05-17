@@ -155,8 +155,8 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                 normalized = ctx._normalize_finding(p, tool_name)
                 if normalized:
                     all_findings.append(normalized)
-        success = True
-        return tool_name, True, result.stdout
+        success = result.success
+        return tool_name, result.success, result.stdout if result.success else None
     except Exception as e:
         logger.warning(f"{tool_name} failed: {e}")
         return tool_name, False, None
@@ -356,6 +356,7 @@ def execute_scan_tools(
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
         # Run all Phase 2 tools in parallel
+        slog.info(f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel")
         if scan_jobs:
             with ThreadPoolExecutor(max_workers=5) as pool:
                 futures = {
@@ -370,8 +371,6 @@ def execute_scan_tools(
                             logger.warning(f"Scan tool {futures[future]} error: {e}")
                 except TimeoutError:
                     logger.warning("Scan tool batch timed out — some tools may not have completed")
-
-        slog.info(f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel")
 
         # Authenticate session if auth_config is provided
         authenticated_session = None
