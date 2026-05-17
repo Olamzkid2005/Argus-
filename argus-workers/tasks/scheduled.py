@@ -53,6 +53,7 @@ def run_due_scans(self):
         due = cursor.fetchall()
 
         spawned = 0
+        dispatch_queue = []
         for row in due:
             (
                 sched_id,
@@ -66,7 +67,7 @@ def run_due_scans(self):
             ) = row
 
             try:
-                _spawn_engagement(
+                dispatch_info = _spawn_engagement(
                     conn=conn,
                     sched_id=sched_id,
                     org_id=org_id,
@@ -78,12 +79,40 @@ def run_due_scans(self):
                     created_by=created_by,
                     db_url=db_url,
                 )
+                if dispatch_info:
+                    dispatch_queue.append(dispatch_info)
                 spawned += 1
             except Exception as e:
                 logger.error("Failed to spawn scheduled engagement %s: %s", sched_id, e)
                 # Continue with next schedule — don't fail the batch
 
         conn.commit()
+
+        # Dispatch Celery tasks AFTER commit so engagements exist in DB
+        for info in dispatch_queue:
+            if info["scan_type"] == "repo":
+                from tasks.repo_scan import run_repo_scan
+                run_repo_scan.delay(
+                    engagement_id=info["engagement_id"],
+                    target=info["target"],
+                    budget={"max_cycles": 5, "max_depth": 3},
+                    trace_id=info["trace_id"],
+                )
+            else:
+                run_recon.delay(
+                    engagement_id=info["engagement_id"],
+                    target=info["target"],
+                    budget={"max_cycles": 5, "max_depth": 3},
+                    trace_id=info["trace_id"],
+                    agent_mode=info["agent_mode"],
+                    prev_engagement_id=info["prev_engagement_id"],
+                )
+            logger.info(
+                "Spawned engagement %s (target=%s, type=%s)",
+                info["engagement_id"],
+                info["target"],
+                info["scan_type"],
+            )
         logger.info("Spawned %d scheduled engagement(s)", spawned)
         return {"status": "completed", "spawned": spawned}
 
@@ -161,6 +190,21 @@ def _spawn_engagement(
             (str(uuid.uuid4()), engagement_id),
         )
 
+        # Look up previous engagement BEFORE updating last_engagement_id
+        # (otherwise the UPDATE below overwrites it and the SELECT would return
+        # the engagement we just created, defeating diff comparison).
+        prev_engagement_id = None
+        try:
+            cursor.execute(
+                "SELECT last_engagement_id FROM scheduled_engagements WHERE id = %s",
+                (sched_id,),
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                prev_engagement_id = str(row[0])
+        except Exception:
+            prev_engagement_id = None
+
         # Update scheduled engagement with next run and last engagement reference
         cursor.execute(
             """
@@ -185,45 +229,12 @@ def _spawn_engagement(
         cursor.close()
         raise
 
-    # Look up previous engagement for this schedule (for diff engine)
-    prev_engagement_id = None
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT last_engagement_id FROM scheduled_engagements WHERE id = %s",
-            (sched_id,),
-        )
-        row = cursor.fetchone()
-        if row and row[0]:
-            prev_engagement_id = str(row[0])
-        cursor.close()
-    except Exception:
-        prev_engagement_id = None
-
-    # Dispatch Celery task asynchronously
-    if scan_type == "repo":
-        from tasks.repo_scan import run_repo_scan
-
-        run_repo_scan.delay(
-            engagement_id=engagement_id,
-            target=target,
-            budget={"max_cycles": 5, "max_depth": 3},
-            trace_id=trace_id,
-        )
-    else:
-        run_recon.delay(
-            engagement_id=engagement_id,
-            target=target,
-            budget={"max_cycles": 5, "max_depth": 3},
-            trace_id=trace_id,
-            agent_mode=agent_mode,
-            prev_engagement_id=prev_engagement_id,
-        )
-
-    logger.info(
-        "Spawned engagement %s from schedule %s (target=%s, type=%s)",
-        engagement_id,
-        sched_id,
-        target,
-        scan_type,
-    )
+    # Return dispatch info so caller can fire tasks after commit
+    return {
+        "engagement_id": engagement_id,
+        "target": target,
+        "scan_type": scan_type,
+        "trace_id": trace_id,
+        "agent_mode": agent_mode,
+        "prev_engagement_id": prev_engagement_id,
+    }
