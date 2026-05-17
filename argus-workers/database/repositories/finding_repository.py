@@ -425,6 +425,7 @@ class FindingRepository(BaseRepository):
             return [dict(row) for row in rows]
         finally:
             cursor.close()
+            conn.rollback()
             if not self._external_conn:
                 self._release_connection(conn)
 

@@ -75,6 +75,7 @@ class EngagementStateMachine:
                 engagement_id,
             )
             current_state = "recon"
+            self.current_state = "recon"
 
         if current_state not in self.STATES:
             raise ValueError(f"Invalid state: {current_state}")
@@ -354,6 +355,7 @@ class EngagementStateMachine:
                     "chain_transition: engagement %s already in terminal state %s — skipping",
                     self.engagement_id, db_current,
                 )
+                conn.rollback()
                 return db_current
 
             # Sync local state with DB to ensure websocket events use the correct from_state
