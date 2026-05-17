@@ -102,7 +102,12 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
     from tasks.utils import fetch_engagement_scan_options
     from utils.logging_utils import ScanLogger
 
-    opts = fetch_engagement_scan_options(engagement_id)
+    try:
+        opts = fetch_engagement_scan_options(engagement_id)
+    except Exception as e:
+        logger.error("Failed to fetch scan options for deep_scan engagement=%s: %s", engagement_id, e)
+        return {"phase": "deep_scan", "status": "failed", "reason": str(e)}
+
     slog = ScanLogger("deep_scan", engagement_id=engagement_id)
     slog.phase_header("DEEP SCAN", targets=f"{len(targets)} target(s)")
 
@@ -117,7 +122,18 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
     with task_context(self, engagement_id, "deep_scan",
                       job_extra=job_extra,
                       trace_id=trace_id) as ctx:
-        return ctx.orchestrator.run_scan(ctx.job)
+        result = ctx.orchestrator.run_scan(ctx.job)
+        ctx.state.transition("analyzing", "Deep scan complete")
+        try:
+            analyze_task = app.send_task(
+                "tasks.analyze.run_analysis",
+                args=[engagement_id, budget, ctx.trace_id],
+            )
+            slog.dispatch("analyze", task_id=analyze_task.id)
+        except Exception as e:
+            logger.error("Failed to enqueue analysis after deep_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"Failed to dispatch analysis: {e}")
+        return result
 
 
 @app.task(bind=True, name="tasks.scan.auth_focused_scan")
@@ -128,12 +144,17 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
     from tasks.utils import fetch_engagement_scan_options
     from utils.logging_utils import ScanLogger
 
-    opts = fetch_engagement_scan_options(engagement_id)
+    try:
+        opts = fetch_engagement_scan_options(engagement_id)
+    except Exception as e:
+        logger.error("Failed to fetch scan options for auth_focused_scan engagement=%s: %s", engagement_id, e)
+        return {"phase": "auth_focused_scan", "status": "failed", "reason": str(e)}
+
     slog = ScanLogger("auth_focused_scan", engagement_id=engagement_id)
     slog.phase_header("AUTH FOCUSED SCAN", endpoints=f"{len(endpoints)} endpoint(s)")
 
     job_extra = {
-        "endpoints": endpoints,
+        "targets": endpoints,
         "budget": budget,
         "agent_mode": opts["agent_mode"],
         "scan_mode": opts["scan_mode"],
@@ -143,4 +164,15 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
     with task_context(self, engagement_id, "auth_focused_scan",
                       job_extra=job_extra,
                       trace_id=trace_id) as ctx:
-        return ctx.orchestrator.run_scan(ctx.job)
+        result = ctx.orchestrator.run_scan(ctx.job)
+        ctx.state.transition("analyzing", "Auth-focused scan complete")
+        try:
+            analyze_task = app.send_task(
+                "tasks.analyze.run_analysis",
+                args=[engagement_id, budget, ctx.trace_id],
+            )
+            slog.dispatch("analyze", task_id=analyze_task.id)
+        except Exception as e:
+            logger.error("Failed to enqueue analysis after auth_focused_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"Failed to dispatch analysis: {e}")
+        return result

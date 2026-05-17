@@ -113,7 +113,7 @@ class ProgressTracker:
                 data["metadata"] = metadata
 
             data["percent_complete"] = min(100, int(
-                (current_step / data["total_steps"]) * 100
+                (current_step / max(data.get("total_steps", 100), 1)) * 100
             ))
             data["updated_at"] = datetime.now(UTC).isoformat()
 

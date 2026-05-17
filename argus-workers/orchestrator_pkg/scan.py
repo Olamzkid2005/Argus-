@@ -145,6 +145,7 @@ def _is_reachable(target: str) -> bool:
 
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool."""
+    success = False
     try:
         emit_tool_start(ctx.engagement_id, tool_name, args)
         result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
@@ -154,10 +155,13 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                 normalized = ctx._normalize_finding(p, tool_name)
                 if normalized:
                     all_findings.append(normalized)
+        success = True
         return tool_name, True, result.stdout
     except Exception as e:
         logger.warning(f"{tool_name} failed: {e}")
         return tool_name, False, None
+    finally:
+        emit_tool_complete(ctx.engagement_id, tool_name, success=success)
 
 
 def execute_scan_tools(

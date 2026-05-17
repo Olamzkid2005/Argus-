@@ -122,7 +122,10 @@ def classify_error(
 
     is_permanent = any(ind in error_message for ind in PERMANENT_INDICATORS)
 
-    if is_permanent or category in (ErrorCategory.VALIDATION, ErrorCategory.SECURITY) or category == ErrorCategory.TIMEOUT and retry_count >= 2 or retry_count >= 3:
+    if (is_permanent
+        or category in (ErrorCategory.VALIDATION, ErrorCategory.SECURITY)
+        or (category == ErrorCategory.TIMEOUT and retry_count >= 2)
+        or retry_count >= 3):
         should_retry = False
         retry_delay = 0
     else:
@@ -382,7 +385,7 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
             severity=ErrorSeverity.MEDIUM,
             should_retry=False,
             retry_delay_seconds=0,
-            alert_message=f"Tool schema mismatch: {code.value}",
+            alert_message="",
             error_code=code,
         )
 
