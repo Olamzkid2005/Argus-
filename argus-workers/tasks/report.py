@@ -44,10 +44,11 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         job_extra=job_extra,
         trace_id=trace_id, current_state="reporting"
     ) as ctx:
-        # Idempotency check INSIDE the lock — if another task already completed
-        # this engagement, skip duplicate work.
-        if ctx.state.current_state in ("complete", "failed"):
-            logger.info("Engagement %s already in terminal state '%s' — skipping report generation", engagement_id, ctx.state.current_state)
+        # Idempotency check INSIDE the lock — query actual DB state,
+        # not the client-side current_state which is forced to "reporting".
+        db_state = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
+        if db_state in ("complete", "failed"):
+            logger.info("Engagement %s already in terminal state '%s' (DB) — skipping report generation", engagement_id, db_state)
             return {"status": "already_complete"}
 
         result = ctx.orchestrator.run_reporting(ctx.job)

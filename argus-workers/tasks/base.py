@@ -116,6 +116,7 @@ def task_context(
     with tracing_manager.trace_execution(engagement_id, job_type, trace_id):
         lock = DistributedLock(redis_url)
         _lock_acquired = False
+        _sm_assigned = False
         try:
             with LockContext(lock, engagement_id):
                 _lock_acquired = True
@@ -124,6 +125,7 @@ def task_context(
                     db_connection_string=db_conn_string,
                     current_state=current_state or _get_engagement_state(engagement_id, db_conn_string),
                 )
+                _sm_assigned = True
                 from websocket_events import get_websocket_publisher
                 sm._ws_publisher = get_websocket_publisher()
                 ctx.state = sm
@@ -142,9 +144,9 @@ def task_context(
             )
             if _lock_acquired:
                 try:
-                    current = sm.current_state if 'sm' in locals() else _get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if _sm_assigned else _get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
-                        if 'sm' in locals() and hasattr(sm, 'current_state'):
+                        if _sm_assigned:
                             sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
                         else:
                             new_sm = EngagementStateMachine(
@@ -166,9 +168,9 @@ def task_context(
             slog.error(f"Task failed: {e}")
             if _lock_acquired:
                 try:
-                    current = sm.current_state if 'sm' in locals() else _get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if _sm_assigned else _get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
-                        if 'sm' in locals() and hasattr(sm, 'current_state'):
+                        if _sm_assigned:
                             sm.transition("failed", f"{job_type} failed: {e}")
                         else:
                             new_sm = EngagementStateMachine(
