@@ -608,7 +608,7 @@ class SwarmOrchestrator:
 
         seen: dict[str, dict] = {}
         for f in findings:
-            fp = ScanDiffEngine._fallback_fingerprint(f)
+            fp = ScanDiffEngine._fingerprint(f)
             if fp not in seen:
                 seen[fp] = {**f}  # shallow copy to avoid mutating caller's findings
                 continue
