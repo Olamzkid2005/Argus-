@@ -946,8 +946,8 @@ class Orchestrator:
             logger.info("Deferred %d action(s): budget exhausted", len(denied_actions))
 
         slog.tool_complete("orchestrator.run_analysis", success=True, findings=len(evaluation.get("scored_findings", [])))
-        slog.info(f"Next state: {next_state}, actions: {len(actions)}")
-        return {"phase": "analyze", "status": "completed", "actions": actions,
+        slog.info(f"Next state: {next_state}, actions: {len(actions)}, approved: {len(approved_actions)}")
+        return {"phase": "analyze", "status": "completed", "actions": approved_actions,
                 "scored_findings": evaluation.get("scored_findings", []),
                 "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
                 "next_state": next_state, "trace_id": get_trace_id()}

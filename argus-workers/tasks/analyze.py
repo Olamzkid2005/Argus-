@@ -44,7 +44,7 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                     row = cursor.fetchone()
                     if row and row[0] is not None and row[1] is not None:
                         current_cycles, max_cycles = row[0], row[1]
-                        if current_cycles >= max_cycles - 1:
+                        if current_cycles >= max_cycles:
                             budget_exhausted = True
                             logger.info(
                                 "Loop budget exhausted (%d/%d cycles) for engagement=%s — advancing to reporting",
