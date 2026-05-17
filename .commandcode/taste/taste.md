@@ -3,7 +3,7 @@
 [cmd]: https://commandcode.ai/
 
 # git
-- Push to GitHub after every step has been completed, not batched at the end. Confidence: 0.85
+- Push to GitHub after every step or fix is completed, not batched at the end. Confidence: 0.90
 
 # cli
 - Use `/opt/local/lib/postgresql15/bin/psql` with `-U argus_user` for PostgreSQL commands. Confidence: 0.65
@@ -20,8 +20,10 @@
 
 # workflow
 - After writing code, review it for errors, fix any found, then repeat the review-fix loop at least twice. Confidence: 0.65
+- When fixing a bug, search the entire codebase for the same bug pattern in similar functions/code paths and fix all instances, not just the reported one. Confidence: 0.65
 - Write an implementation plan to docs/ before starting to code, and wait for user approval before proceeding. Confidence: 0.60
 - When code review surfaces ambiguous questions, resolve them autonomously instead of blocking on user input — the user trusts your judgment. Confidence: 0.60
+- When removing a feature, state, or entity, remove ALL references throughout the codebase including comments — not just functional code. Confidence: 0.70
 
 # testing
 - When performing browser-based QA testing, also check browser console logs and Celery worker logs for errors, not just the UI. Confidence: 0.70

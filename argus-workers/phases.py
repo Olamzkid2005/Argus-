@@ -217,6 +217,8 @@ def to_json_serializable() -> list[dict]:
             "display_name": p.display_name,
             "order": p.order,
             "estimated_minutes": p.estimated_minutes,
+            "step_id": p.step_id,
+            "tool_phases": list(p.tool_phases),
             "is_terminal": p.is_terminal,
             "is_error": p.is_error,
         }

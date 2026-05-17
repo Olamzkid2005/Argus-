@@ -710,7 +710,10 @@ class BugBountyReportGenerator:
 
         for f in findings:
             # Check false positive flag
-            if f.get("false_positive") or f.get("fp_assessment", {}).get("verdict") in (
+            fp_assessment = f.get("fp_assessment", {})
+            if not isinstance(fp_assessment, dict):
+                fp_assessment = {}
+            if f.get("false_positive") or fp_assessment.get("verdict") in (
                 "false_positive", "likely_false_positive"
             ):
                 rejected.append(f)
@@ -740,6 +743,8 @@ class BugBountyReportGenerator:
         # Fallback: check tags for hints
         if mapped == "api-graphql":
             tags = finding.get("tags", [])
+            if not isinstance(tags, (list, tuple)):
+                tags = []
             for tag in tags:
                 if tag in ARGUS_TYPE_TO_BUGREAPER:
                     return ARGUS_TYPE_TO_BUGREAPER[tag]

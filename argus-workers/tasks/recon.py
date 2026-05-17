@@ -124,13 +124,9 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         with task_context(self, engagement_id, "recon_expand",
                           job_extra={"target": None, "targets": [], "budget": budget},
                           trace_id=trace_id, current_state="recon") as ctx:
-            # Use atomic chain-transition instead of three separate commits
-            # to avoid phantom intermediate states if a transition fails mid-chain.
-            ctx.state.chain_transition([
-                ("scanning", "No additional targets — advancing to scan"),
-                ("analyzing", "No additional targets — advancing to analyze"),
-                ("reporting", "No additional targets — advancing to report"),
-            ])
+            # No targets to expand — skip scanning/analyzing and advance straight to reporting.
+            # Single transition avoids polluting engagement_states with phantom entries.
+            ctx.state.transition("reporting", "No additional targets — advancing to report")
             try:
                 app.send_task('tasks.report.generate_report',
                               args=[engagement_id, ctx.trace_id, budget])

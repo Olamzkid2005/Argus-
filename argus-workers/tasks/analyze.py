@@ -28,6 +28,41 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         actions = result.get("actions", [])
         if actions:
             slog.info(f"{len(actions)} action(s) generated — processing")
+
+            # ── Check loop budget BEFORE dispatching any downstream tasks ──
+            # If budget is exhausted, skip dispatch to avoid dispatching
+            # tasks that will immediately hit an invalid state transition when
+            # the engagement is already in "reporting".
+            budget_exhausted = False
+            try:
+                from database.connection import db_cursor
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                        (engagement_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0] is not None and row[1] is not None:
+                        current_cycles, max_cycles = row[0], row[1]
+                        if current_cycles >= max_cycles - 1:
+                            budget_exhausted = True
+                            logger.info(
+                                "Loop budget exhausted (%d/%d cycles) for engagement=%s — advancing to reporting",
+                                current_cycles, max_cycles, engagement_id,
+                            )
+            except Exception:
+                logger.debug("Could not check loop budget for engagement=%s", engagement_id)
+
+            if budget_exhausted:
+                ctx.state.transition("reporting", "Loop budget exhausted — advancing to report")
+                try:
+                    app.send_task('tasks.report.generate_report',
+                                  args=[engagement_id, ctx.trace_id, budget])
+                except Exception as e:
+                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                    ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
+                return result
+
             _dispatched = 0
             _attempted = 0
             # Route each action type to the correct downstream task
@@ -94,34 +129,6 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                         logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
                         ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
             else:
-                # Check loop budget to avoid wasted cycles when actions produce no findings.
-                # If we're on cycle 2+ and keep dispatching, break to reporting.
-                try:
-                    from database.connection import db_cursor
-                    with db_cursor() as cursor:
-                        cursor.execute(
-                            "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
-                            (engagement_id,),
-                        )
-                        row = cursor.fetchone()
-                        if row and row[0] is not None and row[1] is not None:
-                            current_cycles, max_cycles = row[0], row[1]
-                            if current_cycles >= max_cycles - 1:
-                                logger.info(
-                                    "Loop budget exhausted (%d/%d cycles) for engagement=%s — advancing to reporting",
-                                    current_cycles, max_cycles, engagement_id,
-                                )
-                                ctx.state.transition("reporting", "Loop budget exhausted — advancing to report")
-                                try:
-                                    app.send_task('tasks.report.generate_report',
-                                                  args=[engagement_id, ctx.trace_id, budget])
-                                except Exception as e:
-                                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                                    ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
-                                return result
-                except Exception:
-                    logger.debug("Could not check loop budget for engagement=%s", engagement_id)
-
                 # Transition to "recon" (not "scanning") so the loop budget
                 # counter increments in state_machine.py (analyzing→recon).
                 # The dispatched expand_recon/deep_scan tasks will advance

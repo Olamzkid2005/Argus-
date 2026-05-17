@@ -92,6 +92,7 @@ def generate_bugbounty_report(
             reports_dir / f"bugbounty_{platform}_{engagement_id[:8]}.md"
         )
 
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_text(report_md, encoding="utf-8")
     logger.info(f"Bug bounty report written to {output_path}")
 

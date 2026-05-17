@@ -139,8 +139,8 @@ def _is_reachable(target: str) -> bool:
             return False
         return True
     except Exception as e:
-        logger.warning(f"DNS resolution for {hostname} failed with unexpected error — assuming reachable: {e}")
-        return True
+        logger.warning(f"DNS resolution for {hostname} failed with unexpected error — assuming NOT reachable: {e}")
+        return False
 
 
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
@@ -404,7 +404,7 @@ def execute_scan_tools(
             logger.warning(f"WebScanner failed for {target}: {e}")
 
         # DualAuthScanner — cross-account BOLA/BOPLA testing when dual_auth_config is provided
-        if dual_auth_config and auth_config:
+        if dual_auth_config is not None and auth_config is not None:
             slog.tool_start("dual_auth_scanner", [target])
             try:
                 from tools.dual_auth_scanner import DualAuthScanner

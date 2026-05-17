@@ -869,6 +869,7 @@ class Orchestrator:
             )
 
         # ── Developer Fix Generation for MEDIUM+ findings ──
+        llm_svc = None
         try:
             from developer_fix_assistant import (
                 DeveloperFixAssistant,
@@ -878,8 +879,8 @@ class Orchestrator:
                 llm_client=self.llm_client
             )
 
-            # Re-use cost_tracker and llm_svc from PoC section
-            if cost_tracker and llm_svc:
+            # Re-use engagement_cost_tracker and llm_svc from PoC section
+            if engagement_cost_tracker and llm_svc:
                 from concurrent.futures import (
                     ThreadPoolExecutor,
                 )
@@ -903,7 +904,7 @@ class Orchestrator:
                             finding,
                             tech_stack,
                             llm_svc,
-                            cost_tracker,
+                            engagement_cost_tracker,
                         )
                         fix_futures.append((finding, future))
 
@@ -1198,16 +1199,21 @@ class Orchestrator:
 
     def _get_scan_state(self) -> str:
         from database.connection import get_db
+        conn = None
+        cursor = None
         try:
             conn = get_db().get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
             row = cursor.fetchone()
-            cursor.close()
-            get_db().release_connection(conn)
             return row[0] if row else "recon"
         except Exception:
             return "recon"
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
 
     def _log_timeout_event(self, elapsed_seconds: float):
         logger.warning(f"Engagement {self.engagement_id} exceeded hard timeout. "

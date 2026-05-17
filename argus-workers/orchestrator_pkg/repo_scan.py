@@ -206,7 +206,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
     temp_dir = tempfile.mkdtemp(prefix="argus_repo_scan_")
     try:
         # Aggressiveness config for repo scans
-        clone_depth = ["--depth", "1"] if agg == "default" else ["--depth", "1"] if agg == "high" else []
+        clone_depth = ["--depth", "1"] if agg == "default" else ["--depth", "50"] if agg == "high" else []
         semgrep_timeout = TOOL_TIMEOUT_LONG if agg == "default" else 600 if agg == "high" else 1200
         custom_rule_limit = 3 if agg == "default" else 6 if agg == "high" else 999
 

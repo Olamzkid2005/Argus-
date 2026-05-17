@@ -31,7 +31,10 @@ from typing import Any
 try:
     from billiard.exceptions import SoftTimeLimitExceeded
 except ImportError:
-    SoftTimeLimitExceeded = None
+    try:
+        from celery.exceptions import SoftTimeLimitExceeded
+    except ImportError:
+        SoftTimeLimitExceeded = None
 
 logger = logging.getLogger(__name__)
 

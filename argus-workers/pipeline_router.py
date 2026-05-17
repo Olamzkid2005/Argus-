@@ -24,6 +24,9 @@ def execute_recon_pipeline(
     Returns:
         (findings list, ReconContext)
     """
+    if not target or not isinstance(target, str):
+        logger.warning("execute_recon_pipeline called with invalid target: %s", target)
+        return [], None
     from utils.logging_utils import ScanLogger
     slog = ScanLogger("pipeline_router")
     slog.info(f"execute_recon_pipeline: target={target}, aggressiveness={aggressiveness}")

@@ -704,7 +704,7 @@ def detect_license(file_path):
                     return data["license"]
         except Exception:
             logger.warning(
-                "Failed to parse license from package-lock.json", exc_info=True
+                "Failed to parse license from package.json", exc_info=True
             )
 
     return "UNKNOWN"

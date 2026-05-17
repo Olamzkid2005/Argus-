@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
@@ -74,7 +75,8 @@ def execute_recon_tools(
     amass_mode = {
         "default": ["enum", "-d"],
         "high": ["enum", "-d", "-brute", "-active"],
-        "extreme": ["enum", "-d", "-brute", "-w"],
+        "extreme": ["enum", "-d", "-brute", "-w",
+                    os.path.join(os.path.dirname(os.path.dirname(__file__)), "wordlists", "common.txt")],
     }.get(agg, ["enum", "-d"])
 
     def _emit(

@@ -119,6 +119,8 @@ class SpecialistAgent(ABC):
                     findings.append(p)
             elif result.stderr:
                 logger.debug(f"{self.DOMAIN}/{tool_name} stderr: {result.stderr[:200]}")
+        except ImportError as e:
+            logger.error(f"{self.DOMAIN}/{tool_name} missing dependency: {e}")
         except Exception as e:
             logger.warning(f"{self.DOMAIN}/{tool_name} failed: {e}")
         finally:
@@ -137,13 +139,13 @@ class SpecialistAgent(ABC):
             targets.extend(rc.api_endpoints)
         if not targets and hasattr(rc, "crawled_paths") and rc.crawled_paths:
             # Build full URLs from crawled paths
-            base = rc.target_url.rstrip("/") if rc.target_url else ""
+            base = rc.target_url.rstrip("/") if hasattr(rc, "target_url") and rc.target_url else ""
             for path in rc.crawled_paths[:20]:
                 if path.startswith("http"):
                     targets.append(path)
                 elif base:
                     targets.append(f"{base}{path}" if path.startswith("/") else f"{base}/{path}")
-        if not targets and rc.target_url:
+        if not targets and hasattr(rc, "target_url") and rc.target_url:
             targets = [rc.target_url]
         return targets
 
@@ -279,7 +281,7 @@ class AuthAgent(SpecialistAgent):
         )
 
         scan_targets = list(set(targets + auth_endpoints))
-        if not scan_targets and self.recon_context:
+        if not scan_targets and self.recon_context and hasattr(self.recon_context, "target_url"):
             scan_targets = [self.recon_context.target_url]
 
         for target in scan_targets:
@@ -383,7 +385,7 @@ class APIAgent(SpecialistAgent):
         )
 
         scan_targets = list(set(targets + api_endpoints))
-        if not scan_targets and self.recon_context:
+        if not scan_targets and self.recon_context and hasattr(self.recon_context, "target_url"):
             scan_targets = [self.recon_context.target_url]
 
         for target in scan_targets:
@@ -519,7 +521,7 @@ class SwarmOrchestrator:
         if not active:
             logger.info("Swarm: no specialists activated")
             slog.info("No specialists activated")
-            return []
+            return [], set()
 
         slog.swarm_activate([a.DOMAIN for a in active])
         logger.info(
@@ -570,6 +572,9 @@ class SwarmOrchestrator:
                 for domain in remaining:
                     logger.warning("Swarm: agent %s timed out — global timeout reached", domain)
                     emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
+                # Shut down the pool immediately — without this, ThreadPoolExecutor.__exit__
+                # calls shutdown(wait=True) which blocks indefinitely on hung threads.
+                pool.shutdown(wait=False, cancel_futures=True)
 
             # Cancel any remaining futures (best-effort — may not stop running threads)
             for future, domain in futures_map.items():
@@ -605,7 +610,7 @@ class SwarmOrchestrator:
         for f in findings:
             fp = ScanDiffEngine._fallback_fingerprint(f)
             if fp not in seen:
-                seen[fp] = f
+                seen[fp] = {**f}  # shallow copy to avoid mutating caller's findings
                 continue
 
             existing = seen[fp]

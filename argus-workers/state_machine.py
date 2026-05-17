@@ -157,7 +157,6 @@ class EngagementStateMachine:
             reason: Reason for transition
             trace_id: Distributed trace ID for causality chain
         """
-        conn = None
         conn = self._get_connection()
 
         try:
@@ -301,7 +300,7 @@ class EngagementStateMachine:
         if not self.can_transition_to(new_state):
             logger.warning(
                 "Skipping transition %s -> %s for engagement %s "
-                "(no valid outgoing transitions from current state)",
+                "(no valid outgoing transitions from current state — engagement may be in terminal state)",
                 self.current_state, new_state, self.engagement_id,
             )
             return False
