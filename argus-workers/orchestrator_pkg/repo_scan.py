@@ -224,13 +224,24 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             "--exclude", ".nuxt",
         ]
 
-        # Helper to deduplicate findings by endpoint + type
-        seen = set()
+        # Helper to deduplicate findings by endpoint + type. When two findings
+        # share the same key, the one with higher severity wins (prevents a
+        # LOW finding from suppressing a CRITICAL one from a different tool).
+        _sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
+        seen: dict[str, int] = {}
         def add_finding(finding: dict):
             key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{finding.get('evidence', {}).get('check_id', '') or finding.get('evidence', {}).get('cve_id', '')}"
+            sev = finding.get('severity', 'INFO')
+            rank = _sev_rank.get(sev, 0)
             if key not in seen:
-                seen.add(key)
+                seen[key] = len(all_findings)
                 all_findings.append(finding)
+            else:
+                idx = seen[key]
+                existing_sev = all_findings[idx].get('severity', 'INFO')
+                existing_rank = _sev_rank.get(existing_sev, 0)
+                if rank > existing_rank:
+                    all_findings[idx] = finding
 
         def _emit(tool: str, activity: str, status: str, items: int = None):
             orchestrator.ws_publisher.publish_scanner_activity(

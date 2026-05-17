@@ -211,8 +211,12 @@ class IntelligenceEngine:
 
                 # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings
                 # Findings from bug bounty rules (requires_validation: true) remain "Theoretical"
-                # until validated — they should not be treated as high-confidence automatically
-                if finding.get("requires_validation") and finding.get("source") == "bugbounty":
+                # until validated — they should not be treated as high-confidence automatically.
+                # Also catches findings tagged by the orchestrator (bugbounty_source=True) when
+                # bug bounty mode is active.
+                if finding.get("requires_validation") and (
+                    finding.get("source") == "bugbounty" or finding.get("bugbounty_source")
+                ):
                     confidence = min(confidence, 0.70)
 
                 # Update finding

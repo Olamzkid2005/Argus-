@@ -279,6 +279,7 @@ class Orchestrator:
                 # so the Intelligence Engine applies the confidence cap.
                 if self._bug_bounty_mode:
                     finding["bugbounty_source"] = True
+                    finding["source"] = "bugbounty"
 
                 if finding.get("cvss_score") is None:
                     try:
