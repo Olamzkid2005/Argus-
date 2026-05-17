@@ -94,7 +94,7 @@ def run_due_scans(self):
                 from tasks.repo_scan import run_repo_scan
                 run_repo_scan.delay(
                     engagement_id=info["engagement_id"],
-                    target=info["target"],
+                    repo_url=info["target"],
                     budget={"max_cycles": 5, "max_depth": 3},
                     trace_id=info["trace_id"],
                 )
@@ -136,7 +136,7 @@ def _spawn_engagement(
     agent_mode: bool,
     created_by: str,
     db_url: str,
-) -> None:
+) -> dict:
     """
     Create a real engagement from a scheduled engagement record.
     All DB operations use the provided connection for transactional consistency.

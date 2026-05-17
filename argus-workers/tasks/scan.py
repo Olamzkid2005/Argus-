@@ -95,7 +95,7 @@ def run_scan(
 
 
 @app.task(bind=True, name="tasks.scan.deep_scan")
-def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None):
+def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None, auth_config: dict | None = None):
     """
     Execute deep scanning on specific targets
     """
@@ -118,12 +118,20 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
         "scan_mode": opts["scan_mode"],
         "aggressiveness": opts["aggressiveness"],
         "bug_bounty_mode": opts.get("bug_bounty_mode", False),
+        "auth_config": auth_config or {},
     }
     with task_context(self, engagement_id, "deep_scan",
                       job_extra=job_extra,
                       trace_id=trace_id) as ctx:
         result = ctx.orchestrator.run_scan(ctx.job)
-        ctx.state.transition("analyzing", "Deep scan complete")
+        try:
+            ctx.state.transition("analyzing", "Deep scan complete")
+        except Exception as e:
+            logger.error("Failed to transition to analyzing after deep_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"State transition failed: {e}")
+            result["status"] = "failed"
+            result["reason"] = "state_transition_failed"
+            return result
         try:
             analyze_task = app.send_task(
                 "tasks.analyze.run_analysis",
@@ -137,7 +145,7 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
 
 
 @app.task(bind=True, name="tasks.scan.auth_focused_scan")
-def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, trace_id: str = None):
+def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, trace_id: str = None, auth_config: dict | None = None):
     """
     Execute authentication-focused scanning
     """
@@ -160,12 +168,20 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
         "scan_mode": opts["scan_mode"],
         "aggressiveness": opts["aggressiveness"],
         "bug_bounty_mode": opts.get("bug_bounty_mode", False),
+        "auth_config": auth_config or {},
     }
     with task_context(self, engagement_id, "auth_focused_scan",
                       job_extra=job_extra,
                       trace_id=trace_id) as ctx:
         result = ctx.orchestrator.run_scan(ctx.job)
-        ctx.state.transition("analyzing", "Auth-focused scan complete")
+        try:
+            ctx.state.transition("analyzing", "Auth-focused scan complete")
+        except Exception as e:
+            logger.error("Failed to transition to analyzing after auth_focused_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"State transition failed: {e}")
+            result["status"] = "failed"
+            result["reason"] = "state_transition_failed"
+            return result
         try:
             analyze_task = app.send_task(
                 "tasks.analyze.run_analysis",

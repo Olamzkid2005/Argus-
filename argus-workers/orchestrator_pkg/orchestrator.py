@@ -671,12 +671,7 @@ class Orchestrator:
             auth_config=auth_config,
             bug_bounty_mode=bug_bounty_mode,
         )
-        swarm_result = swarm.run(timeout=1800)
-        if isinstance(swarm_result, tuple):
-            swarm_findings, swarm_tools_executed = swarm_result
-        else:
-            swarm_findings = swarm_result
-            swarm_tools_executed = set()
+        swarm_findings, swarm_tools_executed = swarm.run(timeout=1800)
         slog.info(f"Swarm returned {len(swarm_findings)} findings")
         logger.info("Swarm returned %d findings, executed tools: %s", len(swarm_findings), swarm_tools_executed)
         tech_stack = recon_context.tech_stack if recon_context else None
@@ -688,6 +683,7 @@ class Orchestrator:
         safety_findings = execute_scan_pipeline(
             self, targets, budget, adjusted_aggressiveness, auth_config, tech_stack,
             skip_tools=swarm_tools_executed,
+            recon_context=recon_context,
         )
         slog.tool_complete("swarm", success=True, findings=len(swarm_findings))
         return swarm_findings + safety_findings
@@ -706,6 +702,7 @@ class Orchestrator:
         deterministic_findings = execute_scan_pipeline(
             self, targets, budget, aggressiveness, auth_config, tech_stack,
             skip_tools=agent_tried,
+            recon_context=recon_context,
         )
         findings.extend(deterministic_findings)
         slog.tool_complete("agent_scan", success=True, findings=len(findings))
@@ -726,7 +723,7 @@ class Orchestrator:
             mode += " (LLM unavailable)"
         logger.info(f"Running {mode} scan")
         tech_stack = recon_context.tech_stack if recon_context else None
-        result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack)
+        result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack, recon_context=recon_context)
         slog.tool_complete("deterministic_scan", success=True, findings=len(result))
         return result
 

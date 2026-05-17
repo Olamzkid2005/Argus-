@@ -39,6 +39,7 @@ def execute_scan_pipeline(
     auth_config: dict | None = None, dual_auth_config: dict | None = None,
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
+    recon_context=None,
 ) -> list[dict]:
     """
     Execute scanning tools.
@@ -60,4 +61,4 @@ def execute_scan_pipeline(
     slog = ScanLogger("pipeline_router")
     slog.info(f"execute_scan_pipeline: {len(targets)} target(s), aggressiveness={aggressiveness}, skip_tools={skip_tools}")
     from orchestrator_pkg.scan import execute_scan_tools
-    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, dual_auth_config, tech_stack, skip_tools)
+    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, dual_auth_config, tech_stack, skip_tools, recon_context=recon_context)

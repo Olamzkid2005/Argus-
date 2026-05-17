@@ -474,8 +474,8 @@ class SwarmOrchestrator:
     """Runs specialist agents in parallel and merges findings.
 
     Activation is based on ReconContext signals. Each agent gets a deep
-    copy of the context. Merging uses evidence-weighted dedup from
-    ScanDiffEngine._fingerprint() for consistent cross-scan matching.
+    copy of the context. Merging uses evidence-weighted dedup with
+    fallback (type+endpoint) fingerprint for consistent cross-agent merging.
     """
 
     SPECIALIST_CLASSES = [IDORAgent, AuthAgent, APIAgent]
@@ -506,14 +506,14 @@ class SwarmOrchestrator:
         ]
         self.auth_config = auth_config or {}
 
-    def run(self, timeout: int = 1800) -> list[dict]:
+    def run(self, timeout: int = 1800) -> tuple[list[dict], set[str]]:
         """Run all active specialists in parallel and merge findings.
 
         Args:
             timeout: Maximum wall-clock time in seconds (default 30 min)
 
         Returns:
-            Deduplicated list of finding dicts
+            (deduplicated findings list, set of all tools executed)
         """
         active = [a for a in self.agents if a.should_activate()]
         slog = ScanLogger("swarm", engagement_id=active[0].engagement_id if active else "")
@@ -604,11 +604,18 @@ class SwarmOrchestrator:
 
     @staticmethod
     def _deduplicate(findings: list[dict]) -> list[dict]:
+        """Deduplicate findings by type + endpoint (fallback fingerprint).
+
+        Uses ScanDiffEngine._fallback_fingerprint() which only considers
+        type and endpoint (not payload), so the same vulnerability detected
+        with different payload examples gets merged into one finding.
+        The finding with richer evidence or higher confidence wins.
+        """
         from scan_diff_engine import ScanDiffEngine
 
         seen: dict[str, dict] = {}
         for f in findings:
-            fp = ScanDiffEngine._fingerprint(f)
+            fp = ScanDiffEngine._fallback_fingerprint(f)
             if fp not in seen:
                 seen[fp] = {**f}  # shallow copy to avoid mutating caller's findings
                 continue

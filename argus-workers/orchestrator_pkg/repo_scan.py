@@ -692,7 +692,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                         "--ext", ".js,.jsx,.ts,.tsx",
                         "--format", "json",
                         "--no-eslintrc",
-                        "--rule", "{'security/detect-object-injection': 'warn', 'security/detect-non-literal-fs-filename': 'warn', 'security/detect-possible-timing-attacks': 'warn', 'security/detect-eval-with-expression': 'error', 'security/detect-no-csrf-before-method-override': 'warn', 'security/detect-buffer-noassert': 'error', 'security/detect-child-process': 'warn', 'security/detect-disable-mustache-escape': 'error', 'security/detect-new-buffer': 'warn', 'security/detect-unsafe-regex': 'error', 'security/detect-bidi-characters': 'warn', 'security/detect-non-literal-require': 'warn', 'security/detect-pseudoRandomBytes': 'warn'}",
+                        "--rule", '{"security/detect-object-injection":"warn","security/detect-non-literal-fs-filename":"warn","security/detect-possible-timing-attacks":"warn","security/detect-eval-with-expression":"error","security/detect-no-csrf-before-method-override":"warn","security/detect-buffer-noassert":"error","security/detect-child-process":"warn","security/detect-disable-mustache-escape":"error","security/detect-new-buffer":"warn","security/detect-unsafe-regex":"error","security/detect-bidi-characters":"warn","security/detect-non-literal-require":"warn","security/detect-pseudoRandomBytes":"warn"}',
                     ],
                     timeout=TOOL_TIMEOUT_LONG if agg == "default" else 600,
                 )

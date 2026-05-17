@@ -92,6 +92,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             llm_review_max_per_engagement,
             llm_review_max_response_chars,
             llm_review_min_confidence,
+            llm_review_timeout,
         )
     except ImportError:
         llm_review_confidence_threshold = 0.7

@@ -43,6 +43,7 @@ LLM_REVIEW_CONFIDENCE_THRESHOLD = 0.7    # only review findings below this
 LLM_REVIEW_MIN_CONFIDENCE = 0.3           # skip findings below this (too noisy)
 LLM_REVIEW_MAX_RESPONSE_CHARS = 3000      # truncate response body
 LLM_REVIEW_MAX_PER_ENGAGEMENT = 20        # cap total analyses per engagement
+LLM_REVIEW_TIMEOUT = 60                 # per-finding LLM analysis timeout in seconds
 LLM_RESPONSE_ANALYSIS_MODEL = "gpt-4o-mini"
 
 # ── LLM Payload Generation ──

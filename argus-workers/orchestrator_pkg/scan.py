@@ -169,6 +169,7 @@ def execute_scan_tools(
     auth_config: dict | None = None, dual_auth_config: dict | None = None,
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
+    recon_context=None,
 ) -> list[dict]:
     """
     Execute scanning tools against targets.
@@ -326,11 +327,11 @@ def execute_scan_tools(
             scan_jobs.append(("sqlmap", sqlmap_cmd, sqlmap_timeout))
 
         # Build jwt_tool command
-        if "jwt_tool" not in _skip and _should_run_tool("jwt_tool", tech_stack=tech_stack):
+        if "jwt_tool" not in _skip and _should_run_tool("jwt_tool", recon_context=recon_context, tech_stack=tech_stack):
             scan_jobs.append(("jwt_tool", ["-u", target, "-C", "-d"], 120))
 
         # Build commix command
-        if "commix" not in _skip and _should_run_tool("commix", tech_stack=tech_stack):
+        if "commix" not in _skip and _should_run_tool("commix", recon_context=recon_context, tech_stack=tech_stack):
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 commix_out = str(sandbox / "tmp" / "commix.json")
