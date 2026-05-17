@@ -131,7 +131,8 @@ def _get_engagement_target(engagement_id: str) -> str | None:
         )
         row = cursor.fetchone()
         return str(row[0]) if row else None
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to get engagement target for %s: %s", engagement_id, e)
         return None
     finally:
         if conn:

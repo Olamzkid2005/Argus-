@@ -163,6 +163,7 @@ class ComplianceReportGenerator:
         Returns:
             ComplianceReport instance
         """
+        findings = findings or []
         report_id = report_id or f"owasp-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
 
         compliance_findings = []
@@ -220,6 +221,7 @@ class ComplianceReportGenerator:
         Returns:
             ComplianceReport instance
         """
+        findings = findings or []
         report_id = report_id or f"pci-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
 
         # PCI DSS 4.0 requirements checklist
@@ -301,6 +303,7 @@ class ComplianceReportGenerator:
         Returns:
             ComplianceReport instance
         """
+        findings = findings or []
         report_id = report_id or f"soc2-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
 
         # SOC 2 Trust Services Criteria
@@ -373,7 +376,11 @@ class ComplianceReportGenerator:
             template = self.env.get_template(report.template_used)
         except Exception:
             logger.warning(f"Template {report.template_used} not found, using default")
-            template = self.env.get_template("default_report.html")
+            try:
+                template = self.env.get_template("default_report.html")
+            except Exception:
+                logger.error("Default template not found — using minimal inline template")
+                template = self.env.from_string("<html><body><h1>Compliance Report</h1><pre>{{ report | pprint }}</pre></body></html>")
 
         return template.render(
             report=report,

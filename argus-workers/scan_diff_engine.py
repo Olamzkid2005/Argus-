@@ -162,13 +162,25 @@ class ScanDiffEngine:
             logger.error(
                 "Failed to load findings for %s: %s", engagement_id, e
             )
-            return {}
+            raise RuntimeError(f"Failed to load findings for engagement {engagement_id}: {e}") from e
         finally:
             if conn:
                 with contextlib.suppress(Exception):
                     conn.close()
 
     # ── Core diff ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _empty_diff() -> dict:
+        """Return an empty diff result with zero counts and action_required=False."""
+        return {
+            "new": [], "fixed": [], "regressed": [],
+            "persistent": [], "severity_changed": [],
+            "summary": {"new_count": 0, "fixed_count": 0, "regressed_count": 0,
+                        "persistent_count": 0, "severity_changed_count": 0,
+                        "action_required": False, "total_current": 0, "total_previous": 0,
+                        "_error": "load_failure"},
+        }
 
     def diff(
         self,
@@ -195,8 +207,16 @@ class ScanDiffEngine:
                             "persistent_count": 0, "severity_changed_count": 0,
                             "action_required": False, "total_current": 0, "total_previous": 0},
             }
-        prev = self._load_findings(prev_id)
-        curr = self._load_findings(curr_id)
+        try:
+            prev = self._load_findings(prev_id)
+        except RuntimeError as e:
+            logger.error("Diff aborted — failed to load previous findings: %s", e)
+            return self._empty_diff()
+        try:
+            curr = self._load_findings(curr_id)
+        except RuntimeError as e:
+            logger.error("Diff aborted — failed to load current findings: %s", e)
+            return self._empty_diff()
         fixed_fps = self._load_fixed_fingerprints(profile)
 
         result = {

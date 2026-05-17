@@ -83,7 +83,7 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict
             JOIN engagements e ON e.id = %s
             WHERE (
                 w.engagement_id = e.id
-                OR w.engagement_id IS NULL
+                OR (w.engagement_id IS NULL AND (w.organization_id = e.organization_id OR w.organization_id IS NULL))
             )
             AND (
                 w.events @> '["finding_discovered"]'::jsonb
@@ -128,6 +128,8 @@ def _dispatch(url: str, payload: dict, webhook_id: str, db_conn_string: str) -> 
 
 def _mark_triggered(webhook_id: str, db_conn_string: str, success: bool = True) -> None:
     """Update last_triggered timestamp on the webhook record."""
+    conn = None
+    cursor = None
     try:
         from database.connection import get_db
 
@@ -138,7 +140,10 @@ def _mark_triggered(webhook_id: str, db_conn_string: str, success: bool = True) 
             (webhook_id,),
         )
         conn.commit()
-        cursor.close()
-        get_db().release_connection(conn)
     except Exception as e:
         logger.warning("Failed to update webhook last_triggered: %s", e)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            get_db().release_connection(conn)

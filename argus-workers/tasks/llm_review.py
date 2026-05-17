@@ -98,6 +98,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         llm_review_min_confidence = 0.3
         llm_review_max_per_engagement = 20
         llm_review_max_response_chars = 3000
+        llm_review_timeout = 60
 
     # Load feature flag dynamically from Redis (set via UI Settings page)
     try:
@@ -157,12 +158,14 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     # Analyze each finding
     analyzed_count = 0
     confirmed_count = 0
+    budget_was_exhausted = False
 
     for finding in candidate_findings:
         if budget_manager:
             can_continue, _ = budget_manager.can_continue({"type": "llm_review"})
             if not can_continue:
                 slog.info("LLM review budget exhausted — stopping")
+                budget_was_exhausted = True
                 break
             budget_manager.consume({"type": "llm_review"})
 
@@ -173,8 +176,10 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             evidence = finding.get("evidence", {})
             payload = evidence.get("payload", "")
 
-            # Replay HTTP request to get fresh response
+            # Replay HTTP request to get fresh response (falls back to stored evidence)
             response = _replay_request(finding.get("endpoint", ""), evidence, live_replay_enabled)
+            if not response:
+                response = evidence.get("response", "")
             if not response:
                 slog.tool_result("LLM Review", f"Skipping finding {finding.get('id', '?')[:8]}: no response")
                 continue
@@ -270,9 +275,6 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             slog.warning(f"LLM review failed for finding {finding.get('id', '?')[:8]}: {e}")
             continue
 
-    # LLM review uses its own budget (llm_review_max_per_engagement cap),
-    # not the intelligence engine's recon_expand cycles.
-    budget_was_exhausted = False
     slog.info(f"LLM review complete: {analyzed_count} analyzed, {confirmed_count} confirmed, {'budget exhausted' if budget_was_exhausted else 'all candidates processed'}")
 
     return {
