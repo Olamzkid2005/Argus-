@@ -332,9 +332,9 @@ class Orchestrator:
                             from database.connection import db_cursor
                             with db_cursor() as cursor:
                                 cursor.execute(
-                                    "UPDATE findings SET last_seen_at = NOW(), severity = %s, confidence = %s, evidence = %s WHERE id = %s",
+                                    "UPDATE findings SET last_seen_at = NOW(), severity = %s, confidence = %s, evidence = %s, source = %s, bugbounty_source = %s WHERE id = %s",
                                     (finding.get("severity", "INFO"), finding.get("confidence", 0.5),
-                                     json.dumps(finding.get("evidence", {})), similar["id"]),
+                                     json.dumps(finding.get("evidence", {})), finding.get("source"), finding.get("bugbounty_source", False), similar["id"]),
                                 )
                             saved_id = similar["id"]
                             logger.debug(f"Updated existing finding {similar['id']} (similarity={similar['similarity']:.3f})")
@@ -555,7 +555,7 @@ class Orchestrator:
                 logger.warning(f"Agent scan failed for {target}: {e} — falling back to deterministic", exc_info=True)
                 per_target_tools.append(set())
                 fallback = execute_scan_pipeline(self, [target], budget, aggressiveness, auth_config,
-                                                  recon_context.tech_stack if recon_context else None)
+                                                  tech_stack=recon_context.tech_stack if recon_context else None)
                 all_findings.extend(fallback)
 
         if per_target_tools:
@@ -682,7 +682,8 @@ class Orchestrator:
             adjusted_aggressiveness = "default"
             logger.info("Only %ds remaining — reducing safety net aggressiveness to default", remaining)
         safety_findings = execute_scan_pipeline(
-            self, targets, budget, adjusted_aggressiveness, auth_config, tech_stack,
+            self, targets, budget, adjusted_aggressiveness, auth_config,
+            tech_stack=tech_stack,
             skip_tools=swarm_tools_executed,
             recon_context=recon_context,
         )
@@ -701,7 +702,8 @@ class Orchestrator:
         logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
         tech_stack = recon_context.tech_stack if recon_context else None
         deterministic_findings = execute_scan_pipeline(
-            self, targets, budget, aggressiveness, auth_config, tech_stack,
+            self, targets, budget, aggressiveness, auth_config,
+            tech_stack=tech_stack,
             skip_tools=agent_tried,
             recon_context=recon_context,
         )
@@ -724,7 +726,7 @@ class Orchestrator:
             mode += " (LLM unavailable)"
         logger.info(f"Running {mode} scan")
         tech_stack = recon_context.tech_stack if recon_context else None
-        result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack, recon_context=recon_context)
+        result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack=tech_stack, recon_context=recon_context)
         slog.tool_complete("deterministic_scan", success=True, findings=len(result))
         return result
 

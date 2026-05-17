@@ -405,17 +405,19 @@ class EngagementStateMachine:
 
             conn.commit()
 
+            # Publish websocket events for every intermediate state so the
+            # frontend sees each step (e.g. scanning → analyzing → reporting).
             if self._ws_publisher:
-                first_from = self.current_state
-                final_to = states[-1][0]
-                final_reason = states[-1][1]
                 try:
-                    self._ws_publisher.publish_state_transition(
-                        engagement_id=self.engagement_id,
-                        from_state=first_from,
-                        to_state=final_to,
-                        reason=f"Fast-forward: {final_reason}",
-                    )
+                    ws_current = db_current
+                    for new_state, reason in states:
+                        self._ws_publisher.publish_state_transition(
+                            engagement_id=self.engagement_id,
+                            from_state=ws_current,
+                            to_state=new_state,
+                            reason=reason,
+                        )
+                        ws_current = new_state
                 except Exception:
                     logger.debug("Failed to publish chain transition for %s", self.engagement_id)
 

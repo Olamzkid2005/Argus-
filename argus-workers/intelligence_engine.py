@@ -99,11 +99,16 @@ class IntelligenceEngine:
             # Assign confidence scores (with learned FP rates if org_id provided)
             scored_findings = self.assign_confidence_scores(findings, org_id=org_id)
 
+            # Enrich findings with threat intelligence (CVE data, EPSS scores,
+            # threat feed hits, FP assessment) before action generation so
+            # high-exploitability CVEs can influence deep scanning decisions.
+            enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
+
             # Generate actions based on intelligence
-            actions = self.generate_actions(scored_findings, snapshot)
+            actions = self.generate_actions(enriched_findings, snapshot)
 
             # Generate reasoning
-            reasoning = self._generate_reasoning(scored_findings, actions)
+            reasoning = self._generate_reasoning(enriched_findings, actions)
 
             # Log intelligence decision
             self.logger.log_intelligence_decision(
@@ -113,10 +118,10 @@ class IntelligenceEngine:
             )
 
             duration_ms = int((_time.time() - start) * 1000)
-            slog.info(f"Evaluation complete: {len(scored_findings)} scored findings, {len(actions)} actions ({duration_ms}ms)")
+            slog.info(f"Evaluation complete: {len(enriched_findings)} enriched findings, {len(actions)} actions ({duration_ms}ms)")
 
             return {
-                "scored_findings": scored_findings,
+                "scored_findings": enriched_findings,
                 "actions": actions,
                 "reasoning": reasoning,
                 "trace_id": get_trace_id(),
@@ -209,13 +214,15 @@ class IntelligenceEngine:
                 from models.confidence_scorer import ConfidenceScorer
                 confidence = ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
 
-                # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings
-                # Findings from bug bounty rules (requires_validation: true) remain "Theoretical"
-                # until validated — they should not be treated as high-confidence automatically.
-                # Also catches findings tagged by the orchestrator (bugbounty_source=True) when
-                # bug bounty mode is active.
-                if finding.get("requires_validation") and (
-                    finding.get("source") == "bugbounty" or finding.get("bugbounty_source")
+                # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings.
+                # Two paths:
+                # 1. Custom rules with requires_validation and source="bugbounty" — remain
+                #    "Theoretical" until validated.
+                # 2. All findings tagged by the orchestrator (bugbounty_source=True) when
+                #    bug bounty mode is active — these lack explicit validation metadata
+                #    and should be treated conservatively.
+                if finding.get("bugbounty_source") or (
+                    finding.get("requires_validation") and finding.get("source") == "bugbounty"
                 ):
                     confidence = min(confidence, 0.70)
 
