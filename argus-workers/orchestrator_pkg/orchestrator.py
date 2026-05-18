@@ -203,7 +203,7 @@ class Orchestrator:
         slog.tool_complete("orchestrator.run_recon", success=True, findings=len(findings))
 
         findings_count = len(findings)
-        self._save_findings(findings, "tool")
+        self._save_findings(findings)
 
         if recon_context:
             try:
@@ -241,7 +241,7 @@ class Orchestrator:
             finding_type, {"owasp": "N/A", "cwe": "N/A"}
         )
 
-    def _save_findings(self, findings: list[dict], source_tool_key: str = "source_tool"):  # noqa: ARG002
+    def _save_findings(self, findings: list[dict]):
         if not self.finding_repo or not findings:
             return
 
@@ -1104,7 +1104,7 @@ class Orchestrator:
             raise
 
         findings_count = len(findings)
-        self._save_findings(findings, source_tool_key="tool")
+        self._save_findings(findings)
         next_state = "scanning"
         if findings_count == 0:
             logger.info(f"Repository scan completed with no findings for {repo_url}")

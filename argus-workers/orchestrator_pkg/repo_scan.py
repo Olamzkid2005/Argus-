@@ -537,7 +537,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             _emit("trivy", f"Dependency scan failed: {str(e)}", "failed")
             logger.warning(f"Trivy failed: {e}")
 
-        # ── 3. Bandit: Python security scanning ──
+        # ── 5. Bandit: Python security scanning ──
         if "python" in detected_langs:
             slog.tool_start("bandit", [repo_url])
             _emit("bandit", "Running Bandit Python security scanner", "started")
@@ -587,7 +587,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("bandit", f"Bandit scan failed: {str(e)}", "failed")
                 logger.warning(f"Bandit failed: {e}")
 
-        # ── 4. Brakeman: Ruby on Rails security scanning ──
+        # ── 6. Brakeman: Ruby on Rails security scanning ──
         if "ruby" in detected_langs:
             slog.tool_start("brakeman", [repo_url])
             _emit("brakeman", "Running Brakeman Rails security scanner", "started")
@@ -639,7 +639,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("brakeman", f"Brakeman scan failed: {str(e)}", "failed")
                 logger.warning(f"Brakeman failed: {e}")
 
-        # ── 5. Gosec: Go security scanning ──
+        # ── 7. Gosec: Go security scanning ──
         if "go" in detected_langs:
             slog.tool_start("gosec", [repo_url])
             _emit("gosec", "Running Gosec Go security scanner", "started")
@@ -691,7 +691,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("gosec", f"Gosec scan failed: {str(e)}", "failed")
                 logger.warning(f"Gosec failed: {e}")
 
-        # ── 6. ESLint: JavaScript/TypeScript security scanning ──
+        # ── 8. ESLint: JavaScript/TypeScript security scanning ──
         if "javascript" in detected_langs:
             slog.tool_start("eslint", [repo_url])
             _emit("eslint", "Running ESLint security scanner", "started")
@@ -745,7 +745,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("eslint", f"ESLint scan failed: {str(e)}", "failed")
                 logger.warning(f"ESLint failed: {e}")
 
-        # ── 7. PHPCS: PHP security scanning ──
+        # ── 9. PHPCS: PHP security scanning ──
         if "php" in detected_langs:
             slog.tool_start("phpcs", [repo_url])
             _emit("phpcs", "Running PHP CodeSniffer security audit", "started")
@@ -798,7 +798,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("phpcs", f"PHPCS scan failed: {str(e)}", "failed")
                 logger.warning(f"PHPCS failed: {e}")
 
-        # ── 8. SpotBugs: Java/Kotlin security scanning ──
+        # ── 10. SpotBugs: Java/Kotlin security scanning ──
         if "java" in detected_langs:
             slog.tool_start("spotbugs", [repo_url])
             _emit("spotbugs", "Running SpotBugs Java security scanner", "started")
@@ -858,7 +858,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("spotbugs", f"SpotBugs scan failed: {str(e)}", "failed")
                 logger.warning(f"SpotBugs failed: {e}")
 
-        # ── 9. Snyk: dependency vulnerability scanning ──
+        # ── 11. Snyk: dependency vulnerability scanning ──
         slog.tool_start("snyk", [repo_url])
         _emit("snyk", "Running Snyk dependency vulnerability scan", "started")
         try:
@@ -906,7 +906,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             _emit("snyk", f"Snyk scan failed: {str(e)}", "failed")
             logger.warning(f"Snyk failed: {e}")
 
-        # ── 6. Additional SCA scans based on project type ──
+        # ── 12. Additional SCA scans based on project type ──
 
         # npm audit for Node.js projects
         if os.path.exists(os.path.join(temp_dir, "package.json")):

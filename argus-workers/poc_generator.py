@@ -163,12 +163,14 @@ class PoCGenerator:
                     template = POC_TEMPLATES[template_key]
                     break
 
-        evidence = finding.get("evidence", {})
+        evidence = finding.get("evidence") or {}
         if isinstance(evidence, str):
             try:
                 evidence = json.loads(evidence)
             except (json.JSONDecodeError, TypeError):
                 evidence = {"raw": evidence[:500]}
+        elif not isinstance(evidence, dict):
+            evidence = {"raw": str(evidence)[:500]}
 
         # Redact sensitive data from evidence before sending to LLM provider
         import re as _redact_re

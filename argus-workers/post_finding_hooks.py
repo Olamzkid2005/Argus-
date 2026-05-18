@@ -24,23 +24,19 @@ def fire_finding_webhooks(finding: dict, db_conn_string: str | None = None) -> N
     Args:
         finding: Finding dict with keys: id, engagement_id, type, severity,
                 endpoint, source_tool, confidence
-        db_conn_string: Database connection string (auto-resolved if None)
+        db_conn_string: Deprecated — no longer used. Internal functions resolve
+                        the database URL from the environment via get_db().
     """
     # Only fire for high-value findings by default
     severity = finding.get("severity", "").upper()
     if severity not in ("CRITICAL", "HIGH"):
         return
 
-    db_url = db_conn_string or os.getenv("DATABASE_URL")
-    if not db_url:
-        logger.warning("No DATABASE_URL set, skipping webhook dispatch")
-        return
-
     engagement_id = finding.get("engagement_id")
     if not engagement_id:
         return
 
-    webhooks = _get_matching_webhooks(engagement_id, db_url)
+    webhooks = _get_matching_webhooks(engagement_id)
     if not webhooks:
         return
 
@@ -56,10 +52,10 @@ def fire_finding_webhooks(finding: dict, db_conn_string: str | None = None) -> N
     }
 
     for webhook in webhooks:
-        _dispatch(webhook["webhook_url"], payload, webhook["id"], db_url)
+        _dispatch(webhook["webhook_url"], payload, webhook["id"])
 
 
-def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict]:
+def _get_matching_webhooks(engagement_id: str) -> list[dict]:
     """
     Find webhooks that match this engagement.
 
@@ -67,6 +63,9 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict
     - Linked directly to the engagement
     - Global webhooks (engagement_id IS NULL) within the same org
     - Have events array that includes 'finding_discovered' or is empty (all events)
+
+    Uses the global connection pool (get_db()) — does not accept a custom
+    connection string because all internal DB calls resolve from the env.
     """
     from database.connection import get_db
 
@@ -105,10 +104,12 @@ def _get_matching_webhooks(engagement_id: str, db_conn_string: str) -> list[dict
             get_db().release_connection(conn)
 
 
-def _dispatch(url: str, payload: dict, webhook_id: str, db_conn_string: str) -> None:
+def _dispatch(url: str, payload: dict, webhook_id: str) -> None:
     """
     Dispatch a webhook HTTP POST with timeout.
     Updates last_triggered on success or failure.
+
+    Note: DB connection is resolved via the global get_db() pool.
     """
     try:
         with httpx.Client(timeout=5.0) as client:
@@ -120,14 +121,17 @@ def _dispatch(url: str, payload: dict, webhook_id: str, db_conn_string: str) -> 
                 r.status_code,
                 "success" if success else "failed",
             )
-        _mark_triggered(webhook_id, db_conn_string, success=success)
+        _mark_triggered(webhook_id, success=success)
     except Exception as e:
         logger.warning("Webhook %s dispatch failed: %s", webhook_id, e)
-        _mark_triggered(webhook_id, db_conn_string, success=False)
+        _mark_triggered(webhook_id, success=False)
 
 
-def _mark_triggered(webhook_id: str, db_conn_string: str, success: bool = True) -> None:
-    """Update last_triggered timestamp on the webhook record."""
+def _mark_triggered(webhook_id: str, success: bool = True) -> None:
+    """Update last_triggered timestamp on the webhook record.
+
+    Uses the global get_db() pool — no custom connection string needed.
+    """
     conn = None
     cursor = None
     try:
