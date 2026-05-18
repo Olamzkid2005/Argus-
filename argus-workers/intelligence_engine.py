@@ -301,7 +301,7 @@ class IntelligenceEngine:
         """Group findings that represent the same vulnerability family for tool agreement."""
         type_families = {
             "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS", "CROSS_SITE_SCRIPTING"],
-            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "ERROR_SQLI"],
+            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "TIME_BASED_SQL_INJECTION", "ERROR_SQLI"],
             "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
             "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
             "SSRF": ["SSRF", "OPEN_REDIRECT"],
@@ -414,6 +414,9 @@ class IntelligenceEngine:
             True if low coverage detected
         """
         endpoints = {f.get("endpoint") for f in findings if f.get("endpoint")}
+
+        if not endpoints:
+            return False
 
         return len(endpoints) < 5
 
@@ -819,10 +822,10 @@ class IntelligenceEngine:
         finding_type = finding.get("type", "").upper()
         endpoint = finding.get("endpoint", "")
 
-        # Map subtypes to canonical families so RELFECTED_XSS → XSS etc.
+        # Map subtypes to canonical families so REFLECTED_XSS → XSS etc.
         _type_families = {
             "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS", "CROSS_SITE_SCRIPTING"],
-            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "ERROR_SQLI"],
+            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "TIME_BASED_SQL_INJECTION", "ERROR_SQLI"],
             "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
             "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
             "SSRF": ["SSRF", "OPEN_REDIRECT"],

@@ -5,7 +5,9 @@ import json
 
 import pytest
 
-from parsers.parser import HttpxParser, NucleiParser, Parser, ParserError
+from parsers.parsers.httpx import HttpxParser
+from parsers.parsers.nuclei import NucleiParser
+from parsers.parser import Parser, ParserError
 
 
 class TestNucleiParser:

@@ -3,7 +3,9 @@ Tests for new parsers: GospiderParser and WpscanParser
 """
 import json
 
-from parsers.parser import GospiderParser, Parser, WpscanParser
+from parsers.parsers.gospider import GospiderParser
+from parsers.parsers.wpscan import WpscanParser
+from parsers.parser import Parser
 
 
 class TestGospiderParser:

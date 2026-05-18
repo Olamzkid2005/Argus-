@@ -885,7 +885,11 @@ def run_eslint_security(repo_path):
 
 
 def _map_eslint_severity(severity):
-    return "LOW" if severity == 1 else "MEDIUM" if severity == 2 else "HIGH"
+    if severity == 1:
+        return "LOW"
+    if severity == 2:
+        return "MEDIUM"
+    return "INFO"
 
 
 def run_gosec(repo_path):

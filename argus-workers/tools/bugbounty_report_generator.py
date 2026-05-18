@@ -291,6 +291,7 @@ ARGUS_TYPE_TO_BUGREAPER = {
     "SQL_INJECTION": "sqli",
     "BLIND_SQLI": "sqli",
     "TIME_BASED_SQLI": "sqli",
+    "TIME_BASED_SQL_INJECTION": "sqli",
     "ERROR_BASED_SQLI": "sqli",
     "SSRF": "ssrf",
     "IDOR": "idor",
