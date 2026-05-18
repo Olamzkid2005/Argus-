@@ -979,7 +979,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 _emit("maven_check", f"Maven check failed: {str(e)}", "failed")
                 logger.warning(f"Maven check failed: {e}")
 
-        # ── 7. Semgrep: static code analysis ──
+        # ── 13. Semgrep: static code analysis ──
         slog.tool_start("semgrep", [repo_url])
         _rules_registry = os.path.join(os.path.dirname(os.path.dirname(__file__)), "semgrep_rules", "registry")
         def _resolve_semgrep_config(cfg: str) -> list:

@@ -9,7 +9,6 @@ Migration: 030_webhooks.sql
 """
 
 import logging
-import os
 
 import httpx
 
