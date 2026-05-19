@@ -192,7 +192,7 @@ def test_run_scan_marks_failed_when_analyze_enqueue_raises(
         )
 
     fail_calls = [
-        c for c in ctx.state.transition.call_args_list if c[0][0] == "failed"
+        c for c in ctx.state.safe_transition.call_args_list if c[0][0] == "failed"
     ]
     assert fail_calls, "expected failed transition when analyze enqueue fails"
     assert "broker down" in fail_calls[0][0][1]

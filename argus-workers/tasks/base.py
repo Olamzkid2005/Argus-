@@ -34,7 +34,10 @@ except ImportError:
     try:
         from celery.exceptions import SoftTimeLimitExceeded
     except ImportError:
-        SoftTimeLimitExceeded = None
+        # Neither library available — create a dummy so the except clause
+        # in task_context doesn't raise TypeError on None.
+        class SoftTimeLimitExceeded(Exception):  # type: ignore
+            pass
 
 logger = logging.getLogger(__name__)
 

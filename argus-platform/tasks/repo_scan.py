@@ -73,7 +73,7 @@ def detect_license(file_path):
                 data = json.load(f)
                 if 'license' in data:
                     return data['license']
-        except:
+        except Exception:
             pass
     
     return 'UNKNOWN'

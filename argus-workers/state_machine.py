@@ -221,15 +221,22 @@ class EngagementStateMachine:
                     f"Concurrent state change detected for engagement {self.engagement_id}"
                 )
 
-            # If looping back from analyzing to recon, increment budget
+            # If looping back from analyzing to recon, increment budget.
+            # Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) so the row is
+            # auto-created for non-scheduled engagements that were created
+            # without an explicit loop_budgets INSERT.
             if from_state == "analyzing" and to_state == "recon":
                 cursor.execute(
                     """
-                    UPDATE loop_budgets
-                    SET current_cycles = current_cycles + 1, updated_at = NOW()
-                    WHERE engagement_id = %s
+                    INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
+                                               current_cycles, current_depth, created_at)
+                    VALUES (%s, %s, 5, 3, 1, 0, NOW())
+                    ON CONFLICT (engagement_id)
+                    DO UPDATE SET
+                        current_cycles = loop_budgets.current_cycles + 1,
+                        updated_at = NOW()
                     """,
-                    (self.engagement_id,)
+                    (str(uuid.uuid4()), self.engagement_id)
                 )
 
             conn.commit()
@@ -393,16 +400,23 @@ class EngagementStateMachine:
                     f"Concurrent state change detected for engagement {self.engagement_id}"
                 )
 
-            # If looping through analyze→recon in the chain, increment budget
+            # If looping through analyze→recon in the chain, increment budget.
+            # Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) so the row is
+            # auto-created for non-scheduled engagements that were created
+            # without an explicit loop_budgets INSERT.
             recon_loop_count = sum(1 for f, t in states if f == "analyzing" and t == "recon")
             if recon_loop_count > 0:
                 cursor.execute(
                     """
-                    UPDATE loop_budgets
-                    SET current_cycles = current_cycles + %s, updated_at = NOW()
-                    WHERE engagement_id = %s
+                    INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
+                                               current_cycles, current_depth, created_at)
+                    VALUES (%s, %s, 5, 3, %s, 0, NOW())
+                    ON CONFLICT (engagement_id)
+                    DO UPDATE SET
+                        current_cycles = loop_budgets.current_cycles + %s,
+                        updated_at = NOW()
                     """,
-                    (recon_loop_count, self.engagement_id),
+                    (str(uuid.uuid4()), self.engagement_id, recon_loop_count, recon_loop_count),
                 )
 
             conn.commit()
