@@ -127,7 +127,7 @@ class TestDeadLetterQueue:
             "engagement_id": "ENG-001",
         }
         mock_redis.zrevrange.return_value = [b"task-001"]
-        mock_redis.zrange.return_value = [json.dumps(task_data)]
+        mock_redis.zscan_iter.return_value = [(json.dumps(task_data).encode(), 12345.0)]
 
         tasks = dlq.get_failed_tasks(engagement_id="ENG-001", limit=10)
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from database.connection import connect
+from database.connection import get_db
 from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -165,7 +165,10 @@ class StructuredLogger:
                 return
 
         try:
-            conn = connect(self.connection_string)
+            from database.connection import get_db
+
+            db = get_db()
+            conn = db.get_connection()
             cursor = conn.cursor()
 
             try:
@@ -184,7 +187,7 @@ class StructuredLogger:
                 conn.commit()
             finally:
                 cursor.close()
-                conn.close()
+                db.release_connection(conn)
         except Exception as e:
             # Don't fail execution if logging fails
             logger.error("Failed to store log: %s", e)
@@ -334,7 +337,10 @@ class ExecutionSpan:
             return
 
         try:
-            conn = connect(self.connection_string)
+            from database.connection import get_db
+
+            db = get_db()
+            conn = db.get_connection()
             cursor = conn.cursor()
 
             try:
@@ -351,7 +357,7 @@ class ExecutionSpan:
                 conn.commit()
             finally:
                 cursor.close()
-                conn.close()
+                db.release_connection(conn)
         except Exception as e:
             # Don't fail execution if span storage fails
             logger.error("Failed to store span: %s", e)

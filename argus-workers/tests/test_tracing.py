@@ -5,7 +5,7 @@ Validates: Requirements 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2
 """
 import time
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from tracing import (
     ExecutionContext,
@@ -202,8 +202,8 @@ class TestStructuredLogger:
         assert StructuredLogger.EVENT_PARSER_COMPLETED == "parser_completed"
         assert StructuredLogger.EVENT_INTELLIGENCE_DECISION == "intelligence_decision"
 
-    @patch('tracing.connect')
-    def test_log_without_trace_context(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_log_without_trace_context(self, mock_get_db):
         """Test logging without trace context (should not fail)"""
         TraceContext.clear_context()
 
@@ -212,14 +212,16 @@ class TestStructuredLogger:
         logger.log("test_event", "Test message")
 
         # Should not have attempted database connection
-        mock_connect.assert_not_called()
+        mock_get_db.assert_not_called()
 
-    @patch('tracing.connect')
-    def test_log_with_trace_context(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_log_with_trace_context(self, mock_get_db):
         """Test logging with trace context"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         trace_id = str(uuid.uuid4())
@@ -236,12 +238,14 @@ class TestStructuredLogger:
         # Should have executed INSERT
         mock_cursor.execute.assert_called_once()
 
-    @patch('tracing.connect')
-    def test_log_job_started(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_log_job_started(self, mock_get_db):
         """Test log_job_started convenience method"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         trace_id = str(uuid.uuid4())
@@ -257,12 +261,14 @@ class TestStructuredLogger:
 
         mock_cursor.execute.assert_called_once()
 
-    @patch('tracing.connect')
-    def test_log_tool_executed(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_log_tool_executed(self, mock_get_db):
         """Test log_tool_executed convenience method"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         trace_id = str(uuid.uuid4())
@@ -284,12 +290,14 @@ class TestStructuredLogger:
 
         mock_cursor.execute.assert_called_once()
 
-    @patch('tracing.connect')
-    def test_log_parser_completed(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_log_parser_completed(self, mock_get_db):
         """Test log_parser_completed convenience method"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         trace_id = str(uuid.uuid4())
@@ -309,12 +317,14 @@ class TestStructuredLogger:
 
         mock_cursor.execute.assert_called_once()
 
-    @patch('tracing.connect')
-    def test_log_intelligence_decision(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_log_intelligence_decision(self, mock_get_db):
         """Test log_intelligence_decision convenience method"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         trace_id = str(uuid.uuid4())
@@ -345,12 +355,14 @@ class TestExecutionSpan:
         assert ExecutionSpan.SPAN_INTELLIGENCE_EVALUATION == "intelligence_evaluation"
         assert ExecutionSpan.SPAN_ORCHESTRATOR_STEP == "orchestrator_step"
 
-    @patch('tracing.connect')
-    def test_span_context_manager(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_span_context_manager(self, mock_get_db):
         """Test span context manager records duration"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         trace_id = str(uuid.uuid4())
@@ -375,8 +387,8 @@ class TestExecutionSpan:
             call_args = mock_cursor.execute.call_args
             assert "test_span" in str(call_args)
 
-    @patch('tracing.connect')
-    def test_span_without_trace_context(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_span_without_trace_context(self, mock_get_db):
         """Test span without trace context (should not store)"""
         TraceContext.clear_context()
 
@@ -386,7 +398,7 @@ class TestExecutionSpan:
             pass
 
         # Should not have attempted database connection
-        mock_connect.assert_not_called()
+        mock_get_db.get_connection.assert_not_called()
 
 
 class TestConvenienceFunctions:
@@ -411,12 +423,14 @@ class TestConvenienceFunctions:
 class TestIntegration:
     """Integration tests for tracing"""
 
-    @patch('tracing.connect')
-    def test_full_tracing_flow(self, mock_connect):
+    @patch('database.connection.get_db')
+    def test_full_tracing_flow(self, mock_get_db):
         """Test complete tracing flow from job start to completion"""
+        mock_db = MagicMock()
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_connect.return_value = mock_conn
+        mock_get_db.return_value = mock_db
+        mock_db.get_connection.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         manager = TracingManager("test_connection_string")

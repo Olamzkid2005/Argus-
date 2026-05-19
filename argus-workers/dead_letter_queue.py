@@ -8,6 +8,7 @@ Uses Redis for temporary storage and PostgreSQL for persistence.
 import contextlib
 import json
 import logging
+import threading
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -150,16 +151,24 @@ class DeadLetterQueue:
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{engagement_id}"
                 task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
 
-                tasks = []
-                main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 task_id_set = {
                     tid.decode() if isinstance(tid, bytes) else tid
                     for tid in task_ids
                 }
-                for raw_task in self.redis.zrange(main_key, 0, -1):
-                    task = json.loads(raw_task)
+                if not task_id_set:
+                    return []
+
+                tasks = []
+                main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
+                for raw_task in self.redis.zscan_iter(main_key):
+                    member = raw_task[0]
+                    if isinstance(member, bytes):
+                        member = member.decode()
+                    task = json.loads(member)
                     if task["task_id"] in task_id_set:
                         tasks.append(task)
+                        if len(tasks) >= len(task_id_set):
+                            break
                 return tasks
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
@@ -244,11 +253,14 @@ class DeadLetterQueue:
 
 # Singleton instance
 _dlq: DeadLetterQueue | None = None
+_dlq_lock = threading.Lock()
 
 
 def get_dlq() -> DeadLetterQueue:
     """Get the singleton dead letter queue"""
     global _dlq
     if _dlq is None:
-        _dlq = DeadLetterQueue()
+        with _dlq_lock:
+            if _dlq is None:
+                _dlq = DeadLetterQueue()
     return _dlq

@@ -14,6 +14,7 @@ Requirements: 4.9
 """
 import logging
 import os
+import threading
 from enum import Enum
 from typing import Any
 
@@ -133,24 +134,15 @@ class FeatureFlags:
     def _load_flag_from_db(self, flag_name: str) -> bool | None:
         """Load flag value from database. Returns None if not found."""
         try:
-            if self.db:
-                with self.db.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT enabled FROM feature_flags WHERE flag_name = %s",
-                        (flag_name,)
-                    )
-                    row = cursor.fetchone()
-                    return row[0] if row else None
-            else:
-                from database.connection import get_db
-                db = get_db()
-                with db.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT enabled FROM feature_flags WHERE flag_name = %s",
-                        (flag_name,)
-                    )
-                    row = cursor.fetchone()
-                    return row[0] if row else None
+            from database.connection import get_db
+            db = get_db()
+            with db.cursor() as cursor:
+                cursor.execute(
+                    "SELECT enabled FROM feature_flags WHERE flag_name = %s",
+                    (flag_name,)
+                )
+                row = cursor.fetchone()
+                return row[0] if row else None
         except Exception:
             return None
 
@@ -181,13 +173,16 @@ class FeatureFlags:
 
 # Global instance for convenience
 _global_flags: FeatureFlags | None = None
+_global_flags_lock = threading.Lock()
 
 
 def get_feature_flags(db_connection=None) -> FeatureFlags:
     """Get or create the global FeatureFlags instance."""
     global _global_flags
     if _global_flags is None:
-        _global_flags = FeatureFlags(db_connection)
+        with _global_flags_lock:
+            if _global_flags is None:
+                _global_flags = FeatureFlags(db_connection)
     return _global_flags
 
 

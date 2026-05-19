@@ -5,6 +5,7 @@ Implements Model Context Protocol for standardized tool calling
 import logging
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -272,11 +273,14 @@ class MCPServer:
 
 # Global MCP server instance
 _mcp_server: MCPServer | None = None
+_mcp_server_lock = threading.Lock()
 
 
 def get_mcp_server() -> MCPServer:
     """Get the singleton MCP server instance."""
     global _mcp_server
     if _mcp_server is None:
-        _mcp_server = MCPServer()
+        with _mcp_server_lock:
+            if _mcp_server is None:
+                _mcp_server = MCPServer()
     return _mcp_server

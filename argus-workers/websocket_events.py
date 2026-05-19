@@ -551,13 +551,16 @@ class WebSocketEventPublisher:
 
 # Singleton instance
 _publisher: WebSocketEventPublisher | None = None
+_publisher_lock = threading.Lock()
 
 
 def get_websocket_publisher() -> WebSocketEventPublisher:
     """Get the singleton WebSocket event publisher"""
     global _publisher
     if _publisher is None:
-        _publisher = WebSocketEventPublisher()
+        with _publisher_lock:
+            if _publisher is None:
+                _publisher = WebSocketEventPublisher()
     return _publisher
 
 

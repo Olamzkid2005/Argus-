@@ -228,24 +228,11 @@ class IDORAgent(SpecialistAgent):
 
         # 3. web_scanner IDOR-focused checks on all targets
         if targets:
-            try:
-                self.tools_attempted.add("web_scanner")
-                from tools.web_scanner import WebScanner
-
-                logger.info(f"[IDOR] Running web_scanner on {len(targets)} targets")
-                scanner = WebScanner()
-                for target in targets:
-                    try:
-                        emit_swarm_agent_action(
-                            self.engagement_id, self.DOMAIN, "web_scanner",
-                            reasoning=f"IDOR-focused scan of {target}",
-                        )
-                        web_findings = scanner.scan(target)
-                        all_findings.extend(web_findings)
-                    except Exception as e:
-                        logger.warning(f"[IDOR] web_scanner failed for {target}: {e}")
-            except ImportError:
-                logger.debug("[IDOR] WebScanner not available, skipping")
+            self.tools_attempted.add("web_scanner")
+            logger.info(f"[IDOR] Running web_scanner on {len(targets)} targets")
+            for target in targets:
+                web_findings = self._run_tool("web_scanner", [target], timeout=TOOL_TIMEOUT_LONG)
+                all_findings.extend(web_findings)
 
         logger.info(f"[IDOR] Total findings: {len(all_findings)}")
         return self._tag_findings(all_findings)
@@ -325,24 +312,11 @@ class AuthAgent(SpecialistAgent):
 
         # 3. Password reset / login flow testing via web_scanner
         if scan_targets:
-            try:
-                self.tools_attempted.add("web_scanner")
-                from tools.web_scanner import WebScanner
-
-                logger.info(f"[Auth] Running web_scanner on {len(scan_targets)} targets")
-                scanner = WebScanner()
-                for target in scan_targets:
-                    try:
-                        emit_swarm_agent_action(
-                            self.engagement_id, self.DOMAIN, "web_scanner",
-                            reasoning=f"Auth-focused scan of {target}",
-                        )
-                        web_findings = scanner.scan(target)
-                        all_findings.extend(web_findings)
-                    except Exception as e:
-                        logger.warning(f"[Auth] web_scanner failed for {target}: {e}")
-            except ImportError:
-                logger.debug("[Auth] WebScanner not available, skipping")
+            self.tools_attempted.add("web_scanner")
+            logger.info(f"[Auth] Running web_scanner on {len(scan_targets)} targets")
+            for target in scan_targets:
+                web_findings = self._run_tool("web_scanner", [target], timeout=TOOL_TIMEOUT_LONG)
+                all_findings.extend(web_findings)
 
         logger.info(f"[Auth] Total findings: {len(all_findings)}")
         return self._tag_findings(all_findings)

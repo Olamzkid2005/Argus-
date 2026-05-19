@@ -192,6 +192,13 @@ class StreamManager(EventBus):
                         q.put_nowait(event)
                     except queue.Full:
                         self._dropped_count[engagement_id] = self._dropped_count.get(engagement_id, 0) + 1
+                        dropped = self._dropped_count[engagement_id]
+                        if dropped <= 5 or dropped % 100 == 0:
+                            logger.warning(
+                                "StreamManager: queue full for engagement %s, "
+                                "dropping event (%d dropped total)",
+                                engagement_id, dropped,
+                            )
                         dead_queues.append(q)
 
                 for q in dead_queues:

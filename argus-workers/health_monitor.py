@@ -7,6 +7,7 @@ Also tracks per-tool health from the tool_metrics table.
 
 import logging
 import os
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -229,13 +230,16 @@ class WorkerHealthMonitor:
 
 # Singleton instance
 _health_monitor: WorkerHealthMonitor | None = None
+_health_monitor_lock = threading.Lock()
 
 
 def get_health_monitor(worker_id: str | None = None) -> WorkerHealthMonitor:
     """Get singleton health monitor instance"""
     global _health_monitor
     if _health_monitor is None:
-        _health_monitor = WorkerHealthMonitor(worker_id=worker_id)
+        with _health_monitor_lock:
+            if _health_monitor is None:
+                _health_monitor = WorkerHealthMonitor(worker_id=worker_id)
     return _health_monitor
 
 
@@ -332,11 +336,14 @@ class ToolHealthTracker:
 
 
 _tool_health_tracker: ToolHealthTracker | None = None
+_tool_health_tracker_lock = threading.Lock()
 
 
 def get_tool_health_tracker(db_conn: str | None = None) -> ToolHealthTracker:
     """Get singleton tool health tracker instance."""
     global _tool_health_tracker
     if _tool_health_tracker is None:
-        _tool_health_tracker = ToolHealthTracker(db_connection_string=db_conn)
+        with _tool_health_tracker_lock:
+            if _tool_health_tracker is None:
+                _tool_health_tracker = ToolHealthTracker(db_connection_string=db_conn)
     return _tool_health_tracker
