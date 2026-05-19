@@ -159,6 +159,7 @@ class EngagementStateMachine:
             trace_id: Distributed trace ID for causality chain
         """
         conn = self._get_connection()
+        cursor = None
 
         try:
             cursor = conn.cursor()
@@ -240,7 +241,6 @@ class EngagementStateMachine:
                 )
 
             conn.commit()
-            cursor.close()
 
         except Exception as e:
             if conn:
@@ -248,6 +248,8 @@ class EngagementStateMachine:
             logger.error(f"Failed to persist state transition for engagement {self.engagement_id}: {e}")
             raise
         finally:
+            if cursor:
+                cursor.close()
             if conn and not self._external_conn:
                 self._release_connection(conn)
 

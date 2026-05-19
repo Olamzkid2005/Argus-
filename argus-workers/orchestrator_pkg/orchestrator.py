@@ -203,7 +203,9 @@ class Orchestrator:
         slog.tool_complete("orchestrator.run_recon", success=True, findings=len(findings))
 
         findings_count = len(findings)
-        self._save_findings(findings)
+        failed_saves = self._save_findings(findings)
+        if failed_saves > 0:
+            slog.warning(f"{failed_saves}/{findings_count} recon findings failed to save")
 
         if recon_context:
             try:
@@ -241,9 +243,15 @@ class Orchestrator:
             finding_type, {"owasp": "N/A", "cwe": "N/A"}
         )
 
-    def _save_findings(self, findings: list[dict]):
+    def _save_findings(self, findings: list[dict]) -> int:
+        """Save findings to the database.
+
+        Returns:
+            Number of findings that failed to save. 0 means all succeeded.
+            Callers should check this and abort the phase if too many fail.
+        """
         if not self.finding_repo or not findings:
-            return
+            return 0
 
         # Normalize heterogeneous inputs to plain dicts
         normalized_inputs: list[dict] = []
@@ -398,7 +406,9 @@ class Orchestrator:
                 continue
 
         if failed_count > 0:
-            logger.error("_save_findings: %d of %d findings failed to save", failed_count, len(findings))
+            logger.error("_save_findings: %d of %d findings failed to save for engagement %s",
+                         failed_count, len(findings), self.engagement_id)
+        return failed_count
 
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column.
@@ -522,14 +532,18 @@ class Orchestrator:
                     _scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
                     _original_call = agent.registry.call
                     def scoped_call(name, _scope_validator=_scope_validator, _original_call=_original_call, **kwargs):
-                        tgt = kwargs.get("target", "")
-                        if tgt:
-                            try:
-                                _scope_validator.validate_target(tgt)
-                            except ScopeViolationError as e:
-                                logger.warning(f"Scope violation blocked: {e}")
-                                emit_thinking(self.engagement_id, f"Blocked: {tgt} is out of scope")
-                                return AgentResult(tool=name, success=False, error=f"Scope violation: {e}")
+                        # Check all common target-bearing parameter names; tools may
+                        # use 'url', 'host', 'domain', etc. instead of 'target'.
+                        _target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+                        for _param in _target_params:
+                            tgt = kwargs.get(_param, "")
+                            if tgt:
+                                try:
+                                    _scope_validator.validate_target(tgt)
+                                except ScopeViolationError as e:
+                                    logger.warning(f"Scope violation blocked ({_param}): {e}")
+                                    emit_thinking(self.engagement_id, f"Blocked: {tgt} is out of scope")
+                                    return AgentResult(tool=name, success=False, error=f"Scope violation: {e}")
                         return _original_call(name, **kwargs)
                     agent.registry.call = scoped_call
 
@@ -609,7 +623,9 @@ class Orchestrator:
 
         slog.info(f"Scan mode: {scan_mode}, total findings: {len(findings)}")
         findings_count = len(findings)
-        self._save_findings(findings)
+        failed_saves = self._save_findings(findings)
+        if failed_saves > 0:
+            slog.warning(f"{failed_saves}/{findings_count} scan findings failed to save")
 
         from llm_client import load_llm_setting
         llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
@@ -1104,7 +1120,9 @@ class Orchestrator:
             raise
 
         findings_count = len(findings)
-        self._save_findings(findings)
+        failed_saves = self._save_findings(findings)
+        if failed_saves > 0:
+            slog.warning(f"{failed_saves}/{findings_count} repo scan findings failed to save")
         next_state = "scanning"
         if findings_count == 0:
             logger.info(f"Repository scan completed with no findings for {repo_url}")

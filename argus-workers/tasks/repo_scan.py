@@ -21,7 +21,6 @@ from distributed_lock import DistributedLock, LockContext
 from orchestrator import Orchestrator
 from state_machine import EngagementStateMachine
 from tracing import TracingManager
-from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -326,32 +325,12 @@ def enrich_findings_with_blame(repo_path, findings):
 
 
 def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
-    """
-    Query the current engagement state from the database.
+    """Query the current engagement state from the database.
 
-    Args:
-        engagement_id: Engagement ID
-        db_conn_string: Database connection string
-
-    Returns:
-        Current engagement status string
+    Delegates to tasks.utils.get_engagement_state (canonical implementation).
     """
-    try:
-        valid_id = validate_uuid(engagement_id, "engagement_id")
-        conn = connect(db_conn_string)
-        try:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
-                row = cursor.fetchone()
-                return row[0] if row else "created"
-            finally:
-                cursor.close()
-        finally:
-            conn.close()
-    except (ValueError, OSError):
-        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
-        return "created"
+    from tasks.utils import get_engagement_state
+    return get_engagement_state(engagement_id, db_conn_string)
 
 
 def generate_cyclonedx_sbom(repo_path, dependencies):

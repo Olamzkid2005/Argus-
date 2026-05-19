@@ -1,9 +1,9 @@
-"""
-Task utilities - Shared helpers for Celery tasks.
+"""Task utilities - Shared helpers for Celery tasks.
 
 Provides:
 - Redis-based ReconContext persistence across the recon → scan boundary
 - LlmCostTracker for per-engagement LLM budget tracking
+- get_engagement_state for querying engagement status from the database
 """
 import contextlib
 import json
@@ -166,6 +166,44 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
         with contextlib.suppress(Exception):
             r.expire(key, RECON_CONTEXT_TTL)
     return recon_context
+
+
+def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) -> str:
+    """
+    Query the current engagement state from the database.
+
+    Canonical implementation — the source of truth.
+    Previously duplicated in tasks/base.py, tasks/report.py, tasks/repo_scan.py.
+
+    Args:
+        engagement_id: Engagement UUID
+        db_conn_string: Database connection string (auto-resolves from env if not provided)
+
+    Returns:
+        Current engagement status string, or "created" if not found or on error
+    """
+    if not db_conn_string:
+        db_conn_string = os.getenv("DATABASE_URL")
+    if not db_conn_string:
+        return "created"
+    try:
+        from database.connection import connect
+        from utils.validation import validate_uuid
+        valid_id = validate_uuid(engagement_id, "engagement_id")
+        conn = connect(db_conn_string)
+        try:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
+                row = cursor.fetchone()
+                return row[0] if row else "created"
+            finally:
+                cursor.close()
+        finally:
+            conn.close()
+    except (ValueError, OSError):
+        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
+        return "created"
 
 
 def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:

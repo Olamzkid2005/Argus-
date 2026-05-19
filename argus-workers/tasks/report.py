@@ -17,7 +17,6 @@ from compliance_reporting import ComplianceReportGenerator
 from database.connection import connect
 from tasks.base import task_context
 from tracing import TracingManager
-from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -119,33 +118,12 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
 
 
 def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
-    """
-    Query the current engagement state from the database.
+    """Query the current engagement state from the database.
 
-    Args:
-        engagement_id: Engagement ID
-        db_conn_string: Database connection string
-
-    Returns:
-        Current engagement status string
+    Delegates to tasks.utils.get_engagement_state (canonical implementation).
     """
-    try:
-        # Validate UUID before DB query to prevent InvalidTextRepresentation errors
-        valid_id = validate_uuid(engagement_id, "engagement_id")
-        conn = connect(db_conn_string)
-        try:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
-                row = cursor.fetchone()
-                return row[0] if row else "created"
-            finally:
-                cursor.close()
-        finally:
-            conn.close()
-    except (ValueError, OSError):
-        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
-        return "created"
+    from tasks.utils import get_engagement_state
+    return get_engagement_state(engagement_id, db_conn_string)
 
 
 @app.task(bind=True, name="tasks.report.generate_scheduled_reports")

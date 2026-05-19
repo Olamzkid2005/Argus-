@@ -298,24 +298,9 @@ def task_error_boundary(
 
 
 def _get_engagement_state(engagement_id: str, db_conn_string: str = None) -> str:
-    """Query the current engagement state from the database."""
-    if not db_conn_string:
-        db_conn_string = os.getenv("DATABASE_URL")
-    try:
-        from database.connection import connect
-        from utils.validation import validate_uuid
-        valid_id = validate_uuid(engagement_id, "engagement_id")
-        conn = connect(db_conn_string)
-        try:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
-                row = cursor.fetchone()
-                return row[0] if row else "created"
-            finally:
-                cursor.close()
-        finally:
-            conn.close()
-    except (ValueError, OSError):
-        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
-        return "created"
+    """Query the current engagement state from the database.
+
+    Delegates to tasks.utils.get_engagement_state (canonical implementation).
+    """
+    from tasks.utils import get_engagement_state
+    return get_engagement_state(engagement_id, db_conn_string)
