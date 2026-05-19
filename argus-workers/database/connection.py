@@ -219,7 +219,7 @@ class ConnectionManager:
             self.release_connection(conn)
 
     @contextmanager
-    def cursor(self, _commit: bool = True, org_id: str | None = None):
+    def cursor(self, commit: bool = True, org_id: str | None = None):
         """
         Context manager for automatic cursor and connection lifecycle.
 
@@ -231,8 +231,12 @@ class ConnectionManager:
             with db.cursor() as cursor:
                 cursor.execute("SELECT ...")
                 rows = cursor.fetchall()
+
+            with db.cursor(commit=False) as cursor:
+                cursor.execute("UPDATE ...")
+                conn.commit()  # manual control
         """
-        with self.connection(org_id=org_id) as conn:
+        with self.connection(commit=commit, org_id=org_id) as conn:
             cursor = conn.cursor()
             try:
                 yield cursor

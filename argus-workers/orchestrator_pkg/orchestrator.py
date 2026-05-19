@@ -268,6 +268,7 @@ class Orchestrator:
         if not findings:
             return
 
+        from database.connection import db_cursor
         from database.services.embedding_service import EmbeddingService
         emb_svc = EmbeddingService(self.engagement_id)
 
@@ -329,7 +330,6 @@ class Orchestrator:
                     similar = emb_svc.find_existing_similar(dedup_text) if dedup_text.strip() else None
                     if similar:
                         try:
-                            from database.connection import db_cursor
                             with db_cursor() as cursor:
                                 cursor.execute(
                                     "UPDATE findings SET last_seen_at = NOW(), severity = %s, confidence = %s, evidence = %s, source = %s, bugbounty_source = %s WHERE id = %s",

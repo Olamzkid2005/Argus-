@@ -210,7 +210,7 @@ def generate_scheduled_reports(self):
                         report["org_id"],
                         report["created_by"],
                         report["id"],
-                        str({
+                        json.dumps({
                             "recipients": report["email_recipients"],
                             "report_name": report["name"],
                         }),
