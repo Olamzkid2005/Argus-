@@ -288,7 +288,9 @@ class Orchestrator:
                 # so the Intelligence Engine applies the confidence cap.
                 if self._bug_bounty_mode:
                     finding["bugbounty_source"] = True
-                    finding["source"] = "bugbounty"
+                    # Preserve original source — don't overwrite with "bugbounty"
+                    if "source" not in finding or finding["source"] == "bugbounty":
+                        finding["source"] = "bugbounty"
 
                 if finding.get("cvss_score") is None:
                     try:
@@ -959,8 +961,19 @@ class Orchestrator:
         if approved_actions and not denied_actions:
             next_state = "recon"
         elif approved_actions:
-            next_state = "recon"
-            logger.info("Deferred %d action(s): budget exhausted", len(denied_actions))
+            # Some actions were denied — only loop back to recon if at least one
+            # approved action is meaningful (not just a tail action like llm_review).
+            # Otherwise all remaining actions are budget-exhausted and looping back
+            # wastes a full recon cycle for no benefit.
+            meaningful = [a for a in approved_actions if a.get("type") in ("recon_expand", "deep_scan", "auth_focused_scan")]
+            if meaningful:
+                next_state = "recon"
+                logger.info("Deferred %d action(s): budget exhausted. Approved %d meaningful action(s)",
+                            len(denied_actions), len(meaningful))
+            else:
+                logger.info("All remaining actions are budget-exhausted — advancing to reporting. "
+                            "Denied: %d, Approved (tail only): %d",
+                            len(denied_actions), len(approved_actions))
 
         slog.tool_complete("orchestrator.run_analysis", success=True, findings=len(evaluation.get("scored_findings", [])))
         slog.info(f"Next state: {next_state}, actions: {len(actions)}, approved: {len(approved_actions)}")

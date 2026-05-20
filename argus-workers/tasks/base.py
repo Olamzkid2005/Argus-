@@ -183,6 +183,9 @@ def task_context(
                             )
                             new_sm.transition("failed", f"{job_type} failed: {e}")
                         slog.phase_complete(job_type, status="failed", reason=str(e)[:100])
+                        # Mark transition as done to prevent double-transition
+                        # in the Celery task's BaseTask.on_failure hook.
+                        task._failed_transition_done = True
                 except Exception as sm_error:
                     logger.error("State transition to failed error: %s", sm_error)
             raise

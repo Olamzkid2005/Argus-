@@ -87,11 +87,12 @@ class LLMClient:
         self._openai_client = None
 
         # Rate limiting: max 60 requests per minute per provider
-        # In-process rate limiter — does not coordinate across workers
-        # TODO: Replace with Redis-based rate limiter for multi-worker deployments
+        # Uses Redis sorted-set sliding window for cross-worker coordination.
+        # Falls back to in-process rate limiter when Redis is unavailable.
         self._rate_limit_max = 60
         self._rate_limit_window = 60.0
         self._request_timestamps: list[float] = []
+        self._redis_url = redis_url
 
         # Circuit breaker: after N consecutive failures, skip calls for cooldown
         self._circuit_failures = 0
@@ -162,15 +163,52 @@ class LLMClient:
         ]
 
     def _check_rate_limit(self):
-        """Simple in-process rate limiter: max 60 requests/min."""
+        """Rate limiter: max 60 requests/min per provider.
+
+        Uses Redis sorted-set sliding window for cross-worker coordination.
+        Falls back to in-process rate limiter when Redis is unavailable.
+        """
         now = time.time()
         window_start = now - self._rate_limit_window
-        # Remove timestamps outside the current window
+
+        # Try Redis-based rate limiter first for cross-worker coordination
+        if self._redis_url:
+            try:
+                import uuid
+                import redis as redis_module
+
+                r = redis_module.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)
+                rate_key = f"llm_rate:{self.provider}"
+
+                # Remove timestamps outside the window
+                r.zremrangebyscore(rate_key, 0, window_start)
+
+                # Count requests in window
+                count = r.zcount(rate_key, window_start, now)
+
+                if count >= self._rate_limit_max:
+                    # Get earliest timestamp to calculate sleep time
+                    earliest = r.zrange(rate_key, 0, 0, withscores=True)
+                    if earliest:
+                        sleep_time = earliest[0][1] + self._rate_limit_window - now
+                        if sleep_time > 0:
+                            logger.warning("LLM rate limit hit (cross-worker) — sleeping %.1fs", sleep_time)
+                            time.sleep(sleep_time)
+
+                # Record this request
+                member = f"{uuid.uuid4()}:{now}"
+                r.zadd(rate_key, {member: now})
+                r.expire(rate_key, int(self._rate_limit_window) + 10)
+                return
+            except Exception:
+                logger.debug("Redis rate limiter unavailable — falling back to in-process")
+
+        # Fallback: in-process rate limiter
         self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
         if len(self._request_timestamps) >= self._rate_limit_max:
             sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
             if sleep_time > 0:
-                logger.warning("LLM rate limit hit — sleeping %.1fs", sleep_time)
+                logger.warning("LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time)
                 time.sleep(sleep_time)
         self._request_timestamps.append(now)
 
@@ -271,6 +309,9 @@ class LLMClient:
                         else:
                             return str(data)
 
+            except LLMUnavailableError:
+                # Don't retry — propagate immediately
+                raise
             except Exception as e:
                 last_error = e
                 self._circuit_failures += 1
@@ -410,6 +451,9 @@ class LLMClient:
                             cost_usd=cost,
                         )
 
+            except LLMUnavailableError:
+                # Don't retry — propagate immediately
+                raise
             except Exception as e:
                 last_error = e
                 self._circuit_failures += 1

@@ -356,6 +356,57 @@ class ScanDiffEngine:
                 with contextlib.suppress(Exception):
                     conn.close()
 
+    def batch_mark_fixed(
+        self, finding_ids: list[str], closed_in_engagement_id: str
+    ) -> int:
+        """
+        Batch-mark multiple findings as fixed in a single transaction.
+
+        Replaces N separate mark_fixed() calls with one bulk UPDATE,
+        reducing N round-trips to 1.
+
+        Args:
+            finding_ids: List of finding UUIDs to mark fixed
+            closed_in_engagement_id: Engagement where findings were confirmed fixed
+
+        Returns:
+            Number of findings updated
+        """
+        if not finding_ids:
+            return 0
+
+        conn = None
+        try:
+            from database.connection import connect
+
+            conn = connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE findings
+                SET status = 'fixed',
+                    closed_at = NOW(),
+                    closed_in_engagement_id = %s
+                WHERE id = ANY(%s) AND status != 'fixed'
+                """,
+                (closed_in_engagement_id, finding_ids),
+            )
+            conn.commit()
+            return cursor.rowcount
+        except Exception as e:
+            logger.error(
+                "Failed to batch-mark %d findings as fixed: %s",
+                len(finding_ids), e,
+            )
+            if conn:
+                with contextlib.suppress(Exception):
+                    conn.rollback()
+            return 0
+        finally:
+            if conn:
+                with contextlib.suppress(Exception):
+                    conn.close()
+
     def store_diff_in_profile(
         self, org_id: str, domain: str, diff: dict
     ) -> bool:

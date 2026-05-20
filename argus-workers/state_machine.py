@@ -158,10 +158,11 @@ class EngagementStateMachine:
             reason: Reason for transition
             trace_id: Distributed trace ID for causality chain
         """
-        conn = self._get_connection()
+        conn = None
         cursor = None
 
         try:
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             # Lock the engagement row to prevent concurrent state transitions

@@ -69,8 +69,8 @@ LLM_AGENT_CONTEXT_MAX_TOKENS = 3500        # max context passed to LLM
 # LLM cost constants — model-specific. Adjust when changing LLM provider/model.
 # Current values: gpt-4o-mini pricing ($0.150/1M input, $0.600/1M output)
 LLM_AGENT_MAX_COST_USD = float(os.getenv("LLM_AGENT_MAX_COST_USD", "0.25"))
-LLM_AGENT_COST_PER_1K_INPUT = 0.000150     # gpt-4o-mini input cost
-LLM_AGENT_COST_PER_1K_OUTPUT = 0.000600    # gpt-4o-mini output cost
+LLM_AGENT_COST_PER_1K_INPUT = float(os.getenv("LLM_AGENT_COST_PER_1K_INPUT", "0.000150"))     # gpt-4o-mini input cost
+LLM_AGENT_COST_PER_1K_OUTPUT = float(os.getenv("LLM_AGENT_COST_PER_1K_OUTPUT", "0.000600"))    # gpt-4o-mini output cost
 
 # ── Mitigations: Timeout & Retry ────────────────────────────────────────
 LLM_AGENT_TIMEOUT_SECONDS = int(os.getenv("LLM_AGENT_TIMEOUT_SECONDS", "30"))

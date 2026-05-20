@@ -74,11 +74,17 @@ def run_scan_diff(
             prev_engagement_id, new_engagement_id, profile
         )
 
-        # Auto-close fixed findings
-        for finding in diff_result.get(engine.CAT_FIXED, []):
-            finding_id = finding.get("id")
-            if finding_id:
-                engine.mark_fixed(finding_id, new_engagement_id)
+        # Auto-close fixed findings via batch UPDATE (1 query vs N queries)
+        fixed_ids = [
+            f["id"] for f in diff_result.get(engine.CAT_FIXED, [])
+            if f.get("id")
+        ]
+        if fixed_ids:
+            updated = engine.batch_mark_fixed(fixed_ids, new_engagement_id)
+            logger.info(
+                "Batch-marked %d findings as fixed for engagement %s",
+                updated, new_engagement_id,
+            )
 
         # Update fixed fingerprints for regression tracking
         fixed_findings = diff_result.get(engine.CAT_FIXED, [])

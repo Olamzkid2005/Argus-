@@ -187,7 +187,7 @@ class IDORAgent(SpecialistAgent):
         )
         if specific:
             return True
-        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc))
+        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 25 and self._has_dynamic_surface(rc))
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -255,7 +255,7 @@ class AuthAgent(SpecialistAgent):
         )
         if specific:
             return True
-        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 10 and self._has_dynamic_surface(rc))
+        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 25 and self._has_dynamic_surface(rc))
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -550,9 +550,18 @@ class SwarmOrchestrator:
                 # calls shutdown(wait=True) which blocks indefinitely on hung threads.
                 pool.shutdown(wait=False, cancel_futures=True)
 
-            # Cancel any remaining futures (best-effort — may not stop running threads)
+            # Cancel any remaining futures (best-effort — may not stop running threads).
+            # ThreadPoolExecutor.cancel() only cancels futures not yet started.
+            # Already-running threads (e.g. long-running sqlmap subprocess) will
+            # NOT be interrupted — they continue consuming resources in the background.
+            # TODO: Convert long-running tools to process-based execution so they
+            # can be killed on timeout via subprocess.terminate().
             for future, domain in futures_map.items():
                 if domain not in completed:
+                    logger.warning(
+                        "Swarm: agent %s future cancelled — thread may still be running in background",
+                        domain,
+                    )
                     future.cancel()
 
         deduped = self._deduplicate(all_findings)
