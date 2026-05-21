@@ -129,8 +129,8 @@ class WebSocketScanner:
             try:
                 async with websockets.connect(
                     ws_url,
-                    extra_headers={"Origin": origin},
-                    open_timeout=self.timeout,
+                additional_headers={"Origin": origin},
+                open_timeout=self.timeout,
                 ) as ws:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=self.timeout)
@@ -152,14 +152,14 @@ class WebSocketScanner:
                     })
                     await ws.close()
             except InvalidStatus:
-                pass
+                pass  # Server rejected - expected for secure servers
             except (OSError, TimeoutError):
-                pass
+                pass  # Network error - server unreachable
             except WebSocketException:
-                pass
+                pass  # WebSocket protocol error
             except Exception:
-                logger.debug(
-                    "Origin test error for %s with origin %s",
+                logger.warning(
+                    "Unexpected error in origin validation test for %s with origin %s",
                     ws_url,
                     origin,
                     exc_info=True,
@@ -198,7 +198,7 @@ class WebSocketScanner:
         except WebSocketException:
             pass
         except Exception:
-            logger.debug("Auth test error for %s", ws_url, exc_info=True)
+            logger.warning("Unexpected error in auth test for %s", ws_url, exc_info=True)
 
         return findings
 
@@ -251,7 +251,7 @@ class WebSocketScanner:
             except WebSocketException:
                 pass
             except Exception:
-                logger.debug("Injection test error for %s", ws_url, exc_info=True)
+                logger.warning("Unexpected error in injection test for %s", ws_url, exc_info=True)
 
         return findings
 
@@ -310,7 +310,7 @@ class WebSocketScanner:
         except WebSocketException:
             pass
         except Exception:
-            logger.debug("Rate limit test error for %s", ws_url, exc_info=True)
+            logger.warning("Unexpected error in rate limit test for %s", ws_url, exc_info=True)
 
         return findings
 

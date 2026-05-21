@@ -34,4 +34,6 @@ Thumbs.db
 *.swp
 *.swo
 Argus_Improvement_Plan.docx
-celerybeat-schedule
+celerybeat-schedule*
+celerybeat-schedule-shm
+celerybeat-schedule-wal

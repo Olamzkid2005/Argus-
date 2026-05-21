@@ -235,8 +235,8 @@ class ToolRunner:
 
     def _resolve_tool_path(self, tool: str) -> str:
         """
-        Resolve the full path to a tool binary by checking common locations
-        and the current environment PATH.
+        Resolve the full path to a tool binary by checking the ToolCache,
+        common locations, and the current environment PATH.
 
         Args:
             tool: Tool name (e.g., 'nuclei', 'httpx')
@@ -246,6 +246,18 @@ class ToolRunner:
         """
         self._validate_tool_name(tool)
         import shutil
+
+        # 1. Check ToolCache first (cached/pre-installed tools)
+        try:
+            from tools.tool_cache import get_cached_tool
+            cached_path = get_cached_tool(tool)
+            if cached_path and cached_path.exists():
+                logger.debug(f"Resolved {tool} via ToolCache: {cached_path}")
+                return str(cached_path)
+        except ImportError:
+            pass  # ToolCache not available — skip
+        except Exception:
+            pass
 
         # Build a comprehensive PATH that includes venv/bin and ~/go/bin
         # so tools installed via pip or go install are always findable

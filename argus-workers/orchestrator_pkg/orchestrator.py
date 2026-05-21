@@ -19,6 +19,7 @@ from config.constants import (
 from database.connection import connect
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.finding_repository import FindingRepository
+from database.repositories.rate_limit_repository import RateLimitRepository
 from llm_client import LLMClient
 from mcp_server import get_mcp_server
 from models.recon_context import ReconContext
@@ -76,6 +77,7 @@ class Orchestrator:
         self.normalizer = FindingNormalizer()
         self.finding_repo = FindingRepository(db_conn) if db_conn else None
         self.engagement_repo = EngagementRepository(db_conn) if db_conn else None
+        self.rate_limit_repo = RateLimitRepository(db_conn) if db_conn else None
 
         self.llm_client = None
         self.llm_payload_generator = None
@@ -105,13 +107,39 @@ class Orchestrator:
         self._bug_bounty_mode = False
 
     def _register_mcp_tools(self):
-        from tool_definitions import build_mcp_tool_definitions
-        for tool in build_mcp_tool_definitions():
-            self.mcp.register_tool(tool)
+        """
+        Register tools with the MCP server.
+
+        Uses MCPToolBridge to register tools that route through ToolRunner,
+        providing sandboxing, circuit breakers, and metrics recording.
+        Falls back to direct registration via build_mcp_tool_definitions().
+        """
+        try:
+            from tools.mcp_bridge import MCPToolBridge
+            self.mcp_bridge = MCPToolBridge(
+                tool_runner=self.tool_runner,
+                engagement_id=self.engagement_id,
+            )
+        except Exception as e:
+            logger.warning(f"MCPToolBridge failed to initialize (falling back to direct registration): {e}")
+            self.mcp_bridge = None
+            from tool_definitions import build_mcp_tool_definitions
+            for tool in build_mcp_tool_definitions():
+                self.mcp.register_tool(tool)
 
     def mcp_run(self, tool: str, arguments: dict = None) -> dict:
+        """
+        Run a tool via MCP, routing through MCPToolBridge when available.
+
+        When MCPToolBridge is initialized, calls route through ToolRunner
+        for sandboxing, circuit breakers, and metrics. Otherwise falls back
+        to the direct MCP server call_tool().
+        """
         emit_tool_start(self.engagement_id, tool, list((arguments or {}).keys()))
-        result = self.mcp.call_tool(tool, arguments)
+        if hasattr(self, 'mcp_bridge') and self.mcp_bridge is not None:
+            result = self.mcp_bridge.call_via_mcp(tool, arguments or {})
+        else:
+            result = self.mcp.call_tool(tool, arguments)
         success = not result.get("isError", False)
         emit_tool_complete(
             self.engagement_id, tool, success,
@@ -401,6 +429,42 @@ class Orchestrator:
                         })
                     except Exception as hook_err:
                         logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
+
+                    # Verify HIGH/CRITICAL findings offline to reduce false positives
+                    try:
+                        from feature_flags import is_enabled as _ff_enabled
+                        if _ff_enabled("FINDING_VERIFICATION", default=False):
+                            from concurrent.futures import ThreadPoolExecutor
+                            from tools.finding_verifier import VERIFIERS, verify_finding
+                            ftype_key = (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
+                            if ftype_key in VERIFIERS:
+                                def _run_verification(finding_data):
+                                    import asyncio
+                                    try:
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        result = loop.run_until_complete(verify_finding(
+                                            finding_data, engagement_id=self.engagement_id,
+                                        ))
+                                        loop.close()
+                                        if result.get("verification", {}).get("confidence") == "low":
+                                            logger.info(
+                                                "Finding %s has low verification confidence — possible false positive",
+                                                saved_id,
+                                            )
+                                    except Exception as v_err:
+                                        logger.debug(f"Finding verification failed (non-fatal): {v_err}")
+                                with ThreadPoolExecutor(max_workers=2) as _vpool:
+                                    _vpool.submit(_run_verification, {
+                                        "id": saved_id,
+                                        "type": finding.get("type"),
+                                        "severity": finding.get("severity"),
+                                        "endpoint": finding.get("endpoint"),
+                                        "evidence": finding.get("evidence", {}),
+                                        "source_tool": st,
+                                    })
+                    except Exception as v_err:
+                        logger.debug(f"Finding verification dispatch failed (non-fatal): {v_err}")
             except (ValueError, OSError, KeyError, json.JSONDecodeError) as finding_err:
                 failed_count += 1
                 logger.warning("Failed to save finding (type=%s, endpoint=%s): %s",
@@ -412,100 +476,62 @@ class Orchestrator:
                          failed_count, len(findings), self.engagement_id)
         return failed_count
 
+    def _update_finding_jsonb(self, finding_id: str, column: str, data: dict, log_label: str = "update") -> bool:
+        """Save a JSONB dict to a findings column with an auto-timestamp column.
+
+        Args:
+            finding_id: UUID of the finding
+            column: Column name to update (e.g. 'poc_generated', 'remediation_fix')
+            data: Dict to store as JSONB
+            log_label: Human-readable label for log messages
+
+        Returns:
+            True if saved successfully
+        """
+        import json
+
+        from database.connection import get_db
+
+        conn = None
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                f"""
+                UPDATE findings
+                SET {column} = %s::jsonb,
+                    {column}_at = NOW()
+                WHERE id = %s
+                """,
+                (json.dumps(data), finding_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            logger.warning(
+                "Failed to save %s for finding %s: %s",
+                log_label, finding_id, e,
+            )
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception as rollback_err:
+                    logger.warning(f"Rollback failed saving {log_label} for finding {finding_id}: {rollback_err}")
+            return False
+        finally:
+            if conn:
+                try:
+                    get_db().release_connection(conn)
+                except Exception as close_err:
+                    logger.warning(f"Connection release failed after saving {log_label} for finding {finding_id}: {close_err}")
+
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
-        """Save PoC data to findings.poc_generated column.
+        """Save PoC data to findings.poc_generated column."""
+        return self._update_finding_jsonb(finding_id, "poc_generated", poc_data, log_label="PoC")
 
-        Args:
-            finding_id: UUID of the finding
-            poc_data: PoC dict from PoCGenerator
-
-        Returns:
-            True if saved successfully
-        """
-        import json
-
-        from database.connection import get_db
-
-        conn = None
-        try:
-            conn = get_db().get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE findings
-                SET poc_generated = %s::jsonb,
-                    poc_generated_at = NOW()
-                WHERE id = %s
-                """,
-                (json.dumps(poc_data), finding_id),
-            )
-            conn.commit()
-            return cursor.rowcount > 0
-        except Exception as e:
-            logger.warning(
-                "Failed to save PoC for finding %s: %s",
-                finding_id, e,
-            )
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception as rollback_err:
-                    logger.warning(f"Rollback failed saving PoC for finding {finding_id}: {rollback_err}")
-            return False
-        finally:
-            if conn:
-                try:
-                    get_db().release_connection(conn)
-                except Exception as close_err:
-                    logger.warning(f"Connection release failed after saving PoC for finding {finding_id}: {close_err}")
-
-    def _save_remediation_fix(
-        self, finding_id: str, fix_data: dict
-    ) -> bool:
-        """Save remediation fix to findings.remediation_fix column.
-
-        Args:
-            finding_id: UUID of the finding
-            fix_data: Fix dict from DeveloperFixAssistant
-
-        Returns:
-            True if saved successfully
-        """
-        import json
-
-        from database.connection import get_db
-
-        conn = None
-        try:
-            conn = get_db().get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE findings
-                SET remediation_fix = %s::jsonb,
-                    remediation_fix_at = NOW()
-                WHERE id = %s
-                """,
-                (json.dumps(fix_data), finding_id),
-            )
-            conn.commit()
-            return cursor.rowcount > 0
-        except Exception as e:
-            logger.warning(
-                "Failed to save remediation fix: %s", e
-            )
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception as rollback_err:
-                    logger.warning(f"Rollback failed saving remediation fix for finding {finding_id}: {rollback_err}")
-            return False
-        finally:
-            if conn:
-                try:
-                    get_db().release_connection(conn)
-                except Exception as close_err:
-                    logger.warning(f"Connection release failed after saving remediation fix for finding {finding_id}: {close_err}")
+    def _save_remediation_fix(self, finding_id: str, fix_data: dict) -> bool:
+        """Save remediation fix to findings.remediation_fix column."""
+        return self._update_finding_jsonb(finding_id, "remediation_fix", fix_data, log_label="remediation fix")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None, bug_bounty_mode=False,
@@ -1240,7 +1266,7 @@ class Orchestrator:
             row = cursor.fetchone()
             return row[0] if row else "recon"
         except (ValueError, OSError, KeyError) as e:
-            logger.warning("Budget check failed for engagement %s: %s — defaulting to 'failed'", engagement_id, e)
+            logger.warning("Budget check failed for engagement %s: %s — defaulting to 'failed'", self.engagement_id, e)
             return "failed"  # If budget check fails, stop the loop to prevent infinite cycles
         finally:
             if cursor:

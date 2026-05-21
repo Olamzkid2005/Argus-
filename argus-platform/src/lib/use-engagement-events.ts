@@ -105,122 +105,18 @@ export function useEngagementEvents(
   const mountedRef = useRef(true);
   const prevIdRef = useRef(engagementId);
 
+  // Ref for stopPolling to avoid temporal dead zone issues (stopPolling is defined later)
+  const stopPollingRef = useRef<() => void>(() => {});
+
   // Use refs for callbacks to avoid cascading re-creation
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
-  // Reset stored data when engagementId changes
-  // Also close old SSE connection to prevent leaks (fix 1.1, 1.6)
-  useEffect(() => {
-    if (prevIdRef.current !== engagementId) {
-      // Close old SSE connection before switching engagements
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      stopPolling();
-      prevIdRef.current = engagementId;
-      setEvents(loadStoredEvents(engagementId));
-      setCurrentState(loadStoredState(engagementId));
-      lastTimestampRef.current = null;
-      useSseRef.current = true; // Reset SSE attempt on new engagement
-    }
-  }, [engagementId, stopPolling]);
-
-  // Persist events to sessionStorage
-  useEffect(() => {
-    saveStoredEvents(engagementId, events);
-  }, [engagementId, events]);
-
-  // Persist state to sessionStorage
-  useEffect(() => {
-    if (currentState) {
-      saveStoredState(engagementId, currentState);
-    }
-  }, [engagementId, currentState]);
-
-  // ── SSE connection ──
-  // Uses ref for engagementId to avoid stale closure in event handlers (fix 1.6)
+  // Use ref for engagementId to avoid stale closure in event handlers (fix 1.6)
   const engagementIdRef = useRef(engagementId);
   engagementIdRef.current = engagementId;
-
-  const startSse = useCallback(() => {
-    if (!mountedRef.current || !enabled) return;
-
-    // Close any existing connection first (fix 1.1)
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    try {
-      const source = new EventSource(`/api/stream/${engagementId}`);
-
-      source.onopen = () => {
-        if (mountedRef.current) {
-          setIsConnected(true);
-          setError(null);
-          log.wsConnect(engagementId);
-        }
-      };
-
-      source.onmessage = (e: MessageEvent) => {
-        if (!mountedRef.current) return;
-
-        try {
-          const raw: Record<string, unknown> = JSON.parse(e.data);
-
-          // Skip internal/control events
-          if (raw.type === "__connected__" || raw.type === "__heartbeat__") return;
-
-          // Use engagement_id from event data if available (fix 1.6)
-          const eventEngagementId = (raw.engagement_id as string) || engagementIdRef.current;
-          const event = raw as unknown as WebSocketEvent;
-
-          setEvents((prev) => {
-            const next = [event as WebSocketEvent, ...prev].slice(0, 100);
-            saveStoredEvents(eventEngagementId, next);
-            return next;
-          });
-
-          if (event.type === "state_transition" && event.data?.to_state) {
-            setCurrentState(event.data.to_state as string);
-            saveStoredState(eventEngagementId, event.data.to_state as string);
-          }
-
-          onEventRef.current?.(event as WebSocketEvent);
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      source.onerror = () => {
-        if (!mountedRef.current) return;
-
-        // SSE connection failed — fall back to polling
-        log.wsError("SSE connection failed, falling back to polling", {
-          engagementId: engagementIdRef.current,
-        });
-        source.close();
-        eventSourceRef.current = null;
-        useSseRef.current = false;
-        setIsConnected(false);
-        startPollingFallback();
-      };
-
-      eventSourceRef.current = source;
-    } catch (err) {
-      // EventSource constructor threw — fall back to polling
-      log.wsError("SSE init failed, falling back to polling", {
-        error: String(err),
-        engagementId,
-      });
-      useSseRef.current = false;
-      startPollingFallback();
-    }
-  }, [engagementId, enabled, startPollingFallback]);
 
   // Track consecutive errors for backoff
   const consecutiveErrorsRef = useRef(0);
@@ -335,7 +231,90 @@ export function useEngagementEvents(
     pollingRef.current = setInterval(fetchEvents, pollingInterval);
   }, [fetchEvents, pollingInterval]);
 
-  const stopPolling = useCallback(() => {
+  // ── SSE connection ──
+  const startSse = useCallback(() => {
+    if (!mountedRef.current || !enabled) return;
+
+    // Close any existing connection first (fix 1.1)
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    try {
+      const source = new EventSource(`/api/stream/${engagementId}`);
+
+      source.onopen = () => {
+        if (mountedRef.current) {
+          setIsConnected(true);
+          setError(null);
+          log.wsConnect(engagementId);
+        }
+      };
+
+      source.onmessage = (e: MessageEvent) => {
+        if (!mountedRef.current) return;
+
+        try {
+          const raw: Record<string, unknown> = JSON.parse(e.data);
+
+          // Skip internal/control events
+          if (raw.type === "__connected__" || raw.type === "__heartbeat__") return;
+
+          // Use engagement_id from event data if available (fix 1.6)
+          const eventEngagementId = (raw.engagement_id as string) || engagementIdRef.current;
+          const event = raw as unknown as WebSocketEvent;
+
+          setEvents((prev) => {
+            const next = [event as WebSocketEvent, ...prev].slice(0, 100);
+            saveStoredEvents(eventEngagementId, next);
+            return next;
+          });
+
+          if (event.type === "state_transition" && event.data?.to_state) {
+            setCurrentState(event.data.to_state as string);
+            saveStoredState(eventEngagementId, event.data.to_state as string);
+          }
+
+          onEventRef.current?.(event as WebSocketEvent);
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      source.onerror = () => {
+        if (!mountedRef.current) return;
+
+        // SSE connection failed — fall back to polling
+        log.wsError("SSE connection failed, falling back to polling", {
+          engagementId: engagementIdRef.current,
+        });
+        source.close();
+        eventSourceRef.current = null;
+        useSseRef.current = false;
+        setIsConnected(false);
+        startPollingFallbackRef.current();
+      };
+
+      eventSourceRef.current = source;
+    } catch (err) {
+      // EventSource constructor threw — fall back to polling
+      log.wsError("SSE init failed, falling back to polling", {
+        error: String(err),
+        engagementId,
+      });
+      useSseRef.current = false;
+      startPollingFallbackRef.current();
+    }
+  }, [engagementId, enabled]);
+
+  // Refs for callbacks to avoid TDZ issues in useEffect dependency arrays
+  const startPollingFallbackRef = useRef(startPollingFallback);
+  startPollingFallbackRef.current = startPollingFallback;
+  const startSseRef = useRef(startSse);
+  startSseRef.current = startSse;
+
+  stopPollingRef.current = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
@@ -343,13 +322,42 @@ export function useEngagementEvents(
     }
   }, [engagementId]);
 
+  // Reset stored data when engagementId changes
+  useEffect(() => {
+    if (prevIdRef.current !== engagementId) {
+      // Close old SSE connection before switching engagements
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      stopPollingRef.current();
+      prevIdRef.current = engagementId;
+      setEvents(loadStoredEvents(engagementId));
+      setCurrentState(loadStoredState(engagementId));
+      lastTimestampRef.current = null;
+      useSseRef.current = true; // Reset SSE attempt on new engagement
+    }
+  }, [engagementId]);
+
+  // Persist events to sessionStorage
+  useEffect(() => {
+    saveStoredEvents(engagementId, events);
+  }, [engagementId, events]);
+
+  // Persist state to sessionStorage
+  useEffect(() => {
+    if (currentState) {
+      saveStoredState(engagementId, currentState);
+    }
+  }, [engagementId, currentState]);
+
   // ── Start connection ──
   useEffect(() => {
     if (enabled) {
       if (useSseRef.current) {
-        startSse();
+        startSseRef.current();
       } else {
-        startPollingFallback();
+        startPollingFallbackRef.current();
       }
     }
 
@@ -359,9 +367,9 @@ export function useEngagementEvents(
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      stopPolling();
+      stopPollingRef.current();
     };
-  }, [enabled, startSse, startPollingFallback, stopPolling]);
+  }, [enabled]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -373,9 +381,9 @@ export function useEngagementEvents(
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      stopPolling();
+      stopPollingRef.current();
     };
-  }, [stopPolling]);
+  }, []);
 
   // Reconnect
   const reconnect = useCallback(() => {
@@ -390,11 +398,11 @@ export function useEngagementEvents(
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    stopPolling();
+    stopPollingRef.current();
 
     // Restart with SSE
-    startSse();
-  }, [engagementId, startSse, stopPolling]);
+    startSseRef.current();
+  }, [engagementId]);
 
   // Clear events
   const clearEvents = useCallback(() => {

@@ -61,12 +61,9 @@ class FindingRepository(BaseRepository):
         Returns:
             The ID of the created finding
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
         finding_id = str(uuid.uuid4())
 
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             # Soft limit check to prevent unbounded storage growth.
             # TOCTOU is acceptable here — two concurrent inserts may slightly
             # exceed the cap, which is better than holding a FOR UPDATE lock
@@ -118,7 +115,6 @@ class FindingRepository(BaseRepository):
             )
             row = cursor.fetchone()
             if row:
-                conn.commit()
                 return str(row[0])
 
             # No legacy row found — do the standard INSERT with ON CONFLICT
@@ -173,15 +169,7 @@ class FindingRepository(BaseRepository):
                 except Exception as fb_err:
                     logger.error("Fallback query failed: %s", fb_err)
                     return None
-            conn.commit()
             return finding_id
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def upsert_secret_finding(
         self,
@@ -215,13 +203,11 @@ class FindingRepository(BaseRepository):
         Returns:
             The ID of the created or updated finding
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
         source_tool = source_tool or ""
         endpoint = endpoint or ""
         finding_type = finding_type or ""
 
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             # Handle legacy rows with source_tool IS NULL (pre-migration)
             cursor.execute(
                 """
@@ -242,7 +228,6 @@ class FindingRepository(BaseRepository):
             )
             row = cursor.fetchone()
             if row:
-                conn.commit()
                 return str(row[0])
 
             cursor.execute(
@@ -270,16 +255,7 @@ class FindingRepository(BaseRepository):
                 )
             )
             row = cursor.fetchone()
-            finding_id = str(row[0]) if row else None
-            conn.commit()
-            return finding_id
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
+            return str(row[0]) if row else None
 
     def find_high_confidence(
         self,
@@ -296,10 +272,7 @@ class FindingRepository(BaseRepository):
         Returns:
             List of high confidence findings
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT * FROM findings
@@ -311,11 +284,6 @@ class FindingRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            conn.commit()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def get_summary_by_engagement(self, engagement_id: str) -> dict:
         """
@@ -328,10 +296,7 @@ class FindingRepository(BaseRepository):
         Returns:
             Dictionary with counts by severity
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             # Try materialized view first for better performance
             cursor.execute(
                 """
@@ -385,10 +350,6 @@ class FindingRepository(BaseRepository):
                     "avg_cvss": float(row["avg_cvss"]) if row["avg_cvss"] else 0,
                 }
             return summary
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def find_by_engagement_with_details(self, engagement_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
         """
@@ -403,10 +364,7 @@ class FindingRepository(BaseRepository):
         Returns:
             List of finding dictionaries with engagement details
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT
@@ -423,11 +381,6 @@ class FindingRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            conn.rollback()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def update_confidence(self, finding_id: str, confidence: float) -> None:
         """
@@ -437,10 +390,7 @@ class FindingRepository(BaseRepository):
             finding_id: Finding ID
             confidence: New confidence score (0.0-1.0)
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 """
                 UPDATE findings
@@ -449,14 +399,6 @@ class FindingRepository(BaseRepository):
                 """,
                 (float(confidence), finding_id)
             )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def add_llm_evidence(self, finding_id: str, llm_result: dict) -> None:
         """
@@ -466,10 +408,7 @@ class FindingRepository(BaseRepository):
             finding_id: Finding ID
             llm_result: Dictionary with LLM analysis (vulnerable, confidence, evidence_quote, model, timestamp)
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 """
                 UPDATE findings
@@ -479,14 +418,6 @@ class FindingRepository(BaseRepository):
                 """,
                 (Json(llm_result), finding_id)
             )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def get_findings_by_engagement(
         self, engagement_id: str, limit: int = 100, offset: int = 0,
@@ -505,10 +436,7 @@ class FindingRepository(BaseRepository):
         Returns:
             Tuple of (list of finding dictionaries, total count)
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             where_clause = "WHERE engagement_id = %s"
             params = [engagement_id]
 
@@ -537,10 +465,6 @@ class FindingRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows], total
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def find_unreviewed_low_confidence(
         self,
@@ -565,10 +489,7 @@ class FindingRepository(BaseRepository):
         Returns:
             List of finding dictionaries
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT * FROM findings
@@ -585,7 +506,3 @@ class FindingRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)

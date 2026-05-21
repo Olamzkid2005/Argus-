@@ -178,7 +178,7 @@ def run_repo_scan(
                 # Don't transition to "scanning" here — scan.py handles that transition
                 # and reads the actual DB state before transitioning
                 # Auto-push web scan job
-                from tasks.utils import fetch_engagement_scan_options
+                from tasks.utils import fetch_engagement_scan_options, get_engagement_state
 
                 opts = fetch_engagement_scan_options(engagement_id)
                 app.send_task(
@@ -198,7 +198,7 @@ def run_repo_scan(
                 return result
         except Exception as e:
             # Query actual current state from DB before transitioning to failed
-            current_state = _get_engagement_state(engagement_id, db_conn_string)
+            current_state = get_engagement_state(engagement_id, db_conn_string)
             state_machine = EngagementStateMachine(
                 engagement_id,
                 db_connection_string=db_conn_string,
@@ -323,15 +323,6 @@ def enrich_findings_with_blame(repo_path, findings):
 
     return findings
 
-
-def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str | None:
-    """Query the current engagement state from the database.
-
-    Delegates to tasks.utils.get_engagement_state (canonical implementation).
-    Returns None if the engagement is not found or on DB error (issue 3.13).
-    """
-    from tasks.utils import get_engagement_state
-    return get_engagement_state(engagement_id, db_conn_string)
 
 
 def generate_cyclonedx_sbom(repo_path, dependencies):

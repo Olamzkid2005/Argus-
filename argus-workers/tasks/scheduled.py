@@ -7,6 +7,7 @@ creates real engagements for them, and dispatches recon tasks.
 Requirements: Scheduled engagements table (migration 032)
 """
 
+import json
 import logging
 import os
 import uuid
@@ -187,7 +188,7 @@ def _spawn_engagement(
                 org_id,
                 target,
                 "scheduled",
-                scope,
+                json.dumps(scope) if isinstance(scope, dict) else scope,
                 created_by,
                 scan_type,
                 aggressiveness,

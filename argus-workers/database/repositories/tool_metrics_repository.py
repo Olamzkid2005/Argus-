@@ -39,10 +39,7 @@ class ToolMetricsRepository(BaseRepository):
         Returns:
             The ID of the created metric record
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             metric_id = str(uuid.uuid4())
 
             cursor.execute(
@@ -55,17 +52,7 @@ class ToolMetricsRepository(BaseRepository):
             )
 
             result = cursor.fetchone()
-            conn.commit()
-
             return result[0] if result else metric_id
-
-        except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def get_recent_executions(self, tool_name: str, limit: int = 100) -> list[dict]:
         """
@@ -78,10 +65,7 @@ class ToolMetricsRepository(BaseRepository):
         Returns:
             List of execution records
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT id, tool_name, duration_ms, success, created_at
@@ -96,11 +80,6 @@ class ToolMetricsRepository(BaseRepository):
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
-
     def get_performance_stats(self, days: int = 1) -> list[dict]:
         """
         Get performance statistics for all tools within the specified period.
@@ -111,10 +90,7 @@ class ToolMetricsRepository(BaseRepository):
         Returns:
             List of tool performance stat dictionaries
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT
@@ -133,11 +109,6 @@ class ToolMetricsRepository(BaseRepository):
 
             return [dict(row) for row in cursor.fetchall()]
 
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
-
     def get_tool_stats(self, tool_name: str, days: int = 1) -> dict | None:
         """
         Get performance statistics for a specific tool.
@@ -149,10 +120,7 @@ class ToolMetricsRepository(BaseRepository):
         Returns:
             Tool performance stat dictionary, or None if no data
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT
@@ -171,11 +139,6 @@ class ToolMetricsRepository(BaseRepository):
             row = cursor.fetchone()
             return dict(row) if row else None
 
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
-
     def cleanup_old_metrics(self, days: int = 30) -> int:
         """
         Delete metrics older than specified days
@@ -186,10 +149,7 @@ class ToolMetricsRepository(BaseRepository):
         Returns:
             Number of deleted records
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 """
                 DELETE FROM tool_metrics
@@ -199,14 +159,4 @@ class ToolMetricsRepository(BaseRepository):
             )
 
             deleted_count = cursor.rowcount
-            conn.commit()
-
             return deleted_count
-
-        except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)

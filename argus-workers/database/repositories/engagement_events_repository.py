@@ -38,12 +38,9 @@ class EngagementEventsRepository(BaseRepository):
         Returns:
             The ID of the created event
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
         event_id = str(uuid.uuid4())
 
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 """
                 INSERT INTO engagement_events (
@@ -60,17 +57,7 @@ class EngagementEventsRepository(BaseRepository):
                     actor,
                 ),
             )
-            if not self._external_conn:
-                conn.commit()
             return event_id
-        except Exception as e:
-            if not self._external_conn:
-                conn.rollback()
-            raise e
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def get_events(
         self,
@@ -89,10 +76,7 @@ class EngagementEventsRepository(BaseRepository):
         Returns:
             List of event dictionaries ordered by most recent first
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             if event_type:
                 cursor.execute(
                     """
@@ -115,10 +99,6 @@ class EngagementEventsRepository(BaseRepository):
                 )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def get_event_timeline(self, engagement_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
@@ -132,10 +112,7 @@ class EngagementEventsRepository(BaseRepository):
         Returns:
             List of event dictionaries ordered oldest to newest
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT * FROM engagement_events
@@ -147,7 +124,3 @@ class EngagementEventsRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)

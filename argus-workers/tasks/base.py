@@ -88,6 +88,7 @@ def task_context(
     from distributed_lock import DistributedLock, LockAcquisitionError, LockContext
     from orchestrator import Orchestrator
     from state_machine import EngagementStateMachine
+    from tasks.utils import get_engagement_state
     from tracing import TracingManager
     from utils.logging_utils import ScanLogger
 
@@ -126,7 +127,7 @@ def task_context(
                 sm = EngagementStateMachine(
                     engagement_id,
                     db_connection_string=db_conn_string,
-                    current_state=current_state or _get_engagement_state(engagement_id, db_conn_string),
+                    current_state=current_state or get_engagement_state(engagement_id, db_conn_string),
                 )
                 _sm_assigned = True
                 from websocket_events import get_websocket_publisher
@@ -147,7 +148,7 @@ def task_context(
             )
             if _lock_acquired:
                 try:
-                    current = sm.current_state if _sm_assigned else _get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if _sm_assigned else get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
                         if _sm_assigned:
                             sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
@@ -171,7 +172,7 @@ def task_context(
             slog.error(f"Task failed: {e}")
             if _lock_acquired:
                 try:
-                    current = sm.current_state if _sm_assigned else _get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if _sm_assigned else get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
                         if _sm_assigned:
                             sm.transition("failed", f"{job_type} failed: {e}")
@@ -300,11 +301,3 @@ def task_error_boundary(
         raise
 
 
-def _get_engagement_state(engagement_id: str, db_conn_string: str = None) -> str | None:
-    """Query the current engagement state from the database.
-
-    Delegates to tasks.utils.get_engagement_state (canonical implementation).
-    Returns None if the engagement is not found or on DB error (issue 3.13).
-    """
-    from tasks.utils import get_engagement_state
-    return get_engagement_state(engagement_id, db_conn_string)

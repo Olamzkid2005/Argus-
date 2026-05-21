@@ -20,6 +20,24 @@ from streaming import emit_tool_complete, emit_tool_start
 from tools.web_scanner import WebScanner
 from utils.logging_utils import ScanLogger
 
+# Lazy import for RateLimitRepository to avoid circular dependencies
+_RATE_LIMIT_REPO = None
+
+
+def _get_rate_limit_repo():
+    """Lazy-loaded RateLimitRepository singleton for logging rate limit events."""
+    global _RATE_LIMIT_REPO
+    if _RATE_LIMIT_REPO is None:
+        try:
+            import os
+            from database.repositories.rate_limit_repository import RateLimitRepository
+            db_conn = os.getenv("DATABASE_URL")
+            if db_conn:
+                _RATE_LIMIT_REPO = RateLimitRepository(db_conn)
+        except ImportError:
+            pass
+    return _RATE_LIMIT_REPO
+
 from .utils import get_nuclei_templates_path
 
 # Module-level flag to avoid repeated import inside the per-target loop
@@ -356,6 +374,9 @@ def execute_scan_tools(
                 ["--jsonfile", testssl_out, target],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
+        # Log any rate limit events detected during scanning
+        rate_limit_repo = _get_rate_limit_repo()
+
         # Run all Phase 2 tools in parallel
         slog.info(f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel")
         if scan_jobs:
@@ -366,10 +387,22 @@ def execute_scan_tools(
                 }
                 try:
                     for future in as_completed(futures, timeout=max(TOOL_TIMEOUT_LONG + 60, 900)):
+                        tool_name = futures[future]
                         try:
                             future.result(timeout=30)
                         except Exception as e:
-                            logger.warning(f"Scan tool {futures[future]} error: {e}")
+                            err_str = str(e).lower()
+                            if rate_limit_repo and any(kw in err_str for kw in ["429", "rate limit", "too many requests"]):
+                                try:
+                                    rate_limit_repo.create_event(
+                                        domain=target,
+                                        event_type="tool_rate_limited",
+                                        status_code=429,
+                                        current_rps=0.0,
+                                    )
+                                except Exception as rl_err:
+                                    logger.debug(f"Failed to log rate limit event: {rl_err}")
+                            logger.warning(f"Scan tool {tool_name} error: {e}")
                 except TimeoutError:
                     logger.warning("Scan tool batch timed out — some tools may not have completed")
 
@@ -397,6 +430,21 @@ def execute_scan_tools(
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
             web_findings = web_scanner.scan(target)
+
+            # Log any rate limit findings detected by the web scanner
+            if rate_limit_repo:
+                for wf in web_findings:
+                    wf_type = (wf.get("type") or "").upper()
+                    if "RATE_LIMIT" in wf_type:
+                        try:
+                            rate_limit_repo.create_event(
+                                domain=target,
+                                event_type="web_scanner_rate_limit",
+                                status_code=429,
+                                current_rps=0.0,
+                            )
+                        except Exception as rl_err:
+                            logger.debug(f"Failed to log rate limit event: {rl_err}")
 
             slog.tool_complete("web_scanner", success=True, findings=len(web_findings))
             for wf in web_findings:
@@ -457,6 +505,51 @@ def execute_scan_tools(
         except Exception as e:
             slog.tool_complete("ai_vuln_scanner", success=False)
             logger.warning(f"AIVulnScanner failed for {target}: {e}")
+
+        # WebSocketScanner — WebSocket security testing (origin validation, auth, injection, rate limiting)
+        if _feature_enabled("WS_SCANNER", default=False):
+            slog.tool_start("websocket_scanner", [target])
+            try:
+                from tools.websocket_scanner import WebSocketScanner
+                ws_findings = []
+
+                # Discover WebSocket URLs from the target page
+                ws_urls = []
+                try:
+                    ws_urls = asyncio.run(WebSocketScanner.discover_websocket_urls(target))
+                except Exception as disc_err:
+                    logger.debug(f"WebSocket URL discovery failed for {target}: {disc_err}")
+
+                if ws_urls:
+                    slog.info(f"Discovered {len(ws_urls)} WebSocket URL(s) for {target}: {ws_urls}")
+                    for ws_url in ws_urls:
+                        try:
+                            scanner = WebSocketScanner(timeout=SSL_TIMEOUT)
+                            result = asyncio.run(scanner.scan(ws_url))
+                            ws_findings.extend(result)
+                        except RuntimeError as ws_err:
+                            # Missing dependency (websockets or httpx) — skip gracefully
+                            if "is required" in str(ws_err):
+                                slog.info(f"WebSocket scanning skipped (missing dependency): {ws_err}")
+                                break
+                            logger.debug(f"WebSocket scan failed for {ws_url}: {ws_err}")
+                        except Exception as ws_err:
+                            logger.debug(f"WebSocket scan failed for {ws_url}: {ws_err}")
+                else:
+                    slog.info(f"No WebSocket URLs discovered for {target}")
+
+                slog.tool_complete("websocket_scanner", success=True, findings=len(ws_findings))
+                for wf in ws_findings:
+                    normalized = ctx._normalize_finding(wf, "websocket_scanner")
+                    if normalized:
+                        all_findings.append(normalized)
+                emit_tool_complete(ctx.engagement_id, "websocket_scanner", True, 0,
+                                   finding_count=len(ws_findings))
+                if ws_findings:
+                    logger.info(f"WebSocketScanner complete: {len(ws_findings)} findings for {target}")
+            except Exception as e:
+                slog.tool_complete("websocket_scanner", success=False)
+                logger.warning(f"WebSocketScanner failed for {target}: {e}")
 
         slog.target_complete(target, findings=len(all_findings))
 

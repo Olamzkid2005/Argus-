@@ -7,6 +7,7 @@ Supports passing an external connection for transaction support.
 
 import logging
 import time
+from contextlib import contextmanager
 from typing import Any
 
 import psycopg2
@@ -176,6 +177,47 @@ class BaseRepository:
         if conn and not self._external_conn:
             get_db().release_connection(conn)
 
+    @contextmanager
+    def db_operation(self, commit: bool = False, cursor_factory=None):
+        """Context manager for DB connection + cursor lifecycle.
+
+        Handles connection acquisition, cursor creation, and cleanup
+        (cursor close + connection release back to pool).
+
+        Args:
+            commit: If True, auto-commits on success and rolls back on exception.
+                    Only applies when NOT using an external connection.
+            cursor_factory: Optional cursor factory (e.g., RealDictCursor).
+
+        Yields:
+            Tuple of (connection, cursor)
+
+        Usage:
+            with self.db_operation(commit=True) as (conn, cursor):
+                cursor.execute("UPDATE ...")
+
+            with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
+                cursor.execute("SELECT ...")
+                rows = cursor.fetchall()
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=cursor_factory)
+        try:
+            yield (conn, cursor)
+            if commit and not self._external_conn:
+                conn.commit()
+        except Exception:
+            if commit and not self._external_conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            cursor.close()
+            if not self._external_conn:
+                self._release_connection(conn)
+
     def _to_dict(self, row: Any, cursor=None) -> dict | None:
         """Convert row to dictionary using cursor description"""
         if row is None:
@@ -208,20 +250,13 @@ class BaseRepository:
         Returns:
             Dictionary of the record or None
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
         start = time.time()
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             query = f"SELECT * FROM {self.table_name} WHERE {self.id_column} = %s"
             cursor.execute(query, (id,))
             row = cursor.fetchone()
             self._log_query_time(query, start, 1 if row else 0)
             return dict(row) if row else None
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def find_all(self, limit: int = 100, offset: int = 0) -> list[dict]:
         """
@@ -234,20 +269,13 @@ class BaseRepository:
         Returns:
             List of record dictionaries
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
         start = time.time()
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             query = f"SELECT * FROM {self.table_name} ORDER BY created_at DESC LIMIT %s OFFSET %s"
             cursor.execute(query, (limit, offset))
             rows = cursor.fetchall()
             self._log_query_time(query, start, len(rows))
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def delete_by_id(self, id: str) -> bool:
         """
@@ -259,20 +287,11 @@ class BaseRepository:
         Returns:
             True if deleted, False if not found
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
+        with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 f"DELETE FROM {self.table_name} WHERE {self.id_column} = %s", (id,)
             )
-            if not self._external_conn:
-                conn.commit()
             return cursor.rowcount > 0
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def update_by_id(self, id: str, updates: dict) -> dict | None:
         """
@@ -314,10 +333,7 @@ class BaseRepository:
             set_clauses = [f"{key} = %s" for key in updates]
         values = list(updates.values()) + [id]
 
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
             query = f"""
                 UPDATE {self.table_name}
                 SET {", ".join(set_clauses)}
@@ -326,17 +342,7 @@ class BaseRepository:
             """
             cursor.execute(query, values)
             row = cursor.fetchone()
-            if not self._external_conn:
-                conn.commit()
             return dict(row) if row else None
-        except Exception:
-            if not self._external_conn and conn:
-                conn.rollback()
-            raise
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def count(self) -> int:
         """
@@ -345,17 +351,10 @@ class BaseRepository:
         Returns:
             Total number of records
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
         start = time.time()
-
-        try:
+        with self.db_operation() as (conn, cursor):
             query = f"SELECT COUNT(*) FROM {self.table_name}"
             cursor.execute(query)
             result = cursor.fetchone()[0]
             self._log_query_time(query, start)
             return result
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)

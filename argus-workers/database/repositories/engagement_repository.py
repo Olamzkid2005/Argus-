@@ -29,10 +29,7 @@ class EngagementRepository(BaseRepository):
         """
         import uuid
 
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
             engagement_id = str(uuid.uuid4())
 
             cursor.execute(
@@ -56,12 +53,7 @@ class EngagementRepository(BaseRepository):
                 )
             )
             row = cursor.fetchone()
-            conn.commit()
             return dict(row)
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def find_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
@@ -75,10 +67,7 @@ class EngagementRepository(BaseRepository):
         Returns:
             List of engagement dictionaries
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
@@ -101,10 +90,6 @@ class EngagementRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def find_active_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """
@@ -118,10 +103,7 @@ class EngagementRepository(BaseRepository):
         Returns:
             List of active engagement dictionaries
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
@@ -144,10 +126,6 @@ class EngagementRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
 
     def update_status(self, engagement_id: str, status: str) -> dict | None:
         """
@@ -174,10 +152,7 @@ class EngagementRepository(BaseRepository):
         Returns:
             List of engagement dictionaries
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        try:
+        with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT * FROM engagements
@@ -189,7 +164,3 @@ class EngagementRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-        finally:
-            cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)

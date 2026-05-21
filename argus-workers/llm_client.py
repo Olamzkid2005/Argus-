@@ -67,11 +67,12 @@ class LLMClient:
         self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
         self.max_retries = max_retries
 
-        # Resolve API key: explicit > env var > Redis (UI Settings)
+        # Resolve API key: explicit > env var > DB (user_settings) > Redis (UI Settings)
         self.api_key = (
             api_key
             or os.getenv("OPENAI_API_KEY")
             or os.getenv("LLM_API_KEY")
+            or self._load_key_from_db()
             or self._load_key_from_redis(redis_url)
         )
         # Auto-detect OpenRouter: if key was loaded from Redis openrouter key or starts with sk-or-
@@ -99,6 +100,42 @@ class LLMClient:
         self._circuit_open_until = 0.0
         self._circuit_threshold = 3
         self._circuit_cooldown = 60.0
+
+    def _load_key_from_db(self) -> str | None:
+        """
+        Load API key from the user_settings database table as fallback.
+
+        Scans all users' settings for known API key names.
+        This provides an alternative to Redis-based key storage for users
+        who configure settings via the database directly.
+
+        Returns:
+            API key string if found, None otherwise.
+        """
+        try:
+            from database.connection import db_cursor
+
+            key_names = ("openrouter_api_key", "openai_api_key", "llm_api_key")
+            with db_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT ON (key) key, value
+                    FROM user_settings
+                    WHERE key = ANY(%s)
+                      AND value IS NOT NULL
+                      AND value != ''
+                    ORDER BY key, updated_at DESC
+                    """,
+                    (list(key_names),),
+                )
+                for key, value in cursor.fetchall():
+                    if value and len(str(value)) > 10:
+                        logger.info(f"Loaded API key from database settings ({key})")
+                        return value
+            return None
+        except Exception as e:
+            logger.debug(f"Could not load API key from database settings: {e}")
+            return None
 
     def _load_key_from_redis(self, redis_url: str | None = None) -> str | None:
         """

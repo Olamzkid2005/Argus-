@@ -77,7 +77,14 @@ class EmbeddingService:
         }
 
     def _call_embedding_api(self, text: str) -> list[float] | None:
-        """Call the embedding API and return embedding or None."""
+        """Call the embedding API and return embedding or None.
+
+        On class level, tracks whether the API key has valid credits.
+        If a non-200 (e.g. 402 Insufficient Credits) is received once,
+        all subsequent calls skip the network round trip entirely.
+        """
+        if getattr(EmbeddingService, '_embed_api_blocked', False):
+            return None
         api_key = self._api_key()
         if not api_key:
             return None
@@ -94,6 +101,8 @@ class EmbeddingService:
             if resp.status_code == 200:
                 data = resp.json()
                 return data["data"][0]["embedding"]
+            # Non-200 response indicates credits exhausted / invalid key
+            EmbeddingService._embed_api_blocked = True
         except Exception as e:
             logger.debug("Embedding API failed (non-fatal): %s", e)
         return None
@@ -110,13 +119,27 @@ class EmbeddingService:
 
         Falls back to PGVectorRepository's hash-based fallback if the API
         call fails or no API key is configured.
+
+        Results are cached in-memory to avoid redundant API calls when saving
+        many findings with similar dedup_text values (common after recon).
         """
+        if not hasattr(self, '_get_embedding_cache'):
+            self._get_embedding_cache = {}
+        import hashlib
+        key = hashlib.md5(text.encode('utf-8', errors='replace')).hexdigest()
+        if key in self._get_embedding_cache:
+            return self._get_embedding_cache[key]
+
         embedding = self._call_embedding_api(text)
         if embedding:
+            self._get_embedding_cache[key] = embedding
             return embedding
 
         pg = self._pgvector_repo()
-        return pg.generate_embedding_fallback(text) if hasattr(pg, 'generate_embedding_fallback') else None
+        result = pg.generate_embedding_fallback(text) if hasattr(pg, 'generate_embedding_fallback') else None
+        if result is not None:
+            self._get_embedding_cache[key] = result
+        return result
 
     def get_embeddings_batch(self, texts: list[str]) -> list[list[float] | None]:
         """Generate embedding vectors for multiple texts in a single API call.

@@ -45,7 +45,8 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     ) as ctx:
         # Idempotency check INSIDE the lock — query actual DB state,
         # not the client-side current_state which is forced to "reporting".
-        db_state = _get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
+        from tasks.utils import get_engagement_state
+        db_state = get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
         if db_state in ("complete", "failed"):
             logger.info("Engagement %s already in terminal state '%s' (DB) — skipping report generation", engagement_id, db_state)
             return {"status": "already_complete"}
@@ -116,15 +117,6 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
             if conn:
                 conn.close()
 
-
-def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str | None:
-    """Query the current engagement state from the database.
-
-    Delegates to tasks.utils.get_engagement_state (canonical implementation).
-    Returns None if the engagement is not found or on DB error (issue 3.13).
-    """
-    from tasks.utils import get_engagement_state
-    return get_engagement_state(engagement_id, db_conn_string)
 
 
 @app.task(bind=True, name="tasks.report.generate_scheduled_reports")
