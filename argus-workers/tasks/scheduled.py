@@ -14,6 +14,28 @@ import uuid
 from celery_app import app
 from tasks.recon import run_recon
 
+
+def _build_budget_from_aggressiveness(aggressiveness: str) -> dict:
+    """
+    Build a budget dict from the scheduled engagement's aggressiveness setting.
+
+    This replaces the previous hardcoded budget={"max_cycles": 5, "max_depth": 3}
+    which ignored user-configured settings (issue 3.11).
+
+    Args:
+        aggressiveness: One of "gentle", "default", "aggressive", "exhaustive"
+
+    Returns:
+        Budget dict with max_cycles and max_depth keys
+    """
+    budget_map = {
+        "gentle": {"max_cycles": 2, "max_depth": 1},
+        "default": {"max_cycles": 5, "max_depth": 3},
+        "aggressive": {"max_cycles": 8, "max_depth": 5},
+        "exhaustive": {"max_cycles": 12, "max_depth": 7},
+    }
+    return budget_map.get(aggressiveness, budget_map["default"])
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,19 +112,22 @@ def run_due_scans(self):
 
         # Dispatch Celery tasks AFTER commit so engagements exist in DB
         for info in dispatch_queue:
+            # Build budget from scheduled engagement's config or aggressiveness setting
+            aggr = info.get("aggressiveness", "default")
+            budget = _build_budget_from_aggressiveness(aggr)
             if info["scan_type"] == "repo":
                 from tasks.repo_scan import run_repo_scan
                 run_repo_scan.delay(
                     engagement_id=info["engagement_id"],
                     repo_url=info["target"],
-                    budget={"max_cycles": 5, "max_depth": 3},
+                    budget=budget,
                     trace_id=info["trace_id"],
                 )
             else:
                 run_recon.delay(
                     engagement_id=info["engagement_id"],
                     target=info["target"],
-                    budget={"max_cycles": 5, "max_depth": 3},
+                    budget=budget,
                     trace_id=info["trace_id"],
                     agent_mode=info["agent_mode"],
                     prev_engagement_id=info["prev_engagement_id"],
@@ -202,7 +227,8 @@ def _spawn_engagement(
             row = cursor.fetchone()
             if row and row[0]:
                 prev_engagement_id = str(row[0])
-        except Exception:
+        except (ValueError, OSError) as e:
+            logger.debug("Failed to look up previous engagement for scheduled %s: %s", sched_id, e)
             prev_engagement_id = None
 
         # Update scheduled engagement with next run and last engagement reference
@@ -237,4 +263,5 @@ def _spawn_engagement(
         "trace_id": trace_id,
         "agent_mode": agent_mode,
         "prev_engagement_id": prev_engagement_id,
+        "aggressiveness": aggressiveness,
     }

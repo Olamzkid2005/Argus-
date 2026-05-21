@@ -148,7 +148,7 @@ class SnapshotManager:
                             time.sleep(retry_delay * (2 ** attempt))
                             continue
                     except Exception:
-                        pass
+                        logger.debug("Failed to inspect pgcode for snapshot retry", exc_info=True)
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to create snapshot after {max_retries} attempts: {e}") from e
             finally:

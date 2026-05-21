@@ -5,7 +5,30 @@ Provides UUID validation to prevent PostgreSQL errors when
 non-UUID values are passed to UUID-typed columns.
 """
 
+import re
 import uuid
+
+# Pre-compiled regex for Redis key sanitization
+_REDIS_KEY_CLEAN = re.compile(r"[^a-zA-Z0-9\-_.]")
+
+
+def sanitize_redis_key(component: str) -> str:
+    """
+    Sanitize a key component for use in Redis keys.
+
+    Strips characters that could be used for Redis key injection,
+    such as newlines, carriage returns, null bytes, and colons
+    that could alter the intended key hierarchy.
+
+    Only allows alphanumeric characters, hyphens, underscores, and dots.
+
+    Args:
+        component: Raw key component string
+
+    Returns:
+        Sanitized key component safe for Redis key construction
+    """
+    return _REDIS_KEY_CLEAN.sub("_", component)
 
 
 def validate_uuid(value: str, field_name: str = "engagement_id") -> str:

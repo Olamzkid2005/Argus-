@@ -69,6 +69,26 @@ class EngagementStateMachine:
         # a frontend event so the orchestrator doesn't need duplicate publish calls.
         self._ws_publisher = None
 
+        # Handle None — query DB for actual state (issue 3.13)
+        if current_state is None:
+            try:
+                conn = self._get_connection()
+                try:
+                    c = conn.cursor()
+                    c.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
+                    row = c.fetchone()
+                    c.close()
+                    current_state = row[0] if row else "created"
+                finally:
+                    self._release_connection(conn)
+            except Exception:
+                logger.warning(
+                    "Could not query state for engagement %s, defaulting to 'created'",
+                    engagement_id,
+                )
+                current_state = "created"
+            self.current_state = current_state
+
         if current_state == "awaiting_approval":
             logger.warning(
                 "Engagement %s has deprecated 'awaiting_approval' state — mapping to 'recon'",
@@ -144,8 +164,8 @@ class EngagementStateMachine:
                     to_state=new_state,
                     reason=reason or f"Transition to {new_state}",
                 )
-            except Exception:
-                logger.debug("Failed to publish state transition for %s", self.engagement_id)
+            except (ConnectionError, OSError, ValueError) as e:
+                logger.debug("Failed to publish state transition for %s: %s", self.engagement_id, e)
 
     def _persist_state_and_budget(self, from_state: str, to_state: str, reason: str, trace_id: str | None = None):
         """
@@ -243,7 +263,7 @@ class EngagementStateMachine:
 
             conn.commit()
 
-        except Exception as e:
+        except psycopg2.Error as e:
             if conn:
                 conn.rollback()
             logger.error(f"Failed to persist state transition for engagement {self.engagement_id}: {e}")
@@ -437,12 +457,17 @@ class EngagementStateMachine:
                             reason=reason,
                         )
                         ws_current = new_state
-                except Exception:
-                    logger.debug("Failed to publish chain transition for %s", self.engagement_id)
+                except (ConnectionError, OSError, ValueError) as e:
+                    logger.debug("Failed to publish chain transition for %s: %s", self.engagement_id, e)
 
             self.current_state = final_state
             return final_state
-        except Exception:
+        except psycopg2.Error as e:
+            if conn:
+                conn.rollback()
+            logger.error("chain_transition failed for engagement %s: %s", self.engagement_id, e)
+            raise
+        except ValueError as e:
             if conn:
                 conn.rollback()
             raise

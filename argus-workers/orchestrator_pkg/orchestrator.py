@@ -270,7 +270,7 @@ class Orchestrator:
                 continue
             try:
                 normalized_inputs.append(vars(item))
-            except Exception:
+            except TypeError:
                 logger.warning(f"_save_findings: cannot coerce {type(item)} to dict, skipping")
         findings = normalized_inputs
         if not findings:
@@ -401,7 +401,7 @@ class Orchestrator:
                         })
                     except Exception as hook_err:
                         logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
-            except Exception as finding_err:
+            except (ValueError, OSError, KeyError, json.JSONDecodeError) as finding_err:
                 failed_count += 1
                 logger.warning("Failed to save finding (type=%s, endpoint=%s): %s",
                                finding.get("type", "?"), finding.get("endpoint", "?"), finding_err)
@@ -1239,8 +1239,9 @@ class Orchestrator:
             cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
             row = cursor.fetchone()
             return row[0] if row else "recon"
-        except Exception:
-            return "recon"
+        except (ValueError, OSError, KeyError) as e:
+            logger.warning("Budget check failed for engagement %s: %s — defaulting to 'failed'", engagement_id, e)
+            return "failed"  # If budget check fails, stop the loop to prevent infinite cycles
         finally:
             if cursor:
                 cursor.close()

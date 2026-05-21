@@ -70,8 +70,26 @@ class WorkerCache:
     def __init__(self, ttl: int = 300):
         self.ttl = ttl
 
+    def _sanitize_key_component(self, component: str) -> str:
+        """Sanitize a key component to prevent Redis key injection.
+
+        Removes characters like newlines, colons at boundaries, and
+        control characters that could be used for key injection.
+
+        Args:
+            component: Raw key component string
+
+        Returns:
+            Sanitized key component
+        """
+        import re
+        # Remove control characters
+        safe = re.sub(r'[\x00-\x1f\x7f]', '', str(component))
+        # Replace emtpy string after sanitization
+        return safe or "_"
+
     def _key(self, k: str) -> str:
-        return f"{self.KEY_PREFIX}{k}"
+        return f"{self.KEY_PREFIX}{self._sanitize_key_component(k)}"
 
     def get(self, key: str) -> Any | None:
         """Get value from cache"""
@@ -124,7 +142,7 @@ class WorkerCache:
         try:
             deleted = 0
             cursor = 0
-            full_pattern = self._key(pattern)
+            full_pattern = self._key(self._sanitize_key_component(pattern))
             while True:
                 cursor, keys = client.scan(cursor, match=full_pattern, count=100)
                 if keys:

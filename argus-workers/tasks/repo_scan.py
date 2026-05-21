@@ -540,8 +540,10 @@ def run_govulncheck(repo_path):
 def scan_git_history_for_secrets(repo_path):
     """Scan git history for committed secrets."""
     max_git_output_bytes = 100 * 1024 * 1024  # 100MB
+    MAX_PATCH_LINES = 100000  # Prevent unbounded memory accumulation (issue 3.14)
     findings = []
 
+    process = None
     try:
         process = subprocess.Popen(
             [
@@ -594,12 +596,35 @@ def scan_git_history_for_secrets(repo_path):
             elif line.startswith("diff ") or line.startswith("commit "):
                 continue
             else:
+                # Limit patch_lines to prevent OOM (issue 3.14)
+                if len(patch_lines) >= MAX_PATCH_LINES:
+                    logger.warning(
+                        f"Patch too large (> {MAX_PATCH_LINES} lines), checking first batch for commit {current_commit}"
+                    )
+                    if current_commit:
+                        _check_patch_for_secrets(
+                            patch_lines,
+                            current_commit,
+                            current_author,
+                            current_date,
+                            repo_path,
+                            findings,
+                        )
+                    patch_lines = []
                 patch_lines.append(line)
 
         process.wait(timeout=600)
 
-        if process.returncode not in [0, 1]:
+        # Close pipes AFTER wait to avoid SIGPIPE (issue 3.32)
+        if process.stdout:
+            process.stdout.close()
+        if process.stderr:
             stderr_output = process.stderr.read()
+            process.stderr.close()
+        else:
+            stderr_output = ""
+
+        if process.returncode not in [0, 1]:
             logger.warning(
                 f"Git log failed (exit {process.returncode}): {stderr_output}"
             )
@@ -616,10 +641,14 @@ def scan_git_history_for_secrets(repo_path):
 
     except subprocess.TimeoutExpired:
         logger.error("Git history scan timed out")
-        process.kill()
-        process.wait()
-    except Exception as e:
+        if process:
+            process.kill()
+            process.wait()
+    except OSError as e:
         logger.error(f"Git history scan failed: {e}")
+        if process:
+            process.kill()
+            process.wait()
 
     return findings
 
@@ -874,8 +903,9 @@ def _map_eslint_severity(severity):
 def run_gosec(repo_path):
     """Run gosec for Go security issues."""
     try:
+        # Use -- to prevent argument injection via repo_path (issue 3.22)
         result = subprocess.run(
-            ["gosec", "-fmt=json", repo_path],
+            ["gosec", "-fmt=json", "--", repo_path],
             capture_output=True,
             text=True,
             timeout=300,

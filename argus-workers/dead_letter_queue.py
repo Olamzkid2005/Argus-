@@ -65,6 +65,19 @@ class DeadLetterQueue:
                 self._redis.close()
             self._redis = None
 
+    @staticmethod
+    def _sanitize_engagement_key(engagement_id: str) -> str:
+        """Sanitize engagement_id for safe use in Redis keys.
+
+        Prevents Redis key injection via malicious engagement_id values
+        by stripping non-alphanumeric characters, newlines, colons, etc.
+
+        Returns:
+            Sanitized key component safe for Redis keys
+        """
+        from utils.validation import sanitize_redis_key
+        return sanitize_redis_key(engagement_id)
+
     def enqueue(
         self,
         task_id: str,
@@ -119,7 +132,8 @@ class DeadLetterQueue:
 
             # Add to engagement-specific DLQ if applicable
             if engagement_id:
-                eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{engagement_id}"
+                safe_id = self._sanitize_engagement_key(engagement_id)
+                eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 self.redis.zadd(eng_key, {task_id: score})
                 self.redis.expire(eng_key, 86400 * 7)  # 7 days
 
@@ -148,7 +162,8 @@ class DeadLetterQueue:
         """
         try:
             if engagement_id:
-                key = f"{self.REDIS_KEY_PREFIX}:engagement:{engagement_id}"
+                safe_id = self._sanitize_engagement_key(engagement_id)
+                key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
 
                 task_id_set = {
@@ -183,7 +198,8 @@ class DeadLetterQueue:
         """Get total number of failed tasks in DLQ"""
         try:
             if engagement_id:
-                key = f"{self.REDIS_KEY_PREFIX}:engagement:{engagement_id}"
+                safe_id = self._sanitize_engagement_key(engagement_id)
+                key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 return self.redis.zcard(key)
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
@@ -230,7 +246,8 @@ class DeadLetterQueue:
         """
         try:
             if engagement_id:
-                key = f"{self.REDIS_KEY_PREFIX}:engagement:{engagement_id}"
+                safe_id = self._sanitize_engagement_key(engagement_id)
+                key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 count = self.redis.zcard(key)
                 self.redis.delete(key)
                 return count

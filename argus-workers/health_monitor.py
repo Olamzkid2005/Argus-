@@ -49,6 +49,16 @@ class WorkerHealthMonitor:
 
     REDIS_KEY_PREFIX = "worker:health"
 
+    @staticmethod
+    def _sanitize_engagement_key(engagement_id: str) -> str:
+        """Sanitize engagement_id for safe use in Redis keys.
+
+        Prevents Redis key injection via malicious engagement_id values
+        by stripping non-alphanumeric characters, newlines, colons, etc.
+        """
+        from utils.validation import sanitize_redis_key
+        return sanitize_redis_key(engagement_id)
+
     def __init__(self, worker_id: str | None = None, redis_url: str = None):
         self.worker_id = worker_id or f"worker-{os.getpid()}"
         self.hostname = os.uname().nodename
@@ -162,20 +172,23 @@ class WorkerHealthMonitor:
             for key in self.redis.scan_iter(match=pattern):
                 data = self.redis.hgetall(key)
                 if data:
-                    workers.append(WorkerHealth(
-                        worker_id=data.get(b"worker_id", b"").decode(),
-                        hostname=data.get(b"hostname", b"").decode(),
-                        pid=int(data.get(b"pid", 0)),
-                        cpu_percent=float(data.get(b"cpu_percent", 0)),
-                        memory_percent=float(data.get(b"memory_percent", 0)),
-                        memory_mb=float(data.get(b"memory_mb", 0)),
-                        tasks_processed=int(data.get(b"tasks_processed", 0)),
-                        last_heartbeat=data.get(b"last_heartbeat", b"").decode(),
-                        status=data.get(b"status", b"unknown").decode(),
-                        uptime_seconds=int(data.get(b"uptime_seconds", 0))
-                    ))
+                    try:
+                        workers.append(WorkerHealth(
+                            worker_id=data.get(b"worker_id", b"").decode(),
+                            hostname=data.get(b"hostname", b"").decode(),
+                            pid=int(data.get(b"pid", 0)),
+                            cpu_percent=float(data.get(b"cpu_percent", 0)),
+                            memory_percent=float(data.get(b"memory_percent", 0)),
+                            memory_mb=float(data.get(b"memory_mb", 0)),
+                            tasks_processed=int(data.get(b"tasks_processed", 0)),
+                            last_heartbeat=data.get(b"last_heartbeat", b"").decode(),
+                            status=data.get(b"status", b"unknown").decode(),
+                            uptime_seconds=int(data.get(b"uptime_seconds", 0))
+                        ))
+                    except Exception:
+                        logger.debug("Skipping malformed worker health entry: %s", key)
         except Exception as e:
-            logger.error(f"Failed to get worker health: {e}")
+            logger.error(f"Failed to fetch worker health: {e}")
 
         return workers
 
@@ -194,8 +207,8 @@ class WorkerHealthMonitor:
                     worker.status = "dead"
                     unhealthy.append(worker)
                     continue
-            except Exception:
-                pass
+            except (ValueError, OSError):
+                logger.debug("Skipping worker with unparseable heartbeat: %s", worker.worker_id)
 
             # Check status
             if worker.status in ("warning", "critical", "dead"):
@@ -219,8 +232,8 @@ class WorkerHealthMonitor:
                         if (now - last_beat_time).total_seconds() > HEARTBEAT_TTL * 5:
                             self.redis.delete(key)
                             removed += 1
-                    except Exception:
-                        pass
+                    except ValueError:
+                        logger.debug("Skipping worker with unparseable heartbeat: %s", key)
 
         except Exception as e:
             logger.error(f"Failed to cleanup dead workers: {e}")

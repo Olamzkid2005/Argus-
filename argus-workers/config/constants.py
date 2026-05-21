@@ -26,6 +26,32 @@ DEFAULT_AGGRESSIVENESS = "default"   # Default scan aggressiveness
 MAX_PAGES_TO_CRAWL = 10              # Max pages for parameter discovery
 MAX_PARAMETERS_TO_FUZZ = 20          # Max params to fuzz
 
+# Git clone SSRF prevention
+ALLOWED_GIT_SCHEMES = ("https", "http", "ssh")
+GIT_HOST_ALLOWLIST = (
+    "github.com",
+    "gitlab.com",
+    "gitlab.freedesktop.org",
+    "bitbucket.org",
+    "gist.github.com",
+    "git.sr.ht",
+    "git.kernel.org",
+    "git.savannah.gnu.org",
+    "git.savannah.nongnu.org",
+    "gitlab.gnome.org",
+    "gitlab.kitware.com",
+    "gitlab.com",
+    "gitlab.freedesktop.org",
+    "gitlab.xfce.org",
+    "gitlab.archlinux.org",
+    "github.com",
+    "bitbucket.org",
+    "gitlab.com",
+)
+
+# Max tool output size for safety
+MAX_TOOL_OUTPUT_BYTES = 100 * 1024 * 1024  # 100MB
+
 # Circuit breaker
 CIRCUIT_BREAKER_THRESHOLD = 3        # Failures before opening
 CIRCUIT_BREAKER_COOLDOWN = 300       # 5 minutes cooldown

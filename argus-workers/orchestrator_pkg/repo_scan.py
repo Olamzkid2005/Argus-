@@ -10,8 +10,11 @@ import re
 import shutil
 import subprocess
 import tempfile
+from urllib.parse import urlparse
 
 from config.constants import (
+    ALLOWED_GIT_SCHEMES,
+    GIT_HOST_ALLOWLIST,
     DEFAULT_AGGRESSIVENESS,
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
@@ -19,6 +22,58 @@ from config.constants import (
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
+
+def validate_repo_url(repo_url: str) -> str:
+    """
+    Validate a git repository URL to prevent SSRF attacks.
+
+    Checks the URL scheme against an allowlist and validates the host
+    against a domain allowlist. Raises ValueError on invalid URLs.
+
+    Args:
+        repo_url: The repository URL to validate
+
+    Returns:
+        The validated repo_url (unchanged)
+
+    Raises:
+        ValueError: If the URL scheme is disallowed or the host is not in the allowlist
+    """
+    parsed = urlparse(repo_url)
+
+    # Block file:// URLs entirely (path traversal risk)
+    if parsed.scheme == "file":
+        raise ValueError(f"Disallowed git URL scheme: file:// (SSRF risk)")
+
+    # Check scheme is in allowlist
+    if parsed.scheme and parsed.scheme not in ALLOWED_GIT_SCHEMES:
+        raise ValueError(
+            f"Disallowed git URL scheme: '{parsed.scheme}://'. "
+            f"Allowed schemes: {', '.join(ALLOWED_GIT_SCHEMES)}"
+        )
+
+    # For ssh:// URLs, also validate the hostname
+    # For git@host:path URLs, parse the host part
+    netloc = parsed.netloc or ""
+    if not netloc and "@" in repo_url and ":" in repo_url:
+        # Handle git@github.com:user/repo.git format
+        before_colon = repo_url.split(":")[0]
+        if "@" in before_colon:
+            netloc = before_colon.split("@")[-1]
+
+    if netloc:
+        hostname = netloc.split(":")[0] if ":" in netloc else netloc
+        if hostname and not any(
+            hostname == domain or hostname.endswith("." + domain)
+            for domain in GIT_HOST_ALLOWLIST
+        ):
+            raise ValueError(
+                f"Git host not in allowlist: '{hostname}'. "
+                f"Allowed hosts end with one of: {', '.join(sorted(set(GIT_HOST_ALLOWLIST)))}"
+            )
+
+    return repo_url
 
 
 def run_npm_audit(repo_path: str) -> list[dict]:
@@ -252,6 +307,9 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 target=repo_url,
                 items_found=items,
             )
+
+        # ── Validate repo URL before cloning (prevents SSRF) ──
+        validate_repo_url(repo_url)
 
         # ── Clone repository ──
         clone_cmd = ["git", "clone"] + clone_depth + ["--", repo_url, temp_dir]

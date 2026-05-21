@@ -83,17 +83,33 @@ class WebSocketEventPublisher:
                 self._redis.close()
             self._redis = None
 
+    @staticmethod
+    def _sanitize_engagement_key(engagement_id: str) -> str:
+        """Sanitize engagement_id for safe use in Redis keys.
+
+        Prevents Redis key injection via malicious engagement_id values
+        by stripping non-alphanumeric characters, newlines, colons, etc.
+
+        Returns:
+            Sanitized key component safe for Redis keys
+        """
+        from utils.validation import sanitize_redis_key
+        return sanitize_redis_key(engagement_id)
+
     def _get_channel(self, engagement_id: str) -> str:
         """Get Redis channel name for an engagement"""
-        return f"ws:engagement:{engagement_id}"
+        safe = self._sanitize_engagement_key(engagement_id)
+        return f"ws:engagement:{safe}"
 
     def _get_events_key(self, engagement_id: str) -> str:
         """Get Redis key for events list"""
-        return f"events:engagement:{engagement_id}"
+        safe = self._sanitize_engagement_key(engagement_id)
+        return f"events:engagement:{safe}"
 
     def _get_state_key(self, engagement_id: str) -> str:
         """Get Redis key for current state"""
-        return f"state:engagement:{engagement_id}"
+        safe = self._sanitize_engagement_key(engagement_id)
+        return f"state:engagement:{safe}"
 
     def _should_publish(self, event: dict[str, Any], min_severity: str | None = None) -> bool:
         """
@@ -492,15 +508,21 @@ class WebSocketEventPublisher:
         items_found: int = None,
         duration_ms: int = None,
     ) -> None:
-        """Write scanner activity to Postgres for persistence."""
+        """Write scanner activity to Postgres for persistence.
+
+        Uses the shared DB connection pool to avoid creating a new
+        TCP connection per call (issue 3.15).
+        """
         db_url = os.getenv("DATABASE_URL")
         if not db_url:
             return
+        db = None
         conn = None
         cursor = None
         try:
-            from database.connection import connect
-            conn = connect(db_url)
+            from database.connection import get_db
+            db = get_db()
+            conn = db.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -517,8 +539,8 @@ class WebSocketEventPublisher:
         finally:
             if cursor:
                 cursor.close()
-            if conn:
-                conn.close()
+            if conn and db:
+                db.release_connection(conn)
 
     def publish_error(
         self,

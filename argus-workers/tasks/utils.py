@@ -36,8 +36,8 @@ class LlmCostTracker:
         self._redis = None
         try:
             self._redis = _get_redis_client()
-        except Exception:
-            logger.warning("Redis unavailable for LlmCostTracker — cost cap disabled for %s", engagement_id)
+        except (ConnectionError, OSError, ValueError) as e:
+            logger.warning("Redis unavailable for LlmCostTracker — cost cap disabled for %s: %s", engagement_id, e)
 
     def has_remaining_budget(self) -> bool:
         """Check if we're still within budget.
@@ -74,8 +74,8 @@ class LlmCostTracker:
             try:
                 self._redis.incrbyfloat(self._redis_key, cost)
                 self._redis.expire(self._redis_key, 86400)  # 24h TTL
-            except Exception:
-                logger.warning("Failed to record LLM cost in Redis for %s", self.engagement_id)
+            except (ConnectionError, OSError, ValueError) as e:
+                logger.warning("Failed to record LLM cost in Redis for %s: %s", self.engagement_id, e)
         return self._get_current_cost() < self.max_cost
 
     def _get_current_cost(self) -> float:
@@ -88,8 +88,8 @@ class LlmCostTracker:
             try:
                 redis_cost = float(self._redis.get(self._redis_key) or 0)
                 return max(self._local_spend, redis_cost)
-            except Exception:
-                logger.debug("Redis unavailable for LlmCostTracker cost lookup for %s, using local spend", self.engagement_id)
+            except (ConnectionError, OSError, ValueError) as e:
+                logger.debug("Redis unavailable for LlmCostTracker cost lookup for %s: %s, using local spend", self.engagement_id, e)
         return self._local_spend
 
 
@@ -168,24 +168,27 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
     return recon_context
 
 
-def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) -> str:
+def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) -> str | None:
     """
     Query the current engagement state from the database.
 
     Canonical implementation — the source of truth.
     Previously duplicated in tasks/base.py, tasks/report.py, tasks/repo_scan.py.
 
+    Returns None instead of defaulting to "created" so callers can distinguish
+    "state not found" from "engagement is in 'created' state" (issue 3.13).
+
     Args:
         engagement_id: Engagement UUID
         db_conn_string: Database connection string (auto-resolves from env if not provided)
 
     Returns:
-        Current engagement status string, or "created" if not found or on error
+        Current engagement status string, or None if not found or on error
     """
     if not db_conn_string:
         db_conn_string = os.getenv("DATABASE_URL")
     if not db_conn_string:
-        return "created"
+        return None
     try:
         from database.connection import connect
         from utils.validation import validate_uuid
@@ -196,14 +199,14 @@ def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) 
             try:
                 cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
                 row = cursor.fetchone()
-                return row[0] if row else "created"
+                return row[0] if row else None
             finally:
                 cursor.close()
         finally:
             conn.close()
     except (ValueError, OSError):
-        logger.warning("Failed to get engagement status, defaulting to 'created'", exc_info=True)
-        return "created"
+        logger.warning("Failed to get engagement status for %s", engagement_id, exc_info=True)
+        return None
 
 
 def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:

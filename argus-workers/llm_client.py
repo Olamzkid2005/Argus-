@@ -200,8 +200,8 @@ class LLMClient:
                 r.zadd(rate_key, {member: now})
                 r.expire(rate_key, int(self._rate_limit_window) + 10)
                 return
-            except Exception:
-                logger.debug("Redis rate limiter unavailable — falling back to in-process")
+            except (ConnectionError, OSError, ValueError) as e:
+                logger.debug("Redis rate limiter unavailable — falling back to in-process: %s", e)
 
         # Fallback: in-process rate limiter
         self._request_timestamps = [t for t in self._request_timestamps if t > window_start]

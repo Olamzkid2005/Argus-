@@ -13,8 +13,14 @@ Specialist agents:
 import concurrent.futures
 import copy
 import logging
+import os
+import signal
+import subprocess
+import tempfile
+import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from streaming import (
@@ -200,11 +206,9 @@ class IDORAgent(SpecialistAgent):
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / "arjun_idor.json")
+                    arjun_out = str(sandbox / "tmp" / f"arjun_idor_{self.engagement_id}.json")
                 else:
-                    import os
-                    import tempfile
-                    arjun_out = os.path.join(tempfile.gettempdir(), "arjun_idor.json")
+                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_idor_{self.engagement_id}.json")
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -368,11 +372,9 @@ class APIAgent(SpecialistAgent):
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / "arjun_api.json")
+                    arjun_out = str(sandbox / "tmp" / f"arjun_api_{self.engagement_id}.json")
                 else:
-                    import os
-                    import tempfile
-                    arjun_out = os.path.join(tempfile.gettempdir(), "arjun_api.json")
+                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_api_{self.engagement_id}.json")
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -421,19 +423,22 @@ class APIAgent(SpecialistAgent):
                 logger.warning(f"[API] dalfox failed for {target}: {e}")
 
             # 4. sqlmap injection testing on API params
-            logger.info(f"[API] Running sqlmap on {target}")
-            logger.warning("[API] sqlmap executing against %s — verify target is in authorized scope", target)
+            # Re-validate target is in authorized scope before sqlmap execution
+            from tools.scope_validator import validate_target_scope
+            if not validate_target_scope(target, self.engagement_id):
+                logger.warning("[API] Skipping sqlmap for %s — not in authorized scope", target)
+                continue
+
+            logger.info("[API] Running sqlmap on %s", target)
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
-                    sqlmap_out = str(sandbox / "tmp" / "sqlmap_api.json")
+                    sqlmap_out = str(sandbox / "tmp" / f"sqlmap_api_{self.engagement_id}.json")
                 else:
-                    import os
-                    import tempfile
-                    sqlmap_out = os.path.join(tempfile.gettempdir(), "sqlmap_api.json")
+                    sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_api_{self.engagement_id}.json")
                 sqlmap_findings = self._run_tool(
                     "sqlmap",
-                    ["-u", target, "--json-output", sqlmap_out],
+                    ["-u", target, "--batch", "--json-output", sqlmap_out],
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(sqlmap_findings)
@@ -507,6 +512,7 @@ class SwarmOrchestrator:
         emit_swarm_agent_started(active[0].engagement_id, "swarm_orchestrator")
 
         all_findings: list[dict] = []
+        all_findings_lock = threading.Lock()
         completed: set[str] = set()
         per_agent_timeout = max(timeout // max(len(active), 1), 300)  # at least 5 min per agent
 
@@ -528,7 +534,8 @@ class SwarmOrchestrator:
                             emit_swarm_agent_complete(
                                 active[0].engagement_id, domain, findings_count=len(result),
                             )
-                            all_findings.extend(result)
+                            with all_findings_lock:
+                                all_findings.extend(result)
                             completed.add(domain)
                         else:
                             logger.info("Specialist %s returned no findings", domain)
@@ -550,19 +557,28 @@ class SwarmOrchestrator:
                 # calls shutdown(wait=True) which blocks indefinitely on hung threads.
                 pool.shutdown(wait=False, cancel_futures=True)
 
-            # Cancel any remaining futures (best-effort — may not stop running threads).
-            # ThreadPoolExecutor.cancel() only cancels futures not yet started.
-            # Already-running threads (e.g. long-running sqlmap subprocess) will
-            # NOT be interrupted — they continue consuming resources in the background.
-            # TODO: Convert long-running tools to process-based execution so they
-            # can be killed on timeout via subprocess.terminate().
+            # Cancel remaining futures and actively terminate any running tool subprocesses.
+            # Uses process group kill to ensure children (sqlmap, nuclei, etc.) are reaped.
             for future, domain in futures_map.items():
                 if domain not in completed:
                     logger.warning(
-                        "Swarm: agent %s future cancelled — thread may still be running in background",
+                        "Swarm: agent %s timed out — terminating running subprocesses",
                         domain,
                     )
                     future.cancel()
+
+            # Kill any orphaned tool subprocesses that may have been spawned
+            # by timed-out agents (process group signal to catch children).
+            try:
+                import psutil
+                current_process = psutil.Process()
+                for child in current_process.children(recursive=True):
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+            except Exception:
+                logger.debug("Could not kill orphaned tool processes (psutil may not be available)")
 
         deduped = self._deduplicate(all_findings)
         dedup_removed = len(all_findings) - len(deduped)

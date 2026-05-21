@@ -602,8 +602,8 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
 
 QUICK WIN: {quick_win}
 """
-                except Exception:
-                    pass
+                except (OSError, UnicodeDecodeError) as e:
+                    logger.warning("Failed to load bugbounty knowledge file %s: %s", ref_file, e)
 
     return ""
 
@@ -816,7 +816,8 @@ def build_observation_summary(tool_name: str, result) -> str:
             try:
                 json.loads(line)
                 json_lines.append(line)
-            except Exception:
+            except (ValueError, json.JSONDecodeError):
+                # Skip non-JSON lines that happen to start with { or [
                 pass
 
     if json_lines:
