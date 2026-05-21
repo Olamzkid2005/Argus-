@@ -324,10 +324,11 @@ def enrich_findings_with_blame(repo_path, findings):
     return findings
 
 
-def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
+def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str | None:
     """Query the current engagement state from the database.
 
     Delegates to tasks.utils.get_engagement_state (canonical implementation).
+    Returns None if the engagement is not found or on DB error (issue 3.13).
     """
     from tasks.utils import get_engagement_state
     return get_engagement_state(engagement_id, db_conn_string)
