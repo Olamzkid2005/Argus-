@@ -117,10 +117,11 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
                 conn.close()
 
 
-def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str:
+def _get_engagement_state(engagement_id: str, db_conn_string: str) -> str | None:
     """Query the current engagement state from the database.
 
     Delegates to tasks.utils.get_engagement_state (canonical implementation).
+    Returns None if the engagement is not found or on DB error (issue 3.13).
     """
     from tasks.utils import get_engagement_state
     return get_engagement_state(engagement_id, db_conn_string)
