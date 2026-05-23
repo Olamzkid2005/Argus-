@@ -171,6 +171,17 @@ class FeatureFlags:
         return flags
 
 
+# ── Phase-specific feature flag names ──
+# These are the canonical flag names used across the codebase
+# to gate the Agent Runtime Refactor phases.
+
+FEATURE_ENGAGEMENT_STATE = "ENGAGEMENT_STATE"
+FEATURE_TRUE_REACT_LOOP = "TRUE_REACT_LOOP"
+FEATURE_CLEAN_ORCHESTRATOR = "CLEAN_ORCHESTRATOR"
+FEATURE_ATTACK_GRAPH_V2 = "ATTACK_GRAPH_V2"
+FEATURE_MEMORY_RETRIEVAL = "MEMORY_RETRIEVAL"
+FEATURE_GOVERNANCE_V2 = "GOVERNANCE_V2"
+
 # Global instance for convenience
 _global_flags: FeatureFlags | None = None
 _global_flags_lock = threading.Lock()
