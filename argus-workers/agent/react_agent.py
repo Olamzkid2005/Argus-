@@ -621,6 +621,7 @@ class ReActAgent:
         task: str,
         initial_context: dict = None,  # noqa: ARG002
         recon_context: Any = None,
+        _reset_history: bool = True,
     ) -> list[AgentResult]:
         """
         Run the agent loop for a given task.
@@ -629,13 +630,17 @@ class ReActAgent:
             task: Task description (e.g., "scan: https://example.com")
             initial_context: Initial context data
             recon_context: ReconContext for LLM tool selection
+            _reset_history: Reset history before starting (default True).
+                            Set False when running within run_lifecycle() to
+                            preserve context across phases.
 
         Returns:
             List of tool execution results
         """
         slog = ScanLogger("agent", engagement_id=self.engagement_id)
         slog.phase_header(f"AGENT RUN: {task[:80]}")
-        self.history = []
+        if _reset_history:
+            self.history = []
         results = []
         tried_tools = set()
         total_cost_usd = 0.0
@@ -858,3 +863,98 @@ class ReActAgent:
 
         slog.agent_complete(tools_ran=len(results), total_cost=total_cost_usd)
         return results
+
+    def run_lifecycle(
+        self,
+        target: str,
+        phases: list[str] | None = None,
+        recon_context: Any = None,
+        tool_runner=None,
+    ) -> dict[str, list[AgentResult]]:
+        """
+        Run the full engagement lifecycle across multiple phases.
+
+        A single agent instance transitions through each phase, preserving
+        context across phases via EngagementState (when enabled) or history.
+        Tools are reloaded per phase from the phase-specific tool set.
+
+        This is the Phase 2 "True ReAct Loop" — the agent manages the full
+        recon -> scan -> analyze -> report lifecycle rather than handling
+        only scan-phase tool selection.
+
+        Args:
+            target: Target URL or identifier
+            phases: List of phases to run (default: all standard phases)
+            recon_context: ReconContext for LLM tool selection
+            tool_runner: ToolRunner for registering phase-specific tools
+
+        Returns:
+            Dict mapping phase names to lists of AgentResults
+        """
+        if phases is None:
+            phases = ["recon", "scan", "analyze", "report"]
+
+        self._ensure_phase_tools()
+        lifecycle_results: dict[str, list[AgentResult]] = {}
+
+        for phase in phases:
+            if self._cancelled:
+                logger.info("Agent lifecycle: cancelled at phase %s", phase)
+                break
+
+            # Load phase-specific tools
+            self.set_phase(phase)
+            if tool_runner is not None:
+                self.set_tool_runner(tool_runner)
+
+            task_desc = self.PHASE_AGENTS.get(phase, {}).get(
+                "description", phase
+            )
+            logger.info(
+                "Agent lifecycle: running phase '%s' — %s",
+                phase, task_desc,
+            )
+
+            # Run the phase with history preserved across phases
+            # (EngagementState provides the canonical cross-phase context;
+            #  self.history carries the fallback context when state is absent.)
+            phase_results = self.run(
+                task=f"{phase}: {target}",
+                recon_context=recon_context,
+                _reset_history=False,
+            )
+            lifecycle_results[phase] = phase_results
+
+            # Check if EngagementState signals terminal state
+            from feature_flags import is_enabled as _ff_enabled
+            if (
+                _ff_enabled("ENGAGEMENT_STATE", default=False)
+                and self.engagement_state is not None
+                and hasattr(self.engagement_state, "is_complete")
+                and self.engagement_state.is_complete()
+            ):
+                logger.info(
+                    "Agent lifecycle: engagement %s is terminal — "
+                    "stopping after phase %s",
+                    self.engagement_id, phase,
+                )
+                break
+
+            # Log phase transition
+            if phase != phases[-1]:
+                try:
+                    from streaming import emit_thinking
+                    if self.engagement_id:
+                        emit_thinking(
+                            self.engagement_id,
+                            f"Phase {phase} complete — transitioning to "
+                            f"{phases[phases.index(phase) + 1]}...",
+                        )
+                except Exception:
+                    pass
+
+        logger.info(
+            "Agent lifecycle complete for %s — ran %d phases",
+            self.engagement_id, len(lifecycle_results),
+        )
+        return lifecycle_results
