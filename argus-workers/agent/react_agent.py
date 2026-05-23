@@ -62,19 +62,128 @@ class ReActAgent:
     3. In each iteration, calls the LLM to pick the next tool
     4. Feeds meaningful output summaries back so the LLM can reason about results
     5. Stops only when coverage rules are met — not on empty tool output
+
+    Phase management (folded from CoordinatorAgent):
+    - PHASE_AGENTS: maps phase names to descriptions and tool lists
+    - VALID_TRANSITIONS: defines allowed phase transitions
+    - create_for_phase(): creates a configured ReActAgent for a given phase
     """
 
     _phase_tools_loaded = False
 
     @classmethod
     def _ensure_phase_tools(cls):
-        """Lazy-load PHASE_TOOLS from tool_definitions SSOT."""
+        """Lazy-load PHASE_TOOLS and PHASE_AGENTS from tool_definitions SSOT."""
         if not cls._phase_tools_loaded:
-            from tool_definitions import build_phase_tools_dict
+            from tool_definitions import build_phase_tools_dict, get_tools_for_phase
             cls.PHASE_TOOLS = build_phase_tools_dict()
+            cls.PHASE_AGENTS = {
+                phase: {
+                    "description": f"{phase.capitalize().replace('_', ' ')}",
+                    "tools": [t.name for t in get_tools_for_phase(phase)],
+                }
+                for phase in ["recon", "scan", "deep_scan", "repo_scan", "analyze", "report"]
+            }
             cls._phase_tools_loaded = True
 
     PHASE_TOOLS = {}
+    PHASE_AGENTS = {}
+
+    VALID_TRANSITIONS = {
+        "recon": ["scan"],
+        "scan": ["analyze", "deep_scan"],
+        "deep_scan": ["analyze"],
+        "repo_scan": ["scan"],
+        "analyze": ["report", "recon"],
+        "report": [],
+    }
+
+    @classmethod
+    def create_for_phase(
+        cls,
+        phase: str,
+        tool_runner=None,
+        engagement_id: str = None,
+        llm_client=None,
+        decision_repo=None,
+        mode: str | None = None,
+        governance=None,
+        memory_retriever=None,
+        engagement_state=None,
+    ) -> "ReActAgent":
+        """
+        Create a ReActAgent for a specific phase with tools pre-registered.
+
+        Args:
+            phase: Phase name (recon, scan, repo_scan, analyze, report)
+            tool_runner: Optional ToolRunner instance to register real tools
+            engagement_id: Optional engagement ID for context
+            llm_client: Optional LLMClient for LLM-driven tool selection
+            decision_repo: Optional AgentDecisionRepository for logging
+            mode: Optional mode ('bugbounty' for Bug-Reaper methodology)
+            governance: Optional Governance instance for safety controls
+            memory_retriever: Optional MemoryRetriever for context retrieval
+            engagement_state: Optional EngagementState for canonical state
+
+        Returns:
+            Configured ReActAgent
+        """
+        registry = ToolRegistry()
+        cls._ensure_phase_tools()
+        phase_tools = cls.PHASE_TOOLS.get(phase, [])
+
+        if tool_runner:
+            try:
+                from tool_definitions import TOOLS
+            except ImportError:
+                TOOLS = {}
+
+            for tool_name in phase_tools:
+                def make_runner(tn):
+                    def run_tool(target: str = "", **kwargs):
+                        args = kwargs.pop("args", [])
+                        timeout = kwargs.pop("timeout", 300)
+                        if target:
+                            args = [target] + (args or [])
+                        return tool_runner.run(tn, args, timeout=timeout)
+                    run_tool.__name__ = tn
+                    return run_tool
+
+                tool_def = TOOLS.get(tool_name)
+                if tool_def:
+                    description = tool_def.description
+                    try:
+                        parameters = [
+                            {
+                                "name": p.name,
+                                "description": p.description,
+                                "required": p.required,
+                            }
+                            for p in tool_def.parameters
+                        ]
+                    except Exception:
+                        parameters = []
+                else:
+                    description = f"Security tool: {tool_name}"
+                    parameters = [{"name": "target", "description": "Target URL or path", "required": True}]
+
+                registry.register(
+                    tool_name,
+                    make_runner(tool_name),
+                    {"name": tool_name, "description": description, "parameters": parameters},
+                )
+
+        return cls(
+            registry,
+            llm_client=llm_client,
+            decision_repo=decision_repo,
+            engagement_id=engagement_id,
+            phase=phase,
+            mode=mode,
+            governance=governance,
+            memory_retriever=memory_retriever,
+            engagement_state=engagement_state,
+        )
 
     def __init__(
         self,
@@ -172,6 +281,21 @@ class ReActAgent:
         """Set the current phase to determine which tools to use."""
         self._ensure_phase_tools()
         self._phase = phase
+
+    def can_transition_to(self, next_phase: str) -> bool:
+        """Check if transition to next phase is valid."""
+        return next_phase in self.VALID_TRANSITIONS.get(self._phase, [])
+
+    def transition_to(self, next_phase: str) -> bool:
+        """Transition to next phase if valid."""
+        if not self.can_transition_to(next_phase):
+            logger.warning(
+                "Invalid phase transition: %s -> %s",
+                self._phase, next_phase,
+            )
+            return False
+        self._phase = next_phase
+        return True
 
     def set_tool_runner(self, tool_runner):
         """

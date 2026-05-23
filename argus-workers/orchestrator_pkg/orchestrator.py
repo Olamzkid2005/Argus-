@@ -646,14 +646,6 @@ class Orchestrator:
         auth_config = job.get("auth_config", {})
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
-        _llm_ok = self.llm_client is not None and self.llm_client.is_available()
-        _recon_ok = recon_context is not None and (
-            (hasattr(recon_context, 'live_endpoints') and recon_context.live_endpoints) or
-            (hasattr(recon_context, 'tech_stack') and recon_context.tech_stack) or
-            (hasattr(recon_context, 'subdomains') and recon_context.subdomains) or
-            (hasattr(recon_context, 'crawled_paths') and recon_context.crawled_paths) or
-            (hasattr(recon_context, 'parameter_bearing_urls') and recon_context.parameter_bearing_urls)
-        )
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.bug_bounty_mode = bool(bug_bounty_mode)
@@ -662,29 +654,20 @@ class Orchestrator:
         self._bug_bounty_mode = bool(bug_bounty_mode)
         self._agent_mode_enabled = True
 
-        # Orchestrator always tries agent-first with deterministic fallback.
+        # Agent-first scan with deterministic fallback.
         # Mode selection is the agent's responsibility, not the orchestrator's.
         logger.info(
-            "Orchestrator delegating scan to agent "
-            "for engagement %s", self.engagement_id,
+            "Orchestrator running agent-first scan for engagement %s",
+            self.engagement_id,
         )
-        scan_mode = "agent"
-        try:
-            findings = self._run_agent_scan(
-                targets, recon_context, job.get("budget", {}),
-                scan_aggressiveness, auth_config, bug_bounty_mode,
-            )
-        except Exception as _scan_err:
-            slog.warning("Agent scan failed (%s), falling back to deterministic: %s", self.engagement_id, _scan_err)
-            scan_mode = "deterministic_fallback"
-            findings = self._run_deterministic_scan(
-                targets, recon_context, job.get("budget", {}),
-                scan_aggressiveness, auth_config,
-            )
+        findings = self._run_scan_with_fallback(
+            targets, recon_context, job.get("budget", {}),
+            scan_aggressiveness, auth_config, bug_bounty_mode,
+        )
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
 
-        slog.info(f"Scan mode: {scan_mode}, total findings: {len(findings)}")
+        slog.info(f"Scan complete — {len(findings)} total findings")
         findings_count = len(findings)
         failed_saves = self._save_findings(findings)
         if failed_saves > 0:
@@ -722,60 +705,70 @@ class Orchestrator:
                 )
             logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
 
-    def _run_agent_scan(
+    def _run_scan_with_fallback(
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict, bug_bounty_mode: bool = False,
     ) -> list[dict]:
-        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
-        slog.phase_header("AGENT SCAN", targets=f"{len(targets)} target(s)")
-        emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
-        findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config, bug_bounty_mode=bug_bounty_mode, budget=budget)
-        from feature_flags import is_enabled as _ff_enabled
-        if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
-            agent_tried = self.state.tried_tools
-        else:
-            agent_tried = getattr(self, "_last_agent_tried_tools", set())
-        logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
-        tech_stack = recon_context.tech_stack if recon_context else None
-        deterministic_findings = execute_scan_pipeline(
-            self, targets, budget, aggressiveness, auth_config,
-            tech_stack=tech_stack,
-            skip_tools=agent_tried,
-            recon_context=recon_context,
-        )
-        findings.extend(deterministic_findings)
-        slog.tool_complete("agent_scan", success=True, findings=len(findings))
-        return findings
+        """
+        Agent-first scan with deterministic fallback.
 
-    def _run_deterministic_scan(
-        self, targets: list[str], recon_context,
-        budget: dict, aggressiveness: str, auth_config: dict,
-    ) -> list[dict]:
+        Phase 3: The orchestrator no longer selects between agent and deterministic
+        modes. It always tries the agent first. If the agent succeeds, a safety-net
+        deterministic pass runs with tools the agent already tried skipped. If the
+        agent fails entirely, a full deterministic scan runs as fallback.
+        """
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
-        slog.phase_header("DETERMINISTIC SCAN")
-
-        # Use DeterministicRuntime for clean tool dispatch with middleware chain
-        from runtime import DeterministicRuntime, shadow_compare
-        dr = DeterministicRuntime(self, execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None)
-        tech_stack = recon_context.tech_stack if recon_context else None
-        result = dr.run(
-            targets=targets, budget=budget, aggressiveness=aggressiveness,
-            auth_config=auth_config, tech_stack=tech_stack,
-            skip_tools=None, recon_context=recon_context,
-        )
-        # Shadow-compare: DeterministicRuntime vs old execute_scan_pipeline
-        shadow_compare(
-            "deterministic_scan", self.engagement_id,
-            new_result=result,
-            old_path_fn=lambda: execute_scan_pipeline(
+        slog.phase_header("SCAN WITH FALLBACK", targets=f"{len(targets)} target(s)")
+        emit_thinking(self.engagement_id, "Running agent-driven scan...")
+        try:
+            findings = self.run_scan_with_agent(
+                targets, recon_context, aggressiveness,
+                auth_config=auth_config, bug_bounty_mode=bug_bounty_mode, budget=budget,
+            )
+            from feature_flags import is_enabled as _ff_enabled
+            if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
+                agent_tried = self.state.tried_tools
+            else:
+                agent_tried = getattr(self, "_last_agent_tried_tools", set())
+            logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
+            tech_stack = recon_context.tech_stack if recon_context else None
+            deterministic_findings = execute_scan_pipeline(
                 self, targets, budget, aggressiveness, auth_config,
-                tech_stack=tech_stack, recon_context=recon_context,
-            ),
-            key_fields=None,
-        )
-
-        slog.tool_complete("deterministic_scan", success=True, findings=len(result))
-        return result
+                tech_stack=tech_stack,
+                skip_tools=agent_tried,
+                recon_context=recon_context,
+            )
+            findings.extend(deterministic_findings)
+            slog.tool_complete("scan_with_fallback", success=True, findings=len(findings))
+            return findings
+        except Exception as agent_err:
+            slog.warning(
+                "Agent scan failed for engagement %s, falling back to full deterministic: %s",
+                self.engagement_id, agent_err,
+            )
+            # Full deterministic fallback via DeterministicRuntime
+            from runtime import DeterministicRuntime, shadow_compare
+            dr = DeterministicRuntime(
+                self,
+                execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None,
+            )
+            tech_stack = recon_context.tech_stack if recon_context else None
+            result = dr.run(
+                targets=targets, budget=budget, aggressiveness=aggressiveness,
+                auth_config=auth_config, tech_stack=tech_stack,
+                skip_tools=None, recon_context=recon_context,
+            )
+            shadow_compare(
+                "deterministic_scan", self.engagement_id,
+                new_result=result,
+                old_path_fn=lambda: execute_scan_pipeline(
+                    self, targets, budget, aggressiveness, auth_config,
+                    tech_stack=tech_stack, recon_context=recon_context,
+                ),
+                key_fields=None,
+            )
+            slog.tool_complete("deterministic_fallback", success=True, findings=len(result))
+            return result
 
     def _maybe_run_browser_scanner(
         self, targets: list[str], recon_context, findings: list[dict],

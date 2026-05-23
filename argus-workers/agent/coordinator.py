@@ -1,43 +1,37 @@
 """
-Coordinator Agent - Multi-Agent Coordinator that delegates phases to specialized sub-agents.
+Coordinator Agent - Delegates to ReActAgent.create_for_phase().
+
+This module exists for backward compatibility. New code should use
+ReActAgent.create_for_phase() directly.
 """
 import logging
 
 from utils.logging_utils import ScanLogger
 
 from .react_agent import ReActAgent
-from .tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 
 class CoordinatorAgent:
-    """Multi-Agent Coordinator — delegates phases to specialized sub-agents."""
+    """Multi-Agent Coordinator — delegates phases to ReActAgent.
 
-    PHASE_AGENTS = {}
-    _phase_agents_loaded = False
-
-    VALID_TRANSITIONS = {
-        "recon": ["scan"],
-        "scan": ["analyze", "deep_scan"],
-        "deep_scan": ["analyze"],
-        "repo_scan": ["scan"],
-        "analyze": ["report", "recon"],
-        "report": [],
-    }
+    Deprecated: Use ReActAgent.create_for_phase() directly.
+    """
 
     @classmethod
     def _ensure_phase_agents(cls):
-        if not cls._phase_agents_loaded:
-            from tool_definitions import get_tools_for_phase
-            cls.PHASE_AGENTS = {
-                phase: {
-                    "description": f"{phase.capitalize().replace('_', ' ')}",
-                    "tools": [t.name for t in get_tools_for_phase(phase)],
-                }
-                for phase in ["recon", "scan", "deep_scan", "repo_scan", "analyze", "report"]
-            }
-            cls._phase_agents_loaded = True
+        """Delegate to ReActAgent's phase tool loading."""
+        ReActAgent._ensure_phase_tools()
+        # Sync references after ReActAgent lazy-loads its class attributes
+        cls.PHASE_AGENTS = ReActAgent.PHASE_AGENTS
+        cls.VALID_TRANSITIONS = ReActAgent.VALID_TRANSITIONS
+
+    # Default — replaced by _ensure_phase_agents() with ReActAgent's
+    # lazy-loaded values. Backward-compatible: tests access
+    # CoordinatorAgent.PHASE_AGENTS/VALID_TRANSITIONS directly.
+    PHASE_AGENTS = ReActAgent.PHASE_AGENTS
+    VALID_TRANSITIONS = ReActAgent.VALID_TRANSITIONS
 
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
@@ -47,8 +41,7 @@ class CoordinatorAgent:
 
     def can_transition_to(self, next_phase: str) -> bool:
         """Check if transition to next phase is valid."""
-        self._ensure_phase_agents()
-        return next_phase in self.VALID_TRANSITIONS.get(self.current_phase, [])
+        return next_phase in ReActAgent.VALID_TRANSITIONS.get(self.current_phase, [])
 
     def transition_to(self, next_phase: str) -> bool:
         """Transition to next phase if valid."""
@@ -63,8 +56,8 @@ class CoordinatorAgent:
     def get_phase_agent(self, phase: str, tool_runner=None,
                         llm_client=None, decision_repo=None,
                         engagement_id: str = None, mode: str | None = None) -> ReActAgent:
-        """Create a ReAct agent for a specific phase."""
-        return create_phase_agent(
+        """Create a ReAct agent for a specific phase (delegates to ReActAgent.create_for_phase)."""
+        return ReActAgent.create_for_phase(
             phase,
             tool_runner=tool_runner,
             engagement_id=engagement_id or self.engagement_id,
@@ -77,8 +70,7 @@ class CoordinatorAgent:
                   llm_client=None, decision_repo=None, mode: str | None = None) -> list:
         """Run a single phase with tools."""
         self._slog.phase_header(f"COORDINATOR RUN PHASE: {phase}")
-        self._ensure_phase_agents()
-        agent = create_phase_agent(
+        agent = ReActAgent.create_for_phase(
             phase,
             tool_runner=tool_runner,
             engagement_id=self.engagement_id,
@@ -86,7 +78,7 @@ class CoordinatorAgent:
             decision_repo=decision_repo,
             mode=mode,
         )
-        task_desc = self.PHASE_AGENTS.get(phase, {}).get("description", phase)
+        task_desc = ReActAgent.PHASE_AGENTS.get(phase, {}).get("description", phase)
         results = agent.run(task_desc, initial_context=context)
         self._slog.info(f"Phase {phase} complete: {len(results)} results")
         self.phase_results[phase] = results
@@ -102,7 +94,10 @@ def create_phase_agent(
     mode: str | None = None,
 ) -> ReActAgent:
     """
-    Create a ReActAgent for a specific phase with tools pre-registered.
+    Create a ReActAgent for a specific phase.
+
+    Delegates to ReActAgent.create_for_phase(). This function exists for
+    backward compatibility. New code should use ReActAgent.create_for_phase().
 
     Args:
         phase: Phase name (recon, scan, repo_scan, analyze, report)
@@ -115,58 +110,11 @@ def create_phase_agent(
     Returns:
         Configured ReActAgent
     """
-    registry = ToolRegistry()
-    ReActAgent._ensure_phase_tools()
-    phase_tools = ReActAgent.PHASE_TOOLS.get(phase, [])
-
-    if tool_runner:
-        # Read real descriptions and parameter schemas from SSOT
-        try:
-            from tool_definitions import TOOLS
-        except ImportError:
-            TOOLS = {}  # noqa: N806
-
-        for tool_name in phase_tools:
-            def make_runner(tn):
-                def run_tool(target: str = "", **kwargs):
-                    args = kwargs.pop("args", [])
-                    timeout = kwargs.pop("timeout", 300)
-                    if target:
-                        args = [target] + (args or [])
-                    return tool_runner.run(tn, args, timeout=timeout)
-                run_tool.__name__ = tn
-                return run_tool
-
-            tool_def = TOOLS.get(tool_name)
-            if tool_def:
-                description = tool_def.description
-                try:
-                    parameters = [
-                        {
-                            "name": p.name,
-                            "description": p.description,
-                            "required": p.required,
-                        }
-                        for p in tool_def.parameters
-                    ]
-                except Exception:
-                    parameters = []
-            else:
-                description = f"Security tool: {tool_name}"
-                parameters = [{"name": "target", "description": "Target URL or path", "required": True}]
-
-            registry.register(
-                tool_name,
-                make_runner(tool_name),
-                {"name": tool_name, "description": description, "parameters": parameters},
-            )
-
-    agent = ReActAgent(
-        registry,
+    return ReActAgent.create_for_phase(
+        phase=phase,
+        tool_runner=tool_runner,
+        engagement_id=engagement_id,
         llm_client=llm_client,
         decision_repo=decision_repo,
-        engagement_id=engagement_id,
-        phase=phase,
         mode=mode,
     )
-    return agent
