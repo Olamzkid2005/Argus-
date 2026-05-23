@@ -25,6 +25,28 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                       trace_id=trace_id, current_state="analyzing") as ctx:
         result = ctx.orchestrator.run_analysis(ctx.job)
 
+        # Phase 2: TRUE_REACT_LOOP — analysis consumed by agent loop,
+        # not dispatched as batch actions.
+        if result.get("_react_loop", False):
+            analysis = result.get("analysis", {})
+            slog.info(
+                "TRUE_REACT_LOOP: analysis complete — risk=%s, "
+                "coverage_gaps=%d, high_value_targets=%d",
+                analysis.get("risk_level", "unknown"),
+                len(analysis.get("coverage_gaps", [])),
+                len(analysis.get("high_value_targets", [])),
+            )
+            # Advance to reporting — the agent loop will make the next
+            # decision based on analysis.
+            ctx.state.transition("reporting", "Analysis complete (agent loop)")
+            try:
+                app.send_task('tasks.report.generate_report',
+                              args=[engagement_id, ctx.trace_id, budget])
+            except Exception as e:
+                logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+                ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
+            return result
+
         actions = result.get("actions", [])
         if actions:
             slog.info(f"{len(actions)} action(s) generated — processing")

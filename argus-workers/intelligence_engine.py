@@ -65,6 +65,10 @@ class IntelligenceEngine:
         Evaluate snapshot and generate actions.
         Uses ONLY frozen snapshot data, never live DB reads.
 
+        When TRUE_REACT_LOOP feature flag is enabled, calls analyze_state()
+        instead of generate_actions() — returns analysis for agent-loop
+        consumption rather than batch action dispatch.
+
         Args:
             snapshot: Immutable snapshot containing:
                 - findings: List of findings
@@ -76,9 +80,11 @@ class IntelligenceEngine:
         Returns:
             Dictionary with:
                 - scored_findings: Findings with updated confidence scores
-                - actions: List of recommended actions
+                - actions: List of recommended actions (legacy path)
+                - analysis: Analysis dict from analyze_state() (new path)
                 - reasoning: Explanation of decisions
         """
+        from feature_flags import is_enabled as _ff_enabled
         from utils.logging_utils import ScanLogger
         slog = ScanLogger("intelligence_engine")
         slog.phase_header("INTELLIGENCE EVALUATION")
@@ -107,28 +113,53 @@ class IntelligenceEngine:
             # Build and persist attack graph for snapshot consumption
             self._build_and_persist_attack_graph(enriched_findings, snapshot)
 
-            # Generate actions based on intelligence
-            actions = self.generate_actions(enriched_findings, snapshot)
-
-            # Generate reasoning
-            reasoning = self._generate_reasoning(enriched_findings, actions)
-
-            # Log intelligence decision
-            self.logger.log_intelligence_decision(
-                actions=actions,
-                findings_analyzed=len(findings),
-                reasoning=reasoning
-            )
-
-            duration_ms = int((_time.time() - start) * 1000)
-            slog.info(f"Evaluation complete: {len(enriched_findings)} enriched findings, {len(actions)} actions ({duration_ms}ms)")
-
-            return {
-                "scored_findings": enriched_findings,
-                "actions": actions,
-                "reasoning": reasoning,
-                "trace_id": get_trace_id(),
-            }
+            # Phase 2: TRUE_REACT_LOOP flag — use analyze_state() instead of
+            # generate_actions(). The analysis is consumed by the agent loop
+            # (single-step reasoning) rather than dispatch by batch actions.
+            if _ff_enabled("TRUE_REACT_LOOP", default=False):
+                # Build a minimal EngagementState-like object from snapshot
+                # for analyze_state() consumption.
+                _state = _SnapshotStateAdapter(snapshot, enriched_findings)
+                analysis = self.analyze_state(_state)
+                reasoning = self._generate_reasoning(enriched_findings, [])
+                duration_ms = int((_time.time() - start) * 1000)
+                slog.info(
+                    f"Evaluation complete (TRUE_REACT_LOOP): "
+                    f"{len(enriched_findings)} enriched findings, "
+                    f"risk={analysis.get('risk_level', 'unknown')} "
+                    f"({duration_ms}ms)"
+                )
+                self.logger.log_intelligence_decision(
+                    actions=[],
+                    findings_analyzed=len(findings),
+                    reasoning=reasoning,
+                )
+                return {
+                    "scored_findings": enriched_findings,
+                    "actions": [],  # No batch actions in new path
+                    "analysis": analysis,
+                    "reasoning": reasoning,
+                    "trace_id": get_trace_id(),
+                    "_react_loop": True,  # Signal to caller that this is agent-loop mode
+                }
+            else:
+                # Legacy path: generate batch actions for dispatch
+                actions = self.generate_actions(enriched_findings, snapshot)
+                reasoning = self._generate_reasoning(enriched_findings, actions)
+                self.logger.log_intelligence_decision(
+                    actions=actions,
+                    findings_analyzed=len(findings),
+                    reasoning=reasoning,
+                )
+                duration_ms = int((_time.time() - start) * 1000)
+                slog.info(f"Evaluation complete: {len(enriched_findings)} enriched findings, {len(actions)} actions ({duration_ms}ms)")
+                return {
+                    "scored_findings": enriched_findings,
+                    "actions": actions,
+                    "reasoning": reasoning,
+                    "trace_id": get_trace_id(),
+                    "_react_loop": False,
+                }
 
     def assign_confidence_scores(
         self,
@@ -1128,3 +1159,27 @@ class IntelligenceEngine:
             return "medium"
         else:
             return "low"
+
+
+class _SnapshotStateAdapter:
+    """
+    Adapter that wraps a snapshot dict to quack like an EngagementState.
+
+    Used by IntelligenceEngine.evaluate() when TRUE_REACT_LOOP flag is
+    enabled, allowing analyze_state() to consume snapshot data without
+    requiring a full EngagementState instance.
+
+    This is a TEMPORARY adapter — it exists to bridge the gap between the
+    old snapshot-centric evaluate() flow and the new EngagementState-centric
+    analyze_state() flow. It will be removed once the full migration is
+    complete and all callers pass an EngagementState directly.
+    """
+
+    def __init__(self, snapshot: dict, findings: list[dict]):
+        self.snapshot = snapshot
+        self.findings = findings
+        self.engagement_id = snapshot.get("engagement_id", "")
+        self.execution_iteration = (
+            snapshot.get("engagement_state", {})
+            .get("execution_iteration", 0)
+        )
