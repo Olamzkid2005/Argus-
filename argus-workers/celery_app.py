@@ -99,6 +99,7 @@ app = Celery(
         "tasks.asset_discovery",
         "tasks.scheduled",
         "tasks.replay",
+        "tasks.diff",
     ],
 )
 
@@ -196,6 +197,11 @@ app.conf.update(
         "update-nuclei-templates": {
             "task": "tasks.maintenance.update_nuclei_templates",
             "schedule": 86400.0,  # daily
+        },
+        # Clean up old DLQ items every 12 hours
+        "cleanup-dlq": {
+            "task": "tasks.maintenance.cleanup_dlq",
+            "schedule": 43200.0,  # every 12 hours
         },
     },
 )
@@ -297,10 +303,29 @@ class BaseTask(app.Task):
 
         logger.error(f"Task {task_id} failed: {exc}")
 
+    def retry(self, args=None, kwargs=None, exc=None, throw=True,
+              eta=None, countdown=None, max_retries=None,
+              default_retry_delay=None, **options):
+        """Override retry to inject classification-based retry_delay_seconds."""
+        if countdown is None and hasattr(self, '_last_classification') and self._last_classification is not None:
+            cd = self._last_classification.retry_delay_seconds
+            if cd is not None and cd > 0:
+                countdown = cd
+        return super().retry(
+            args=args, kwargs=kwargs, exc=exc, throw=throw,
+            eta=eta, countdown=countdown, max_retries=max_retries,
+            default_retry_delay=default_retry_delay, **options,
+        )
+
     def on_retry(self, exc, task_id, _args, _kwargs, _einfo):
         """Called when task is retried"""
+        delay = ''
+        if hasattr(self, '_last_classification') and self._last_classification is not None:
+            cd = self._last_classification.retry_delay_seconds
+            if cd is not None:
+                delay = f' (delay={cd}s)'
         logger.warning(
-            f"Task {task_id} retrying (attempt {self.request.retries}): {exc}"
+            f"Task {task_id} retrying (attempt {self.request.retries}){delay}: {exc}"
         )
 
     def on_success(self, _retval, task_id, _args, _kwargs):

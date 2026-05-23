@@ -607,7 +607,8 @@ class AttackGraph:
         path_length = len(path.nodes)
         return 1.0 + (0.2 * (path_length - 1))
 
-    def _estimate_cvss(self, severity: str) -> float:
+    @staticmethod
+    def _estimate_cvss(severity: str) -> float:
         """
         Estimate CVSS score from severity
 

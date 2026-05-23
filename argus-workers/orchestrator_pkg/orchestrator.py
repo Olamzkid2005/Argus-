@@ -980,6 +980,41 @@ class Orchestrator:
             if can_continue:
                 budget_mgr.consume(action)
                 approved_actions.append(action)
+
+                # ── Persist budget state to DB after every consume() ──
+                # This prevents budget bypass on worker crash: the consumed
+                # budget (current_cycles, current_depth, current_llm_reviews)
+                # is written to the DB immediately, not just in memory.
+                try:
+                    from database.connection import db_cursor
+                    bd = budget_mgr.to_dict()
+                    with db_cursor() as cursor:
+                        cursor.execute(
+                            """
+                            INSERT INTO loop_budgets
+                                (engagement_id, max_cycles, max_depth, max_llm_reviews,
+                                 current_cycles, current_depth, current_llm_reviews)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (engagement_id) DO UPDATE SET
+                                current_cycles = EXCLUDED.current_cycles,
+                                current_depth = EXCLUDED.current_depth,
+                                current_llm_reviews = EXCLUDED.current_llm_reviews
+                            """,
+                            (
+                                self.engagement_id,
+                                bd["max_cycles"],
+                                bd["max_depth"],
+                                bd["max_llm_reviews"],
+                                bd["current_cycles"],
+                                bd["current_depth"],
+                                bd["current_llm_reviews"],
+                            ),
+                        )
+                except Exception as persist_err:
+                    logger.warning(
+                        "Failed to persist budget after consume for engagement=%s: %s",
+                        self.engagement_id, persist_err,
+                    )
             else:
                 logger.info(f"Budget exhausted for action {action.get('type')}: {reason}")
                 denied_actions.append(action)

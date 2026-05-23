@@ -83,6 +83,21 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     slog = ScanLogger("llm_review", engagement_id=engagement_id)
     slog.phase_header("LLM REVIEW")
 
+    # ── Guard: skip if engagement already in terminal state ──
+    try:
+        from database.connection import db_cursor
+        with db_cursor() as cursor:
+            cursor.execute(
+                "SELECT status FROM engagements WHERE id = %s",
+                (engagement_id,),
+            )
+            row = cursor.fetchone()
+            if row and row[0] in ("complete", "failed"):
+                slog.info(f"Engagement already in terminal state ({row[0]}) — skipping LLM review")
+                return {"status": "skipped", "reason": f"engagement_in_{row[0]}_state"}
+    except Exception as e:
+        slog.warning(f"Could not check engagement state: {e}")
+
     db_conn_string = os.getenv("DATABASE_URL")
 
     # Check if LLM review is enabled

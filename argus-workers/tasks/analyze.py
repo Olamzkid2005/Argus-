@@ -94,8 +94,21 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                                        engagement_id, auth_task.id)
                         except Exception as e:
                             logger.error("Failed to enqueue auth_focused_scan for %s: %s", engagement_id, e, exc_info=True)
+                elif action_type == "recon_expand":
+                    targets = action.get("targets", []) if isinstance(action, dict) else []
+                    if targets:
+                        _attempted += 1
+                        try:
+                            expand_task = app.send_task('tasks.recon.expand_recon',
+                                          args=[engagement_id, targets, budget, ctx.trace_id])
+                            slog.dispatch("expand_recon", task_id=expand_task.id)
+                            _dispatched += 1
+                            logger.info("Dispatched expand_recon for engagement=%s with %d targets (task=%s)",
+                                       engagement_id, len(targets), expand_task.id)
+                        except Exception as e:
+                            logger.error("Failed to enqueue expand_recon for %s: %s", engagement_id, e, exc_info=True)
                 else:
-                    # Default: extract targets and expand recon
+                    # Default: extract targets and expand recon (catch-all for unknown action types)
                     target = None
                     if isinstance(action, dict):
                         target = action.get("target") or action.get("arguments", {}).get("target")

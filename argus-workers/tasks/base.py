@@ -253,6 +253,9 @@ def task_error_boundary(
             retry_count=getattr(task.request, "retries", 0) if hasattr(task, "request") else 0,
         )
 
+        # Store classification on task so on_retry can use retry_delay_seconds
+        task._last_classification = classification
+
         log_classified_error(
             classification=classification,
             task_id=getattr(task.request, "id", "unknown") if hasattr(task, "request") else "unknown",

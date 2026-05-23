@@ -230,6 +230,28 @@ def worker_health_check(self):
         return {"status": "error", "error": str(e)}
 
 
+@app.task(bind=True, name="tasks.maintenance.cleanup_dlq")
+def cleanup_dlq(self):
+    """
+    Purge old DLQ items that have exceeded retention period.
+
+    Runs periodically via Celery Beat to prevent DLQ from growing unbounded.
+    """
+    from dead_letter_queue import get_dlq
+
+    try:
+        dlq = get_dlq()
+        purged = dlq.purge(older_than_hours=48)
+        if purged:
+            logger.info(f"Cleaned up {purged} old DLQ items older than 48 hours")
+        else:
+            logger.debug("No old DLQ items to clean up")
+        return {"status": "completed", "purged": purged}
+    except Exception as e:
+        logger.error(f"DLQ cleanup task failed: {e}")
+        return {"status": "error", "error": str(e)}
+
+
 @app.task(bind=True, name="tasks.maintenance.update_nuclei_templates")
 def update_nuclei_templates(self):
     """
