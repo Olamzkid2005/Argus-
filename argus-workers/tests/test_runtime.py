@@ -852,3 +852,202 @@ class TestShadowMode:
         stats = get_shadow_stats("test_phase")
         assert stats["consecutive_successes"] == 0
         assert stats["total_mismatches"] == 0
+
+
+# =========================================================================
+# SafeEventEmitter (Transactional Event Stream) Tests
+# =========================================================================
+
+
+class TestSafeEventEmitter:
+    """Tests for SafeEventEmitter — persist -> commit -> emit ordering."""
+
+    def test_queues_events_before_flush(self):
+        """Test that events are queued and not emitted until flush."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_thinking("test message")
+        assert emitter.queue_size == 1
+        emitter.emit_tool_start("nuclei", ["-u", "target"])
+        assert emitter.queue_size == 2
+        emitter.emit_tool_complete("nuclei", True, 100, 3)
+        assert emitter.queue_size == 3
+
+    def test_flush_emits_events(self):
+        """Test that flush sends queued events via streaming layer."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_thinking("hello")
+        emitter.emit_tool_start("nuclei", ["-u", "t"])
+
+        # SafeEventEmitter.flush() imports streaming functions inside its scope
+        with patch("streaming.emit_thinking") as mock_thinking, \
+             patch("streaming.emit_tool_start") as mock_start, \
+             patch("websocket_events.get_websocket_publisher", return_value=None):
+            emitter.flush()
+
+        mock_thinking.assert_called_once_with("eng-1", "hello", {})
+        mock_start.assert_called_once_with("eng-1", "nuclei", ["-u", "t"])
+        assert emitter.queue_size == 0
+
+    def test_flush_empty_queue(self):
+        """Test that flush does nothing when queue is empty."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+
+        with patch("streaming.emit_thinking") as mock, \
+             patch("websocket_events.get_websocket_publisher", return_value=None):
+            emitter.flush()
+
+        mock.assert_not_called()
+
+    def test_discard_clears_queue(self):
+        """Test that discard() clears queue without emitting."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_thinking("will be discarded")
+        assert emitter.queue_size == 1
+
+        with patch("streaming.emit_thinking") as mock, \
+             patch("websocket_events.get_websocket_publisher", return_value=None):
+            emitter.discard()
+
+        mock.assert_not_called()
+        assert emitter.queue_size == 0
+
+    def test_discard_after_db_failure(self):
+        """Test that discard prevents phantom events when DB fails."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+
+        # Simulate: events queued, DB commit fails
+        emitter.emit_tool_complete("scanner", True, 100, 5)
+        emitter.emit_finding("f-1", "xss", "HIGH", 0.95, "https://x", "nuclei")
+
+        # DB failure — discard instead of flush
+        emitter.discard()
+        assert emitter.queue_size == 0
+
+    def test_emit_finding(self):
+        """Test that emit_finding queues finding with correct fields."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_finding("f-1", "xss", "HIGH", 0.95, "https://x.com", "nuclei")
+
+        assert emitter.queue_size == 1
+        event = emitter._queue[0]
+        assert event["type"] == "finding"
+        assert event["data"]["finding_id"] == "f-1"
+        assert event["data"]["finding_type"] == "xss"
+        assert event["data"]["severity"] == "HIGH"
+
+    def test_emit_state_change(self):
+        """Test that emit_state_change queues event."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_state_change("init", "scanning", "start scan")
+
+        assert emitter.queue_size == 1
+        event = emitter._queue[0]
+        assert event["type"] == "state_change"
+        assert event["data"]["from_state"] == "init"
+        assert event["data"]["to_state"] == "scanning"
+
+    def test_emit_agent_decision(self):
+        """Test that emit_agent_decision queues event."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_agent_decision(3, "nuclei", "Found open ports", True)
+
+        assert emitter.queue_size == 1
+        event = emitter._queue[0]
+        assert event["type"] == "agent_decision"
+        assert event["data"]["iteration"] == 3
+
+    def test_flush_finding_via_websocket(self):
+        """Test that findings are flushed via WebSocket publisher."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_finding("f-1", "xss", "HIGH", 0.95, "https://x.com", "nuclei")
+
+        mock_ws = MagicMock()
+        with patch("websocket_events.get_websocket_publisher", return_value=mock_ws), \
+             patch("streaming.emit_thinking"):
+            emitter.flush()
+
+        mock_ws.publish_finding.assert_called_once_with(
+            "eng-1", "f-1", "xss", "HIGH", 0.95, "https://x.com", "nuclei",
+        )
+
+    def test_flush_state_change_via_websocket(self):
+        """Test that state changes are flushed via WebSocket publisher."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_state_change("init", "scanning")
+
+        mock_ws = MagicMock()
+        with patch("websocket_events.get_websocket_publisher", return_value=mock_ws), \
+             patch("streaming.emit_thinking"):
+            emitter.flush()
+
+        mock_ws.publish_state_transition.assert_called_once_with(
+            "eng-1", "init", "scanning", "",
+        )
+
+    def test_multiple_event_types_mixed(self):
+        """Test that a mix of event types are all flushed correctly."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_thinking("analyzing")
+        emitter.emit_tool_start("nuclei")
+        emitter.emit_tool_complete("nuclei", True, 50)
+        emitter.emit_state_change("scan", "analyze")
+
+        mock_ws = MagicMock()
+        with patch("streaming.emit_thinking") as mock_thinking, \
+             patch("streaming.emit_tool_start") as mock_start, \
+             patch("streaming.emit_tool_complete") as mock_complete, \
+             patch("websocket_events.get_websocket_publisher", return_value=mock_ws):
+            emitter.flush()
+
+        mock_thinking.assert_called_once()
+        mock_start.assert_called_once()
+        mock_complete.assert_called_once()
+        mock_ws.publish_state_transition.assert_called_once()
+
+    def test_flush_handles_individual_event_failure(self):
+        """Test that one failing event doesn't stop the rest from flushing."""
+        from runtime.event_stream import SafeEventEmitter
+
+        emitter = SafeEventEmitter("eng-1")
+        emitter.emit_thinking("first")
+        emitter.emit_tool_start("nuclei")
+        emitter.emit_thinking("third")
+
+        call_count = 0
+
+        def _failing_emit(eid, msg, details):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:  # second call fails
+                raise RuntimeError("stream closed")
+
+        with patch("streaming.emit_thinking", side_effect=_failing_emit), \
+             patch("streaming.emit_tool_start") as mock_start, \
+             patch("websocket_events.get_websocket_publisher", return_value=None):
+            emitter.flush()
+
+        # tool_start should still be emitted even though second thinking failed
+        mock_start.assert_called_once()
+        assert emitter.queue_size == 0  # queue cleared either way

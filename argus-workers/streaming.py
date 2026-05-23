@@ -6,6 +6,12 @@ replacing the dual system of StreamManager + WebSocketEventPublisher.
 
 Callers should use the emit_* convenience functions (emit_thinking,
 emit_tool_start, etc.) which delegate to the configured EventBus.
+
+Transactional Event Stream (Step 9):
+    When TRANSACTIONAL_EVENTS is enabled, callers should wrap emit calls
+    in a transactional context to enforce persist -> commit -> emit ordering.
+    Use get_transactional_emitter() to obtain a SafeEventEmitter, then
+    call flush_transactional_events() after DB commit.
 """
 import contextlib
 import json
@@ -19,6 +25,49 @@ from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ── Transactional event stream support ──
+
+_transactional_emitter: threading.local = threading.local()
+"""Thread-local storage for an optional SafeEventEmitter.
+When set, all emit_* functions delegate to this emitter instead of
+publishing directly, enabling persist -> commit -> emit ordering."""
+
+
+def set_transactional_emitter(emitter: Any | None) -> None:
+    """Set the thread-local transactional emitter for the current context.
+
+    When set, all emit_* calls will queue events via this emitter instead
+    of publishing them directly to the stream manager.
+
+    Args:
+        emitter: A SafeEventEmitter instance or None to clear.
+    """
+    _transactional_emitter.value = emitter
+
+
+def get_transactional_emitter() -> Any | None:
+    """Get the current thread-local transactional emitter, or None."""
+    return getattr(_transactional_emitter, "value", None)
+
+
+def clear_transactional_emitter() -> None:
+    """Clear the thread-local transactional emitter."""
+    _transactional_emitter.value = None
+
+
+def flush_transactional_events() -> None:
+    """Flush all queued events from the current transactional emitter.
+
+    Must be called AFTER the DB commit completes. If no transactional
+    emitter is active, this is a no-op.
+    """
+    emitter = get_transactional_emitter()
+    if emitter is not None:
+        emitter.flush()
+
+
+# ── End of transactional event stream support ──
 
 
 # ── Unified Event schema ──
@@ -248,8 +297,45 @@ class StreamManager(EventBus):
 
 # Convenience functions for publishing common events
 
+def _maybe_transactional(engagement_id: str, event_type: str, data: dict) -> bool:
+    """If a transactional emitter is active, delegate to it.
+
+    Returns True if the event was handled transactionally (queued),
+    False if the caller should publish directly.
+    """
+    emitter = get_transactional_emitter()
+    if emitter is None:
+        return False
+    try:
+        if event_type == "thinking":
+            emitter.emit_thinking(data.get("message", ""), data.get("details"))
+        elif event_type == "tool_start":
+            emitter.emit_tool_start(data["tool"], data.get("args"))
+        elif event_type == "tool_complete":
+            emitter.emit_tool_complete(
+                data["tool"], data["success"],
+                data.get("duration_ms", 0), data.get("findings", 0),
+            )
+        elif event_type == "finding":
+            emitter.emit_finding(
+                "", data.get("type", ""), data.get("severity", "INFO"),
+                0.0, data.get("endpoint", ""), "",
+            )
+        elif event_type == "state_change":
+            emitter.emit_state_change(
+                data.get("from", ""), data.get("to", ""),
+                data.get("reason", ""),
+            )
+    except Exception:
+        logger.debug("Transactional emitter delegate failed", exc_info=True)
+    return True
+
+
 def emit_thinking(engagement_id: str, message: str, details: dict = None):
     """Emit a thinking/reasoning event."""
+    data = {"message": message, "details": details or {}}
+    if _maybe_transactional(engagement_id, "thinking", data):
+        return
     get_stream_manager().publish(Event(
         type=EventType.THINKING,
         engagement_id=engagement_id,
@@ -259,6 +345,9 @@ def emit_thinking(engagement_id: str, message: str, details: dict = None):
 
 def emit_tool_start(engagement_id: str, tool: str, args: list[str] = None):
     """Emit a tool execution start event."""
+    data = {"tool": tool, "args": args or []}
+    if _maybe_transactional(engagement_id, "tool_start", data):
+        return
     get_stream_manager().publish(Event(
         type=EventType.TOOL_START,
         engagement_id=engagement_id,
@@ -277,6 +366,12 @@ def emit_tool_output(engagement_id: str, tool: str, output: str, is_stderr: bool
 
 def emit_tool_complete(engagement_id: str, tool: str, success: bool, duration_ms: int, finding_count: int = 0):
     """Emit a tool execution complete event."""
+    data = {
+        "tool": tool, "success": success,
+        "duration_ms": duration_ms, "findings": finding_count,
+    }
+    if _maybe_transactional(engagement_id, "tool_complete", data):
+        return
     get_stream_manager().publish(Event(
         type=EventType.TOOL_COMPLETE,
         engagement_id=engagement_id,
@@ -291,6 +386,9 @@ def emit_tool_complete(engagement_id: str, tool: str, success: bool, duration_ms
 
 def emit_finding(engagement_id: str, finding_type: str, severity: str, endpoint: str, title: str):
     """Emit a finding discovered event."""
+    data = {"type": finding_type, "severity": severity, "endpoint": endpoint, "title": title}
+    if _maybe_transactional(engagement_id, "finding", data):
+        return
     get_stream_manager().publish(Event(
         type=EventType.FINDING,
         engagement_id=engagement_id,
@@ -305,6 +403,9 @@ def emit_finding(engagement_id: str, finding_type: str, severity: str, endpoint:
 
 def emit_state_change(engagement_id: str, from_state: str, to_state: str, reason: str = ""):
     """Emit a state transition event."""
+    data = {"from": from_state, "to": to_state, "reason": reason}
+    if _maybe_transactional(engagement_id, "state_change", data):
+        return
     get_stream_manager().publish(Event(
         type=EventType.STATE_CHANGE,
         engagement_id=engagement_id,
