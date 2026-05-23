@@ -49,11 +49,17 @@ class MemoryRetriever:
         """
         Build a condensed memory summary for agent prompt injection.
         Latency budget: <50ms per call.
+
+        Works with both EngagementState (state.observations) and
+        ReActAgent (state.history) for backward compatibility during migration.
         """
         parts = []
 
-        # Short-term: recent observations
-        observations = getattr(state, "observations", [])[-6:]
+        # Short-term: recent observations (supports both EngagementState and ReActAgent)
+        observations = getattr(state, "observations", None)
+        if observations is None:
+            observations = getattr(state, "history", [])
+        observations = observations[-6:]
         if observations:
             recent = []
             for obs in observations:
@@ -98,12 +104,16 @@ class MemoryRetriever:
         return combined
 
     def _get_short_term(self, state: Any) -> list[dict]:
-        """Short-term: recent observations from EngagementState."""
-        return getattr(state, "observations", [])[-10:]
+        """Short-term: recent observations from EngagementState or ReActAgent."""
+        observations = getattr(state, "observations", None)
+        if observations is None:
+            observations = getattr(state, "history", [])
+        return observations[-10:]
 
     def _get_medium_term(self, state: Any) -> list[dict]:
         """Medium-term: compressed reasoning from decision_snapshots."""
-        engagement_id = getattr(state, "engagement_id", "")
+        # Support both EngagementState and bare objects
+        engagement_id = getattr(state, "engagement_id", None) or getattr(state, "_engagement_id", "")
         if not engagement_id or not self.connection_string:
             return []
         try:

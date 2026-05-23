@@ -86,6 +86,7 @@ class ReActAgent:
         phase: str = "scan",
         mode: str | None = None,
         governance: Any = None,
+        memory_retriever: Any = None,
     ):
         self.registry = registry
         self.max_iterations = max_iterations
@@ -93,6 +94,7 @@ class ReActAgent:
         self.decision_repo = decision_repo
         self.engagement_id = engagement_id
         self.governance = governance
+        self.memory_retriever = memory_retriever
         self.history: list[dict] = []
         self._phase = phase
         self._mode = mode
@@ -275,6 +277,19 @@ class ReActAgent:
             else None
         )
 
+        # ── Memory context retrieval (Phase 5) ──
+        _memory_context = ""
+        if (
+            _ff_enabled("MEMORY_RETRIEVAL", default=False)
+            and self.memory_retriever is not None
+        ):
+            try:
+                _memory_context = self.memory_retriever.get_observation_summary(
+                    self, max_tokens=800,
+                )
+            except Exception as e:
+                logger.debug("Memory retrieval failed: %s", e)
+
         user_prompt = build_tool_selection_prompt(
             recon_section,
             self.registry.list_tools(),
@@ -283,6 +298,7 @@ class ReActAgent:
             target_profile=_target_profile,
             bugbounty_context=bugbounty_context,
             candidate_list=self._candidate_list,
+            memory_context=_memory_context,
         )
 
         system_prompt = self._get_system_prompt(recon_context)

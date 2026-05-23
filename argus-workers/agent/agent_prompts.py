@@ -702,6 +702,7 @@ def build_tool_selection_prompt(
     bugbounty_context: str = "",
     priority_classes: list[str] | None = None,
     candidate_list = None,
+    memory_context: str = "",
 ) -> str:
     """
     Build the user prompt for tool selection.
@@ -719,6 +720,8 @@ def build_tool_selection_prompt(
         mode: Scan mode ('bugbounty', 'standard')
         bugbounty_context: Bug-Reaper methodology context for bug bounty mode
         priority_classes: Optional list of analyst-prioritized vulnerability classes
+        candidate_list: Optional CandidateList for structured scan targets
+        memory_context: Optional 3-tier memory summary from MemoryRetriever
     """
     prompt_parts = []
 
@@ -727,6 +730,10 @@ def build_tool_selection_prompt(
         paragraph = _build_target_context_paragraph(target_profile)
         if paragraph:
             prompt_parts.append(paragraph)
+
+    # ── Section 0.1: Retrieved Memory Context (Phase 5) ────────────
+    if memory_context:
+        prompt_parts.append(f"=== MEMORY CONTEXT ===\n{memory_context}")
 
     # ── Section 0.5: Scan Candidates (structured, from Idea 6) ──────
     if candidate_list and hasattr(candidate_list, "to_llm_summary"):
