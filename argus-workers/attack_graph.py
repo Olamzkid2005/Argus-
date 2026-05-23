@@ -5,8 +5,19 @@ Includes Bug-Reaper vulnerability chaining templates for detecting
 high-value attack chains that escalate individual findings to critical severity.
 """
 import math
+from enum import StrEnum
 
 from models.finding import VulnerabilityFinding
+
+
+class RelationshipType(StrEnum):
+    """Semantic relationship between graph nodes."""
+    CAUSES = "causes"
+    AMPLIFIES = "amplifies"
+    ENABLES = "enables"
+    DEPENDS_ON = "depends_on"
+    MITIGATES = "mitigates"
+    INDEPENDENT = "independent"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Bug-Reaper Chain Templates
@@ -124,13 +135,17 @@ class Node:
         node_type: str,
         data: dict,
         cvss: float | None = None,
-        confidence: float | None = None
+        confidence: float | None = None,
+        prerequisites: list[str] | None = None,
+        downstream_impacts: list[str] | None = None,
     ):
         self.id = node_id
         self.type = node_type  # "vulnerability" or "endpoint"
         self.data = data
         self.cvss = cvss
         self.confidence = confidence
+        self.prerequisites = prerequisites or []
+        self.downstream_impacts = downstream_impacts or []
 
 
 class Edge:
@@ -141,12 +156,14 @@ class Edge:
         from_node: str,
         to_node: str,
         edge_type: str,
-        correlation_factor: float
+        correlation_factor: float,
+        relationship_type: RelationshipType = RelationshipType.INDEPENDENT,
     ):
         self.from_node = from_node
         self.to_node = to_node
         self.type = edge_type
         self.correlation_factor = correlation_factor
+        self.relationship_type = relationship_type
 
 
 class Path:
@@ -169,6 +186,68 @@ class AttackGraph:
         "enables": 1.2,
         "depends_on": 0.8,
         "independent": 1.0,
+    }
+
+    # Relationship-aware correlation factors (supersedes CORRELATION_FACTORS)
+    RELATIONSHIP_CORRELATION = {
+        RelationshipType.CAUSES: 1.5,
+        RelationshipType.AMPLIFIES: 1.3,
+        RelationshipType.ENABLES: 1.4,
+        RelationshipType.DEPENDS_ON: 0.8,
+        RelationshipType.MITIGATES: 0.5,
+        RelationshipType.INDEPENDENT: 1.0,
+    }
+
+    # Map finding type to exploitation prerequisites
+    PREREQ_MAP = {
+        "SSRF": ["outbound_fetch_capability"],
+        "XSS": ["user_interaction", "no_csp"],
+        "REFLECTED_XSS": ["user_interaction", "no_csp"],
+        "STORED_XSS": ["no_csp"],
+        "DOM_XSS": ["user_interaction"],
+        "BLIND_XSS": [],
+        "SQL_INJECTION": ["parametrized_query_bypassed"],
+        "IDOR": ["authenticated_session", "sequential_id"],
+        "BOLA": ["authenticated_session"],
+        "LFI": ["file_read_enabled"],
+        "PATH_TRAVERSAL": ["file_read_enabled"],
+        "DIRECTORY_TRAVERSAL": ["file_read_enabled"],
+        "RCE": ["code_exec_sink_reachable"],
+        "COMMAND_INJECTION": ["code_exec_sink_reachable"],
+        "OPEN_REDIRECT": ["external_redirect_allowed"],
+        "AUTH_BYPASS": ["public_endpoint"],
+        "BROKEN_AUTH": ["public_endpoint"],
+        "BROKEN_AUTHENTICATION": ["public_endpoint"],
+        "CSRF": ["authenticated_session"],
+        "CORS": ["authenticated_session"],
+        "CORS_MISCONFIGURATION": ["authenticated_session"],
+        "SUBDOMAIN_TAKEOVER": ["dangling_dns"],
+    }
+
+    # Map finding type to downstream impacts
+    IMPACT_MAP = {
+        "SSRF": ["credential_access", "internal_service_discovery"],
+        "XSS": ["session_theft", "credential_capture", "malicious_action"],
+        "REFLECTED_XSS": ["session_theft", "credential_capture"],
+        "STORED_XSS": ["malicious_action", "credential_capture"],
+        "DOM_XSS": ["session_theft"],
+        "BLIND_XSS": ["credential_capture"],
+        "SQL_INJECTION": ["data_exfiltration", "auth_bypass"],
+        "IDOR": ["unauthorized_data_access", "privilege_escalation"],
+        "BOLA": ["unauthorized_data_access"],
+        "LFI": ["file_disclosure", "rce_chainable"],
+        "PATH_TRAVERSAL": ["file_disclosure"],
+        "DIRECTORY_TRAVERSAL": ["file_disclosure"],
+        "RCE": ["full_system_compromise"],
+        "COMMAND_INJECTION": ["full_system_compromise"],
+        "OPEN_REDIRECT": ["phishing_chainable", "oauth_token_theft"],
+        "AUTH_BYPASS": ["privilege_escalation", "data_exfiltration"],
+        "BROKEN_AUTH": ["privilege_escalation"],
+        "BROKEN_AUTHENTICATION": ["privilege_escalation", "data_exfiltration"],
+        "CSRF": ["malicious_action"],
+        "CORS": ["data_exfiltration"],
+        "CORS_MISCONFIGURATION": ["data_exfiltration"],
+        "SUBDOMAIN_TAKEOVER": ["credential_capture", "malicious_action"],
     }
 
     # Exposure factors
@@ -261,14 +340,49 @@ class AttackGraph:
             )
             self.nodes[endpoint_node_id] = endpoint_node
 
+        # Set prerequisites and downstream_impacts from maps
+        vuln_node.prerequisites = self._infer_prerequisites(finding.type)
+        vuln_node.downstream_impacts = self._infer_downstream_impacts(finding.type)
+
         # Create edge connecting vulnerability to endpoint
         edge = Edge(
             from_node=vuln_node_id,
             to_node=endpoint_node_id,
             edge_type="independent",  # Default edge type
             correlation_factor=self.CORRELATION_FACTORS["independent"],
+            relationship_type=self._infer_relationship(finding.type),
         )
         self.edges.append(edge)
+
+    def _infer_prerequisites(self, finding_type: str) -> list[str]:
+        """Map finding type to exploitation prerequisites."""
+        return list(self.PREREQ_MAP.get(finding_type.upper(), []))
+
+    def _infer_downstream_impacts(self, finding_type: str) -> list[str]:
+        """Map finding type to downstream impacts."""
+        return list(self.IMPACT_MAP.get(finding_type.upper(), []))
+
+    def _infer_relationship(self, finding_type: str) -> RelationshipType:
+        """
+        Infer the default relationship type for a finding type.
+
+        Vulnerabilities that directly enable further exploitation get ENABLES.
+        Vulnerabilities that increase impact severity get AMPLIFIES.
+        All others default to INDEPENDENT.
+        """
+        enables_types = {"SSRF", "RCE", "COMMAND_INJECTION", "IDOR", "BOLA", "LFI",
+                         "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL", "AUTH_BYPASS",
+                         "BROKEN_AUTH", "BROKEN_AUTHENTICATION"}
+        amplifies_types = {"XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS",
+                           "BLIND_XSS", "CSRF", "CORS", "CORS_MISCONFIGURATION",
+                           "SUBDOMAIN_TAKEOVER", "OPEN_REDIRECT"}
+
+        ft = finding_type.upper()
+        if ft in enables_types:
+            return RelationshipType.ENABLES
+        elif ft in amplifies_types:
+            return RelationshipType.AMPLIFIES
+        return RelationshipType.INDEPENDENT
 
     def _get_chain_prereq(self, finding_type: str) -> str | None:
         """Map finding type to chain prerequisite type."""
