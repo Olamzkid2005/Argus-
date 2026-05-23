@@ -428,6 +428,68 @@ class IntelligenceEngine:
         snapshot_dict["paths_saved"] = saved_count
         return snapshot_dict
 
+    def analyze_state(self, state: Any) -> dict:
+        """
+        Analyze an EngagementState and return analysis (not actions).
+
+        This is the Phase 2 replacement for generate_actions().
+        Called BY the agent loop (not independently) to provide
+        intelligence analysis that the agent uses to decide next steps.
+
+        Args:
+            state: EngagementState instance
+
+        Returns:
+            Analysis dict with:
+                - scored_findings: Findings with confidence scores
+                - risk_level: Overall risk assessment
+                - coverage_gaps: List of areas with insufficient coverage
+                - high_value_targets: Endpoints warranting deeper inspection
+                - weak_auth_signals: Authentication-related signals
+                - threat_intel_summary: Threat intelligence overview
+                - reasoning: Analysis reasoning text
+        """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("intelligence_engine")
+
+        findings = getattr(state, "findings", [])
+        slog.info(f"Analysis state: {len(findings)} findings, iteration {getattr(state, 'execution_iteration', 0)}")
+
+        # Sort by signal quality
+        findings = self._sort_findings_by_signal_quality(findings)
+
+        # Assign confidence scores
+        scored_findings = self.assign_confidence_scores(findings)
+
+        # Enrich with threat intel
+        enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
+
+        # Build analysis
+        coverage_gaps = []
+        high_value_targets = []
+        weak_auth_signals = []
+
+        if self.detect_low_coverage(enriched_findings):
+            coverage_gaps = self.suggest_new_targets(enriched_findings)
+
+        if self.detect_high_value_targets(enriched_findings):
+            high_value_targets = self.get_priority_endpoints(enriched_findings)
+
+        if self.detect_weak_auth_signals(enriched_findings):
+            weak_auth_signals = self.get_auth_endpoints(enriched_findings)
+
+        risk_level = self._calculate_overall_risk(enriched_findings)
+
+        return {
+            "scored_findings": enriched_findings,
+            "risk_level": risk_level,
+            "coverage_gaps": coverage_gaps,
+            "high_value_targets": high_value_targets,
+            "weak_auth_signals": weak_auth_signals,
+            "threat_intel_summary": self.get_threat_summary(enriched_findings),
+            "reasoning": self._generate_reasoning(enriched_findings, []),
+        }
+
     def generate_actions(self, scored_findings: list[dict], context: dict) -> list[dict]:
         """
         Generate recommended actions based on intelligence

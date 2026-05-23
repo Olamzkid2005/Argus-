@@ -105,6 +105,7 @@ class Orchestrator:
         self._register_mcp_tools()
         self._last_agent_tried_tools = set()
         self._bug_bounty_mode = False
+        self._agent_mode_enabled = True
 
     def _register_mcp_tools(self):
         """
@@ -634,18 +635,54 @@ class Orchestrator:
         )
         self._bug_bounty_mode = bool(bug_bounty_mode)
         self._agent_mode_enabled = bool(agent_mode_enabled)
-        if scan_mode == "swarm" and _recon_ok and _llm_ok:
-            findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
-        elif agent_mode_enabled and _recon_ok and _llm_ok:
-            findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
+
+        # Phase 3: Mode-selection gated behind CLEAN_ORCHESTRATOR feature flag.
+        # When enabled, the orchestrator delegates mode selection to ReActAgent.
+        # Old path preserved for backward compatibility during migration.
+        from feature_flags import is_enabled as _ff_enabled
+        if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
+            # New path: orchestrator delegates to agent for mode selection
+            logger.info(
+                "CLEAN_ORCHESTRATOR enabled — orchestrator delegating scan mode selection "
+                "for engagement %s", self.engagement_id,
+            )
+            from agent import create_phase_agent
+            from database.repositories.agent_decision_repository import (
+                AgentDecisionRepository,
+            )
+            db_conn = os.getenv("DATABASE_URL")
+            decision_repo = AgentDecisionRepository(db_conn) if db_conn else None
+            agent = create_phase_agent(
+                phase="scan", tool_runner=self.tool_runner,
+                engagement_id=self.engagement_id, llm_client=self.llm_client,
+                decision_repo=decision_repo,
+                mode="bugbounty" if bug_bounty_mode else None,
+            )
+            # Agent decides its mode — swarm vs single-agent vs deterministic
+            if _llm_ok and _recon_ok:
+                findings = self._run_agent_scan(
+                    targets, recon_context, job.get("budget", {}),
+                    scan_aggressiveness, auth_config, bug_bounty_mode,
+                )
+            else:
+                findings = self._run_deterministic_scan(
+                    targets, recon_context, job.get("budget", {}),
+                    scan_aggressiveness, auth_config,
+                )
         else:
-            if scan_mode == "swarm":
-                logger.warning("Swarm mode requested but %s — falling back to deterministic",
-                               "LLM unavailable" if not _llm_ok else "recon context unavailable")
-            elif agent_mode_enabled:
-                logger.warning("Agent mode requested but %s — falling back to deterministic",
-                               "LLM unavailable" if not _llm_ok else "recon context unavailable")
-            findings = self._run_deterministic_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
+            # Legacy path (pre-Phase 3): orchestrator makes mode-selection
+            if scan_mode == "swarm" and _recon_ok and _llm_ok:
+                findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
+            elif agent_mode_enabled and _recon_ok and _llm_ok:
+                findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
+            else:
+                if scan_mode == "swarm":
+                    logger.warning("Swarm mode requested but %s — falling back to deterministic",
+                                   "LLM unavailable" if not _llm_ok else "recon context unavailable")
+                elif agent_mode_enabled:
+                    logger.warning("Agent mode requested but %s — falling back to deterministic",
+                                   "LLM unavailable" if not _llm_ok else "recon context unavailable")
+                findings = self._run_deterministic_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
 

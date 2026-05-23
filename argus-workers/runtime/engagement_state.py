@@ -174,6 +174,34 @@ class EngagementState:
     def budget_status(self) -> dict:
         return self.budget_manager.get_status()
 
+    # ── Observation building ──
+
+    def build_observation(self) -> dict:
+        """
+        Build a complete observation dict for the agent loop.
+        Includes all state needed for the LLM to reason about next actions.
+        This replaces the ad-hoc observation history in ReActAgent.
+        """
+        return {
+            "engagement_id": self.engagement_id,
+            "current_phase": self.current_phase,
+            "execution_iteration": self.execution_iteration,
+            "recent_observations": self.get_context(max_entries=5),
+            "findings_count": len(self.findings),
+            "recent_tools": [
+                t.to_dict() for t in self.tool_history[-10:]
+            ],
+            "failed_actions": self.failed_actions[-5:],
+            "attack_graph_paths": self.attack_graph.get("paths", [])[:5],
+            "budget_status": self.budget_manager.get_status(),
+            "tried_tools": list(self._last_agent_tried_tools),
+            "memory_summary": self.memory_summary[:1000] if self.memory_summary else "",
+        }
+
+    def is_complete(self) -> bool:
+        """Check if the engagement is in a terminal state."""
+        return self.current_state in ("complete", "failed")
+
     # ── Serialization ──
 
     def to_dict(self) -> dict:

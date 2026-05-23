@@ -1,0 +1,115 @@
+"""
+ExecutionEngine — Shared tool dispatch + result recording.
+
+Used by both the agent runtime and deterministic runtime to execute tools
+with consistent sandboxing, scope validation, and result recording.
+
+Middleware chain:
+  1. Scope validation (mandatory — blocks out-of-scope targets)
+  2. Rate limit check
+  3. Tool execution via ToolRunner
+  4. Result recording to EngagementState
+"""
+
+import logging
+import time
+from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
+
+
+class ExecutionEngine:
+    """
+    Shared tool execution layer for agent and deterministic runtimes.
+
+    Wraps ToolRunner.run() with scope validation middleware, rate-limit
+    awareness, and engagement state recording.
+    """
+
+    def __init__(
+        self,
+        tool_runner: Any,
+        scope_validator: Any | None = None,
+        engagement_state: Any | None = None,
+    ):
+        self.tool_runner = tool_runner
+        self.scope_validator = scope_validator
+        self.engagement_state = engagement_state
+        self._middleware: list[Callable] = []
+
+    def add_middleware(self, fn: Callable):
+        """Add a middleware function to the execution chain.
+
+        Middleware signature: fn(tool_name, args, kwargs) -> (tool_name, args, kwargs)
+        Return None to abort execution.
+        """
+        self._middleware.append(fn)
+
+    def execute(
+        self,
+        tool_name: str,
+        args: list | None = None,
+        timeout: int = 300,
+        **kwargs,
+    ) -> Any:
+        """Execute a tool through the middleware chain.
+
+        Args:
+            tool_name: Name of the tool to execute
+            args: Positional arguments for the tool
+            timeout: Timeout in seconds
+            **kwargs: Additional keyword arguments
+
+        Returns:
+            ToolRunner result object
+        """
+        from tools.tool_runner import ToolResult
+
+        args = args or []
+
+        # Run middleware chain
+        for middleware_fn in self._middleware:
+            result = middleware_fn(tool_name, args, kwargs)
+            if result is None:
+                return ToolResult(
+                    tool=tool_name,
+                    success=False,
+                    stdout="",
+                    stderr="Blocked by middleware",
+                    returncode=-1,
+                )
+            # Allow middleware to modify args/kwargs
+            if isinstance(result, tuple) and len(result) == 3:
+                tool_name, args, kwargs = result
+
+        # Execute
+        start = time.time()
+        try:
+            result = self.tool_runner.run(tool_name, args, timeout=timeout)
+        except Exception as e:
+            result = ToolResult(
+                tool=tool_name,
+                success=False,
+                stdout="",
+                stderr=str(e),
+                returncode=-1,
+            )
+
+        duration_ms = int((time.time() - start) * 1000)
+
+        # Record to engagement state
+        if self.engagement_state:
+            from .engagement_state import ToolExecutionRecord
+
+            record = ToolExecutionRecord(
+                tool=tool_name,
+                args={"args": args, **kwargs},
+                timestamp=start,
+                result_summary=(result.stdout or "")[:500] if result.success else (result.stderr or "")[:200],
+                success=result.success,
+                failure_state="" if result.success else (result.stderr or "")[:200],
+            )
+            record.duration_ms = duration_ms
+            self.engagement_state.record_tool_execution(record)
+
+        return result

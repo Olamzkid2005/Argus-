@@ -421,6 +421,33 @@ class ReActAgent:
 
         return self._deterministic_plan(task, tried_tools)
 
+    def _persist_decision_checkpoint(self, action: AgentAction, observation_context: str, reasoning: str) -> str | None:
+        """Persist a DecisionCheckpoint for replay safety.
+
+        This ensures that on Celery retry, the original LLM decision is
+        replayed rather than making a new LLM call.
+
+        Returns:
+            checkpoint_id if persisted, None otherwise
+        """
+        from runtime import DecisionCheckpoint
+
+        try:
+            checkpoint = DecisionCheckpoint.from_action(
+                action=action,
+                observation_context=observation_context,
+                reasoning=reasoning or action.reasoning,
+                state_version=0,
+                engagement_id=self.engagement_id or "",
+            )
+            from runtime.decision_checkpoint import DecisionCheckpointRepository
+            repo = DecisionCheckpointRepository()
+            repo.save(checkpoint)
+            return checkpoint.checkpoint_id
+        except Exception as e:
+            logger.debug("Failed to persist DecisionCheckpoint: %s", e)
+            return None
+
     def run(
         self,
         task: str,
@@ -492,6 +519,12 @@ class ReActAgent:
                 action.cost_usd,
             )
 
+            # ── Persist DecisionCheckpoint for replay safety (Phase 2) ──
+            observation_context = self.get_context()
+            checkpoint_id = self._persist_decision_checkpoint(
+                action, observation_context, action.reasoning,
+            )
+
             # Emit agent decision event for frontend reasoning feed
             try:
                 from streaming import emit_agent_decision
@@ -510,6 +543,19 @@ class ReActAgent:
             result = self.registry.call(action.tool, **action.arguments)
             tried_tools.add(action.tool)
             results.append(result)
+
+            # Mark checkpoint execution result
+            if checkpoint_id:
+                try:
+                    from runtime.decision_checkpoint import DecisionCheckpointRepository
+                    repo = DecisionCheckpointRepository()
+                    repo.mark_execution_result(
+                        checkpoint_id,
+                        success=result.success,
+                        error=result.stderr if hasattr(result, "stderr") and not result.success else "",
+                    )
+                except Exception as e:
+                    logger.debug("Failed to mark checkpoint result: %s", e)
 
             # FIX: skip counting for tools that failed or were skipped
             # (e.g. __skip__ exception from scan.py sets success=False)
