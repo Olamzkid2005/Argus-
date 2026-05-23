@@ -104,6 +104,9 @@ class IntelligenceEngine:
             # high-exploitability CVEs can influence deep scanning decisions.
             enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
 
+            # Build and persist attack graph for snapshot consumption
+            self._build_and_persist_attack_graph(enriched_findings, snapshot)
+
             # Generate actions based on intelligence
             actions = self.generate_actions(enriched_findings, snapshot)
 
@@ -347,6 +350,84 @@ class IntelligenceEngine:
 
         return groups
 
+    def _build_and_persist_attack_graph(self, scored_findings: list[dict], context: dict) -> dict:
+        """
+        Build AttackGraph from scored findings and persist to database.
+
+        Converts finding dicts to VulnerabilityFinding objects, builds the
+        attack graph, and persists it to the attack_paths table via
+        AttackGraphRepository so SnapshotManager can read it.
+
+        Args:
+            scored_findings: Findings with confidence scores
+            context: Snapshot context (must include engagement_id)
+
+        Returns:
+            Snapshot-ready attack graph dict (from to_snapshot_dict())
+        """
+        from attack_graph import AttackGraph
+        from models.finding import VulnerabilityFinding, Severity
+
+        engagement_id = context.get("engagement_id", "") or ""
+        if not engagement_id:
+            logger.warning("No engagement_id in context, skipping attack graph build")
+            return {"paths": []}
+
+        graph = AttackGraph(engagement_id)
+
+        for finding_dict in scored_findings:
+            try:
+                severity_str = finding_dict.get("severity", "MEDIUM")
+                if isinstance(severity_str, str):
+                    try:
+                        severity = Severity[severity_str.upper()]
+                    except (KeyError, ValueError):
+                        severity = Severity.MEDIUM
+                else:
+                    severity = Severity.MEDIUM
+
+                evidence = finding_dict.get("evidence", {})
+                if isinstance(evidence, str):
+                    import json
+                    try:
+                        evidence = json.loads(evidence)
+                    except (json.JSONDecodeError, TypeError):
+                        evidence = {"raw": evidence}
+
+                finding = VulnerabilityFinding(
+                    type=finding_dict.get("type", "UNKNOWN"),
+                    severity=severity,
+                    confidence=finding_dict.get("confidence", 0.5),
+                    endpoint=finding_dict.get("endpoint", "unknown"),
+                    evidence=evidence,
+                    source_tool=finding_dict.get("source_tool", "unknown"),
+                    cvss_score=finding_dict.get("cvss_score"),
+                )
+                graph.add_finding(finding)
+            except Exception as e:
+                logger.warning(
+                    "Could not add finding to attack graph: %s", e,
+                    exc_info=logger.isEnabledFor(logging.DEBUG),
+                )
+                continue
+
+        # Persist to database so SnapshotManager can read it
+        saved_count = 0
+        try:
+            from attack_graph_db import AttackGraphRepository
+            repo = AttackGraphRepository(self.connection_string)
+            saved_count = repo.save_paths(engagement_id, graph)
+            logger.info(
+                "Persisted %d attack paths for engagement %s",
+                saved_count, engagement_id,
+            )
+        except Exception as e:
+            logger.warning("Could not persist attack graph: %s", e)
+
+        snapshot_dict = graph.to_snapshot_dict()
+        snapshot_dict["paths_saved"] = saved_count
+        return snapshot_dict
+
     def generate_actions(self, scored_findings: list[dict], context: dict) -> list[dict]:
         """
         Generate recommended actions based on intelligence
@@ -367,7 +448,7 @@ class IntelligenceEngine:
         if self.detect_low_coverage(scored_findings):
             actions.append({
                 "type": "recon_expand",
-                "scope": self.suggest_new_targets(scored_findings),
+                "targets": self.suggest_new_targets(scored_findings),
                 "reason": "low_coverage_detected",
                 "description": "Insufficient endpoint coverage detected. Expanding reconnaissance to discover more attack surface.",
             })

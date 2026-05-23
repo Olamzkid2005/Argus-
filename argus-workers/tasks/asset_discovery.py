@@ -168,14 +168,8 @@ def update_asset_risk_scores(self, org_id: str):
         "INFO": 0.25,
     }
 
-    # Estimate CVSS per severity — mirrors attack_graph._estimate_cvss
-    severity_cvss = {
-        "CRITICAL": 9.5,
-        "HIGH": 7.5,
-        "MEDIUM": 5.0,
-        "LOW": 3.0,
-        "INFO": 0.0,
-    }
+    # Estimate CVSS per severity — uses shared canonical mapping from attack_graph
+    from attack_graph import AttackGraph
 
     try:
         conn = connect(db_conn_string)
@@ -222,15 +216,15 @@ def update_asset_risk_scores(self, org_id: str):
             else:
                 # Pick the CVSS equivalent of the highest severity present
                 if critical_count > 0:
-                    cvss_based = severity_cvss["CRITICAL"]
+                    cvss_based = AttackGraph._estimate_cvss("CRITICAL")
                 elif high_count > 0:
-                    cvss_based = severity_cvss["HIGH"]
+                    cvss_based = AttackGraph._estimate_cvss("HIGH")
                 elif medium_count > 0:
-                    cvss_based = severity_cvss["MEDIUM"]
+                    cvss_based = AttackGraph._estimate_cvss("MEDIUM")
                 elif low_count > 0:
-                    cvss_based = severity_cvss["LOW"]
+                    cvss_based = AttackGraph._estimate_cvss("LOW")
                 else:
-                    cvss_based = severity_cvss["INFO"]
+                    cvss_based = AttackGraph._estimate_cvss("INFO")
 
             # Apply severity-weight penalty (same method as security-rating.ts)
             total_weight = (
