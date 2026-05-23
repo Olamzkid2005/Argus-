@@ -1051,3 +1051,139 @@ class TestSafeEventEmitter:
         # tool_start should still be emitted even though second thinking failed
         mock_start.assert_called_once()
         assert emitter.queue_size == 0  # queue cleared either way
+
+
+# =========================================================================
+# Operational Gate Tests (Principle 2 — 100 consecutive engagements)
+# =========================================================================
+
+
+class TestOperationalGate:
+    """Operational-scale tests simulating the '100 consecutive engagements'
+    gate threshold required by Principle 2 before flipping a flag to default.
+
+    These tests verify that the shadow-mode infrastructure can track
+    consecutive successes across many simulated engagement runs and that
+    a single mismatch resets the counter — exactly the pattern used to
+    gate feature flag rollouts in production.
+    """
+
+    def setup_method(self):
+        """Reset shadow stats before each test."""
+        from runtime.shadow_mode import reset_shadow_stats
+        reset_shadow_stats()
+
+    @pytest.mark.parametrize("n_engagements", [1, 10, 50, 100, 200])
+    def test_consecutive_engagements_pass_gate(self, n_engagements):
+        """Simulate N consecutive engagements where the new and old paths
+        produce identical results. After N engagements, the consecutive
+        successes counter must equal N, proving the gate is met."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+
+        for i in range(n_engagements):
+            shadow_compare(
+                "gate_test",
+                f"eng-{i:04d}",
+                {"status": "ok", "findings": 5, "duration_ms": 1200},
+                lambda: {"status": "ok", "findings": 5, "duration_ms": 1200},
+            )
+
+        stats = get_shadow_stats("gate_test")
+        assert stats["consecutive_successes"] == n_engagements
+        assert stats["total_mismatches"] == 0
+
+    @pytest.mark.parametrize("n_ok_before", [50, 99])
+    def test_mismatch_resets_after_n_ok(self, n_ok_before):
+        """Simulate N successful engagements, then a single mismatch.
+        The consecutive counter must reset to 0 after the mismatch,
+        simulating the 'gate not yet met' scenario."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+
+        for i in range(n_ok_before):
+            shadow_compare(
+                "reset_test",
+                f"eng-{i:04d}",
+                {"result": "clean"},
+                lambda: {"result": "clean"},
+            )
+
+        # Verify gate is N/n_ok_before OK
+        stats_before = get_shadow_stats("reset_test")
+        assert stats_before["consecutive_successes"] == n_ok_before
+
+        # Now a mismatch
+        shadow_compare(
+            "reset_test",
+            "eng-fail",
+            {"result": "clean"},
+            lambda: {"result": "vulnerable"},
+        )
+
+        stats_after = get_shadow_stats("reset_test")
+        assert stats_after["consecutive_successes"] == 0
+        assert stats_after["total_mismatches"] == 1
+
+    def test_old_path_exception_breaks_gate(self):
+        """If the old path raises during any engagement, it counts as a
+        mismatch and resets the consecutive counter."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+
+        # 20 good runs
+        for i in range(20):
+            shadow_compare(
+                "exception_test", f"eng-{i:04d}",
+                {"ok": True}, lambda: {"ok": True},
+            )
+
+        # Old path raises
+        def failing_old():
+            raise ConnectionError("database down")
+
+        shadow_compare("exception_test", "eng-bad", {"ok": True}, failing_old)
+
+        stats = get_shadow_stats("exception_test")
+        assert stats["consecutive_successes"] == 0
+        assert stats["total_mismatches"] == 1
+
+    def test_multi_phase_gate(self):
+        """Simulate multiple phases each tracking their own gate threshold.
+        Phase A passes 100, Phase B only 50 — only A should be past the gate."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+
+        # Phase A: 100 consecutive successes
+        for i in range(100):
+            shadow_compare(
+                "phase_a", f"eng-{i:04d}",
+                {"phase": "a", "ok": True},
+                lambda: {"phase": "a", "ok": True},
+            )
+
+        # Phase B: 50 consecutive successes, then a mismatch
+        for i in range(50):
+            shadow_compare(
+                "phase_b", f"eng-{i:04d}",
+                {"phase": "b", "ok": True},
+                lambda: {"phase": "b", "ok": True},
+            )
+        shadow_compare(
+            "phase_b", "eng-fail",
+            {"phase": "b", "ok": True},
+            lambda: {"phase": "b", "ok": False},
+        )
+
+        # Phase C: 200 consecutive successes
+        for i in range(200):
+            shadow_compare(
+                "phase_c", f"eng-{i:04d}",
+                {"phase": "c", "result": i},
+                lambda: {"phase": "c", "result": i},
+            )
+
+        all_stats = get_shadow_stats()
+        assert all_stats["consecutive_successes"]["phase_a"] >= 100
+        assert all_stats["consecutive_successes"]["phase_b"] == 0  # reset by mismatch
+        assert all_stats["consecutive_successes"]["phase_c"] == 200
+        # Phases with 0 mismatches may be absent from the dict (not inserted)
+        assert all_stats["total_mismatches"].get("phase_a", 0) == 0
+        assert all_stats["total_mismatches"]["phase_b"] == 1
+        assert all_stats["total_mismatches"].get("phase_c", 0) == 0
