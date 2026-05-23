@@ -962,6 +962,9 @@ class Orchestrator:
         # Load org_id for learned FP rate lookups in IntelligenceEngine
         org_id = self._get_org_id()
         snapshot["org_id"] = org_id
+        # Pass EngagementState reference for AttackGraph integration (Step 11)
+        if hasattr(self, "state"):
+            snapshot["_engagement_state"] = self.state
         evaluation = engine.evaluate(snapshot, org_id=org_id)
 
         # ── Shared per-engagement cost tracker ──

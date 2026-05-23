@@ -391,7 +391,7 @@ class IntelligenceEngine:
 
         return groups
 
-    def _build_and_persist_attack_graph(self, scored_findings: list[dict], context: dict) -> dict:
+    def _build_and_persist_attack_graph(self, scored_findings: list[dict], context: dict) -> tuple[dict, Any]:
         """
         Build AttackGraph from scored findings and persist to database.
 
@@ -399,12 +399,16 @@ class IntelligenceEngine:
         attack graph, and persists it to the attack_paths table via
         AttackGraphRepository so SnapshotManager can read it.
 
+        When ATTACK_GRAPH_V2 is enabled and context contains an
+        EngagementState reference (``_engagement_state``), attaches the
+        AttackGraph instance so build_observation() includes live paths.
+
         Args:
             scored_findings: Findings with confidence scores
             context: Snapshot context (must include engagement_id)
 
         Returns:
-            Snapshot-ready attack graph dict (from to_snapshot_dict())
+            Tuple of (snapshot_dict, graph_instance)
         """
         from attack_graph import AttackGraph
         from models.finding import VulnerabilityFinding, Severity
@@ -412,7 +416,7 @@ class IntelligenceEngine:
         engagement_id = context.get("engagement_id", "") or ""
         if not engagement_id:
             logger.warning("No engagement_id in context, skipping attack graph build")
-            return {"paths": []}
+            return {"paths": []}, None
 
         graph = AttackGraph(engagement_id)
 
@@ -467,7 +471,24 @@ class IntelligenceEngine:
 
         snapshot_dict = graph.to_snapshot_dict()
         snapshot_dict["paths_saved"] = saved_count
-        return snapshot_dict
+
+        # Step 11: When ATTACK_GRAPH_V2 is enabled, attach the graph instance
+        # to the state so build_observation() includes live attack paths.
+        if _ff_enabled("ATTACK_GRAPH_V2", default=False):
+            _state = context.get("_engagement_state")
+            if _state is not None and hasattr(_state, "set_attack_graph_instance"):
+                try:
+                    _state.set_attack_graph_instance(graph)
+                    logger.debug(
+                        "Attached AttackGraph instance to state for engagement %s",
+                        engagement_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Could not attach AttackGraph to state: %s", e,
+                    )
+
+        return snapshot_dict, graph
 
     def analyze_state(self, state: Any) -> dict:
         """

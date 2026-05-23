@@ -76,6 +76,7 @@ class EngagementState:
         engagement_id: str,
         state_machine: EngagementStateMachine | None = None,
         budget_manager: LoopBudgetManager | None = None,
+        attack_graph: Any | None = None,
     ):
         self.engagement_id = engagement_id
         self.state_machine = state_machine
@@ -89,6 +90,7 @@ class EngagementState:
         self.tool_history: list[ToolExecutionRecord] = []
         self.failed_actions: list[dict] = []
         self.attack_graph: dict = {}
+        self._attack_graph_instance: Any | None = attack_graph
         self.confidence_scores: dict = {}
         self.memory_summary: str = ""
         self.current_goal: str = ""
@@ -197,6 +199,18 @@ class EngagementState:
     def tried_tools(self) -> set[str]:
         return self._last_agent_tried_tools
 
+    def set_attack_graph_instance(self, graph: Any) -> None:
+        """Attach an AttackGraph instance for live path computation.
+
+        When set, build_observation() includes actual attack paths from
+        the graph instead of the static attack_graph dict placeholder.
+
+        Args:
+            graph: An AttackGraph instance (or anything with to_snapshot_dict())
+        """
+        self._attack_graph_instance = graph
+        self._bump_version()
+
     # ── Budget delegation ──
 
     def budget_can_continue(self, action: dict) -> tuple[bool, str]:
@@ -216,7 +230,23 @@ class EngagementState:
         Build a complete observation dict for the agent loop.
         Includes all state needed for the LLM to reason about next actions.
         This replaces the ad-hoc observation history in ReActAgent.
+
+        When ATTACK_GRAPH_V2 is enabled and an AttackGraph instance has been
+        attached via set_attack_graph_instance(), attack_graph_paths contains
+        live-computed attack paths with risk scores, prerequisites, and impacts.
+        Otherwise, falls back to the static attack_graph dict placeholder.
         """
+        from feature_flags import is_enabled as _ff_enabled
+
+        if _ff_enabled("ATTACK_GRAPH_V2", default=False) and self._attack_graph_instance is not None:
+            try:
+                snapshot = self._attack_graph_instance.to_snapshot_dict()
+                attack_paths = snapshot.get("paths", [])[:5]
+            except Exception:
+                attack_paths = self.attack_graph.get("paths", [])[:5]
+        else:
+            attack_paths = self.attack_graph.get("paths", [])[:5]
+
         return {
             "engagement_id": self.engagement_id,
             "current_phase": self.current_phase,
@@ -227,7 +257,7 @@ class EngagementState:
                 t.to_dict() for t in self.tool_history[-10:]
             ],
             "failed_actions": self.failed_actions[-5:],
-            "attack_graph_paths": self.attack_graph.get("paths", [])[:5],
+            "attack_graph_paths": attack_paths,
             "budget_status": self.budget_manager.get_status(),
             "tried_tools": list(self._last_agent_tried_tools),
             "memory_summary": self.memory_summary[:1000] if self.memory_summary else "",
