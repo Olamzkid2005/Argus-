@@ -103,9 +103,11 @@ class Orchestrator:
         self.mcp = get_mcp_server()
         self.stream = get_stream_manager()
         self._register_mcp_tools()
-        self._last_agent_tried_tools = set()
-        self._bug_bounty_mode = False
-        self._agent_mode_enabled = True
+        # These are migrated to EngagementState when ENGAGEMENT_STATE flag is on.
+        # For backward compatibility, keep them as fallback.
+        self._last_agent_tried_tools: set[str] = set()
+        self._bug_bounty_mode: bool = False
+        self._agent_mode_enabled: bool = True
 
     def _register_mcp_tools(self):
         """
@@ -204,6 +206,9 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_recon", ["target"])
         self._check_timeout()
+        from feature_flags import is_enabled as _ff_enabled
+        if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
+            self.state.bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
         self._bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
         target = job.get("target")
         if not target:
@@ -315,7 +320,13 @@ class Orchestrator:
             try:
                 # Tag findings with bugbounty source when in bug bounty mode
                 # so the Intelligence Engine applies the confidence cap.
-                if self._bug_bounty_mode:
+                from feature_flags import is_enabled as _ff_enabled
+                bug_bounty = (
+                    self.state.bug_bounty_mode
+                    if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state")
+                    else self._bug_bounty_mode
+                )
+                if bug_bounty:
                     finding["bugbounty_source"] = True
                     # Preserve original source — don't overwrite with "bugbounty"
                     if "source" not in finding or finding["source"] == "bugbounty":
@@ -633,9 +644,13 @@ class Orchestrator:
                 all_findings.extend(fallback)
 
         if per_target_tools:
-            self._last_agent_tried_tools = set.union(*per_target_tools)
+            union_set = set.union(*per_target_tools)
         else:
-            self._last_agent_tried_tools = set()
+            union_set = set()
+        from feature_flags import is_enabled as _ff_enabled
+        if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
+            self.state.record_tried_tools(union_set)
+        self._last_agent_tried_tools = union_set
 
         return all_findings
 
@@ -664,6 +679,10 @@ class Orchestrator:
             (hasattr(recon_context, 'crawled_paths') and recon_context.crawled_paths) or
             (hasattr(recon_context, 'parameter_bearing_urls') and recon_context.parameter_bearing_urls)
         )
+        from feature_flags import is_enabled as _ff_enabled
+        if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
+            self.state.bug_bounty_mode = bool(bug_bounty_mode)
+            self.state.agent_mode_enabled = bool(agent_mode_enabled)
         self._bug_bounty_mode = bool(bug_bounty_mode)
         self._agent_mode_enabled = bool(agent_mode_enabled)
 
@@ -810,7 +829,11 @@ class Orchestrator:
         slog.phase_header("AGENT SCAN", targets=f"{len(targets)} target(s)")
         emit_thinking(self.engagement_id, "LLM agent mode active — analyzing recon results and selecting scan tools...")
         findings = self.run_scan_with_agent(targets, recon_context, aggressiveness, auth_config=auth_config, bug_bounty_mode=bug_bounty_mode, budget=budget)
-        agent_tried = getattr(self, "_last_agent_tried_tools", set())
+        from feature_flags import is_enabled as _ff_enabled
+        if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
+            agent_tried = self.state.tried_tools
+        else:
+            agent_tried = getattr(self, "_last_agent_tried_tools", set())
         logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
         tech_stack = recon_context.tech_stack if recon_context else None
         deterministic_findings = execute_scan_pipeline(
@@ -834,7 +857,11 @@ class Orchestrator:
         mode = "deterministic"
         if not recon_context:
             mode += " (no recon context)"
-        elif not getattr(self, "_agent_mode_enabled", True):
+        elif not (
+            self.state.agent_mode_enabled
+            if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state")
+            else getattr(self, "_agent_mode_enabled", True)
+        ):
             mode += " (agent mode disabled)"
         else:
             mode += " (LLM unavailable)"

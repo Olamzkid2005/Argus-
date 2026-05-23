@@ -156,6 +156,8 @@ def task_context(
                 slog.info("Lock acquired, state machine initialized")
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
+                if _state_assigned and isinstance(state, EngagementState):
+                    orchestrator.state = state  # Step 10: wire EngagementState into orchestrator
                 ctx.orchestrator = orchestrator
 
                 yield ctx
