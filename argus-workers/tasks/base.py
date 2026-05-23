@@ -88,7 +88,7 @@ def task_context(
     from distributed_lock import DistributedLock, LockAcquisitionError, LockContext
     from feature_flags import is_enabled as _ff_enabled
     from orchestrator import Orchestrator
-    from runtime import EngagementState
+    from runtime import EngagementState, shadow_compare
     from state_machine import EngagementStateMachine
     from tasks.utils import get_engagement_state
     from tracing import TracingManager
@@ -138,6 +138,16 @@ def task_context(
                 # when feature flag is enabled.
                 if _ff_enabled("ENGAGEMENT_STATE", default=False):
                     state = EngagementState(engagement_id, state_machine=sm)
+                    # Shadow-compare: new EngagementState vs raw state machine
+                    shadow_compare(
+                        "engagement_state", engagement_id,
+                        new_result=state.to_dict(),
+                        old_path_fn=lambda sm=sm: {
+                            "current_state": sm.current_state,
+                            "engagement_id": sm.engagement_id,
+                        },
+                        key_fields=["current_state", "engagement_id"],
+                    )
                 else:
                     state = sm
                 _state_assigned = True

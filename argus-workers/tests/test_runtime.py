@@ -722,3 +722,92 @@ class TestRuntimeIntegration:
         assert d["engagement_id"] == "eng-integ-4"
         assert d["tool_history_count"] >= 1
         assert d["state_version"] >= 1
+
+
+# =========================================================================
+# Shadow-Mode Validation Tests
+# =========================================================================
+
+
+class TestShadowMode:
+    def setup_method(self):
+        """Reset shadow stats before each test."""
+        from runtime.shadow_mode import reset_shadow_stats
+        reset_shadow_stats()
+
+    def test_matching_results(self):
+        """Test that matching results increment consecutive successes."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        shadow_compare("test_phase", "eng-1", {"key": "value"}, lambda: {"key": "value"})
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 1
+        assert stats["total_mismatches"] == 0
+
+    def test_mismatching_results(self):
+        """Test that mismatching results reset consecutive successes."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        shadow_compare("test_phase", "eng-1", {"key": "new_value"}, lambda: {"key": "old_value"})
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 0
+        assert stats["total_mismatches"] == 1
+
+    def test_old_path_exception(self):
+        """Test that old path exceptions are counted as mismatches."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+
+        def failing_old_path():
+            raise RuntimeError("old path failed")
+
+        shadow_compare("test_phase", "eng-1", {"key": "value"}, failing_old_path)
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 0
+        assert stats["total_mismatches"] == 1
+
+    def test_key_fields_comparison(self):
+        """Test comparing only specific key fields."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        new_result = {"risk": "high", "findings": ["xss"]}
+        old_result = {"risk": "high", "findings": ["sqli"]}
+        # Compare only 'risk' key — should match
+        shadow_compare("test_phase", "eng-1", new_result, lambda: old_result, key_fields=["risk"])
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 1
+
+    def test_consecutive_successes_accumulate(self):
+        """Test that consecutive successes accumulate across calls."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        for _ in range(5):
+            shadow_compare("test_phase", "eng-1", {"key": "v"}, lambda: {"key": "v"})
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 5
+
+    def test_mismatch_resets_consecutive(self):
+        """Test that a mismatch resets the consecutive counter."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        for _ in range(3):
+            shadow_compare("test_phase", "eng-1", {"key": "v"}, lambda: {"key": "v"})
+        # Now a mismatch
+        shadow_compare("test_phase", "eng-1", {"key": "new"}, lambda: {"key": "old"})
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 0
+        assert stats["total_mismatches"] == 1
+
+    def test_get_shadow_stats_all_phases(self):
+        """Test that get_shadow_stats without phase returns all."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        shadow_compare("phase_a", "eng-1", {"k": "v"}, lambda: {"k": "v"})
+        shadow_compare("phase_b", "eng-1", {"k": "v"}, lambda: {"k": "old"})
+        all_stats = get_shadow_stats()
+        assert "consecutive_successes" in all_stats
+        assert "total_mismatches" in all_stats
+        assert all_stats["consecutive_successes"]["phase_a"] == 1
+        assert all_stats["total_mismatches"]["phase_b"] == 1
+
+    def test_reset_shadow_stats(self):
+        """Test that reset clears stats for a specific phase."""
+        from runtime.shadow_mode import shadow_compare, get_shadow_stats, reset_shadow_stats
+        shadow_compare("test_phase", "eng-1", {"k": "v"}, lambda: {"k": "v"})
+        reset_shadow_stats("test_phase")
+        stats = get_shadow_stats("test_phase")
+        assert stats["consecutive_successes"] == 0
+        assert stats["total_mismatches"] == 0

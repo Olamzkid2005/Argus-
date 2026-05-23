@@ -855,13 +855,23 @@ class Orchestrator:
 
         # Phase 3/4: Use DeterministicRuntime when CLEAN_ORCHESTRATOR is enabled
         if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
-            from runtime import DeterministicRuntime
+            from runtime import DeterministicRuntime, shadow_compare
             dr = DeterministicRuntime(self, execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None)
             tech_stack = recon_context.tech_stack if recon_context else None
             result = dr.run(
                 targets=targets, budget=budget, aggressiveness=aggressiveness,
                 auth_config=auth_config, tech_stack=tech_stack,
                 skip_tools=None, recon_context=recon_context,
+            )
+            # Shadow-compare: DeterministicRuntime vs old execute_scan_pipeline
+            shadow_compare(
+                "deterministic_scan", self.engagement_id,
+                new_result=result,
+                old_path_fn=lambda: execute_scan_pipeline(
+                    self, targets, budget, aggressiveness, auth_config,
+                    tech_stack=tech_stack, recon_context=recon_context,
+                ),
+                key_fields=None,
             )
         else:
             tech_stack = recon_context.tech_stack if recon_context else None

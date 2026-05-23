@@ -122,6 +122,16 @@ class IntelligenceEngine:
                 _state = _SnapshotStateAdapter(snapshot, enriched_findings)
                 analysis = self.analyze_state(_state)
                 reasoning = self._generate_reasoning(enriched_findings, [])
+
+                # Shadow-compare: analyze_state output vs generate_actions output
+                from runtime.shadow_mode import shadow_compare as _shadow_compare
+                _shadow_compare(
+                    "intelligence_engine", snapshot.get("engagement_id", ""),
+                    new_result=analysis,
+                    old_path_fn=lambda: self.generate_actions(enriched_findings, snapshot),
+                    key_fields=["risk_level"],
+                )
+
                 duration_ms = int((_time.time() - start) * 1000)
                 slog.info(
                     f"Evaluation complete (TRUE_REACT_LOOP): "
