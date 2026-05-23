@@ -25,6 +25,7 @@ from config.constants import (
     LLM_AGENT_TEMPERATURE,
     LLM_AGENT_ZERO_FINDING_STOP,
 )
+from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
 from utils.logging_utils import ScanLogger
 
@@ -84,12 +85,14 @@ class ReActAgent:
         engagement_id: str = None,
         phase: str = "scan",
         mode: str | None = None,
+        governance: Any = None,
     ):
         self.registry = registry
         self.max_iterations = max_iterations
         self.llm_client = llm_client
         self.decision_repo = decision_repo
         self.engagement_id = engagement_id
+        self.governance = governance
         self.history: list[dict] = []
         self._phase = phase
         self._mode = mode
@@ -497,18 +500,35 @@ class ReActAgent:
                 logger.info("Agent: no more actions at iteration %d", iteration)
                 break
 
-            # Cost guard
-            total_cost_usd += getattr(action, "cost_usd", 0.0)
-            if total_cost_usd > LLM_AGENT_MAX_COST_USD:
-                logger.warning(
-                    f"Cost guard: ${total_cost_usd:.4f} exceeds ${LLM_AGENT_MAX_COST_USD:.4f}. "
-                    f"Switching to deterministic for remaining tools."
-                )
-                for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                    if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
-                        result = self.registry.call(tool_name, target=initial_target)
-                        results.append(result)
-                break
+            # ── Governance check (Phase 6) ──
+            # When GOVERNANCE_V2 flag is enabled and a Governance instance
+            # is provided, use unified safety controls instead of ad-hoc cost guard.
+            if _ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None:
+                can_proceed, reason = self.governance.check(action)
+                if not can_proceed:
+                    logger.warning(
+                        "Governance: %s — engagement %s, switching to deterministic for remaining tools",
+                        reason, self.engagement_id,
+                    )
+                    # Run remaining phase tools deterministically before shutdown
+                    for tool_name in self.PHASE_TOOLS.get(self._phase, []):
+                        if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
+                            result = self.registry.call(tool_name, target=initial_target)
+                            results.append(result)
+                    break
+            else:
+                # Legacy cost guard (backward compatible when governance is absent)
+                total_cost_usd += getattr(action, "cost_usd", 0.0)
+                if total_cost_usd > LLM_AGENT_MAX_COST_USD:
+                    logger.warning(
+                        f"Cost guard: ${total_cost_usd:.4f} exceeds ${LLM_AGENT_MAX_COST_USD:.4f}. "
+                        f"Switching to deterministic for remaining tools."
+                    )
+                    for tool_name in self.PHASE_TOOLS.get(self._phase, []):
+                        if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
+                            result = self.registry.call(tool_name, target=initial_target)
+                            results.append(result)
+                    break
 
             slog.agent_iteration(iteration, action.tool, action.reasoning[:80] if action.reasoning else "", cost=action.cost_usd)
             logger.info(
@@ -557,39 +577,53 @@ class ReActAgent:
                 except Exception as e:
                     logger.debug("Failed to mark checkpoint result: %s", e)
 
-            # FIX: skip counting for tools that failed or were skipped
-            # (e.g. __skip__ exception from scan.py sets success=False)
-            if result.tool in tried_tools and not result.success:
-                pass
-            else:
-                output_content = (result.output or "").strip()
-                if len(output_content) < 30:
-                    if output_content.startswith(('{', '[')):
-                        try:
-                            import json as _json
-                            _json.loads(output_content)
-                            empty_output_consecutive = 0
-                        except (ValueError, _json.JSONDecodeError):
-                            empty_output_consecutive += 1
-                    else:
-                        empty_output_consecutive += 1
-                    logger.info(
-                        "Agent: %s produced little/no output (%d consecutive)",
-                        action.tool,
-                        empty_output_consecutive,
+            # ── Record result with governance (Phase 6) ──
+            if _ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None:
+                self.governance.record_result(result, action)
+                # Check low-signal threshold
+                is_low_signal, signal_reason = self.governance.check_low_signal()
+                if is_low_signal:
+                    logger.warning(
+                        "Governance: %s — stopping agent for engagement %s",
+                        signal_reason, self.engagement_id,
                     )
-                else:
-                    empty_output_consecutive = 0
+                    break
 
-            # Only stop on empty output if we've already run at least 4 tools
-            # This prevents stopping before critical tools (nuclei, web_scanner) run
-            if empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP and len(tried_tools) >= 4:
-                logger.info(
-                    "Agent: %d consecutive empty tools after %d runs — stopping",
-                    empty_output_consecutive,
-                    len(tried_tools),
-                )
-                break
+            # Legacy empty-output detection (only when governance is not active)
+            if not (_ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None):
+                # FIX: skip counting for tools that failed or were skipped
+                # (e.g. __skip__ exception from scan.py sets success=False)
+                if result.tool in tried_tools and not result.success:
+                    pass
+                else:
+                    output_content = (result.output or "").strip()
+                    if len(output_content) < 30:
+                        if output_content.startswith(('{', '[')):
+                            try:
+                                import json as _json
+                                _json.loads(output_content)
+                                empty_output_consecutive = 0
+                            except (ValueError, _json.JSONDecodeError):
+                                empty_output_consecutive += 1
+                        else:
+                            empty_output_consecutive += 1
+                        logger.info(
+                            "Agent: %s produced little/no output (%d consecutive)",
+                            action.tool,
+                            empty_output_consecutive,
+                        )
+                    else:
+                        empty_output_consecutive = 0
+
+                # Only stop on empty output if we've already run at least 4 tools
+                # This prevents stopping before critical tools (nuclei, web_scanner) run
+                if empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP and len(tried_tools) >= 4:
+                    logger.info(
+                        "Agent: %d consecutive empty tools after %d runs — stopping",
+                        empty_output_consecutive,
+                        len(tried_tools),
+                    )
+                    break
 
             # FIX: build meaningful observation from actual output content
             observation = build_observation_summary(action.tool, result)
