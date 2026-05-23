@@ -22,8 +22,13 @@ class ExecutionEngine:
     """
     Shared tool execution layer for agent and deterministic runtimes.
 
-    Wraps ToolRunner.run() with scope validation middleware, rate-limit
-    awareness, and engagement state recording.
+    Wraps ToolRunner.run() with mandatory scope validation middleware,
+    rate-limit awareness, and engagement state recording.
+
+    When a ScopeValidator is provided at construction time, it is
+    automatically registered as the first middleware in the chain,
+    making scope validation MANDATORY for ALL tool executions through
+    this engine — not an optional per-call wrapper.
     """
 
     def __init__(
@@ -36,6 +41,37 @@ class ExecutionEngine:
         self.scope_validator = scope_validator
         self.engagement_state = engagement_state
         self._middleware: list[Callable] = []
+
+        # ── Mandatory scope validation middleware ──
+        # When a ScopeValidator is provided, register it as the first middleware
+        # in the chain so scope checks run BEFORE every tool execution.
+        # This makes scope validation mandatory — not an optional per-call wrapper.
+        if scope_validator is not None:
+            self.add_middleware(self._build_scope_middleware(scope_validator))
+
+    @staticmethod
+    def _build_scope_middleware(scope_validator: Any) -> Callable:
+        """
+        Build a scope validation middleware function from a ScopeValidator.
+
+        Checks all common target-bearing parameter names (target, url, host,
+        hostname, domain, endpoint) and blocks execution if any are out of scope.
+        """
+        def _scope_check(tool_name: str, args: list, kwargs: dict) -> tuple | None:
+            target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+            for param in target_params:
+                tgt = kwargs.get(param, "")
+                if tgt:
+                    try:
+                        scope_validator.validate_target(tgt)
+                    except Exception as e:
+                        logger.warning(
+                            "Scope validation blocked %s: param=%s target=%s — %s",
+                            tool_name, param, tgt, e,
+                        )
+                        return None  # Block execution
+            return (tool_name, args, kwargs)
+        return _scope_check
 
     def add_middleware(self, fn: Callable):
         """Add a middleware function to the execution chain.

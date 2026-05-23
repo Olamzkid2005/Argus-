@@ -394,6 +394,47 @@ class TestExecutionEngine:
         assert result.success is False
         assert "Tool crashed" in result.stderr
 
+    def test_scope_validator_middleware_auto_registered(self):
+        """Test that scope validator is auto-registered as middleware."""
+        from tools.scope_validator import ScopeValidator
+
+        tool_runner = MagicMock()
+        scope_val = ScopeValidator("eng-1", {"domains": ["example.com"]})
+        engine = ExecutionEngine(tool_runner=tool_runner, scope_validator=scope_val)
+
+        # Should have at least one middleware registered (scope check)
+        assert len(engine._middleware) >= 1
+
+        # Out-of-scope target should be blocked
+        result = engine.execute("nuclei", args=[], target="https://evil.com")
+        assert result.success is False
+        assert "Blocked by middleware" in result.stderr
+        tool_runner.run.assert_not_called()
+
+    def test_scope_middleware_allows_in_scope_target(self):
+        """Test that scope middleware allows in-scope targets."""
+        from tools.scope_validator import ScopeValidator
+
+        tool_runner = MagicMock()
+        tool_runner.run.return_value = MagicMock(success=True, stdout="ok")
+        scope_val = ScopeValidator("eng-1", {"domains": ["example.com"]})
+        engine = ExecutionEngine(tool_runner=tool_runner, scope_validator=scope_val)
+
+        result = engine.execute("nuclei", args=[], target="https://example.com/api")
+        assert result.success is True
+        tool_runner.run.assert_called_once()
+
+    def test_engine_without_scope_validator_still_works(self):
+        """Test that engine works normally without scope validator."""
+        tool_runner = MagicMock()
+        tool_runner.run.return_value = MagicMock(success=True, stdout="ok")
+        engine = ExecutionEngine(tool_runner=tool_runner)
+
+        result = engine.execute("nuclei", args=["target"])
+        assert result.success is True
+        # No middleware registered
+        assert len(engine._middleware) == 0
+
 
 # =========================================================================
 # Governance Tests

@@ -563,26 +563,13 @@ class Orchestrator:
                 # Phase 3/4: Use ExecutionEngine with mandatory scope validation
                 # middleware when CLEAN_ORCHESTRATOR is enabled.
                 if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
+                    # ExecutionEngine auto-registers scope validation as mandatory
+                    # middleware when scope_validator is provided. No manual
+                    # middleware registration needed.
                     _exec_engine = ExecutionEngine(
                         tool_runner=self.tool_runner,
                         scope_validator=ScopeValidator(self.engagement_id, authorized_scope) if authorized_scope else None,
                     )
-                    # Register scope validation middleware (mandatory — blocks
-                    # out-of-scope targets before they reach the tool runner)
-                    if authorized_scope:
-                        _scope_val = ScopeValidator(self.engagement_id, authorized_scope)
-                        def _scope_middleware(tool_name, args, kwargs, _sv=_scope_val):
-                            target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
-                            for p in target_params:
-                                tgt = kwargs.get(p, "")
-                                if tgt:
-                                    try:
-                                        _sv.validate_target(tgt)
-                                    except ScopeViolationError as e:
-                                        logger.warning("Scope violation blocked (%s): %s", p, e)
-                                        return None
-                            return (tool_name, args, kwargs)
-                        _exec_engine.add_middleware(_scope_middleware)
                     self._execution_engine = _exec_engine
 
                     # Wrap agent registry.call to run scope middleware before dispatch.
