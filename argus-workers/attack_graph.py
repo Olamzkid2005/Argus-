@@ -627,6 +627,115 @@ class AttackGraph:
 
         return severity_to_cvss.get(severity, 5.0)
 
+    def compute_exploitability(self, path: Path, satisfied_prerequisites: set[str]) -> float:
+        """
+        Compute how exploitable a path is given satisfied prerequisites.
+
+        Returns the fraction of path node prerequisites that are satisfied.
+        A path where all prerequisites are met returns 1.0 (fully exploitable).
+        A path with no prerequisites returns 1.0 (always exploitable).
+        A path where no prerequisites are met returns 0.0.
+
+        Args:
+            path: Attack path to evaluate
+            satisfied_prerequisites: Set of prerequisite conditions that are met
+
+        Returns:
+            Exploitability score (0.0-1.0)
+        """
+        all_prereqs = set()
+        for node in path.nodes:
+            all_prereqs.update(node.prerequisites)
+
+        if not all_prereqs:
+            return 1.0
+
+        satisfied = all_prereqs & satisfied_prerequisites
+        return len(satisfied) / len(all_prereqs)
+
+    def get_downstream_paths(self, node_id: str) -> list[Path]:
+        """
+        Return all paths where this node is a starting point.
+
+        Enables queries like "Given SSRF at endpoint X, what attacks does it enable?"
+        Returns paths starting from node_id through all outgoing edges.
+
+        Args:
+            node_id: The node ID to find downstream paths from
+
+        Returns:
+            List of paths originating from the given node
+        """
+        if node_id not in self.nodes:
+            return []
+
+        start_node = self.nodes[node_id]
+        downstream = []
+
+        # Find all edges originating from this node
+        for edge in self.edges:
+            if edge.from_node == node_id:
+                to_node = self.nodes.get(edge.to_node)
+                if to_node:
+                    downstream.append(Path(
+                        nodes=[start_node, to_node],
+                        edges=[edge],
+                    ))
+
+        # Also check chain rules where this node is the prerequisite
+        chains = self.find_chains()
+        for chain in chains:
+            if chain["prereq_node"].id == node_id:
+                downstream.append(Path(
+                    nodes=[chain["prereq_node"], chain["chain_node"]],
+                    edges=[],
+                ))
+
+        return downstream
+
+    def to_snapshot_dict(self) -> dict:
+        """
+        Serialize the attack graph to a dictionary for snapshot storage.
+
+        Produces the dict used by SnapshotManager for decision_snapshots,
+        including all nodes, edges, relationships, prerequisites, and impacts.
+
+        Returns:
+            Dict with 'paths' key containing serialized path data
+        """
+        paths = self.get_all_paths_with_chains()
+
+        serialized_paths = []
+        for path in paths:
+            risk = self.compute_risk(path)
+            serialized_paths.append({
+                "risk_score": round(risk, 2),
+                "nodes": [
+                    {
+                        "id": node.id,
+                        "type": node.type,
+                        "data": node.data,
+                        "cvss": node.cvss,
+                        "confidence": node.confidence,
+                        "prerequisites": list(node.prerequisites),
+                        "downstream_impacts": list(node.downstream_impacts),
+                    }
+                    for node in path.nodes
+                ],
+                "edges": [
+                    {
+                        "from_node": edge.from_node,
+                        "to_node": edge.to_node,
+                        "type": edge.type,
+                        "correlation_factor": edge.correlation_factor,
+                        "relationship_type": str(edge.relationship_type),
+                    }
+                    for edge in path.edges
+                ],
+            })
+
+        return {"paths": serialized_paths}
+
     def get_all_paths(self) -> list[Path]:
         """
         Get all attack paths in the graph
