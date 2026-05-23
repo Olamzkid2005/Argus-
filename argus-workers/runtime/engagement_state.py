@@ -77,10 +77,14 @@ class EngagementState:
         state_machine: EngagementStateMachine | None = None,
         budget_manager: LoopBudgetManager | None = None,
         attack_graph: Any | None = None,
+        state_cache: Any | None = None,
     ):
         self.engagement_id = engagement_id
         self.state_machine = state_machine
         self.budget_manager = budget_manager or LoopBudgetManager(engagement_id)
+
+        # ── Redis fast-access cache (optional, wired on creation) ──
+        self._state_cache: Any | None = state_cache
 
         # ── State fields ──
         self.recon_context: dict = {}
@@ -104,8 +108,14 @@ class EngagementState:
     # ── Versioned mutation ──
 
     def _bump_version(self):
-        """Increment state_version on every mutation."""
+        """Increment state_version on every mutation.
+
+        If a Redis state_cache is attached, auto-persists the snapshot
+        so the agent loop always reads fresh data without a DB round-trip.
+        """
         self.state_version += 1
+        if self._state_cache is not None:
+            self._state_cache.save(self.engagement_id, self.to_dict())
 
     # ── Phase management ──
 
@@ -315,6 +325,45 @@ class EngagementState:
         state.current_phase = data.get("current_phase", "created")
         if data.get("budget"):
             state.budget_manager.load_from_db(data["budget"])
+        return state
+
+    # ── Redis cache convenience ──
+
+    def save_to_cache(self) -> bool:
+        """Persist current state to Redis cache (if attached).
+
+        Returns:
+            True if saved, False if no cache attached or Redis unavailable.
+        """
+        if self._state_cache is None:
+            return False
+        return self._state_cache.save(self.engagement_id, self.to_dict())
+
+    @classmethod
+    def load_from_cache(
+        cls,
+        engagement_id: str,
+        state_cache: Any,
+        state_machine: EngagementStateMachine | None = None,
+    ) -> "EngagementState | None":
+        """Load engagement state from Redis cache (fast path).
+
+        Falls back gracefully by returning None if not cached, allowing
+        callers to reconstruct from Postgres instead.
+
+        Args:
+            engagement_id: Engagement UUID.
+            state_cache: RedisStateCache instance.
+            state_machine: Optional state machine to attach.
+
+        Returns:
+            EngagementState if found in cache, None otherwise.
+        """
+        data = state_cache.load(engagement_id)
+        if data is None:
+            return None
+        state = cls.from_dict(data, state_machine=state_machine)
+        state._state_cache = state_cache
         return state
 
     # ── Bug bounty mode ──

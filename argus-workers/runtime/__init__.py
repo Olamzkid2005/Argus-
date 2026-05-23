@@ -1,6 +1,6 @@
 """
 Runtime Package — Canonical runtime state, checkpointing, memory, governance,
-and shadow-mode validation.
+shadow-mode validation, Redis caching, and in-flight migration.
 
 Provides the execution layer for the agent-first architecture:
 - EngagementState: Canonical runtime state for an engagement
@@ -10,6 +10,8 @@ Provides the execution layer for the agent-first architecture:
 - MemoryRetriever: 3-tier memory retrieval (Phase 5)
 - Governance: Unified safety controls (Phase 6)
 - shadow_compare: Shadow-mode validation (Phase 0, Principle 2)
+- RedisStateCache: Fast-access Redis cache for EngagementState
+- migrate_engagement: In-flight migration gate (Phase 0)
 """
 
 from .engagement_state import EngagementState, ToolExecutionRecord
