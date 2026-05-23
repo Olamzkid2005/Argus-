@@ -541,6 +541,8 @@ class Orchestrator:
         from database.repositories.agent_decision_repository import (
             AgentDecisionRepository,
         )
+        from feature_flags import is_enabled as _ff_enabled
+        from runtime import ExecutionEngine
         from tools.scope_validator import ScopeValidator, ScopeViolationError
 
         db_conn = os.getenv("DATABASE_URL")
@@ -557,24 +559,66 @@ class Orchestrator:
                     decision_repo=decision_repo,
                     mode="bugbounty" if bug_bounty_mode else None,
                 )
-                if authorized_scope:
-                    _scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
+
+                # Phase 3/4: Use ExecutionEngine with mandatory scope validation
+                # middleware when CLEAN_ORCHESTRATOR is enabled.
+                if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
+                    _exec_engine = ExecutionEngine(
+                        tool_runner=self.tool_runner,
+                        scope_validator=ScopeValidator(self.engagement_id, authorized_scope) if authorized_scope else None,
+                    )
+                    # Register scope validation middleware (mandatory — blocks
+                    # out-of-scope targets before they reach the tool runner)
+                    if authorized_scope:
+                        _scope_val = ScopeValidator(self.engagement_id, authorized_scope)
+                        def _scope_middleware(tool_name, args, kwargs, _sv=_scope_val):
+                            target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+                            for p in target_params:
+                                tgt = kwargs.get(p, "")
+                                if tgt:
+                                    try:
+                                        _sv.validate_target(tgt)
+                                    except ScopeViolationError as e:
+                                        logger.warning("Scope violation blocked (%s): %s", p, e)
+                                        return None
+                            return (tool_name, args, kwargs)
+                        _exec_engine.add_middleware(_scope_middleware)
+                    self._execution_engine = _exec_engine
+
+                    # Wrap agent registry.call to run scope middleware before dispatch.
+                    # The middleware validates targets; actual tool dispatch still
+                    # goes through the agent's registered tool functions.
                     _original_call = agent.registry.call
-                    def scoped_call(name, _scope_validator=_scope_validator, _original_call=_original_call, **kwargs):
-                        # Check all common target-bearing parameter names; tools may
-                        # use 'url', 'host', 'domain', etc. instead of 'target'.
-                        _target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
-                        for _param in _target_params:
-                            tgt = kwargs.get(_param, "")
-                            if tgt:
-                                try:
-                                    _scope_validator.validate_target(tgt)
-                                except ScopeViolationError as e:
-                                    logger.warning(f"Scope violation blocked ({_param}): {e}")
-                                    emit_thinking(self.engagement_id, f"Blocked: {tgt} is out of scope")
-                                    return AgentResult(tool=name, success=False, error=f"Scope violation: {e}")
-                        return _original_call(name, **kwargs)
-                    agent.registry.call = scoped_call
+                    def _scoped_dispatch(name, _ee=_exec_engine, _orig=_original_call, **kwargs):
+                        # Run middleware chain for scope validation
+                        args = []
+                        for fn in _ee._middleware:
+                            result = fn(name, args, kwargs)
+                            if result is None:
+                                from agent import AgentResult
+                                return AgentResult(tool=name, success=False, error="Blocked by scope validation")
+                            if isinstance(result, tuple) and len(result) == 3:
+                                name, args, kwargs = result
+                        return _orig(name, **kwargs)
+                    agent.registry.call = _scoped_dispatch
+                else:
+                    # Legacy scope validation wrapper (backward compatible)
+                    if authorized_scope:
+                        _scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
+                        _original_call = agent.registry.call
+                        def scoped_call(name, _scope_validator=_scope_validator, _original_call=_original_call, **kwargs):
+                            _target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+                            for _param in _target_params:
+                                tgt = kwargs.get(_param, "")
+                                if tgt:
+                                    try:
+                                        _scope_validator.validate_target(tgt)
+                                    except ScopeViolationError as e:
+                                        logger.warning(f"Scope violation blocked ({_param}): {e}")
+                                        emit_thinking(self.engagement_id, f"Blocked: {tgt} is out of scope")
+                                        return AgentResult(tool=name, success=False, error=f"Scope violation: {e}")
+                            return _original_call(name, **kwargs)
+                        agent.registry.call = scoped_call
 
                 emit_thinking(self.engagement_id, f"LLM agent selecting scan tools for {target}...")
                 results = agent.run(
@@ -796,6 +840,8 @@ class Orchestrator:
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict,
     ) -> list[dict]:
+        from feature_flags import is_enabled as _ff_enabled
+
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("DETERMINISTIC SCAN")
         mode = "deterministic"
@@ -806,8 +852,21 @@ class Orchestrator:
         else:
             mode += " (LLM unavailable)"
         logger.info(f"Running {mode} scan")
-        tech_stack = recon_context.tech_stack if recon_context else None
-        result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack=tech_stack, recon_context=recon_context)
+
+        # Phase 3/4: Use DeterministicRuntime when CLEAN_ORCHESTRATOR is enabled
+        if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
+            from runtime import DeterministicRuntime
+            dr = DeterministicRuntime(self, execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None)
+            tech_stack = recon_context.tech_stack if recon_context else None
+            result = dr.run(
+                targets=targets, budget=budget, aggressiveness=aggressiveness,
+                auth_config=auth_config, tech_stack=tech_stack,
+                skip_tools=None, recon_context=recon_context,
+            )
+        else:
+            tech_stack = recon_context.tech_stack if recon_context else None
+            result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack=tech_stack, recon_context=recon_context)
+
         slog.tool_complete("deterministic_scan", success=True, findings=len(result))
         return result
 
