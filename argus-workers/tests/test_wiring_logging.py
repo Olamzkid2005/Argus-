@@ -109,7 +109,6 @@ class TestFindingVerifierLogging:
 
         osc = Orchestrator.__new__(Orchestrator)
         osc.engagement_id = ENGAGEMENT_ID
-        osc._bug_bounty_mode = False
         osc.finding_repo = MagicMock()
         osc.finding_repo.create_finding.return_value = str(uuid.uuid4())
 
@@ -147,7 +146,6 @@ class TestFindingVerifierLogging:
 
         osc = Orchestrator.__new__(Orchestrator)
         osc.engagement_id = ENGAGEMENT_ID
-        osc._bug_bounty_mode = False
         osc.finding_repo = MagicMock()
         osc.finding_repo.create_finding.return_value = str(uuid.uuid4())
 
@@ -287,7 +285,6 @@ class TestWiringIntegration:
 
         osc = Orchestrator.__new__(Orchestrator)
         osc.engagement_id = ENGAGEMENT_ID
-        osc._bug_bounty_mode = False
         osc.finding_repo = MagicMock()
         mock_id = str(uuid.uuid4())
         osc.finding_repo.create_finding.return_value = mock_id

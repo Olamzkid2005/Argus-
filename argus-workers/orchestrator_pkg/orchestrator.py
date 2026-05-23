@@ -102,13 +102,6 @@ class Orchestrator:
         self.mcp = get_mcp_server()
         self.stream = get_stream_manager()
         self._register_mcp_tools()
-        # ── Deprecated instance vars ──
-        # These are migrated to EngagementState. Kept as local sync caches for
-        # backward compatibility. New code should read from self.state when
-        # ENGAGEMENT_STATE feature flag is enabled.
-        self._last_agent_tried_tools: set[str] = set()
-        self._bug_bounty_mode: bool = False
-        self._agent_mode_enabled: bool = True
 
     def _register_mcp_tools(self):
         """
@@ -200,7 +193,6 @@ class Orchestrator:
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
-        self._bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
         target = job.get("target")
         if not target:
             targets_list = job.get("targets", [])
@@ -315,7 +307,7 @@ class Orchestrator:
                 bug_bounty = (
                     self.state.bug_bounty_mode
                     if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state")
-                    else self._bug_bounty_mode
+                    else False
                 )
                 if bug_bounty:
                     finding["bugbounty_source"] = True
@@ -627,7 +619,6 @@ class Orchestrator:
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.record_tried_tools(union_set)
-        self._last_agent_tried_tools = union_set
 
         return all_findings
 
@@ -650,9 +641,6 @@ class Orchestrator:
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.bug_bounty_mode = bool(bug_bounty_mode)
             self.state.agent_mode_enabled = True
-        # Sync local cache for backward compat
-        self._bug_bounty_mode = bool(bug_bounty_mode)
-        self._agent_mode_enabled = True
 
         # Agent-first scan with deterministic fallback.
         # Mode selection is the agent's responsibility, not the orchestrator's.
@@ -729,7 +717,7 @@ class Orchestrator:
             if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
                 agent_tried = self.state.tried_tools
             else:
-                agent_tried = getattr(self, "_last_agent_tried_tools", set())
+                agent_tried = set()
             logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
             tech_stack = recon_context.tech_stack if recon_context else None
             deterministic_findings = execute_scan_pipeline(
