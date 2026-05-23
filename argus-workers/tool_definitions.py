@@ -121,6 +121,27 @@ class ToolDefinition:
     #: Activation gate — tool only runs when these conditions are met
     requires: ToolRequires | None = None
 
+    #: Risk level of running the tool (low, medium, high, critical)
+    risk_level: str | None = None
+
+    #: Estimated cost per invocation in USD
+    estimated_cost: float | None = None
+
+    #: Estimated runtime in seconds
+    estimated_runtime: int | None = None
+
+    #: Maximum concurrent instances (None = no limit)
+    concurrency_limit: int | None = None
+
+    #: How sensitive the tool is to out-of-scope targets (low, medium, high)
+    scope_sensitivity: str | None = None
+
+    #: Exploit categories this tool covers (e.g. ["xss", "sqli"])
+    exploit_categories: list[str] | None = None
+
+    #: Rate limit impact (low, medium, high)
+    rate_limit_impact: str | None = None
+
 
 # ═══════════════════════════════════════════════════════════════
 # Registry — single source of truth for all tool definitions

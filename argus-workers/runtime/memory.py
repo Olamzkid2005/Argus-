@@ -55,10 +55,18 @@ class MemoryRetriever:
         """
         parts = []
 
-        # Short-term: recent observations (supports both EngagementState and ReActAgent)
+        # Short-term: recent observations (supports EngagementState, ReActAgent,
+        # and ReActAgent with engagement_state attribute)
         observations = getattr(state, "observations", None)
-        if observations is None:
+        if observations is None or callable(observations):
+            # Check if state has an engagement_state attribute
+            engagement_state = getattr(state, "engagement_state", None)
+            if engagement_state is not None and not callable(engagement_state):
+                observations = getattr(engagement_state, "observations", None)
+        if observations is None or callable(observations):
             observations = getattr(state, "history", [])
+        if callable(observations):
+            observations = []
         observations = observations[-6:]
         if observations:
             recent = []
@@ -104,10 +112,31 @@ class MemoryRetriever:
         return combined
 
     def _get_short_term(self, state: Any) -> list[dict]:
-        """Short-term: recent observations from EngagementState or ReActAgent."""
+        """Short-term: recent observations from EngagementState or ReActAgent.
+
+        Resolution order:
+        1. state.observations (direct EngagementState instance)
+        2. state.engagement_state.observations (when agent holds EngagementState)
+        3. state.history (ReActAgent fallback)
+        """
+        # Direct observations attribute (EngagementState or similar)
         observations = getattr(state, "observations", None)
-        if observations is None:
-            observations = getattr(state, "history", [])
+        if observations is not None and not callable(observations):
+            return observations[-10:]
+
+        # Check if state has an engagement_state attribute (e.g. ReActAgent
+        # wired with EngagementState). Guard against mock objects by checking
+        # that it has actual observations content.
+        engagement_state = getattr(state, "engagement_state", None)
+        if engagement_state is not None and not callable(engagement_state):
+            obs = getattr(engagement_state, "observations", None)
+            if obs is not None and not callable(obs):
+                return obs[-10:]
+
+        # Fallback to history list
+        observations = getattr(state, "history", [])
+        if callable(observations):
+            observations = []
         return observations[-10:]
 
     def _get_medium_term(self, state: Any) -> list[dict]:

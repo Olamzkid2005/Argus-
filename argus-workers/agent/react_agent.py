@@ -87,6 +87,7 @@ class ReActAgent:
         mode: str | None = None,
         governance: Any = None,
         memory_retriever: Any = None,
+        engagement_state: Any = None,
     ):
         self.registry = registry
         self.max_iterations = max_iterations
@@ -95,6 +96,8 @@ class ReActAgent:
         self.engagement_id = engagement_id
         self.governance = governance
         self.memory_retriever = memory_retriever
+        self.engagement_state = engagement_state
+        # Fallback history list when EngagementState is not provided
         self.history: list[dict] = []
         self._phase = phase
         self._mode = mode
@@ -112,27 +115,49 @@ class ReActAgent:
     def add_to_history(self, role: str, content: str, data: dict = None):
         """Add an entry to the agent's history/context.
 
+        When EngagementState is available, delegates to state.add_observation()
+        for canonical state tracking. Otherwise falls back to self.history.
+
         Content is truncated to 2000 chars to prevent unbounded token growth
         from large tool outputs (nuclei can produce thousands of JSON lines).
         """
+        from feature_flags import is_enabled as _ff_enabled
         max_history_entry = 2000
-        self.history.append(
-            {
-                "role": role,
-                "content": content[:max_history_entry],
-                "data": data or {},
-                "timestamp": time.time(),
-            }
-        )
-        # Cap history to last 50 entries to prevent memory growth
-        if len(self.history) > 50:
-            self.history = self.history[-50:]
+        if (
+            _ff_enabled("ENGAGEMENT_STATE", default=False)
+            and self.engagement_state is not None
+            and hasattr(self.engagement_state, "add_observation")
+        ):
+            self.engagement_state.add_observation(role, content[:max_history_entry], data)
+        else:
+            self.history.append(
+                {
+                    "role": role,
+                    "content": content[:max_history_entry],
+                    "data": data or {},
+                    "timestamp": time.time(),
+                }
+            )
+            # Cap history to last 50 entries to prevent memory growth
+            if len(self.history) > 50:
+                self.history = self.history[-50:]
 
     def get_context(self, max_tokens: int = LLM_AGENT_CONTEXT_MAX_TOKENS) -> str:
         """
         Build observation history string from tool results.
         Trims to stay under token budget — keeps most recent entries.
+
+        When EngagementState is available, reads from state.observations
+        for canonical state tracking. Falls back to self.history.
         """
+        from feature_flags import is_enabled as _ff_enabled
+        if (
+            _ff_enabled("ENGAGEMENT_STATE", default=False)
+            and self.engagement_state is not None
+            and hasattr(self.engagement_state, "get_context")
+        ):
+            return self.engagement_state.get_context(max_entries=6)
+
         recent = self.history[-6:]  # last 6 entries (up from 5)
         parts = [f"[{e['role']}]: {e['content']}" for e in recent]
         context = "\n".join(parts)
@@ -500,6 +525,20 @@ class ReActAgent:
             if self._cancelled:
                 logger.info("Agent: cancelled at iteration %d", iteration)
                 break
+
+            # Check if engagement state signals completion
+            from feature_flags import is_enabled as _ff_enabled
+            if (
+                _ff_enabled("ENGAGEMENT_STATE", default=False)
+                and self.engagement_state is not None
+                and hasattr(self.engagement_state, "is_complete")
+                and self.engagement_state.is_complete()
+            ):
+                logger.info(
+                    "Agent: engagement %s is in terminal state — stopping",
+                    self.engagement_id,
+                )
+                break
             plan_kwargs = {"tried_tools": tried_tools}
             if recon_context is not None:
                 plan_kwargs["recon_context"] = recon_context
@@ -580,6 +619,27 @@ class ReActAgent:
             tried_tools.add(action.tool)
             results.append(result)
 
+            # ── Record tool execution in EngagementState ──
+            if (
+                _ff_enabled("ENGAGEMENT_STATE", default=False)
+                and self.engagement_state is not None
+                and hasattr(self.engagement_state, "record_tool_execution")
+            ):
+                from runtime import ToolExecutionRecord
+                try:
+                    record = ToolExecutionRecord(
+                        tool=action.tool,
+                        args=action.arguments,
+                        timestamp=time.time(),
+                        result_summary=str(result.output)[:500] if hasattr(result, "output") and result.output else "",
+                        execution_cost=getattr(action, "cost_usd", 0.0),
+                        success=getattr(result, "success", False),
+                        failure_state=getattr(result, "stderr", "")[:200] if not getattr(result, "success", True) else "",
+                    )
+                    self.engagement_state.record_tool_execution(record)
+                except Exception as e:
+                    logger.debug("Failed to record tool execution in state: %s", e)
+
             # Mark checkpoint execution result
             if checkpoint_id:
                 try:
@@ -644,6 +704,16 @@ class ReActAgent:
             # FIX: build meaningful observation from actual output content
             observation = build_observation_summary(action.tool, result)
             self.add_to_history("observation", observation)
+
+            # Track execution iteration in EngagementState
+            if (
+                _ff_enabled("ENGAGEMENT_STATE", default=False)
+                and self.engagement_state is not None
+            ):
+                try:
+                    self.engagement_state.execution_iteration = iteration + 1
+                except Exception:
+                    pass
 
             # Log decision to repository
             if self.decision_repo:

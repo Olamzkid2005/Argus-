@@ -132,30 +132,28 @@ class TestIntelligenceEngine:
 
         assert self.engine.detect_weak_auth_signals(findings) is False
 
-    def test_generate_actions_for_low_coverage(self):
-        """Test action generation for low coverage"""
+    def test_detect_low_coverage_triggers_recon_expand(self):
+        """Test that low coverage detection can be used by analyze_state()"""
         findings = [
             {"endpoint": "https://example.com/1", "severity": "INFO"}
         ]
 
-        actions = self.engine.generate_actions(findings, {})
+        assert self.engine.detect_low_coverage(findings) is True
+        gaps = self.engine.suggest_new_targets(findings)
+        assert len(gaps) > 0
 
-        assert len(actions) > 0
-        assert any(a["type"] == "recon_expand" for a in actions)
-
-    def test_generate_actions_for_high_value_targets(self):
-        """Test action generation for high value targets"""
+    def test_detect_high_value_triggers_deep_scan(self):
+        """Test that high value detection can be used by analyze_state()"""
         findings = [
             {"endpoint": "https://example.com/api", "severity": "CRITICAL"}
         ]
 
-        actions = self.engine.generate_actions(findings, {})
+        assert self.engine.detect_high_value_targets(findings) is True
+        endpoints = self.engine.get_priority_endpoints(findings)
+        assert len(endpoints) > 0
 
-        assert len(actions) > 0
-        assert any(a["type"] == "deep_scan" for a in actions)
-
-    def test_evaluate_returns_scored_findings_and_actions(self):
-        """Test that evaluate returns scored findings and actions"""
+    def test_evaluate_returns_scored_findings_and_analysis(self):
+        """Test that evaluate returns scored findings and analysis"""
         snapshot = {
             "findings": [
                 {
@@ -175,6 +173,20 @@ class TestIntelligenceEngine:
         result = self.engine.evaluate(snapshot)
 
         assert "scored_findings" in result
-        assert "actions" in result
+        assert "analysis" in result
         assert "reasoning" in result
         assert len(result["scored_findings"]) == 1
+
+    def test_analyze_state_independent(self):
+        """Test analyze_state works independently (without pre-enriched findings)"""
+        class FakeState:
+            findings = [
+                {"type": "XSS", "endpoint": "https://example.com", "severity": "HIGH"}
+            ]
+            execution_iteration = 1
+
+        analysis = self.engine.analyze_state(FakeState())
+
+        assert "risk_level" in analysis
+        assert "coverage_gaps" in analysis
+        assert "reasoning" in analysis

@@ -103,8 +103,10 @@ class Orchestrator:
         self.mcp = get_mcp_server()
         self.stream = get_stream_manager()
         self._register_mcp_tools()
-        # These are migrated to EngagementState when ENGAGEMENT_STATE flag is on.
-        # For backward compatibility, keep them as fallback.
+        # ── Deprecated instance vars ──
+        # These are migrated to EngagementState. Kept as local sync caches for
+        # backward compatibility. New code should read from self.state when
+        # ENGAGEMENT_STATE feature flag is enabled.
         self._last_agent_tried_tools: set[str] = set()
         self._bug_bounty_mode: bool = False
         self._agent_mode_enabled: bool = True
@@ -665,9 +667,7 @@ class Orchestrator:
         self._load_and_publish_custom_rules(targets)
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
-        scan_mode = job.get("scan_mode", "agent")
         recon_context = job.get("recon_context") or load_recon_context(self.engagement_id)
-        agent_mode_enabled = job.get("agent_mode", True)
         auth_config = job.get("auth_config", {})
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
@@ -682,57 +682,30 @@ class Orchestrator:
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.bug_bounty_mode = bool(bug_bounty_mode)
-            self.state.agent_mode_enabled = bool(agent_mode_enabled)
+            self.state.agent_mode_enabled = True
+        # Sync local cache for backward compat
         self._bug_bounty_mode = bool(bug_bounty_mode)
-        self._agent_mode_enabled = bool(agent_mode_enabled)
+        self._agent_mode_enabled = True
 
-        # Phase 3: Mode-selection gated behind CLEAN_ORCHESTRATOR feature flag.
-        # When enabled, the orchestrator delegates mode selection to ReActAgent.
-        # Old path preserved for backward compatibility during migration.
-        from feature_flags import is_enabled as _ff_enabled
-        if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
-            # New path: orchestrator delegates to agent for mode selection
-            logger.info(
-                "CLEAN_ORCHESTRATOR enabled — orchestrator delegating scan mode selection "
-                "for engagement %s", self.engagement_id,
+        # Orchestrator always tries agent-first with deterministic fallback.
+        # Mode selection is the agent's responsibility, not the orchestrator's.
+        logger.info(
+            "Orchestrator delegating scan to agent "
+            "for engagement %s", self.engagement_id,
+        )
+        scan_mode = "agent"
+        try:
+            findings = self._run_agent_scan(
+                targets, recon_context, job.get("budget", {}),
+                scan_aggressiveness, auth_config, bug_bounty_mode,
             )
-            from agent import create_phase_agent
-            from database.repositories.agent_decision_repository import (
-                AgentDecisionRepository,
+        except Exception as _scan_err:
+            slog.warning("Agent scan failed (%s), falling back to deterministic: %s", self.engagement_id, _scan_err)
+            scan_mode = "deterministic_fallback"
+            findings = self._run_deterministic_scan(
+                targets, recon_context, job.get("budget", {}),
+                scan_aggressiveness, auth_config,
             )
-            db_conn = os.getenv("DATABASE_URL")
-            decision_repo = AgentDecisionRepository(db_conn) if db_conn else None
-            agent = create_phase_agent(
-                phase="scan", tool_runner=self.tool_runner,
-                engagement_id=self.engagement_id, llm_client=self.llm_client,
-                decision_repo=decision_repo,
-                mode="bugbounty" if bug_bounty_mode else None,
-            )
-            # Agent decides its mode — swarm vs single-agent vs deterministic
-            if _llm_ok and _recon_ok:
-                findings = self._run_agent_scan(
-                    targets, recon_context, job.get("budget", {}),
-                    scan_aggressiveness, auth_config, bug_bounty_mode,
-                )
-            else:
-                findings = self._run_deterministic_scan(
-                    targets, recon_context, job.get("budget", {}),
-                    scan_aggressiveness, auth_config,
-                )
-        else:
-            # Legacy path (pre-Phase 3): orchestrator makes mode-selection
-            if scan_mode == "swarm" and _recon_ok and _llm_ok:
-                findings = self._run_swarm_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
-            elif agent_mode_enabled and _recon_ok and _llm_ok:
-                findings = self._run_agent_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config, bug_bounty_mode)
-            else:
-                if scan_mode == "swarm":
-                    logger.warning("Swarm mode requested but %s — falling back to deterministic",
-                                   "LLM unavailable" if not _llm_ok else "recon context unavailable")
-                elif agent_mode_enabled:
-                    logger.warning("Agent mode requested but %s — falling back to deterministic",
-                                   "LLM unavailable" if not _llm_ok else "recon context unavailable")
-                findings = self._run_deterministic_scan(targets, recon_context, job.get("budget", {}), scan_aggressiveness, auth_config)
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
 
@@ -774,53 +747,6 @@ class Orchestrator:
                 )
             logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
 
-    def _run_swarm_scan(
-        self, targets: list[str], recon_context,
-        budget: dict, aggressiveness: str, auth_config: dict,
-        bug_bounty_mode: bool = False,
-    ) -> list[dict]:
-        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
-        slog.phase_header("SWARM SCAN", targets=f"{len(targets)} target(s)")
-        emit_thinking(
-            self.engagement_id,
-            "Multi-agent swarm mode active — spawning specialist agents...",
-        )
-        from agent.swarm import SwarmOrchestrator
-        from database.repositories.agent_decision_repository import (
-            AgentDecisionRepository,
-        )
-        from llm_service import LLMService
-        decision_repo = AgentDecisionRepository(
-            os.getenv("DATABASE_URL")
-        ) if os.getenv("DATABASE_URL") else None
-        llm_svc = LLMService(llm_client=self.llm_client)
-        swarm = SwarmOrchestrator(
-            llm_service=llm_svc,
-            tool_runner=self.tool_runner,
-            recon_context=recon_context,
-            engagement_id=self.engagement_id,
-            decision_repo=decision_repo,
-            auth_config=auth_config,
-            bug_bounty_mode=bug_bounty_mode,
-        )
-        swarm_findings, swarm_tools_executed = swarm.run(timeout=1800)
-        slog.info(f"Swarm returned {len(swarm_findings)} findings")
-        logger.info("Swarm returned %d findings, executed tools: %s", len(swarm_findings), swarm_tools_executed)
-        tech_stack = recon_context.tech_stack if recon_context else None
-        remaining = self.get_remaining_time()
-        adjusted_aggressiveness = aggressiveness
-        if remaining < 600:
-            adjusted_aggressiveness = "default"
-            logger.info("Only %ds remaining — reducing safety net aggressiveness to default", remaining)
-        safety_findings = execute_scan_pipeline(
-            self, targets, budget, adjusted_aggressiveness, auth_config,
-            tech_stack=tech_stack,
-            skip_tools=swarm_tools_executed,
-            recon_context=recon_context,
-        )
-        slog.tool_complete("swarm", success=True, findings=len(swarm_findings))
-        return swarm_findings + safety_findings
-
     def _run_agent_scan(
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict, bug_bounty_mode: bool = False,
@@ -850,46 +776,28 @@ class Orchestrator:
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict,
     ) -> list[dict]:
-        from feature_flags import is_enabled as _ff_enabled
-
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("DETERMINISTIC SCAN")
-        mode = "deterministic"
-        if not recon_context:
-            mode += " (no recon context)"
-        elif not (
-            self.state.agent_mode_enabled
-            if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state")
-            else getattr(self, "_agent_mode_enabled", True)
-        ):
-            mode += " (agent mode disabled)"
-        else:
-            mode += " (LLM unavailable)"
-        logger.info(f"Running {mode} scan")
 
-        # Phase 3/4: Use DeterministicRuntime when CLEAN_ORCHESTRATOR is enabled
-        if _ff_enabled("CLEAN_ORCHESTRATOR", default=False):
-            from runtime import DeterministicRuntime, shadow_compare
-            dr = DeterministicRuntime(self, execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None)
-            tech_stack = recon_context.tech_stack if recon_context else None
-            result = dr.run(
-                targets=targets, budget=budget, aggressiveness=aggressiveness,
-                auth_config=auth_config, tech_stack=tech_stack,
-                skip_tools=None, recon_context=recon_context,
-            )
-            # Shadow-compare: DeterministicRuntime vs old execute_scan_pipeline
-            shadow_compare(
-                "deterministic_scan", self.engagement_id,
-                new_result=result,
-                old_path_fn=lambda: execute_scan_pipeline(
-                    self, targets, budget, aggressiveness, auth_config,
-                    tech_stack=tech_stack, recon_context=recon_context,
-                ),
-                key_fields=None,
-            )
-        else:
-            tech_stack = recon_context.tech_stack if recon_context else None
-            result = execute_scan_pipeline(self, targets, budget, aggressiveness, auth_config, tech_stack=tech_stack, recon_context=recon_context)
+        # Use DeterministicRuntime for clean tool dispatch with middleware chain
+        from runtime import DeterministicRuntime, shadow_compare
+        dr = DeterministicRuntime(self, execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None)
+        tech_stack = recon_context.tech_stack if recon_context else None
+        result = dr.run(
+            targets=targets, budget=budget, aggressiveness=aggressiveness,
+            auth_config=auth_config, tech_stack=tech_stack,
+            skip_tools=None, recon_context=recon_context,
+        )
+        # Shadow-compare: DeterministicRuntime vs old execute_scan_pipeline
+        shadow_compare(
+            "deterministic_scan", self.engagement_id,
+            new_result=result,
+            old_path_fn=lambda: execute_scan_pipeline(
+                self, targets, budget, aggressiveness, auth_config,
+                tech_stack=tech_stack, recon_context=recon_context,
+            ),
+            key_fields=None,
+        )
 
         slog.tool_complete("deterministic_scan", success=True, findings=len(result))
         return result
@@ -1094,77 +1002,23 @@ class Orchestrator:
                 "Fix generation batch failed (non-fatal): %s", e
             )
 
-        actions = evaluation.get("actions", [])
-        next_state = "reporting"
-        approved_actions = []
-        denied_actions = []
-        for action in actions:
-            can_continue, reason = budget_mgr.can_continue(action)
-            if can_continue:
-                budget_mgr.consume(action)
-                approved_actions.append(action)
-
-                # ── Persist budget state to DB after every consume() ──
-                # This prevents budget bypass on worker crash: the consumed
-                # budget (current_cycles, current_depth, current_llm_reviews)
-                # is written to the DB immediately, not just in memory.
-                try:
-                    from database.connection import db_cursor
-                    bd = budget_mgr.to_dict()
-                    with db_cursor() as cursor:
-                        cursor.execute(
-                            """
-                            INSERT INTO loop_budgets
-                                (engagement_id, max_cycles, max_depth, max_llm_reviews,
-                                 current_cycles, current_depth, current_llm_reviews)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (engagement_id) DO UPDATE SET
-                                current_cycles = EXCLUDED.current_cycles,
-                                current_depth = EXCLUDED.current_depth,
-                                current_llm_reviews = EXCLUDED.current_llm_reviews
-                            """,
-                            (
-                                self.engagement_id,
-                                bd["max_cycles"],
-                                bd["max_depth"],
-                                bd["max_llm_reviews"],
-                                bd["current_cycles"],
-                                bd["current_depth"],
-                                bd["current_llm_reviews"],
-                            ),
-                        )
-                except Exception as persist_err:
-                    logger.warning(
-                        "Failed to persist budget after consume for engagement=%s: %s",
-                        self.engagement_id, persist_err,
-                    )
-            else:
-                logger.info(f"Budget exhausted for action {action.get('type')}: {reason}")
-                denied_actions.append(action)
-
-        if approved_actions and not denied_actions:
-            next_state = "recon"
-        elif approved_actions:
-            # Some actions were denied — only loop back to recon if at least one
-            # approved action is meaningful (not just a tail action like llm_review).
-            # Otherwise all remaining actions are budget-exhausted and looping back
-            # wastes a full recon cycle for no benefit.
-            meaningful = [a for a in approved_actions if a.get("type") in ("recon_expand", "deep_scan", "auth_focused_scan")]
-            if meaningful:
-                next_state = "recon"
-                logger.info("Deferred %d action(s): budget exhausted. Approved %d meaningful action(s)",
-                            len(denied_actions), len(meaningful))
-            else:
-                logger.info("All remaining actions are budget-exhausted — advancing to reporting. "
-                            "Denied: %d, Approved (tail only): %d",
-                            len(denied_actions), len(approved_actions))
+        # No batch actions to dispatch — analysis is consumed by the agent loop.
+        # The analysis dict (risk_level, coverage_gaps, etc.) is returned for
+        # the caller to use in reporting/progress tracking.
+        analysis = evaluation.get("analysis", {})
 
         slog.tool_complete("orchestrator.run_analysis", success=True, findings=len(evaluation.get("scored_findings", [])))
-        slog.info(f"Next state: {next_state}, actions: {len(actions)}, approved: {len(approved_actions)}")
-        return {"phase": "analyze", "status": "completed", "actions": approved_actions,
+        slog.info(
+            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d",
+            analysis.get("risk_level", "unknown"),
+            len(analysis.get("coverage_gaps", [])),
+            len(analysis.get("high_value_targets", [])),
+        )
+        return {"phase": "analyze", "status": "completed", "actions": [],
+                "analysis": analysis,
                 "scored_findings": evaluation.get("scored_findings", []),
                 "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
-                "next_state": next_state, "trace_id": get_trace_id()}
+                "next_state": "reporting", "trace_id": get_trace_id()}
 
     def run_reporting(self, job: dict) -> dict:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)

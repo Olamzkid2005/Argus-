@@ -14,7 +14,11 @@ logger = logging.getLogger(__name__)
 @app.task(bind=True, name="tasks.analyze.run_analysis")
 def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
     """
-    Execute analysis phase for an engagement
+    Execute analysis phase for an engagement.
+
+    Analysis is consumed by the agent loop as intelligence for decision-making,
+    not dispatched as batch actions. The orchestrator's run_analysis() handles
+    all analysis processing through the evaluate() → analyze_state() path.
     """
     from utils.logging_utils import ScanLogger
     slog = ScanLogger("analyze", engagement_id=engagement_id)
@@ -25,158 +29,23 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
                       trace_id=trace_id, current_state="analyzing") as ctx:
         result = ctx.orchestrator.run_analysis(ctx.job)
 
-        # Phase 2: TRUE_REACT_LOOP — analysis consumed by agent loop,
-        # not dispatched as batch actions.
-        if result.get("_react_loop", False):
-            analysis = result.get("analysis", {})
-            slog.info(
-                "TRUE_REACT_LOOP: analysis complete — risk=%s, "
-                "coverage_gaps=%d, high_value_targets=%d",
-                analysis.get("risk_level", "unknown"),
-                len(analysis.get("coverage_gaps", [])),
-                len(analysis.get("high_value_targets", [])),
-            )
-            # Advance to reporting — the agent loop will make the next
-            # decision based on analysis.
-            ctx.state.transition("reporting", "Analysis complete (agent loop)")
-            try:
-                app.send_task('tasks.report.generate_report',
-                              args=[engagement_id, ctx.trace_id, budget])
-            except Exception as e:
-                logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
-            return result
+        analysis = result.get("analysis", {})
+        slog.info(
+            "Analysis complete — risk=%s, "
+            "coverage_gaps=%d, high_value_targets=%d",
+            analysis.get("risk_level", "unknown"),
+            len(analysis.get("coverage_gaps", [])),
+            len(analysis.get("high_value_targets", [])),
+        )
 
-        actions = result.get("actions", [])
-        if actions:
-            slog.info(f"{len(actions)} action(s) generated — processing")
-
-            # ── Check loop budget BEFORE dispatching any downstream tasks ──
-            # If budget is exhausted, skip dispatch to avoid dispatching
-            # tasks that will immediately hit an invalid state transition when
-            # the engagement is already in "reporting".
-            budget_exhausted = False
-            try:
-                from database.connection import db_cursor
-                with db_cursor() as cursor:
-                    cursor.execute(
-                        "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
-                        (engagement_id,),
-                    )
-                    row = cursor.fetchone()
-                    if row and row[0] is not None and row[1] is not None:
-                        current_cycles, max_cycles = row[0], row[1]
-                        if current_cycles >= max_cycles:
-                            budget_exhausted = True
-                            logger.info(
-                                "Loop budget exhausted (%d/%d cycles) for engagement=%s — advancing to reporting",
-                                current_cycles, max_cycles, engagement_id,
-                            )
-            except Exception:
-                logger.debug("Could not check loop budget for engagement=%s", engagement_id)
-
-            if budget_exhausted:
-                ctx.state.transition("reporting", "Loop budget exhausted — advancing to report")
-                try:
-                    app.send_task('tasks.report.generate_report',
-                                  args=[engagement_id, ctx.trace_id, budget])
-                except Exception as e:
-                    logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                    ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
-                return result
-
-            _dispatched = 0
-            _attempted = 0
-            # Route each action type to the correct downstream task
-            for action in actions:
-                action_type = action.get("type", "") if isinstance(action, dict) else ""
-                if action_type == "deep_scan":
-                    targets = action.get("targets", []) if isinstance(action, dict) else []
-                    if targets:
-                        _attempted += 1
-                        try:
-                            deep_task = app.send_task('tasks.scan.deep_scan',
-                                          args=[engagement_id, targets, budget, ctx.trace_id])
-                            slog.dispatch("deep_scan", task_id=deep_task.id)
-                            _dispatched += 1
-                            logger.info("Dispatched deep_scan for engagement=%s with %d targets (task=%s)",
-                                       engagement_id, len(targets), deep_task.id)
-                        except Exception as e:
-                            logger.error("Failed to enqueue deep_scan for %s: %s", engagement_id, e, exc_info=True)
-                elif action_type == "auth_focused_scan":
-                    endpoints = action.get("endpoints", []) if isinstance(action, dict) else []
-                    if endpoints:
-                        _attempted += 1
-                        try:
-                            auth_task = app.send_task('tasks.scan.auth_focused_scan',
-                                          args=[engagement_id, endpoints, budget, ctx.trace_id])
-                            slog.dispatch("auth_focused_scan", task_id=auth_task.id)
-                            _dispatched += 1
-                            logger.info("Dispatched auth_focused_scan for engagement=%s (task=%s)",
-                                       engagement_id, auth_task.id)
-                        except Exception as e:
-                            logger.error("Failed to enqueue auth_focused_scan for %s: %s", engagement_id, e, exc_info=True)
-                elif action_type == "recon_expand":
-                    targets = action.get("targets", []) if isinstance(action, dict) else []
-                    if targets:
-                        _attempted += 1
-                        try:
-                            expand_task = app.send_task('tasks.recon.expand_recon',
-                                          args=[engagement_id, targets, budget, ctx.trace_id])
-                            slog.dispatch("expand_recon", task_id=expand_task.id)
-                            _dispatched += 1
-                            logger.info("Dispatched expand_recon for engagement=%s with %d targets (task=%s)",
-                                       engagement_id, len(targets), expand_task.id)
-                        except Exception as e:
-                            logger.error("Failed to enqueue expand_recon for %s: %s", engagement_id, e, exc_info=True)
-                else:
-                    # Default: extract targets and expand recon (catch-all for unknown action types)
-                    target = None
-                    if isinstance(action, dict):
-                        target = action.get("target") or action.get("arguments", {}).get("target")
-                    if isinstance(target, list):
-                        target = target[0] if target else None
-                    if target and isinstance(target, str):
-                        _attempted += 1
-                        try:
-                            expand_task = app.send_task('tasks.recon.expand_recon',
-                                          args=[engagement_id, [target], budget, ctx.trace_id])
-                            slog.dispatch("expand_recon", task_id=expand_task.id)
-                            _dispatched += 1
-                            logger.info("Dispatched expand_recon for engagement=%s with target %s (task=%s)",
-                                       engagement_id, target, expand_task.id)
-                        except Exception as e:
-                            logger.error("Failed to enqueue expand_recon for %s: %s", engagement_id, e, exc_info=True)
-                    else:
-                        logger.warning("Action %s has no valid targets for engagement=%s", action_type, engagement_id)
-
-            if _dispatched == 0:
-                if _attempted > 0:
-                    logger.error("All %d attempted action(s) failed to dispatch for engagement=%s — transitioning to failed", _attempted, engagement_id)
-                    ctx.state.safe_transition("failed", f"All {_attempted} action dispatch(es) failed")
-                else:
-                    logger.info("All %d action(s) had empty/invalid targets for engagement=%s — advancing to reporting", len(actions), engagement_id)
-                    ctx.state.transition("reporting", "No actionable targets — advancing to report")
-                    try:
-                        app.send_task('tasks.report.generate_report',
-                                      args=[engagement_id, ctx.trace_id, budget])
-                    except Exception as e:
-                        logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                        ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
-            else:
-                # Transition to "recon" (not "scanning") so the loop budget
-                # counter increments in state_machine.py (analyzing→recon).
-                # The dispatched expand_recon/deep_scan tasks will advance
-                # state to scanning automatically.
-                ctx.state.transition("recon", f"{_dispatched} action(s) dispatched — looping through recon")
-        else:
-            slog.info("No actions — advancing to reporting")
-            ctx.state.transition("reporting", "Analysis complete")
-            try:
-                app.send_task('tasks.report.generate_report',
-                              args=[engagement_id, ctx.trace_id, budget])
-            except Exception as e:
-                logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
+        # Advance to reporting — the agent loop will make the next
+        # decision based on analysis.
+        ctx.state.transition("reporting", "Analysis complete")
+        try:
+            app.send_task('tasks.report.generate_report',
+                          args=[engagement_id, ctx.trace_id, budget])
+        except Exception as e:
+            logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
 
         return result

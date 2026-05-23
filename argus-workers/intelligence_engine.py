@@ -4,7 +4,6 @@ Analyzes findings and generates recommended actions
 
 Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2, 18.1, 18.2, 18.3, 18.4
 """
-import asyncio
 import json
 import logging
 import os
@@ -62,12 +61,8 @@ class IntelligenceEngine:
 
     def evaluate(self, snapshot: dict, org_id: str | None = None) -> dict:
         """
-        Evaluate snapshot and generate actions.
+        Evaluate snapshot and return analysis for the agent loop.
         Uses ONLY frozen snapshot data, never live DB reads.
-
-        When TRUE_REACT_LOOP feature flag is enabled, calls analyze_state()
-        instead of generate_actions() — returns analysis for agent-loop
-        consumption rather than batch action dispatch.
 
         Args:
             snapshot: Immutable snapshot containing:
@@ -80,11 +75,9 @@ class IntelligenceEngine:
         Returns:
             Dictionary with:
                 - scored_findings: Findings with updated confidence scores
-                - actions: List of recommended actions (legacy path)
-                - analysis: Analysis dict from analyze_state() (new path)
+                - analysis: Analysis dict from analyze_state()
                 - reasoning: Explanation of decisions
         """
-        from feature_flags import is_enabled as _ff_enabled
         from utils.logging_utils import ScanLogger
         slog = ScanLogger("intelligence_engine")
         slog.phase_header("INTELLIGENCE EVALUATION")
@@ -106,70 +99,36 @@ class IntelligenceEngine:
             scored_findings = self.assign_confidence_scores(findings, org_id=org_id)
 
             # Enrich findings with threat intelligence (CVE data, EPSS scores,
-            # threat feed hits, FP assessment) before action generation so
-            # high-exploitability CVEs can influence deep scanning decisions.
+            # threat feed hits, FP assessment) before analysis so
+            # high-exploitability CVEs can influence risk assessment.
             enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
 
             # Build and persist attack graph for snapshot consumption
             self._build_and_persist_attack_graph(enriched_findings, snapshot)
 
-            # Phase 2: TRUE_REACT_LOOP flag — use analyze_state() instead of
-            # generate_actions(). The analysis is consumed by the agent loop
-            # (single-step reasoning) rather than dispatch by batch actions.
-            if _ff_enabled("TRUE_REACT_LOOP", default=False):
-                # Build a minimal EngagementState-like object from snapshot
-                # for analyze_state() consumption.
-                _state = _SnapshotStateAdapter(snapshot, enriched_findings)
-                analysis = self.analyze_state(_state)
-                reasoning = self._generate_reasoning(enriched_findings, [])
+            # Use analyze_state() for agent-loop consumption.
+            # Pass enriched_findings to avoid redundant scoring/enrichment.
+            analysis = self.analyze_state(snapshot, enriched_findings=enriched_findings)
+            reasoning = self._generate_reasoning(enriched_findings, [])
 
-                # Shadow-compare: analyze_state output vs generate_actions output
-                from runtime.shadow_mode import shadow_compare as _shadow_compare
-                _shadow_compare(
-                    "intelligence_engine", snapshot.get("engagement_id", ""),
-                    new_result=analysis,
-                    old_path_fn=lambda: self.generate_actions(enriched_findings, snapshot),
-                    key_fields=["risk_level"],
-                )
-
-                duration_ms = int((_time.time() - start) * 1000)
-                slog.info(
-                    f"Evaluation complete (TRUE_REACT_LOOP): "
-                    f"{len(enriched_findings)} enriched findings, "
-                    f"risk={analysis.get('risk_level', 'unknown')} "
-                    f"({duration_ms}ms)"
-                )
-                self.logger.log_intelligence_decision(
-                    actions=[],
-                    findings_analyzed=len(findings),
-                    reasoning=reasoning,
-                )
-                return {
-                    "scored_findings": enriched_findings,
-                    "actions": [],  # No batch actions in new path
-                    "analysis": analysis,
-                    "reasoning": reasoning,
-                    "trace_id": get_trace_id(),
-                    "_react_loop": True,  # Signal to caller that this is agent-loop mode
-                }
-            else:
-                # Legacy path: generate batch actions for dispatch
-                actions = self.generate_actions(enriched_findings, snapshot)
-                reasoning = self._generate_reasoning(enriched_findings, actions)
-                self.logger.log_intelligence_decision(
-                    actions=actions,
-                    findings_analyzed=len(findings),
-                    reasoning=reasoning,
-                )
-                duration_ms = int((_time.time() - start) * 1000)
-                slog.info(f"Evaluation complete: {len(enriched_findings)} enriched findings, {len(actions)} actions ({duration_ms}ms)")
-                return {
-                    "scored_findings": enriched_findings,
-                    "actions": actions,
-                    "reasoning": reasoning,
-                    "trace_id": get_trace_id(),
-                    "_react_loop": False,
-                }
+            duration_ms = int((_time.time() - start) * 1000)
+            slog.info(
+                f"Evaluation complete: "
+                f"{len(enriched_findings)} enriched findings, "
+                f"risk={analysis.get('risk_level', 'unknown')} "
+                f"({duration_ms}ms)"
+            )
+            self.logger.log_intelligence_decision(
+                actions=[],
+                findings_analyzed=len(findings),
+                reasoning=reasoning,
+            )
+            return {
+                "scored_findings": enriched_findings,
+                "analysis": analysis,
+                "reasoning": reasoning,
+                "trace_id": get_trace_id(),
+            }
 
     def assign_confidence_scores(
         self,
@@ -490,20 +449,20 @@ class IntelligenceEngine:
 
         return snapshot_dict, graph
 
-    def analyze_state(self, state: Any) -> dict:
+    def analyze_state(self, state: Any, enriched_findings: list[dict] | None = None) -> dict:
         """
-        Analyze an EngagementState and return analysis (not actions).
+        Analyze engagement state and return analysis for the agent loop.
 
-        This is the Phase 2 replacement for generate_actions().
-        Called BY the agent loop (not independently) to provide
-        intelligence analysis that the agent uses to decide next steps.
+        When called from evaluate(), pass pre-enriched findings to avoid
+        redundant scoring/threat-intel work. When called independently,
+        enriched_findings can be None and the method does its own enrichment.
 
         Args:
-            state: EngagementState instance
+            state: EngagementState or snapshot dict
+            enriched_findings: Optional pre-enriched findings (from evaluate())
 
         Returns:
             Analysis dict with:
-                - scored_findings: Findings with confidence scores
                 - risk_level: Overall risk assessment
                 - coverage_gaps: List of areas with insufficient coverage
                 - high_value_targets: Endpoints warranting deeper inspection
@@ -514,17 +473,18 @@ class IntelligenceEngine:
         from utils.logging_utils import ScanLogger
         slog = ScanLogger("intelligence_engine")
 
-        findings = getattr(state, "findings", [])
-        slog.info(f"Analysis state: {len(findings)} findings, iteration {getattr(state, 'execution_iteration', 0)}")
-
-        # Sort by signal quality
-        findings = self._sort_findings_by_signal_quality(findings)
-
-        # Assign confidence scores
-        scored_findings = self.assign_confidence_scores(findings)
-
-        # Enrich with threat intel
-        enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
+        # If enriched_findings not provided, do our own scoring/enrichment
+        if enriched_findings is None:
+            findings = getattr(state, "findings", [])
+            slog.info(f"Analyzing state: {len(findings)} findings")
+            # Sort by signal quality
+            findings = self._sort_findings_by_signal_quality(findings)
+            # Assign confidence scores
+            scored_findings = self.assign_confidence_scores(findings)
+            # Enrich with threat intel
+            enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
+        else:
+            slog.info(f"Analyzing state with {len(enriched_findings)} pre-enriched findings")
 
         # Build analysis
         coverage_gaps = []
@@ -543,7 +503,6 @@ class IntelligenceEngine:
         risk_level = self._calculate_overall_risk(enriched_findings)
 
         return {
-            "scored_findings": enriched_findings,
             "risk_level": risk_level,
             "coverage_gaps": coverage_gaps,
             "high_value_targets": high_value_targets,
@@ -551,62 +510,6 @@ class IntelligenceEngine:
             "threat_intel_summary": self.get_threat_summary(enriched_findings),
             "reasoning": self._generate_reasoning(enriched_findings, []),
         }
-
-    def generate_actions(self, scored_findings: list[dict], context: dict) -> list[dict]:
-        """
-        Generate recommended actions based on intelligence
-
-        Args:
-            scored_findings: Findings with confidence scores
-            context: Snapshot context
-
-        Returns:
-            List of recommended actions
-        """
-        from utils.logging_utils import ScanLogger
-        slog = ScanLogger("intelligence_engine")
-
-        actions = []
-
-        # Pattern: Low coverage detected
-        if self.detect_low_coverage(scored_findings):
-            actions.append({
-                "type": "recon_expand",
-                "targets": self.suggest_new_targets(scored_findings),
-                "reason": "low_coverage_detected",
-                "description": "Insufficient endpoint coverage detected. Expanding reconnaissance to discover more attack surface.",
-            })
-            slog.info("Low coverage detected — scheduling recon_expand")
-
-        # Pattern: High-value targets found
-        if self.detect_high_value_targets(scored_findings):
-            actions.append({
-                "type": "deep_scan",
-                "targets": self.get_priority_endpoints(scored_findings),
-                "reason": "high_value_targets_identified",
-                "description": "High-value targets with potential vulnerabilities identified. Performing deep scan.",
-            })
-            slog.info("High-value targets found — scheduling deep_scan")
-
-        # Pattern: Weak authentication signals
-        if self.detect_weak_auth_signals(scored_findings):
-            # Extract budget from context for auth_focused_scan
-            loop_budget = context.get("loop_budget", {})
-            budget = {
-                "max_cycles": loop_budget.get("max_cycles", 5),
-                "max_depth": loop_budget.get("max_depth", 3),
-            }
-            actions.append({
-                "type": "auth_focused_scan",
-                "endpoints": self.get_auth_endpoints(scored_findings),
-                "budget": budget,
-                "reason": "weak_auth_signals",
-                "description": "Weak authentication signals detected. Focusing on authentication mechanisms.",
-            })
-            slog.info("Weak auth signals detected — scheduling auth_focused_scan")
-
-        slog.info(f"Generated {len(actions)} action(s)")
-        return actions
 
     def detect_low_coverage(self, findings: list[dict]) -> bool:
         """
@@ -1192,25 +1095,4 @@ class IntelligenceEngine:
             return "low"
 
 
-class _SnapshotStateAdapter:
-    """
-    Adapter that wraps a snapshot dict to quack like an EngagementState.
 
-    Used by IntelligenceEngine.evaluate() when TRUE_REACT_LOOP flag is
-    enabled, allowing analyze_state() to consume snapshot data without
-    requiring a full EngagementState instance.
-
-    This is a TEMPORARY adapter — it exists to bridge the gap between the
-    old snapshot-centric evaluate() flow and the new EngagementState-centric
-    analyze_state() flow. It will be removed once the full migration is
-    complete and all callers pass an EngagementState directly.
-    """
-
-    def __init__(self, snapshot: dict, findings: list[dict]):
-        self.snapshot = snapshot
-        self.findings = findings
-        self.engagement_id = snapshot.get("engagement_id", "")
-        self.execution_iteration = (
-            snapshot.get("engagement_state", {})
-            .get("execution_iteration", 0)
-        )
