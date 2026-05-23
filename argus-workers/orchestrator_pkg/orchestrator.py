@@ -16,7 +16,6 @@ from config.constants import (
     HARD_TIMEOUT_SECONDS,
     LLM_AGENT_MODEL,
 )
-from database.connection import connect
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.finding_repository import FindingRepository
 from database.repositories.rate_limit_repository import RateLimitRepository
@@ -153,35 +152,25 @@ class Orchestrator:
         return result
 
     def _load_custom_rules(self, engagement_id: str) -> list[dict]:
-        db_conn = os.getenv("DATABASE_URL")
-        if not db_conn:
-            return []
-        conn = None
-        cursor = None
+        from database.connection import db_cursor
         try:
-            conn = connect(db_conn)
-            cursor = conn.cursor()
-            cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
-            row = cursor.fetchone()
-            if not row:
-                return []
-            org_id = row[0]
-            cursor.execute("""
-                SELECT id, name, description, severity, category, rule_yaml, tags
-                FROM custom_rules WHERE org_id = %s AND status = 'active'
-                ORDER BY created_at DESC
-            """, (org_id,))
-            columns = [desc[0] for desc in cursor.description]
-            rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-            return rules
+            with db_cursor() as cursor:
+                cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return []
+                org_id = row[0]
+                cursor.execute("""
+                    SELECT id, name, description, severity, category, rule_yaml, tags
+                    FROM custom_rules WHERE org_id = %s AND status = 'active'
+                    ORDER BY created_at DESC
+                """, (org_id,))
+                columns = [desc[0] for desc in cursor.description]
+                rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                return rules
         except Exception as e:
             logger.warning(f"Failed to load custom rules: {e}")
             return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
 
     def run(self, job: dict) -> dict:
         if self.start_time is None:
@@ -504,40 +493,26 @@ class Orchestrator:
         """
         import json
 
-        from database.connection import get_db
+        from database.connection import db_cursor
 
-        conn = None
         try:
-            conn = get_db().get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                f"""
-                UPDATE findings
-                SET {column} = %s::jsonb,
-                    {column}_at = NOW()
-                WHERE id = %s
-                """,
-                (json.dumps(data), finding_id),
-            )
-            conn.commit()
-            return cursor.rowcount > 0
+            with db_cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE findings
+                    SET {column} = %s::jsonb,
+                        {column}_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (json.dumps(data), finding_id),
+                )
+                return cursor.rowcount > 0
         except Exception as e:
             logger.warning(
                 "Failed to save %s for finding %s: %s",
                 log_label, finding_id, e,
             )
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception as rollback_err:
-                    logger.warning(f"Rollback failed saving {log_label} for finding {finding_id}: {rollback_err}")
             return False
-        finally:
-            if conn:
-                try:
-                    get_db().release_connection(conn)
-                except Exception as close_err:
-                    logger.warning(f"Connection release failed after saving {log_label} for finding {finding_id}: {close_err}")
 
     def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column."""
@@ -1268,23 +1243,15 @@ class Orchestrator:
             )
 
     def _get_scan_state(self) -> str:
-        from database.connection import get_db
-        conn = None
-        cursor = None
+        from database.connection import db_cursor
         try:
-            conn = get_db().get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
-            row = cursor.fetchone()
-            return row[0] if row else "recon"
+            with db_cursor() as cursor:
+                cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
+                row = cursor.fetchone()
+                return row[0] if row else "recon"
         except (ValueError, OSError, KeyError) as e:
             logger.warning("Budget check failed for engagement %s: %s — defaulting to 'failed'", self.engagement_id, e)
             return "failed"  # If budget check fails, stop the loop to prevent infinite cycles
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                get_db().release_connection(conn)
 
     def _log_timeout_event(self, elapsed_seconds: float):
         logger.warning(f"Engagement {self.engagement_id} exceeded hard timeout. "
