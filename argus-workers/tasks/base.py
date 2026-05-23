@@ -86,7 +86,9 @@ def task_context(
             ctx.state.transition("scanning", "...")
     """
     from distributed_lock import DistributedLock, LockAcquisitionError, LockContext
+    from feature_flags import is_enabled as _ff_enabled
     from orchestrator import Orchestrator
+    from runtime import EngagementState
     from state_machine import EngagementStateMachine
     from tasks.utils import get_engagement_state
     from tracing import TracingManager
@@ -120,7 +122,7 @@ def task_context(
     with tracing_manager.trace_execution(engagement_id, job_type, trace_id):
         lock = DistributedLock(redis_url)
         _lock_acquired = False
-        _sm_assigned = False
+        _state_assigned = False
         try:
             with LockContext(lock, engagement_id):
                 _lock_acquired = True
@@ -129,10 +131,17 @@ def task_context(
                     db_connection_string=db_conn_string,
                     current_state=current_state or get_engagement_state(engagement_id, db_conn_string),
                 )
-                _sm_assigned = True
                 from websocket_events import get_websocket_publisher
                 sm._ws_publisher = get_websocket_publisher()
-                ctx.state = sm
+
+                # Phase 1: Wrap state machine in canonical EngagementState
+                # when feature flag is enabled.
+                if _ff_enabled("ENGAGEMENT_STATE", default=False):
+                    state = EngagementState(engagement_id, state_machine=sm)
+                else:
+                    state = sm
+                _state_assigned = True
+                ctx.state = state
 
                 slog.info("Lock acquired, state machine initialized")
 
@@ -148,10 +157,10 @@ def task_context(
             )
             if _lock_acquired:
                 try:
-                    current = sm.current_state if _sm_assigned else get_engagement_state(engagement_id, db_conn_string)
+                    current = ctx.state.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
-                        if _sm_assigned:
-                            sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                        if _state_assigned:
+                            ctx.state.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
                         else:
                             new_sm = EngagementStateMachine(
                                 engagement_id,
@@ -172,10 +181,10 @@ def task_context(
             slog.error(f"Task failed: {e}")
             if _lock_acquired:
                 try:
-                    current = sm.current_state if _sm_assigned else get_engagement_state(engagement_id, db_conn_string)
+                    current = ctx.state.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
-                        if _sm_assigned:
-                            sm.transition("failed", f"{job_type} failed: {e}")
+                        if _state_assigned:
+                            ctx.state.transition("failed", f"{job_type} failed: {e}")
                         else:
                             new_sm = EngagementStateMachine(
                                 engagement_id,

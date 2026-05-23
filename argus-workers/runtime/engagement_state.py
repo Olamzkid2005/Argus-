@@ -124,6 +124,41 @@ class EngagementState:
         self.current_phase = new_state
         self._bump_version()
 
+    def safe_transition(self, new_state: str, reason: str | None = None) -> bool:
+        """
+        Attempt a state transition, silently skip if terminal.
+        Delegates to EngagementStateMachine.safe_transition().
+
+        Returns True if the transition was applied, False if skipped.
+        """
+        if self.state_machine:
+            return self.state_machine.safe_transition(new_state, reason)
+        if self.current_phase in ("complete", "failed"):
+            return False
+        self.current_phase = new_state
+        self._bump_version()
+        return True
+
+    def chain_transition(
+        self, states: list[tuple[str, str]], trace_id: str | None = None
+    ) -> str:
+        """
+        Perform multiple state transitions atomically.
+        Delegates to EngagementStateMachine.chain_transition().
+
+        Args:
+            states: List of (new_state, reason) tuples to chain through
+
+        Returns:
+            The final state after all transitions
+        """
+        if self.state_machine:
+            return self.state_machine.chain_transition(states, trace_id)
+        for new_state, reason in states:
+            self.current_phase = new_state
+        self._bump_version()
+        return self.current_phase
+
     # ── Observation building ──
 
     def add_observation(self, role: str, content: str, data: dict | None = None):
