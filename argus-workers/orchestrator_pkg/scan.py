@@ -221,6 +221,33 @@ def execute_scan_tools(
         slog.warn("No targets provided")
         return all_findings
 
+    # Phase 0: Scope validation — filter targets before any tool execution.
+    # This ensures the deterministic path enforces scope even when the agent
+    # path is not active (previously scope was only checked in LLM agent path).
+    engagement_id = getattr(ctx, 'engagement_id', '')
+    if engagement_id:
+        try:
+            from tools.scope_validator import validate_target_scope
+            scoped_targets = []
+            blocked_targets = []
+            for t in targets:
+                if validate_target_scope(t, engagement_id):
+                    scoped_targets.append(t)
+                else:
+                    blocked_targets.append(t)
+                    slog.warn(f"Target {t} is out of scope — skipping")
+            if blocked_targets:
+                logger.warning(
+                    "Scope filter blocked %d of %d targets for engagement %s",
+                    len(blocked_targets), len(targets), engagement_id,
+                )
+            targets = scoped_targets
+        except Exception as e:
+            logger.warning("Scope validation skipped (error): %s — scanning all targets", e)
+    if not targets:
+        slog.warn("All targets filtered by scope — nothing to scan")
+        return all_findings
+
     # Auto-update nuclei templates once before scanning (not per-target)
     if _feature_enabled("nuclei_templates_auto_update"):
         try:
