@@ -296,6 +296,31 @@ class WebScanner:
         self.slog.phase_header("WEB SCAN", target=self.target_url)
         logger.info(f"Starting comprehensive web scan: {self.target_url}")
 
+        # Pre-flight: test SSL/TLS connectivity. If a cert error occurs,
+        # report it as a finding and retry with verification disabled so
+        # the rest of the scan can proceed against self-signed/internal certs.
+        try:
+            resp = self.session.get(
+                self.target_url, timeout=self.timeout, allow_redirects=True
+            )
+            self._base_response = resp
+        except requests.exceptions.SSLError as e:
+            logger.warning("SSL certificate error for %s — reporting as finding and retrying without verification: %s", self.target_url, e)
+            self._report_ssl_finding(str(e))
+            # Retry with verification disabled so the scan continues
+            self.session.verify = False
+            try:
+                resp = self.session.get(
+                    self.target_url, timeout=self.timeout, allow_redirects=True
+                )
+                self._base_response = resp
+            except Exception as retry_err:
+                logger.error("Web scanner: cannot connect to %s even without SSL verification: %s", self.target_url, retry_err)
+                return self.findings
+        except Exception as e:
+            logger.error("Web scanner: failed to connect to %s: %s", self.target_url, e)
+            return self.findings
+
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         checks = [
@@ -353,6 +378,17 @@ class WebScanner:
 
         logger.info(f"Scan complete: {len(self.findings)} findings")
         return self.findings
+
+    def _report_ssl_finding(self, error_msg: str) -> None:
+        """Record an SSL/TLS certificate error as a finding."""
+        self.findings.append({
+            "type": "SSL_CERTIFICATE_ERROR",
+            "severity": "MEDIUM",
+            "endpoint": self.target_url,
+            "source_tool": "web_scanner",
+            "evidence": {"error": error_msg[:500]},
+            "confidence": 0.85,
+        })
 
     def _safe_request(self, method: str, url: str, session: requests.Session | None = None, **kwargs) -> requests.Response | None:
         """Make HTTP request with error handling. Thread-safe — uses per-thread sessions.

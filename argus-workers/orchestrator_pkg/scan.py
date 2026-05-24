@@ -129,6 +129,7 @@ def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
 def _is_reachable(target: str) -> bool:
     # Use urlparse for reliable hostname extraction (handles IPv6, userinfo, etc.)
     from urllib.parse import urlparse
+    import ipaddress
     try:
         parsed = urlparse(target)
         hostname = parsed.hostname or target
@@ -147,9 +148,25 @@ def _is_reachable(target: str) -> bool:
     if hostname in ('localhost', '127.0.0.1', '::1'):
         logger.warning(f'Target {target} resolves to loopback — skipping')
         return False
+    if hostname.startswith('169.254.'):
+        logger.warning(f'Target {target} is link-local — skipping')
+        return False
     try:
         socket.setdefaulttimeout(5)
-        socket.getaddrinfo(hostname, None)
+        addrinfo = socket.getaddrinfo(hostname, None)
+        # Validate resolved IPs to prevent DNS rebinding
+        for family, _typ, _proto, _cn, sockaddr in addrinfo:
+            resolved_ip = sockaddr[0]
+            try:
+                addr = ipaddress.ip_address(resolved_ip)
+                if addr.is_private or addr.is_loopback or addr.is_link_local:
+                    logger.warning(
+                        f'Target {target} resolved to {resolved_ip} (private/internal) — '
+                        f'blocking to prevent DNS rebinding SSRF'
+                    )
+                    return False
+            except ValueError:
+                pass
         return True
     except socket.gaierror as e:
         if e.errno in (-2, -3):
