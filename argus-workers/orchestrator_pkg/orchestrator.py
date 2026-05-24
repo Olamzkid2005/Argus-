@@ -649,21 +649,39 @@ class Orchestrator:
         auth_config = job.get("auth_config", {})
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
+        # Respect user-configured scan mode and agent mode.
+        # Priority: explicit scan_mode > agent_mode flag > default (agent-first with fallback)
+        scan_mode = job.get("scan_mode", "agent")
+        agent_mode = job.get("agent_mode", True)
+
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.bug_bounty_mode = bool(bug_bounty_mode)
-            self.state.agent_mode_enabled = True
+            self.state.agent_mode_enabled = bool(agent_mode)
 
-        # Agent-first scan with deterministic fallback.
-        # Mode selection is the agent's responsibility, not the orchestrator's.
-        logger.info(
-            "Orchestrator running agent-first scan for engagement %s",
-            self.engagement_id,
-        )
-        findings = self._run_scan_with_fallback(
-            targets, recon_context, job.get("budget", {}),
-            scan_aggressiveness, auth_config, bug_bounty_mode,
-        )
+        budget = job.get("budget", {})
+        if not agent_mode or scan_mode == "deterministic":
+            # User explicitly disabled agent or requested deterministic-only scan.
+            # Skip LLM agent entirely — run full deterministic scan without fallback.
+            logger.info(
+                "Orchestrator running deterministic-only scan for engagement %s (agent_mode=%s, scan_mode=%s)",
+                self.engagement_id, agent_mode, scan_mode,
+            )
+            tech_stack = recon_context.tech_stack if recon_context else None
+            findings = execute_scan_pipeline(
+                self, targets, budget, scan_aggressiveness, auth_config,
+                tech_stack=tech_stack, recon_context=recon_context,
+            )
+        else:
+            # Agent-first scan with deterministic safety-net fallback.
+            logger.info(
+                "Orchestrator running agent-first scan for engagement %s (scan_mode=%s)",
+                self.engagement_id, scan_mode,
+            )
+            findings = self._run_scan_with_fallback(
+                targets, recon_context, budget,
+                scan_aggressiveness, auth_config, bug_bounty_mode,
+            )
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
 
