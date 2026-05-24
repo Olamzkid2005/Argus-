@@ -71,24 +71,11 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         except Exception as e:
             logger.warning("Failed to enqueue asset discovery for %s: %s", engagement_id, e)
 
-        # Dispatch scan BEFORE transitioning state. If dispatch fails the
-        # engagement transitions directly to "failed" — no orphaned state.
-        # If dispatch succeeds, the scan task itself transitions to "scanning"
-        # (see scan.py:69-70), so there's no gap.
-        try:
-            scan_task = app.send_task(
-                'tasks.scan.run_scan',
-                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness, bug_bounty_mode],
-            )
-            slog.dispatch("scan", task_id=scan_task.id)
-        except Exception as e:
-            logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
-            ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
-            return {"phase": "recon", "status": "failed", "reason": "scan_dispatch_failed"}
-
-        # Save recon context AFTER scan dispatch so a crash between dispatch
-        # and save does not leave the engagement stuck in "recon" — the scan
-        # task handles a missing context gracefully (falls back to deterministic).
+        # Save recon context BEFORE dispatching scan to eliminate race
+        # condition. The orchestrator.run_recon() already persists the context
+        # to Redis, but we re-save here to ensure the latest state is available
+        # when the scan worker starts. If save fails, scan handles missing
+        # context gracefully (falls back to deterministic).
         if result.get("recon_context"):
             try:
                 from tasks.utils import save_recon_context
@@ -100,7 +87,6 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 slog.info("Saved recon context for scan phase")
             except Exception as e:
                 logger.error("Failed to save recon context for %s — scan will fall back to deterministic: %s", engagement_id, e, exc_info=True)
-                # Track this failure for observability
                 try:
                     from dead_letter_queue import get_dlq
                     get_dlq().enqueue(
@@ -113,6 +99,19 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                     )
                 except Exception:
                     pass
+
+        # Dispatch scan AFTER saving context. If dispatch fails the
+        # engagement transitions directly to "failed" — no orphaned state.
+        try:
+            scan_task = app.send_task(
+                'tasks.scan.run_scan',
+                args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness, bug_bounty_mode],
+            )
+            slog.dispatch("scan", task_id=scan_task.id)
+        except Exception as e:
+            logger.error("Failed to enqueue scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
+            return {"phase": "recon", "status": "failed", "reason": "scan_dispatch_failed"}
 
         # Transition state AFTER dispatch succeeds. If the process crashes
         # between dispatch and this transition, the scan task handles
@@ -167,6 +166,34 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                       trace_id=trace_id, current_state="recon") as ctx:
         result = ctx.orchestrator.run_recon(ctx.job)
 
+        # Save updated recon context BEFORE dispatching scan to eliminate
+        # race condition. The orchestrator.run_recon() already persists it
+        # to Redis, but we re-save here for the expanded context.
+        if result.get("recon_context"):
+            try:
+                from tasks.utils import save_recon_context
+                ctx_data = result["recon_context"]
+                if isinstance(ctx_data, dict):
+                    from models.recon_context import ReconContext
+                    ctx_data = ReconContext.from_dict(ctx_data)
+                save_recon_context(engagement_id, ctx_data)
+                slog.info("Saved expanded recon context")
+                logger.info("Saved expanded recon context for %s", engagement_id)
+            except Exception as e:
+                logger.error("Failed to save expanded recon context for %s — scan will fall back to deterministic: %s", engagement_id, e, exc_info=True)
+                try:
+                    from dead_letter_queue import get_dlq
+                    get_dlq().enqueue(
+                        task_id="recon_context_save_expand",
+                        task_name="tasks.recon.expand_recon",
+                        args=[], kwargs={"engagement_id": engagement_id},
+                        error_message=str(e),
+                        error_class=type(e).__name__,
+                        engagement_id=engagement_id,
+                    )
+                except Exception:
+                    pass
+
         # Load scan flags from DB (expand_recon is not dispatched with full job payload)
         from tasks.utils import fetch_engagement_scan_options
 
@@ -198,34 +225,6 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
             logger.error("Failed to enqueue scan after expand for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
             return result
-
-        # Save updated recon context AFTER scan dispatch so a crash between
-        # dispatch and save does not leave the engagement stuck — the scan
-        # task handles a missing context gracefully (falls back to deterministic).
-        if result.get("recon_context"):
-            try:
-                from tasks.utils import save_recon_context
-                ctx_data = result["recon_context"]
-                if isinstance(ctx_data, dict):
-                    from models.recon_context import ReconContext
-                    ctx_data = ReconContext.from_dict(ctx_data)
-                save_recon_context(engagement_id, ctx_data)
-                slog.info("Saved expanded recon context")
-                logger.info("Saved expanded recon context for %s", engagement_id)
-            except Exception as e:
-                logger.error("Failed to save expanded recon context for %s — scan will fall back to deterministic: %s", engagement_id, e, exc_info=True)
-                try:
-                    from dead_letter_queue import get_dlq
-                    get_dlq().enqueue(
-                        task_id="recon_context_save_expand",
-                        task_name="tasks.recon.expand_recon",
-                        args=[], kwargs={"engagement_id": engagement_id},
-                        error_message=str(e),
-                        error_class=type(e).__name__,
-                        engagement_id=engagement_id,
-                    )
-                except Exception:
-                    pass
 
         return result
 
