@@ -554,8 +554,8 @@ class ReActAgent:
                                     hostname, param_name, action.tool,
                                 )
                                 return False
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Target validation failed for '%s' (param=%s): %s", target, param_name, e)
 
         return True
 

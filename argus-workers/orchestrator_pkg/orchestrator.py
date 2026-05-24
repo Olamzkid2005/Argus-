@@ -496,16 +496,15 @@ class Orchestrator:
         import json
 
         from database.connection import db_cursor
+        from psycopg2.sql import Identifier, SQL
 
         try:
             with db_cursor() as cursor:
                 cursor.execute(
-                    f"""
-                    UPDATE findings
-                    SET {column} = %s::jsonb,
-                        {column}_at = NOW()
-                    WHERE id = %s
-                    """,
+                    SQL("UPDATE findings SET {col} = %s::jsonb, {col_at} = NOW() WHERE id = %s").format(
+                        col=Identifier(column),
+                        col_at=Identifier(f"{column}_at"),
+                    ),
                     (json.dumps(data), finding_id),
                 )
                 return cursor.rowcount > 0
@@ -1244,7 +1243,7 @@ class Orchestrator:
                 row = cursor.fetchone()
                 return row[0] if row else "recon"
         except (ValueError, OSError, KeyError) as e:
-            logger.warning("Budget check failed for engagement %s: %s — defaulting to 'failed'", self.engagement_id, e)
+            logger.warning("State check failed for engagement %s: %s — defaulting to 'failed'", self.engagement_id, e)
             return "failed"  # If budget check fails, stop the loop to prevent infinite cycles
 
     def _log_timeout_event(self, elapsed_seconds: float):

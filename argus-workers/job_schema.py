@@ -117,8 +117,8 @@ class JobMessage:
                 from metrics import increment_counter
                 increment_counter("job_schema.unknown_fields", len(unknown),
                                   tags={"engagement_id": data.get("engagement_id", "unknown")})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to increment job_schema.unknown_fields metric: %s", e)
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def to_celery_args(self) -> list:

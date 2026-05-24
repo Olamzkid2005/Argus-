@@ -49,8 +49,20 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None,
             len(analysis.get("high_value_targets", [])),
         )
 
-        # Advance to reporting — dispatch task FIRST, then transition
-        # to avoid being stuck in "reporting" with no running task.
+        # Advance to reporting — transition FIRST so the report task
+        # always finds the engagement in "reporting" state. If transition
+        # fails, no downstream task is dispatched and the engagement
+        # stays in "analyzing" (handled by the ctx.state exception below).
+        # If transition succeeds but dispatch fails, we transition to
+        # "failed" cleanly (analyzing→reporting→failed is valid).
+        try:
+            ctx.state.transition("reporting", "Analysis complete — advancing to report")
+        except Exception as e:
+            logger.error("Failed to transition to reporting for engagement=%s: %s", engagement_id, e, exc_info=True)
+            ctx.state.safe_transition("failed", f"State transition failed: {e}")
+            result["status"] = "failed"
+            result["reason"] = "state_transition_failed"
+            return result
         try:
             app.send_task('tasks.report.generate_report',
                           args=[engagement_id, ctx.trace_id, budget])
@@ -60,7 +72,5 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None,
             result["status"] = "failed"
             result["reason"] = "report_dispatch_failed"
             return result
-
-        ctx.state.transition("reporting", "Analysis complete — report dispatched")
 
         return result

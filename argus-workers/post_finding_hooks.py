@@ -81,7 +81,7 @@ def _get_matching_webhooks(engagement_id: str) -> list[dict]:
             JOIN engagements e ON e.id = %s
             WHERE (
                 w.engagement_id = e.id
-                OR (w.engagement_id IS NULL AND (w.organization_id = e.organization_id OR w.organization_id IS NULL))
+                OR (w.engagement_id IS NULL AND (w.org_id = e.org_id OR w.org_id IS NULL))
             )
             AND (
                 w.events @> '["finding_discovered"]'::jsonb

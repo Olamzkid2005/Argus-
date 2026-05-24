@@ -484,8 +484,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                             if normalized:
                                 add_finding(normalized)
                                 wt_count += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Working-tree secret scan: gitleaks file error for %s: %s", fpath, e)
             # .env files with populated values
             for fpath in glob.glob(os.path.join(temp_dir, ".env*"), recursive=False):
                 # Guard against symlink escapes
@@ -521,8 +521,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                         if normalized:
                             add_finding(normalized)
                             wt_count += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Env file scan error for %s: %s", fpath, e)
             # Config files with password/secret/private_key keys
             for pattern in ("**/*.yml", "**/*.yaml", "**/*.conf", "**/*.cfg", "**/*.ini", "**/*.toml"):
                 for fpath in glob.glob(os.path.join(temp_dir, pattern), recursive=True):
@@ -554,8 +554,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                             if normalized:
                                 add_finding(normalized)
                                 wt_count += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Config secret scan error for %s: %s", fpath, e)
             _emit("secret-scan", f"Working tree secret scan complete — found {wt_count} issues", "completed", items=wt_count)
         except Exception as e:
             _emit("secret-scan", f"Working tree secret scan failed: {str(e)}", "failed")

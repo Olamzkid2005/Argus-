@@ -138,6 +138,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                           job_extra={"target": None, "targets": [], "budget": budget},
                           trace_id=trace_id, current_state="recon") as ctx:
             # No targets to expand — skip scanning/analyzing and advance straight to reporting.
+            # Transition FIRST so the report task finds the correct state.
             # chain_transition goes through valid intermediate states atomically.
             ctx.state.chain_transition([
                 ("scanning", "No additional targets — skipping scan"),

@@ -35,7 +35,8 @@ def run_scan(
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     try:
         recon_context = load_recon_context(engagement_id, redis_url)
-        recon_info = f"{len(recon_context.live_endpoints or []) if hasattr(recon_context, 'live_endpoints') else 0} endpoints" if recon_context else "none"
+        ep_count = len(recon_context.live_endpoints or []) if (recon_context and hasattr(recon_context, 'live_endpoints')) else 0
+        recon_info = f"{ep_count} endpoints" if recon_context else "none"
         slog.info(f"Recon context loaded: {recon_info}")
     except Exception as e:
         logger.error("Failed to load recon context for engagement=%s: %s", engagement_id, e, exc_info=True)

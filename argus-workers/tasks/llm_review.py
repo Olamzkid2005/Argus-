@@ -115,12 +115,17 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     # Check if LLM review is enabled
     try:
         from config.constants import (
-            llm_review_confidence_threshold,
-            llm_review_max_per_engagement,
-            llm_review_max_response_chars,
-            llm_review_min_confidence,
-            llm_review_timeout,
+            LLM_REVIEW_CONFIDENCE_THRESHOLD,
+            LLM_REVIEW_MAX_PER_ENGAGEMENT,
+            LLM_REVIEW_MAX_RESPONSE_CHARS,
+            LLM_REVIEW_MIN_CONFIDENCE,
+            LLM_REVIEW_TIMEOUT,
         )
+        llm_review_confidence_threshold = LLM_REVIEW_CONFIDENCE_THRESHOLD
+        llm_review_min_confidence = LLM_REVIEW_MIN_CONFIDENCE
+        llm_review_max_per_engagement = LLM_REVIEW_MAX_PER_ENGAGEMENT
+        llm_review_max_response_chars = LLM_REVIEW_MAX_RESPONSE_CHARS
+        llm_review_timeout = LLM_REVIEW_TIMEOUT
     except ImportError:
         llm_review_confidence_threshold = 0.7
         llm_review_min_confidence = 0.3

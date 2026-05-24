@@ -433,19 +433,23 @@ class IntelligenceEngine:
 
         # Step 11: When ATTACK_GRAPH_V2 is enabled, attach the graph instance
         # to the state so build_observation() includes live attack paths.
-        if _ff_enabled("ATTACK_GRAPH_V2", default=False):
-            _state = context.get("_engagement_state")
-            if _state is not None and hasattr(_state, "set_attack_graph_instance"):
-                try:
-                    _state.set_attack_graph_instance(graph)
-                    logger.debug(
-                        "Attached AttackGraph instance to state for engagement %s",
-                        engagement_id,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Could not attach AttackGraph to state: %s", e,
-                    )
+        try:
+            from feature_flags import is_enabled as _ff_enabled
+            if _ff_enabled("ATTACK_GRAPH_V2", default=False):
+                _state = context.get("_engagement_state")
+                if _state is not None and hasattr(_state, "set_attack_graph_instance"):
+                    try:
+                        _state.set_attack_graph_instance(graph)
+                        logger.debug(
+                            "Attached AttackGraph instance to state for engagement %s",
+                            engagement_id,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Could not attach AttackGraph to state: %s", e,
+                        )
+        except ImportError:
+            logger.debug("feature_flags module not available — skipping AttackGraph attachment")
 
         return snapshot_dict, graph
 
