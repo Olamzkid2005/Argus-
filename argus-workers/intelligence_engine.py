@@ -189,24 +189,38 @@ class IntelligenceEngine:
                 learned_fp = tool_fp_rates.get(source_tool)   # from tool_accuracy DB
                 stored_fp = finding.get("fp_likelihood")
 
-                # Type guard: booleans from JSON should not cast to float 1.0/0.0
-                if isinstance(stored_fp, bool):
-                    stored_fp_val = 0.2
-                    learned_fp = None  # Force fallback to default
-                    fp_likelihood = 0.2
-                elif learned_fp is not None and stored_fp is not None:
+                # ── Robust type coercion and validation ──
+                # Validate learned_fp is a numeric float in [0.0, 1.0]
+                _learned_fp_valid: float | None = None
+                if learned_fp is not None:
                     try:
-                        stored_fp_val = float(stored_fp)
+                        _val = float(learned_fp)
+                        if 0.0 <= _val <= 1.0:
+                            _learned_fp_valid = _val
+                        else:
+                            logger.debug("learned_fp out of range for tool %s: %s", source_tool, _val)
                     except (ValueError, TypeError):
-                        stored_fp_val = 0.2
-                    fp_likelihood = 0.6 * learned_fp + 0.4 * stored_fp_val
-                elif learned_fp is not None:
-                    fp_likelihood = learned_fp
-                elif stored_fp is not None:
+                        logger.debug("learned_fp non-numeric for tool %s: %s", source_tool, learned_fp)
+
+                # Validate stored_fp is a numeric float in [0.0, 1.0]
+                _stored_fp_valid: float | None = None
+                if stored_fp is not None and not isinstance(stored_fp, bool):
                     try:
-                        fp_likelihood = float(stored_fp)
+                        _val = float(stored_fp)
+                        if 0.0 <= _val <= 1.0:
+                            _stored_fp_valid = _val
+                        else:
+                            logger.debug("stored_fp out of range: %s", _val)
                     except (ValueError, TypeError):
-                        fp_likelihood = 0.2
+                        logger.debug("stored_fp non-numeric: %s (type=%s)", stored_fp, type(stored_fp).__name__)
+
+                # Weighted blend: 60% historical (DB) + 40% scanner metadata
+                if _learned_fp_valid is not None and _stored_fp_valid is not None:
+                    fp_likelihood = 0.6 * _learned_fp_valid + 0.4 * _stored_fp_valid
+                elif _learned_fp_valid is not None:
+                    fp_likelihood = _learned_fp_valid
+                elif _stored_fp_valid is not None:
+                    fp_likelihood = _stored_fp_valid
                 else:
                     fp_likelihood = 0.2
 
@@ -235,8 +249,8 @@ class IntelligenceEngine:
                 scored_finding["tool_agreement_level"] = self._get_agreement_level(len(group))
                 # Tag fp_rate source for auditability
                 scored_finding["fp_rate_source"] = (
-                    "learned" if learned_fp is not None
-                    else "scanner_metadata" if stored_fp is not None
+                    "learned" if _learned_fp_valid is not None
+                    else "scanner_metadata" if _stored_fp_valid is not None
                     else "default_0.2"
                 )
 
