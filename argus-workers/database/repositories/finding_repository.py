@@ -5,6 +5,7 @@ import logging
 import os
 import uuid
 
+import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 
 from database.repositories.base import BaseRepository
@@ -12,6 +13,11 @@ from database.repositories.base import BaseRepository
 logger = logging.getLogger(__name__)
 
 MAX_FINDINGS_PER_ENGAGEMENT = int(os.getenv("MAX_FINDINGS_PER_ENGAGEMENT", "50000"))
+
+
+class FindingCapExceededError(Exception):
+    """Raised when the maximum number of findings per engagement is reached."""
+    pass
 
 
 class FindingRepository(BaseRepository):
@@ -74,11 +80,13 @@ class FindingRepository(BaseRepository):
             )
             count = cursor.fetchone()[0]
             if count >= MAX_FINDINGS_PER_ENGAGEMENT:
-                logger.warning(
-                    "Engagement %s has %d findings (limit %d) — skipping new finding",
+                logger.error(
+                    "Engagement %s has %d findings (limit %d) — finding cap exceeded",
                     engagement_id, count, MAX_FINDINGS_PER_ENGAGEMENT
                 )
-                return None  # Return None to signal the finding was NOT saved
+                raise FindingCapExceededError(
+                    f"Engagement {engagement_id} has {count} findings (limit {MAX_FINDINGS_PER_ENGAGEMENT})"
+                )
 
             source_tool = source_tool or ""
             endpoint = endpoint or ""
@@ -118,37 +126,87 @@ class FindingRepository(BaseRepository):
                 return str(row[0])
 
             # No legacy row found — do the standard INSERT with ON CONFLICT
-            cursor.execute(
-                """
-                INSERT INTO findings (
-                    id, engagement_id, type, severity, confidence,
-                    endpoint, evidence, source_tool, cvss_score,
-                    owasp_category, cwe_id, evidence_strength,
-                    tool_agreement_level, fp_likelihood, verified, created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO findings (
+                        id, engagement_id, type, severity, confidence,
+                        endpoint, evidence, source_tool, cvss_score,
+                        owasp_category, cwe_id, evidence_strength,
+                        tool_agreement_level, fp_likelihood, verified, created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                    )
+                    ON CONFLICT (engagement_id, endpoint, type, source_tool)
+                    DO UPDATE SET id = findings.id
+                    RETURNING id
+                    """,
+                    (
+                        finding_id,
+                        engagement_id,
+                        finding_type,
+                        severity,
+                        confidence,
+                        endpoint,
+                        Json(evidence),
+                        source_tool,
+                        cvss_score,
+                        owasp_category,
+                        cwe_id,
+                        evidence_strength,
+                        tool_agreement_level,
+                        fp_likelihood,
+                    )
                 )
-                ON CONFLICT (engagement_id, endpoint, type, source_tool)
-                DO UPDATE SET id = findings.id
-                RETURNING id
-                """,
-                (
-                    finding_id,
-                    engagement_id,
-                    finding_type,
-                    severity,
-                    confidence,
-                    endpoint,
-                    Json(evidence),
-                    source_tool,
-                    cvss_score,
-                    owasp_category,
-                    cwe_id,
-                    evidence_strength,
-                    tool_agreement_level,
-                    fp_likelihood,
+            except psycopg2.errors.UniqueViolation:
+                # ON CONFLICT clause requires the constraint to exist on the table.
+                # If it doesn't, PostgreSQL raises UniqueViolation at query-plan time.
+                # Fall back to SELECT-then-UPDATE-else-INSERT approach.
+                logger.warning("ON CONFLICT constraint not found — using SELECT-then-INSERT fallback")
+                cursor.execute(
+                    "SELECT id FROM findings WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s",
+                    (engagement_id, endpoint, finding_type, source_tool),
                 )
-            )
+                row = cursor.fetchone()
+                if row:
+                    finding_id = str(row[0])
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO findings (
+                            id, engagement_id, type, severity, confidence,
+                            endpoint, evidence, source_tool, cvss_score,
+                            owasp_category, cwe_id, evidence_strength,
+                            tool_agreement_level, fp_likelihood, verified, created_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                        )
+                        RETURNING id
+                        """,
+                        (
+                            finding_id,
+                            engagement_id,
+                            finding_type,
+                            severity,
+                            confidence,
+                            endpoint,
+                            Json(evidence),
+                            source_tool,
+                            cvss_score,
+                            owasp_category,
+                            cwe_id,
+                            evidence_strength,
+                            tool_agreement_level,
+                            fp_likelihood,
+                        )
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        finding_id = str(row[0])
+                return finding_id
+            except psycopg2.Error as on_conflict_err:
+                logger.error("ON CONFLICT insert failed: %s", on_conflict_err)
+                raise
             row = cursor.fetchone()
             if row:
                 finding_id = str(row[0])

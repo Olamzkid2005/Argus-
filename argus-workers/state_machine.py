@@ -64,13 +64,14 @@ class EngagementStateMachine:
         self.engagement_id = validate_uuid(engagement_id, "engagement_id")
         self._db_conn_string = db_connection_string
         self._external_conn = connection
-        self.current_state = current_state
+        self.current_state = None  # Will be set properly after None-handling below
         # Optional websocket publisher — when set, every transition() also emits
         # a frontend event so the orchestrator doesn't need duplicate publish calls.
         self._ws_publisher = None
 
         # Handle None — query DB for actual state (issue 3.13)
-        if current_state is None:
+        resolved_state = current_state
+        if resolved_state is None:
             try:
                 conn = self._get_connection()
                 try:
@@ -78,27 +79,27 @@ class EngagementStateMachine:
                     c.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
                     row = c.fetchone()
                     c.close()
-                    current_state = row[0] if row else "created"
+                    resolved_state = row[0] if row else "created"
                 finally:
                     self._release_connection(conn)
-            except Exception:
+            except Exception as e:
                 logger.warning(
-                    "Could not query state for engagement %s, defaulting to 'created'",
-                    engagement_id,
+                    "Could not query state for engagement %s, defaulting to 'created': %s",
+                    engagement_id, e,
                 )
-                current_state = "created"
-            self.current_state = current_state
+                resolved_state = "created"
 
-        if current_state == "awaiting_approval":
+        if resolved_state == "awaiting_approval":
             logger.warning(
                 "Engagement %s has deprecated 'awaiting_approval' state — mapping to 'recon'",
                 engagement_id,
             )
-            current_state = "recon"
-            self.current_state = "recon"
+            resolved_state = "recon"
 
-        if current_state not in self.STATES:
-            raise ValueError(f"Invalid state: {current_state}")
+        if resolved_state not in self.STATES:
+            raise ValueError(f"Invalid state: {resolved_state}")
+
+        self.current_state = resolved_state
 
     def _get_connection(self):
         """Get a database connection (external or from pool)"""

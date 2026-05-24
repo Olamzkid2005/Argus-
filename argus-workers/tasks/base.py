@@ -156,8 +156,7 @@ def task_context(
                 slog.info("Lock acquired, state machine initialized")
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-                if _state_assigned and isinstance(state, EngagementState):
-                    orchestrator.state = state  # Step 10: wire EngagementState into orchestrator
+                orchestrator.state = state  # Always wire state into orchestrator (regardless of type)
                 ctx.orchestrator = orchestrator
 
                 yield ctx
@@ -169,17 +168,12 @@ def task_context(
             )
             if _lock_acquired:
                 try:
-                    current = ctx.state.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
                         if _state_assigned:
                             ctx.state.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
                         else:
-                            new_sm = EngagementStateMachine(
-                                engagement_id,
-                                db_connection_string=db_conn_string,
-                                current_state=current,
-                            )
-                            new_sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                            sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
                         slog.phase_complete(job_type, status="failed", reason="soft_time_limit")
                 except Exception as st_error:
                     logger.error("Failed to transition on soft time limit: %s", st_error)
@@ -190,20 +184,15 @@ def task_context(
             slog.warning("Lock acquisition failed for %s — will retry", engagement_id)
             raise
         except Exception as e:
-            slog.error(f"Task failed: {e}")
+            logger.error("Task failed for %s engagement %s: %s", job_type, engagement_id, e)
             if _lock_acquired:
                 try:
-                    current = ctx.state.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
+                    current = sm.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
                     if current not in ("complete", "failed"):
                         if _state_assigned:
                             ctx.state.transition("failed", f"{job_type} failed: {e}")
                         else:
-                            new_sm = EngagementStateMachine(
-                                engagement_id,
-                                db_connection_string=db_conn_string,
-                                current_state=current,
-                            )
-                            new_sm.transition("failed", f"{job_type} failed: {e}")
+                            sm.transition("failed", f"{job_type} failed: {e}")
                         slog.phase_complete(job_type, status="failed", reason=str(e)[:100])
                         # Mark transition as done to prevent double-transition
                         # in the Celery task's BaseTask.on_failure hook.
@@ -246,7 +235,7 @@ def task_error_boundary(
     try:
         yield
     except SoftTimeLimitExceeded:
-        slog.error(f"Soft time limit exceeded in {phase_name}")
+        slog.error("Soft time limit exceeded in %s", phase_name)
         logger.warning(
             "Soft time limit exceeded in %s for engagement %s — transitioning to failed",
             phase_name, engagement_id,
@@ -265,7 +254,7 @@ def task_error_boundary(
             logger.error("Failed to update engagement state on soft time limit: %s", state_error)
         raise
     except Exception as e:
-        slog.error(f"{phase_name} failed: {e}")
+        slog.error("%s failed: %s", phase_name, e)
         from error_classifier import classify_error_with_code, log_classified_error
 
         classification = classify_error_with_code(

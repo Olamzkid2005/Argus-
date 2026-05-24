@@ -173,8 +173,8 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                 normalized = ctx._normalize_finding(p, tool_name)
                 if normalized:
                     all_findings.append(normalized)
-        success = result.success
-        return tool_name, result.success, result.stdout if result.success else None
+            success = True  # Only set success after parsing succeeds
+        return tool_name, success, result.stdout if success else None
     except Exception as e:
         logger.warning(f"{tool_name} failed: {e}")
         return tool_name, False, None
@@ -293,6 +293,11 @@ def execute_scan_tools(
         # Phase 2: all vulnerability scanners run simultaneously
         scan_jobs = []
 
+        # Budget enforcement: limit scan tools per target if budget specifies a cap
+        max_tools = int(budget.get("max_scan_tools", 0)) if isinstance(budget, dict) else 0
+        _tool_count = 0
+        _budget_exceeded = lambda: max_tools > 0 and _tool_count >= max_tools
+
         # Build and run nuclei command with streaming (real-time findings)
         if "nuclei" not in _skip:
             nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
@@ -310,11 +315,15 @@ def execute_scan_tools(
             try:
                 emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
                 ctx.tool_runner.run_streaming("nuclei", nuclei_cmd, nuclei_timeout, _on_nuclei_line)
+                emit_tool_complete(ctx.engagement_id, "nuclei", True, 0,
+                                    finding_count=len([f for f in all_findings if f.get("source_tool") == "nuclei"]))
             except Exception as e:
+                emit_tool_complete(ctx.engagement_id, "nuclei", False, 0)
                 logger.warning(f"nuclei streaming failed for {target}: {e}")
 
         # Build dalfox command
-        if "dalfox" not in _skip:
+        if "dalfox" not in _skip and not _budget_exceeded():
+            _tool_count += 1
             dalfox_cmd = ["url", target, "--json"]
             dalfox_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
@@ -326,7 +335,8 @@ def execute_scan_tools(
             scan_jobs.append(("dalfox", dalfox_cmd, dalfox_timeout))
 
         # Build sqlmap command
-        if "sqlmap" not in _skip:
+        if "sqlmap" not in _skip and not _budget_exceeded():
+            _tool_count += 1
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 sqlmap_out = str(sandbox / "tmp" / "sqlmap.json")
@@ -345,11 +355,12 @@ def execute_scan_tools(
             scan_jobs.append(("sqlmap", sqlmap_cmd, sqlmap_timeout))
 
         # Build jwt_tool command
-        if "jwt_tool" not in _skip and _should_run_tool("jwt_tool", recon_context=recon_context, tech_stack=tech_stack):
+        if "jwt_tool" not in _skip and not _budget_exceeded() and _should_run_tool("jwt_tool", recon_context=recon_context, tech_stack=tech_stack):
+            _tool_count += 1
             scan_jobs.append(("jwt_tool", ["-u", target, "-C", "-d"], 120))
 
         # Build commix command
-        if "commix" not in _skip and _should_run_tool("commix", recon_context=recon_context, tech_stack=tech_stack):
+        if "commix" not in _skip and not _budget_exceeded() and _should_run_tool("commix", recon_context=recon_context, tech_stack=tech_stack):
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 commix_out = str(sandbox / "tmp" / "commix.json")
@@ -362,7 +373,7 @@ def execute_scan_tools(
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
         # Build testssl command
-        if "testssl" not in _skip and _should_run_tool("testssl", target=target):
+        if "testssl" not in _skip and not _budget_exceeded() and _should_run_tool("testssl", target=target):
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 testssl_out = str(sandbox / "tmp" / "testssl.json")

@@ -38,14 +38,16 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
             len(analysis.get("high_value_targets", [])),
         )
 
-        # Advance to reporting — the agent loop will make the next
-        # decision based on analysis.
-        ctx.state.transition("reporting", "Analysis complete")
+        # Advance to reporting — dispatch task FIRST, then transition
+        # to avoid being stuck in "reporting" with no running task.
         try:
             app.send_task('tasks.report.generate_report',
                           args=[engagement_id, ctx.trace_id, budget])
         except Exception as e:
             logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
+            return result
+
+        ctx.state.transition("reporting", "Analysis complete — report dispatched")
 
         return result

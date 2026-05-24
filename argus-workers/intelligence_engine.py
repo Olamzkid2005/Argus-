@@ -224,7 +224,7 @@ class IntelligenceEngine:
                 # 2. All findings tagged by the orchestrator (bugbounty_source=True) when
                 #    bug bounty mode is active — these lack explicit validation metadata
                 #    and should be treated conservatively.
-                if finding.get("bugbounty_source") or (
+                if finding.get("bugbounty_source") or finding.get("source") == "bugbounty" or (
                     finding.get("requires_validation") and finding.get("source") == "bugbounty"
                 ):
                     confidence = min(confidence, 0.70)
@@ -775,46 +775,56 @@ class IntelligenceEngine:
             Dictionary mapping CVE ID to details
         """
         results = {}
+        if not cve_ids:
+            return results
+
+        def _fetch_single(cve_id: str) -> tuple[str, dict | None]:
+            try:
+                with httpx.Client(timeout=5.0) as client:
+                    response = client.get(
+                        f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
+                        headers={"User-Agent": "Argus-Platform/1.0"}
+                    )
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        vulnerabilities = data.get("vulnerabilities", [])
+
+                        if vulnerabilities:
+                            vuln = vulnerabilities[0].get("cve", {})
+                            metrics = vuln.get("metrics", {})
+                            cvss_data = None
+
+                            # Prefer CVSS v3.1, fallback to v3.0, then v2
+                            if "cvssMetricV31" in metrics:
+                                cvss_data = metrics["cvssMetricV31"][0].get("cvssData", {})
+                            elif "cvssMetricV30" in metrics:
+                                cvss_data = metrics["cvssMetricV30"][0].get("cvssData", {})
+                            elif "cvssMetricV2" in metrics:
+                                cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
+
+                            return cve_id, {
+                                "description": vuln.get("descriptions", [{}])[0].get("value", ""),
+                                "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
+                                "severity": cvss_data.get("baseSeverity") if cvss_data else None,
+                                "published": vuln.get("published", ""),
+                                "last_modified": vuln.get("lastModified", ""),
+                                "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
+                            }
+            except Exception as e:
+                logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
+            return cve_id, None
 
         try:
-            with httpx.Client(timeout=10.0) as client:
-                for cve_id in cve_ids:
-                    try:
-                        response = client.get(
-                            f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
-                            headers={"User-Agent": "Argus-Platform/1.0"}
-                        )
-
-                        if response.status_code == 200:
-                            data = response.json()
-                            vulnerabilities = data.get("vulnerabilities", [])
-
-                            if vulnerabilities:
-                                vuln = vulnerabilities[0].get("cve", {})
-                                metrics = vuln.get("metrics", {})
-                                cvss_data = None
-
-                                # Prefer CVSS v3.1, fallback to v3.0, then v2
-                                if "cvssMetricV31" in metrics:
-                                    cvss_data = metrics["cvssMetricV31"][0].get("cvssData", {})
-                                elif "cvssMetricV30" in metrics:
-                                    cvss_data = metrics["cvssMetricV30"][0].get("cvssData", {})
-                                elif "cvssMetricV2" in metrics:
-                                    cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
-
-                                results[cve_id] = {
-                                    "description": vuln.get("descriptions", [{}])[0].get("value", ""),
-                                    "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
-                                    "severity": cvss_data.get("baseSeverity") if cvss_data else None,
-                                    "published": vuln.get("published", ""),
-                                    "last_modified": vuln.get("lastModified", ""),
-                                    "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
-                                }
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
-                        continue
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=min(len(cve_ids), 5)) as pool:
+                futures = {pool.submit(_fetch_single, cve_id): cve_id for cve_id in cve_ids}
+                for future in as_completed(futures):
+                    cve_id, result = future.result()
+                    if result:
+                        results[cve_id] = result
         except Exception as e:
-            logger.warning(f"NVD API client failed: {e}")
+            logger.warning(f"NVD API parallel fetch failed: {e}")
 
         return results
 
@@ -1020,7 +1030,7 @@ class IntelligenceEngine:
             "confidence": round(confidence, 3),
             "true_positive_score": round(avg_score, 3),
             "factors": reasons,
-            "factor_scores": {reason: round(score, 3) for reason, score in zip(reasons, scores, strict=False)},
+            "factor_scores": {reason: round(score, 3) for reason, score in zip(reasons, scores)},
         }
 
     def get_threat_summary(self, findings: list[dict]) -> dict:

@@ -528,31 +528,34 @@ class ReActAgent:
                     logger.warning(f"Missing required param '{param_name}' for {action.tool}")
                     return False
 
-        # Validate target is not internal/private if present
-        target = action.arguments.get("target", "")
-        if target:
-            try:
-                import ipaddress
-                from urllib.parse import urlparse
-                hostname = urlparse(target).hostname
-                if hostname:
-                    try:
-                        ip = ipaddress.ip_address(hostname)
-                        if ip.is_private or ip.is_loopback or ip.is_link_local:
-                            logger.warning(
-                                "Blocked internal target '%s' for tool '%s'",
-                                target, action.tool,
-                            )
-                            return False
-                    except ValueError:
-                        if hostname.lower() in {"localhost", "169.254.169.254"}:
-                            logger.warning(
-                                "Blocked internal hostname '%s' for tool '%s'",
-                                hostname, action.tool,
-                            )
-                            return False
-            except Exception:
-                pass
+        # Validate target is not internal/private if present.
+        # Check all common target parameter names, not just "target".
+        _target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+        for param_name in _target_params:
+            target = action.arguments.get(param_name, "")
+            if target:
+                try:
+                    import ipaddress
+                    from urllib.parse import urlparse
+                    hostname = urlparse(target).hostname
+                    if hostname:
+                        try:
+                            ip = ipaddress.ip_address(hostname)
+                            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                                logger.warning(
+                                    "Blocked internal target '%s' (param=%s) for tool '%s'",
+                                    target, param_name, action.tool,
+                                )
+                                return False
+                        except ValueError:
+                            if hostname.lower() in {"localhost", "169.254.169.254"}:
+                                logger.warning(
+                                    "Blocked internal hostname '%s' (param=%s) for tool '%s'",
+                                    hostname, param_name, action.tool,
+                                )
+                                return False
+                except Exception:
+                    pass
 
         return True
 
@@ -619,7 +622,7 @@ class ReActAgent:
     def run(
         self,
         task: str,
-        initial_context: dict = None,  # noqa: ARG002
+        initial_context: dict = None,
         recon_context: Any = None,
         _reset_history: bool = True,
     ) -> list[AgentResult]:
@@ -641,6 +644,9 @@ class ReActAgent:
         slog.phase_header(f"AGENT RUN: {task[:80]}")
         if _reset_history:
             self.history = []
+        # Incorporate initial context into history if provided
+        if initial_context:
+            self.add_to_history("system", f"Initial context: {initial_context}")
         results = []
         tried_tools = set()
         total_cost_usd = 0.0
@@ -796,9 +802,7 @@ class ReActAgent:
 
             # Legacy empty-output detection (only when governance is not active)
             if not (_ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None):
-                # FIX: skip counting for tools that failed or were skipped
-                # (e.g. __skip__ exception from scan.py sets success=False)
-                if result.tool in tried_tools and not result.success:
+                if not result.success:
                     pass
                 else:
                     output_content = (result.output or "").strip()

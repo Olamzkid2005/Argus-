@@ -106,6 +106,15 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
         opts = fetch_engagement_scan_options(engagement_id)
     except Exception as e:
         logger.error("Failed to fetch scan options for deep_scan engagement=%s: %s", engagement_id, e)
+        # Transition state to failed so engagement doesn't get stuck
+        try:
+            from state_machine import EngagementStateMachine
+            from tasks.utils import get_engagement_state
+            db_conn = os.getenv("DATABASE_URL")
+            sm = EngagementStateMachine(engagement_id, current_state=get_engagement_state(engagement_id, db_conn))
+            sm.transition("failed", f"Failed to fetch scan options: {e}")
+        except Exception as sm_error:
+            logger.error("Failed to transition engagement %s to failed state: %s", engagement_id, sm_error)
         return {"phase": "deep_scan", "status": "failed", "reason": str(e)}
 
     slog = ScanLogger("deep_scan", engagement_id=engagement_id)
@@ -156,6 +165,15 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
         opts = fetch_engagement_scan_options(engagement_id)
     except Exception as e:
         logger.error("Failed to fetch scan options for auth_focused_scan engagement=%s: %s", engagement_id, e)
+        # Transition state to failed so engagement doesn't get stuck
+        try:
+            from state_machine import EngagementStateMachine
+            from tasks.utils import get_engagement_state
+            db_conn = os.getenv("DATABASE_URL")
+            sm = EngagementStateMachine(engagement_id, current_state=get_engagement_state(engagement_id, db_conn))
+            sm.transition("failed", f"Failed to fetch scan options: {e}")
+        except Exception as sm_error:
+            logger.error("Failed to transition engagement %s to failed state: %s", engagement_id, sm_error)
         return {"phase": "auth_focused_scan", "status": "failed", "reason": str(e)}
 
     slog = ScanLogger("auth_focused_scan", engagement_id=engagement_id)

@@ -27,8 +27,11 @@ class TargetProfileRepository:
     # ── Domain extraction ───────────────────────────────────────────
 
     @staticmethod
-    def _extract_domain(target_url: str) -> str:
+    def extract_domain(target_url: str) -> str:
         """Normalize a URL to a stable domain key.
+
+        Public API for domain extraction. Used by tasks/diff.py and
+        internally by this repository.
 
         Args:
             target_url: Full URL (e.g. 'https://www.example.com/path')
@@ -38,6 +41,9 @@ class TargetProfileRepository:
         """
         parsed = urlparse(target_url)
         return parsed.netloc or target_url.split("/")[0]
+
+    # Backward-compatible alias for internal use
+    _extract_domain = extract_domain
 
     # ── Profile persistence ─────────────────────────────────────────
 

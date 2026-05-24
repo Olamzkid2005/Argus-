@@ -28,7 +28,7 @@ MAX_PARAMETERS_TO_FUZZ = 20          # Max params to fuzz
 
 # Git clone SSRF prevention
 ALLOWED_GIT_SCHEMES = ("https", "http", "ssh")
-GIT_HOST_ALLOWLIST = (
+GIT_HOST_ALLOWLIST = tuple(sorted(set((
     "github.com",
     "gitlab.com",
     "gitlab.freedesktop.org",
@@ -40,14 +40,9 @@ GIT_HOST_ALLOWLIST = (
     "git.savannah.nongnu.org",
     "gitlab.gnome.org",
     "gitlab.kitware.com",
-    "gitlab.com",
-    "gitlab.freedesktop.org",
     "gitlab.xfce.org",
     "gitlab.archlinux.org",
-    "github.com",
-    "bitbucket.org",
-    "gitlab.com",
-)
+))))
 
 # Max tool output size for safety
 MAX_TOOL_OUTPUT_BYTES = 100 * 1024 * 1024  # 100MB

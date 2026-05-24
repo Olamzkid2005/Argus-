@@ -15,6 +15,7 @@ import contextlib
 import hashlib
 import json
 import logging
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +48,19 @@ class ScanDiffEngine:
         """
         if not endpoint:
             return endpoint
-        from urllib.parse import urlparse
         parsed = urlparse(endpoint)
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme else parsed.path
 
     @staticmethod
-    def _fallback_fingerprint(finding: dict) -> str:
+    def fallback_fingerprint(finding: dict) -> str:
         """Cross-scan fallback fingerprint using type+endpoint only."""
         finding_type = finding.get("type", "UNKNOWN")
         endpoint = ScanDiffEngine._normalize_endpoint(finding.get("endpoint", ""))
         key = f"{finding_type}:{endpoint}"
         return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    # Backward-compatible alias
+    _fallback_fingerprint = fallback_fingerprint
 
     @staticmethod
     def _has_payload(finding: dict) -> bool:
@@ -76,7 +79,7 @@ class ScanDiffEngine:
         return bool(payload and payload != "None")
 
     @staticmethod
-    def _fingerprint(finding: dict) -> str:
+    def fingerprint(finding: dict) -> str:
         """Stable fingerprint for matching findings across scans.
 
         Multi-field to distinguish payload-level differences:
@@ -109,6 +112,9 @@ class ScanDiffEngine:
             key = f"{finding_type}:{endpoint}"
 
         return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    # Backward-compatible alias
+    _fingerprint = fingerprint
 
     @staticmethod
     def _load_fixed_fingerprints(profile: dict | None) -> set[str]:

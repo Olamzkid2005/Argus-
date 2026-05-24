@@ -98,6 +98,18 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     except Exception as e:
         slog.warning(f"Could not check engagement state: {e}")
 
+
+    def _is_terminal_state() -> bool:
+        """Check if engagement is in a terminal state (re-check during processing)."""
+        try:
+            from database.connection import db_cursor
+            with db_cursor() as cursor:
+                cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+                row = cursor.fetchone()
+                return row and row[0] in ("complete", "failed")
+        except Exception:
+            return False
+
     db_conn_string = os.getenv("DATABASE_URL")
 
     # Check if LLM review is enabled
@@ -177,6 +189,12 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     budget_was_exhausted = False
 
     for finding in candidate_findings:
+        # Re-check terminal state to avoid TOCTOU race (engagement may have been
+        # marked complete/failed by another worker since our initial check).
+        if _is_terminal_state():
+            slog.info("Engagement entered terminal state during LLM review — stopping")
+            break
+
         if budget_manager:
             can_continue, _ = budget_manager.can_continue({"type": "llm_review"})
             if not can_continue:
@@ -322,7 +340,7 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
         return None
 
     try:
-        from urllib.parse import urlencode
+        from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
 
         import requests
 
@@ -331,7 +349,12 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
 
         payload = evidence.get("payload", "")
         if payload and payload.strip():
-            test_url = f"{endpoint}?{urlencode({'q': payload})}"
+            # Parse the endpoint URL and merge payload param to avoid double ? markers
+            parsed = urlparse(endpoint)
+            params = parse_qs(parsed.query)
+            params['q'] = payload
+            new_query = urlencode(params, doseq=True)
+            test_url = urlunparse(parsed._replace(query=new_query))
             resp = requests.get(test_url, headers=headers, timeout=timeout, allow_redirects=True)
         else:
             # No payload — still try to GET the endpoint for analysis

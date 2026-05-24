@@ -17,7 +17,7 @@ from config.constants import (
     LLM_AGENT_MODEL,
 )
 from database.repositories.engagement_repository import EngagementRepository
-from database.repositories.finding_repository import FindingRepository
+from database.repositories.finding_repository import FindingCapExceededError, FindingRepository
 from database.repositories.rate_limit_repository import RateLimitRepository
 from llm_client import LLMClient
 from mcp_server import get_mcp_server
@@ -61,8 +61,9 @@ class Orchestrator:
 
     def __init__(self, engagement_id: str, trace_id: str = None):
         self.engagement_id = engagement_id
-        self.start_time = None
+        self.start_time = time.time()
         self.trace_id = trace_id
+        self.bug_bounty_mode = False
 
         db_conn = os.getenv("DATABASE_URL")
         self.tracing_manager = TracingManager(db_conn)
@@ -190,15 +191,20 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_recon", ["target"])
         self._check_timeout()
-        from feature_flags import is_enabled as _ff_enabled
-        if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
-            self.state.bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
+        self.bug_bounty_mode = bool(job.get("bug_bounty_mode", False))
         target = job.get("target")
         if not target:
             targets_list = job.get("targets", [])
             target = targets_list[0] if targets_list else None
         if not target:
             logger.warning(f"run_recon called with no target for engagement {self.engagement_id}, skipping")
+            # Also transition the DB state, not just the websocket
+            try:
+                from state_machine import EngagementStateMachine
+                sm = EngagementStateMachine(self.engagement_id, current_state=self._get_scan_state())
+                sm.transition("failed", "No target URL configured for engagement")
+            except Exception:
+                logger.warning("Failed to transition engagement state for no-target case")
             self.ws_publisher.publish_state_transition(
                 engagement_id=self.engagement_id,
                 from_state=self._get_scan_state(),
@@ -267,7 +273,10 @@ class Orchestrator:
             Number of findings that failed to save. 0 means all succeeded.
             Callers should check this and abort the phase if too many fail.
         """
-        if not self.finding_repo or not findings:
+        if not self.finding_repo:
+            logger.error("No finding repository configured — DATABASE_URL not set, cannot persist findings")
+            return len(findings)
+        if not findings:
             return 0
 
         # Normalize heterogeneous inputs to plain dicts
@@ -291,7 +300,7 @@ class Orchestrator:
                 logger.warning(f"_save_findings: cannot coerce {type(item)} to dict, skipping")
         findings = normalized_inputs
         if not findings:
-            return
+            return 0
 
         from database.connection import db_cursor
         from database.services.embedding_service import EmbeddingService
@@ -303,12 +312,7 @@ class Orchestrator:
             try:
                 # Tag findings with bugbounty source when in bug bounty mode
                 # so the Intelligence Engine applies the confidence cap.
-                from feature_flags import is_enabled as _ff_enabled
-                bug_bounty = (
-                    self.state.bug_bounty_mode
-                    if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state")
-                    else False
-                )
+                bug_bounty = self.bug_bounty_mode
                 if bug_bounty:
                     finding["bugbounty_source"] = True
                     # Preserve original source — don't overwrite with "bugbounty"
@@ -353,11 +357,12 @@ class Orchestrator:
                     )
                 else:
                     evidence_obj = finding.get('evidence') or {}
-                    payload = evidence_obj.get('payload', '') if isinstance(evidence_obj, dict) else ''
+                    payload_raw = evidence_obj.get('payload', '') if isinstance(evidence_obj, dict) else ''
+                    payload_str = str(payload_raw) if not isinstance(payload_raw, str) else payload_raw
                     ftype = finding.get("type") or ""
                     fep = finding.get("endpoint") or ""
-                    if payload and '__REDACTED__' not in str(payload):
-                        dedup_text = f"{ftype} {fep} {payload}"
+                    if payload_str and '__REDACTED__' not in payload_str:
+                        dedup_text = f"{ftype} {fep} {payload_str}"
                     else:
                         dedup_text = f"{ftype} {fep}"  # Fallback: type + endpoint only
                     similar = emb_svc.find_existing_similar(dedup_text) if dedup_text.strip() else None
@@ -465,6 +470,11 @@ class Orchestrator:
                 logger.warning("Failed to save finding (type=%s, endpoint=%s): %s",
                                finding.get("type", "?"), finding.get("endpoint", "?"), finding_err)
                 continue
+            except FindingCapExceededError:
+                failed_count += 1
+                logger.error("Finding cap exceeded for engagement %s — stopping save loop", self.engagement_id)
+                # Finding cap is a hard limit — stop trying to save more findings
+                break
 
         if failed_count > 0:
             logger.error("_save_findings: %d of %d findings failed to save for engagement %s",
@@ -610,7 +620,10 @@ class Orchestrator:
                 per_target_tools.append(set())
                 fallback = execute_scan_pipeline(self, [target], budget, aggressiveness, auth_config,
                                                   tech_stack=recon_context.tech_stack if recon_context else None)
-                all_findings.extend(fallback)
+                for f in fallback:
+                    norm = self._normalize_finding(f, f.get("source_tool", "fallback"))
+                    if norm:
+                        all_findings.append(norm)
 
         if per_target_tools:
             union_set = set.union(*per_target_tools)

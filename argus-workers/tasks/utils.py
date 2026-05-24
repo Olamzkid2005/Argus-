@@ -13,7 +13,8 @@ import os
 logger = logging.getLogger(__name__)
 
 RECON_CONTEXT_KEY = "recon_context:{engagement_id}"
-RECON_CONTEXT_TTL = 7200  # 2 hours (was 1h — scan can take 60min to execute)
+from config.constants import HARD_TIMEOUT_SECONDS
+RECON_CONTEXT_TTL = HARD_TIMEOUT_SECONDS  # Match hard timeout so context doesn't expire before scan completes
 LLM_COST_KEY = "llm_cost:{engagement_id}"
 
 
@@ -113,6 +114,7 @@ def _get_redis_client(redis_url: str = None):
             socket_connect_timeout=2,
             socket_timeout=2,
             max_connections=10,
+            health_check_interval=30,
         )
         _redis_pool_url = url
         return redis_module.Redis(connection_pool=_redis_pool)
@@ -125,7 +127,13 @@ def _get_redis_client(redis_url: str = None):
             socket_timeout=2,
         )
 
-    return redis_module.Redis(connection_pool=_redis_pool)
+    try:
+        return redis_module.Redis(connection_pool=_redis_pool)
+    except redis_module.ConnectionError:
+        logger.warning("Redis connection pool stale — recreating pool")
+        _redis_pool = None
+        _redis_pool_url = None
+        return _get_redis_client(redis_url)
 
 
 def save_recon_context(engagement_id: str, ctx, redis_url: str = None):

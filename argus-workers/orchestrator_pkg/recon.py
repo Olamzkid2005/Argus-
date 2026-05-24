@@ -61,7 +61,9 @@ def execute_recon_tools(
 
         return [], ReconContext(target_url=target or "")
 
-    target_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+    from urllib.parse import urlparse
+    parsed_target = urlparse(target)
+    target_domain = parsed_target.hostname or target.replace("https://", "").replace("http://", "").split("/")[0]
 
     # Aggressiveness config
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
@@ -247,11 +249,17 @@ def execute_recon_tools(
         },
     }
 
-    slog.info(f"Launching {len(recon_tools)} parallel recon tools")
+    # Budget enforcement: limit number of recon tools if budget specifies a cap
+    max_tools = budget.get("max_recon_tools", len(recon_tools)) if isinstance(budget, dict) else len(recon_tools)
+    if max_tools < len(recon_tools):
+        logger.info("Budget limits recon tools to %d (from %d available)", max_tools, len(recon_tools))
+    selected_tools = dict(list(recon_tools.items())[:max_tools])
+
+    slog.info(f"Launching {len(selected_tools)} parallel recon tools (budget allows {max_tools})")
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {
             pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings, cfg.get("start_msg")): name
-            for name, cfg in recon_tools.items()
+            for name, cfg in selected_tools.items()
         }
         try:
             for future in as_completed(futures, timeout=300):

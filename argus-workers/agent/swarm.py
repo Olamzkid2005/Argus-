@@ -29,6 +29,7 @@ from streaming import (
     emit_swarm_agent_started,
     emit_swarm_merge_complete,
 )
+from tools.scope_validator import validate_target_scope
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -424,7 +425,6 @@ class APIAgent(SpecialistAgent):
 
             # 4. sqlmap injection testing on API params
             # Re-validate target is in authorized scope before sqlmap execution
-            from tools.scope_validator import validate_target_scope
             if not validate_target_scope(target, self.engagement_id):
                 logger.warning("[API] Skipping sqlmap for %s — not in authorized scope", target)
                 continue
@@ -577,8 +577,13 @@ class SwarmOrchestrator:
                         child.kill()
                     except psutil.NoSuchProcess:
                         pass
+            except ImportError:
+                logger.warning(
+                    "psutil not installed — cannot kill orphaned tool subprocesses. "
+                    "Install psutil to prevent resource leaks from timed-out swarm agents."
+                )
             except Exception:
-                logger.debug("Could not kill orphaned tool processes (psutil may not be available)")
+                logger.debug("Could not kill orphaned tool processes", exc_info=True)
 
         deduped = self._deduplicate(all_findings)
         dedup_removed = len(all_findings) - len(deduped)

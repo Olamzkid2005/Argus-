@@ -61,7 +61,7 @@ def run_scan_diff(
         profile_repo = TargetProfileRepository(db_url)
         target_url = _get_engagement_target(new_engagement_id)
         domain = (
-            TargetProfileRepository._extract_domain(target_url)
+            TargetProfileRepository.extract_domain(target_url)
             if target_url
             else ""
         )

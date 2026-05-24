@@ -52,26 +52,32 @@ class VulnerabilityFinding(BaseModel):
     @field_validator('evidence')
     @classmethod
     def validate_evidence(cls, v):
-        """Ensure evidence has required structure"""
-        if not isinstance(v, dict):
-            raise ValueError("Evidence must be a dictionary")
-        return v
+        """Ensure evidence has required structure — coerce strings to dicts"""
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return {"raw": v}
+        if isinstance(v, dict):
+            return v
+        return {"raw": str(v)}
 
     @field_validator('type')
     @classmethod
     def validate_type(cls, v):
-        """Ensure type is not empty"""
-        if not v or not v.strip():
-            raise ValueError("Type cannot be empty")
-        return v.strip().upper()
+        """Ensure type is not empty — default to UNKNOWN"""
+        if not v or not str(v).strip():
+            return "UNKNOWN"
+        return str(v).strip().upper()
 
     @field_validator('endpoint')
     @classmethod
     def validate_endpoint(cls, v):
-        """Ensure endpoint is not empty"""
-        if not v or not v.strip():
-            raise ValueError("Endpoint cannot be empty")
-        return v.strip()
+        """Ensure endpoint is not empty — default to UNKNOWN"""
+        if not v or not str(v).strip():
+            return "UNKNOWN"
+        return str(v).strip()
 
 
 class FindingValidationError(Exception):
