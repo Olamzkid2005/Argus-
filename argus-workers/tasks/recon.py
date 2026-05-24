@@ -137,22 +137,21 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
         with task_context(self, engagement_id, "recon_expand",
                           job_extra={"target": None, "targets": [], "budget": budget},
                           trace_id=trace_id, current_state="recon") as ctx:
-            # No targets to expand — skip scanning/analyzing and advance straight to reporting.
-            # Transition FIRST so the report task finds the correct state.
-            # chain_transition goes through valid intermediate states atomically.
+            # No targets to expand — skip scanning but still run analysis to enrich
+            # existing recon findings with confidence scores and threat intel.
+            # Skipping analysis would leave findings raw and unenriched in reports.
             ctx.state.chain_transition([
                 ("scanning", "No additional targets — skipping scan"),
-                ("analyzing", "No additional targets — skipping analysis"),
-                ("reporting", "No additional targets — advancing to report"),
+                ("analyzing", "Running analysis enrichment on existing findings"),
             ], trace_id=trace_id)
             try:
-                app.send_task('tasks.report.generate_report',
-                              args=[engagement_id, ctx.trace_id, budget])
+                app.send_task('tasks.analyze.run_analysis',
+                              args=[engagement_id, budget, ctx.trace_id])
             except Exception as e:
-                logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
-                ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
-                return {"phase": "recon_expand", "status": "failed", "reason": "report_dispatch_failed", "next_state": "failed"}
-        return {"phase": "recon_expand", "status": "skipped", "reason": "no_valid_targets", "next_state": "reporting"}
+                logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
+                ctx.state.safe_transition("failed", f"Failed to enqueue analysis: {e}")
+                return {"phase": "recon_expand", "status": "failed", "reason": "analysis_dispatch_failed", "next_state": "failed"}
+        return {"phase": "recon_expand", "status": "skipped_scan", "reason": "no_valid_targets", "next_state": "analyzing"}
 
     slog.phase_header("EXPAND RECON", targets=f"{len(valid_targets)} targets")
 
