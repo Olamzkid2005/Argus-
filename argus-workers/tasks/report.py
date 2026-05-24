@@ -445,7 +445,11 @@ def generate_compliance_report(
 
         except Exception as e:
             logger.error("Compliance report generation failed: %s", e)
-            conn.rollback()
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             raise
         finally:
             if cursor:
@@ -638,7 +642,11 @@ def generate_full_report(
 
         except Exception as e:
             logger.error("Full report generation failed: %s", e)
-            conn.rollback()
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             raise
         finally:
             if cursor:
