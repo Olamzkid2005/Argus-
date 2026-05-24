@@ -796,14 +796,52 @@ def build_tool_selection_prompt(
     return prompt
 
 
+_PROMPT_INJECTION_PATTERNS = [
+    # System prompt override attempts
+    r'(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions',
+    r'(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)',
+    r'(?i)override\s+(system|assistant)\s+(prompt|message)',
+    r'(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)',
+    # Command injection patterns in output
+    r'(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)',
+    r'(?i)(subprocess|os\.system|eval|exec)\s*\(',
+    r'(?i)run\s+(the\s+following|this)\s+(command|tool)',
+    r'(?i)system\s+prompt\s*(=|\s+is\s*)',
+]
+
+def _sanitize_for_llm(text: str) -> str:
+    """Remove prompt injection patterns from tool output before feeding to LLM.
+
+    Truncates to 3000 chars, strips control characters, replaces backtick
+    fences, and redacts known injection patterns to prevent prompt injection
+    from attacker-controlled target servers.
+    """
+    import re as _re
+    # Truncate first to limit regex work on large outputs
+    text = text[:3000]
+    # Strip control characters (except newline/tab)
+    text = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    # Remove backtick fences that could break prompt structure
+    text = text.replace('```', '` ` `')
+    # Replace injection patterns with redacted markers
+    for pattern in _PROMPT_INJECTION_PATTERNS:
+        text = _re.sub(pattern, '[REDACTED_INJECTION]', text)
+    return text
+
+
 def build_observation_summary(tool_name: str, result) -> str:
     """
     Build a meaningful observation string from a tool result for the agent history.
     This is what the LLM reads to decide its next action — must be informative.
+    All tool outputs are sanitized to prevent prompt injection from attacker-
+    controlled target servers.
     """
     success = getattr(result, "success", False)
     output = getattr(result, "output", "") or ""
     error = getattr(result, "error", "") or ""
+    # Sanitize all externally-derived content before it enters LLM context
+    output = _sanitize_for_llm(output)
+    error = _sanitize_for_llm(error)
 
     if not success:
         return f"{tool_name}: FAILED — {error[:200]}"
