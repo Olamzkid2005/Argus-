@@ -154,17 +154,48 @@ class ScopeValidator:
 def validate_target_scope(target: str, engagement_id: str, authorized_scope: dict | None = None) -> bool:
     """Standalone convenience wrapper around ScopeValidator.
 
+    Fail-Closed: If scope validation encounters an error (DB unavailable,
+    malformed scope JSON, network timeout), the target is considered
+    OUT of scope. Only when no scope is configured do we allow-all.
+
     Args:
         target: Target URL or hostname
         engagement_id: Engagement UUID
         authorized_scope: Optional scope dict (loaded from DB if None)
 
     Returns:
-        True if target is in scope, False if not (no exception raised)
+        True if target is in scope, False if not or on validation error
     """
+    from database.connection import db_cursor
+
+    # Load scope from DB if not provided
+    if authorized_scope is None:
+        try:
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT scope FROM engagements WHERE id = %s",
+                    (engagement_id,),
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    authorized_scope = row[0]
+        except Exception:
+            logger.warning(
+                "Scope validation: DB unavailable for %s — defaulting to deny",
+                target,
+            )
+            return False
+
+    # No scope configured — allow all (no restrictions set by operator)
+    if not authorized_scope:
+        return True
+
     try:
         validator = ScopeValidator(engagement_id, authorized_scope)
         return validator.is_in_scope(target)
     except Exception:
-        logger.warning("Scope validation failed for %s — defaulting to allow", target, exc_info=True)
-        return True
+        logger.warning(
+            "Scope validation failed for %s — failing closed (deny)",
+            target, exc_info=True,
+        )
+        return False
