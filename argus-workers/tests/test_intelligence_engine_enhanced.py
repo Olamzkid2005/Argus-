@@ -424,8 +424,8 @@ class TestThreatSummary:
         assert engine._calculate_overall_risk(findings) == "high"
 
     def test_calculate_overall_risk_medium(self, engine):
-        """Test overall risk calculation - medium"""
-        findings = [{"severity": "HIGH"}]
+        """Test overall risk calculation - medium (needs >=3 MEDIUM findings)"""
+        findings = [{"severity": "MEDIUM"}] * 3
         assert engine._calculate_overall_risk(findings) == "medium"
 
     def test_calculate_overall_risk_low(self, engine):

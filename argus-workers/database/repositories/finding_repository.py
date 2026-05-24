@@ -594,8 +594,13 @@ class FindingRepository(BaseRepository):
         updated_count = 0
 
         with self.db_operation(commit=True) as (conn, cursor):
-            for f in findings:
+            for idx, f in enumerate(findings):
+                sp_name = f"finding_sp_{idx}"
                 try:
+                    # Create a savepoint before each finding so individual
+                    # failures can be rolled back without aborting the batch.
+                    cursor.execute(f"SAVEPOINT {sp_name}")
+
                     finding_id = str(uuid.uuid4())
                     _type = f.get("type", "UNKNOWN")
                     _severity = f.get("severity", "INFO")
@@ -653,7 +658,18 @@ class FindingRepository(BaseRepository):
                             "batch_create_or_update: no row returned for type=%s endpoint=%s",
                             _type, _endpoint,
                         )
+
+                    # Release the savepoint on success
+                    try:
+                        cursor.execute(f"RELEASE SAVEPOINT {sp_name}")
+                    except Exception:
+                        pass
                 except psycopg2.errors.UniqueViolation:
+                    # Rollback savepoint to clear aborted transaction state
+                    try:
+                        cursor.execute(f"ROLLBACK TO SAVEPOINT {sp_name}")
+                    except Exception:
+                        pass
                     # ON CONFLICT didn't catch it — fall back to SELECT
                     try:
                         cursor.execute(
@@ -668,9 +684,19 @@ class FindingRepository(BaseRepository):
                         logger.debug("Fallback query failed: %s", fb_err)
                 except psycopg2.Error as db_err:
                     logger.warning(
-                        "batch_create_or_update: DB error for type=%s endpoint=%s: %s",
+                        "batch_create_or_update: DB error for type=%s endpoint=%s: %s — rolling back savepoint, continuing batch",
                         _type, _endpoint, db_err,
                     )
-                    continue
+                    # Rollback savepoint to clear aborted transaction state.
+                    # Without this, PostgreSQL rejects all subsequent statements
+                    # with "current transaction is aborted, commands ignored".
+                    try:
+                        cursor.execute(f"ROLLBACK TO SAVEPOINT {sp_name}")
+                    except Exception as sp_err:
+                        logger.warning(
+                            "batch_create_or_update: savepoint rollback also failed for %s — aborting batch: %s",
+                            _endpoint, sp_err,
+                        )
+                        raise
 
         return inserted_count, updated_count

@@ -60,7 +60,7 @@ class CheckpointManager:
             if conn:
                 conn.rollback()
             logger.error("Failed to save checkpoint for %s/%s: %s", engagement_id, phase, e)
-            raise
+            raise RuntimeError(f"Failed to save checkpoint for {engagement_id}/{phase}: {e}") from e
         finally:
             if cursor:
                 cursor.close()
@@ -207,7 +207,7 @@ class CheckpointManager:
             if conn:
                 conn.rollback()
             logger.error("Failed to delete checkpoints for %s: %s", engagement_id, e)
-            raise
+            raise RuntimeError(f"Failed to delete checkpoints for {engagement_id}: {e}") from e
         finally:
             if cursor:
                 cursor.close()
@@ -333,7 +333,7 @@ class CheckpointManager:
             if conn:
                 conn.rollback()
             logger.error("Failed to cleanup checkpoints: %s", e)
-            raise
+            raise RuntimeError(f"Failed to cleanup checkpoints: {e}") from e
         finally:
             if cursor:
                 cursor.close()

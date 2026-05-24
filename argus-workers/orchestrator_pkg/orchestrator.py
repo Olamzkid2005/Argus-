@@ -374,7 +374,7 @@ class Orchestrator:
         # Secret findings: save individually (different upsert logic)
         for f in secret:
             try:
-                self.finding_repo.upsert_secret_finding(
+                saved_id = self.finding_repo.upsert_secret_finding(
                     engagement_id=self.engagement_id,
                     finding_type=f.get("type", "UNKNOWN"),
                     severity=f.get("severity", "INFO"),
@@ -384,6 +384,8 @@ class Orchestrator:
                     source_tool=f.get("source_tool", "unknown"),
                     cvss_score=f.get("cvss_score"),
                 )
+                if saved_id:
+                    f["_saved_id"] = saved_id
             except (ValueError, OSError, KeyError) as e:
                 failed_count += 1
                 logger.warning("Failed to save secret finding: %s", e)
@@ -557,6 +559,10 @@ class Orchestrator:
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.record_tried_tools(union_set)
+        # Always store tried tools on the orchestrator instance so
+        # _run_scan_with_fallback can use them for safety-net filtering
+        # even when ENGAGEMENT_STATE feature flag is disabled.
+        self._agent_tried_tools = union_set
 
         return all_findings
 
@@ -660,6 +666,11 @@ class Orchestrator:
         modes. It always tries the agent first. If the agent succeeds, a safety-net
         deterministic pass runs with tools the agent already tried skipped. If the
         agent fails entirely, a full deterministic scan runs as fallback.
+
+        Tried-tool tracking: Always extracts agent-tried tools from the
+        EngagementState (when available) OR from the scan result metadata
+        returned by run_scan_with_agent to prevent the safety net from
+        duplicating findings the agent already produced.
         """
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("SCAN WITH FALLBACK", targets=f"{len(targets)} target(s)")
@@ -670,10 +681,15 @@ class Orchestrator:
                 auth_config=auth_config, bug_bounty_mode=bug_bounty_mode, budget=budget,
             )
             from feature_flags import is_enabled as _ff_enabled
+            agent_tried: set[str] = set()
+            # Prefer EngagementState when available (feature-flagged)
             if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
                 agent_tried = self.state.tried_tools
-            else:
-                agent_tried = set()
+            # Always extract tried tools from per_target_tools via the agent
+            # result metadata if possible. This ensures the safety net skips
+            # tools the agent already ran even when ENGAGEMENT_STATE is off.
+            if hasattr(self, '_agent_tried_tools') and self._agent_tried_tools:
+                agent_tried = agent_tried | self._agent_tried_tools
             logger.info(f"Agent scan complete — safety net skipping agent tools: {agent_tried}")
             tech_stack = recon_context.tech_stack if recon_context else None
             deterministic_findings = execute_scan_pipeline(

@@ -29,7 +29,7 @@ def execute_recon_tools(
     target: str,
     budget: dict,
     aggressiveness: str = DEFAULT_AGGRESSIVENESS,
-) -> list[dict]:
+) -> tuple[list[dict], object]:
     """
     Execute reconnaissance tools against target.
 
@@ -40,7 +40,7 @@ def execute_recon_tools(
         aggressiveness: Scan aggressiveness level (default, high, extreme)
 
     Returns:
-        List of findings
+        Tuple of (list of normalized findings, ReconContext)
     """
     # Lazily get a ToolContext-aware wrapper
     if not hasattr(ctx, "publish_activity"):

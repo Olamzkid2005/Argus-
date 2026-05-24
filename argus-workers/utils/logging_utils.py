@@ -388,6 +388,10 @@ class ScanLogger:
         msg = f"{self._prefix()}  {self._YELLOW}{message}{self._RESET}"
         self._logger.warning(msg)
 
+    def warning(self, message: str):
+        """Alias for warn(). Using the standard logging API name."""
+        self.warn(message)
+
     def error(self, message: str):
         """Log an error message with the standard prefix."""
         msg = f"{self._prefix()}  {self._RED}{self._BOLD}ERROR: {message}{self._RESET}"

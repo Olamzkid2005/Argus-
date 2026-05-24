@@ -319,13 +319,16 @@ def execute_scan_tools(
         # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:
             try:
+                import hashlib
+                _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
                 sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / "arjun.json")
+                    sandbox.mkdir(parents=True, exist_ok=True)
+                    arjun_out = str(sandbox / "tmp" / f"arjun_{_target_slug}.json")
                 else:
                     import os
                     import tempfile
-                    arjun_out = os.path.join(tempfile.gettempdir(), "arjun.json")
+                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_{_target_slug}.json")
                 arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
                 arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
                 _run_scan_tool(ctx, "arjun",
@@ -381,13 +384,16 @@ def execute_scan_tools(
         # Build sqlmap command
         if "sqlmap" not in _skip and not _budget_exceeded():
             _tool_count += 1
+            import hashlib
+            _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
-                sqlmap_out = str(sandbox / "tmp" / "sqlmap.json")
+                sandbox.mkdir(parents=True, exist_ok=True)
+                sqlmap_out = str(sandbox / "tmp" / f"sqlmap_{_target_slug}.json")
             else:
                 import os
                 import tempfile
-                sqlmap_out = os.path.join(tempfile.gettempdir(), "sqlmap.json")
+                sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_{_target_slug}.json")
             sqlmap_cmd = ["-u", target, "--json-output", sqlmap_out]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
@@ -405,26 +411,32 @@ def execute_scan_tools(
 
         # Build commix command
         if "commix" not in _skip and not _budget_exceeded() and _should_run_tool("commix", recon_context=recon_context, tech_stack=tech_stack):
+            import hashlib
+            _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
-                commix_out = str(sandbox / "tmp" / "commix.json")
+                sandbox.mkdir(parents=True, exist_ok=True)
+                commix_out = str(sandbox / "tmp" / f"commix_{_target_slug}.json")
             else:
                 import os
                 import tempfile
-                commix_out = os.path.join(tempfile.gettempdir(), "commix.json")
+                commix_out = os.path.join(tempfile.gettempdir(), f"commix_{_target_slug}.json")
             scan_jobs.append(("commix",
                 ["--url", target, "--batch", "--json-output", commix_out],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
 
         # Build testssl command
         if "testssl" not in _skip and not _budget_exceeded() and _should_run_tool("testssl", target=target):
+            import hashlib
+            _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
-                testssl_out = str(sandbox / "tmp" / "testssl.json")
+                sandbox.mkdir(parents=True, exist_ok=True)
+                testssl_out = str(sandbox / "tmp" / f"testssl_{_target_slug}.json")
             else:
                 import os
                 import tempfile
-                testssl_out = os.path.join(tempfile.gettempdir(), "testssl.json")
+                testssl_out = os.path.join(tempfile.gettempdir(), f"testssl_{_target_slug}.json")
             scan_jobs.append(("testssl",
                 ["--jsonfile", testssl_out, target],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))

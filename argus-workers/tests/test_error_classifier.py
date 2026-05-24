@@ -253,39 +253,42 @@ class TestLogClassifiedError:
         log_classified_error(classification, "task-005", "tasks.external.call", error, extra)
 
         mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args[0][0]
-        assert "endpoint" in call_args
+        # The message is "LOW ERROR"; extra context is passed as the `extra` kwarg
+        call_kwargs = mock_logger.info.call_args.kwargs
+        assert "endpoint" in call_kwargs.get("extra", {}).get("context", {})
 
 
 class TestSendAlert:
     """Test suite for send_alert function"""
 
     @patch("error_classifier.os.getenv")
-    @patch("requests.post")
+    @patch("httpx.Client")
     @patch("error_classifier.logger")
-    def test_send_alert_with_webhook(self, _mock_logger, mock_post, mock_getenv):
+    def test_send_alert_with_webhook(self, _mock_logger, mock_httpx_client, mock_getenv):
         """Test sending alert via webhook"""
         mock_getenv.return_value = "https://hooks.example.com/alerts"
+        mock_instance = mock_httpx_client.return_value.__enter__.return_value
 
         send_alert("Test alert", ErrorSeverity.HIGH)
 
-        mock_post.assert_called_once()
-        call_args = mock_post.call_args
+        mock_instance.post.assert_called_once()
+        call_args = mock_instance.post.call_args
         assert call_args[0][0] == "https://hooks.example.com/alerts"
         assert call_args[1]["json"]["text"] == "Test alert"
         assert call_args[1]["json"]["severity"] == "high"
 
     @patch("error_classifier.os.getenv")
-    @patch("requests.post")
+    @patch("httpx.Client")
     @patch("error_classifier.logger")
-    def test_send_alert_webhook_failure(self, mock_logger, mock_post, mock_getenv):
+    def test_send_alert_webhook_failure(self, mock_logger, mock_httpx_client, mock_getenv):
         """Test alert handles webhook failure gracefully"""
         mock_getenv.return_value = "https://hooks.example.com/alerts"
-        mock_post.side_effect = Exception("Network error")
+        mock_instance = mock_httpx_client.return_value.__enter__.return_value
+        mock_instance.post.side_effect = Exception("Network error")
 
         send_alert("Test alert", ErrorSeverity.HIGH)
 
-        mock_post.assert_called_once()
+        mock_instance.post.assert_called_once()
         mock_logger.error.assert_called_once()
 
     @patch("error_classifier.os.getenv")

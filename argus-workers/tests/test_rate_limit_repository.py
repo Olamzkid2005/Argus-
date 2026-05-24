@@ -231,7 +231,8 @@ class TestRateLimitRepositoryWiring:
         ctx.publish_activity = MagicMock()
 
         with patch("orchestrator_pkg.scan._is_reachable", return_value=True), \
-             patch("orchestrator_pkg.scan._feature_enabled", return_value=False):
+             patch("orchestrator_pkg.scan._feature_enabled", return_value=False), \
+             patch("tools.scope_validator.validate_target_scope", return_value=True):
             results = execute_scan_tools(ctx, ["https://example.test/"], {}, "default")
 
         assert mock_get_repo.called

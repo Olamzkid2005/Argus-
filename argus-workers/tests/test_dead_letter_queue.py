@@ -126,8 +126,8 @@ class TestDeadLetterQueue:
             "failed_at": datetime.now(UTC).isoformat(),
             "engagement_id": "ENG-001",
         }
-        mock_redis.zrevrange.return_value = [b"task-001"]
-        mock_redis.zscan_iter.return_value = [(json.dumps(task_data).encode(), 12345.0)]
+        # The engagement-specific key stores full task JSON (not just task_id)
+        mock_redis.zrevrange.return_value = [json.dumps(task_data).encode()]
 
         tasks = dlq.get_failed_tasks(engagement_id="ENG-001", limit=10)
 
@@ -168,7 +168,7 @@ class TestDeadLetterQueue:
             "args": ["ENG-001"],
             "kwargs": {"tool": "nuclei"},
         }
-        mock_redis.zrange.return_value = [json.dumps(task_data)]
+        mock_redis.hget.return_value = json.dumps(task_data)
 
         result = dlq.get_task_by_id("task-001")
 
@@ -178,7 +178,7 @@ class TestDeadLetterQueue:
 
     def test_get_task_by_id_not_found(self, dlq, mock_redis):
         """Test looking up a task that doesn't exist"""
-        mock_redis.zrange.return_value = []
+        mock_redis.hget.return_value = None
 
         result = dlq.get_task_by_id("task-999")
 
@@ -186,7 +186,7 @@ class TestDeadLetterQueue:
 
     def test_get_task_by_id_error(self, dlq, mock_redis):
         """Test get_task_by_id handles errors"""
-        mock_redis.zrange.side_effect = Exception("Redis error")
+        mock_redis.hget.side_effect = Exception("Redis error")
 
         result = dlq.get_task_by_id("task-001")
         assert result is None
@@ -198,7 +198,9 @@ class TestDeadLetterQueue:
         count = dlq.purge()
 
         assert count == 10
-        mock_redis.delete.assert_called_once_with("dlq:task:tasks")
+        assert mock_redis.delete.call_count == 2
+        mock_redis.delete.assert_any_call("dlq:task:tasks")
+        mock_redis.delete.assert_any_call("dlq:task:index")
 
     def test_purge_by_engagement(self, dlq, mock_redis):
         """Test purging tasks for specific engagement"""
@@ -207,6 +209,7 @@ class TestDeadLetterQueue:
         count = dlq.purge(engagement_id="ENG-001")
 
         assert count == 3
+        # Also cleans up the index key
         mock_redis.delete.assert_called_once_with("dlq:task:engagement:ENG-001")
 
     def test_purge_older_than(self, dlq, mock_redis):

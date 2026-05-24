@@ -92,7 +92,7 @@ class TestCheckpointManager:
     def test_has_checkpoint_false(self, manager, mock_db_conn):
         """Test has_checkpoint returns False"""
         mock_db, mock_conn, mock_cursor = mock_db_conn
-        mock_cursor.fetchone.return_value = (0,)
+        mock_cursor.fetchone.return_value = None
 
         assert manager.has_checkpoint("ENG-001") is False
 
