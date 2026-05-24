@@ -6,6 +6,7 @@ Categorizes errors by type and severity for targeted handling and alerting.
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
@@ -55,7 +56,7 @@ ERROR_PATTERNS = {
     ],
     ErrorCategory.INFRASTRUCTURE: [
         "database", "postgresql", "psycopg2", "redis", "connection pool",
-        "network", "dns", "timeout", "socket",
+        "network", "dns", "socket",
     ],
     ErrorCategory.EXTERNAL: [
         "http error", "api error", "third party", "webhook",
@@ -112,13 +113,19 @@ def classify_error(
         )
 
     category = ErrorCategory.UNKNOWN
+    # First pass: match against error MESSAGE only (highest signal).
     for cat, patterns in ERROR_PATTERNS.items():
         if any(pattern in error_message for pattern in patterns):
             category = cat
             break
-        if any(pattern in error_type.lower() for pattern in patterns):
-            category = cat
-            break
+    # Second pass: if no message match, fall back to error TYPE.
+    # This prevents type-name matches (e.g. "DatabaseError") from
+    # preempting more specific message patterns (e.g. "connection reset").
+    if category == ErrorCategory.UNKNOWN:
+        for cat, patterns in ERROR_PATTERNS.items():
+            if any(pattern in error_type.lower() for pattern in patterns):
+                category = cat
+                break
 
     is_permanent = any(ind in error_message for ind in PERMANENT_INDICATORS)
 
@@ -189,13 +196,13 @@ def log_classified_error(
     }
 
     if classification.severity == ErrorSeverity.CRITICAL:
-        logger.critical(f"CRITICAL ERROR: {log_data}")
+        logger.critical("CRITICAL ERROR", extra=log_data)
     elif classification.severity == ErrorSeverity.HIGH:
-        logger.error(f"HIGH ERROR: {log_data}")
+        logger.error("HIGH ERROR", extra=log_data)
     elif classification.severity == ErrorSeverity.MEDIUM:
-        logger.warning(f"MEDIUM ERROR: {log_data}")
+        logger.warning("MEDIUM ERROR", extra=log_data)
     else:
-        logger.info(f"LOW ERROR: {log_data}")
+        logger.info("LOW ERROR", extra=log_data)
 
     # Send alert if applicable
     if classification.alert_message:
@@ -206,27 +213,35 @@ def send_alert(message: str, severity: ErrorSeverity):
     """
     Send an alert for high/critical errors.
 
+    Fires the HTTP request in a daemon thread so the caller is never
+    blocked by a slow or unresponsive webhook. Errors are logged but
+    never propagated.
+
     In production, this would integrate with PagerDuty, OpsGenie, Slack, etc.
-    For now, it logs the alert.
     """
     alert_channel = os.getenv("ALERT_WEBHOOK_URL")
 
-    if alert_channel:
-        try:
-            import requests
-            requests.post(
-                alert_channel,
-                json={
-                    "text": message,
-                    "severity": severity.value,
-                    "timestamp": datetime.now(UTC).isoformat()
-                },
-                timeout=5
-            )
-        except Exception as e:
-            logger.error(f"Failed to send alert: {e}")
-    else:
+    if not alert_channel:
         logger.warning(f"ALERT: {message}")
+        return
+
+    def _fire():
+        try:
+            import httpx
+            with httpx.Client(timeout=5.0) as client:
+                client.post(
+                    alert_channel,
+                    json={
+                        "text": message,
+                        "severity": severity.value,
+                        "timestamp": datetime.now(UTC).isoformat()
+                    },
+                )
+        except Exception as e:
+            logger.error("Failed to send alert: %s", e)
+
+    t = threading.Thread(target=_fire, daemon=True)
+    t.start()
 
 
 # ═══════════════════════════════════════════════════════════════

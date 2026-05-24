@@ -32,8 +32,13 @@ class FailedTask:
     error_class: str
     worker_id: str | None
     retry_count: int
-    failed_at: str
+    failed_at: str  # ISO 8601 string (serialized from datetime)
     engagement_id: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "FailedTask":
+        """Deserialize from a JSON-loaded dict."""
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
 class DeadLetterQueue:
@@ -127,14 +132,19 @@ class DeadLetterQueue:
 
             self.redis.zadd(key, {json.dumps(asdict(failed_task)): score})
 
+            # Maintain secondary hash index for O(1) task-by-id lookups
+            self.redis.hset(self.TASK_INDEX_KEY, task_id, json.dumps(asdict(failed_task)))
+
             # Trim to max size
             self.redis.zremrangebyrank(key, 0, -(self.MAX_DLQ_SIZE + 1))
 
-            # Add to engagement-specific DLQ if applicable
+            # Add to engagement-specific DLQ if applicable.
+            # Store full task JSON (not just task_id) so engagement-filtered
+            # retrieval doesn't need to scan the entire main key (bug #27).
             if engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                self.redis.zadd(eng_key, {task_id: score})
+                self.redis.zadd(eng_key, {json.dumps(asdict(failed_task)): score})
                 self.redis.expire(eng_key, 86400 * 7)  # 7 days
 
             logger.warning(
@@ -164,27 +174,8 @@ class DeadLetterQueue:
             if engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
-
-                task_id_set = {
-                    tid.decode() if isinstance(tid, bytes) else tid
-                    for tid in task_ids
-                }
-                if not task_id_set:
-                    return []
-
-                tasks = []
-                main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
-                for raw_task in self.redis.zscan_iter(main_key):
-                    member = raw_task[0]
-                    if isinstance(member, bytes):
-                        member = member.decode()
-                    task = json.loads(member)
-                    if task["task_id"] in task_id_set:
-                        tasks.append(task)
-                        if len(tasks) >= len(task_id_set):
-                            break
-                return tasks
+                raw_tasks = self.redis.zrevrange(key, offset, offset + limit - 1)
+                return [json.loads(t) for t in raw_tasks]
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 raw_tasks = self.redis.zrevrange(key, offset, offset + limit - 1)
@@ -208,9 +199,11 @@ class DeadLetterQueue:
             logger.error(f"Failed to get DLQ count: {e}")
             return 0
 
+    TASK_INDEX_KEY = f"{REDIS_KEY_PREFIX}:index"  # Hash: task_id → JSON
+
     def get_task_by_id(self, task_id: str) -> dict | None:
         """
-        Find a task in the DLQ by its ID.
+        Find a task in the DLQ by its ID using a secondary hash index.
 
         Args:
             task_id: The task ID to find
@@ -219,13 +212,9 @@ class DeadLetterQueue:
             Task dict if found, None otherwise
         """
         try:
-            key = f"{self.REDIS_KEY_PREFIX}:tasks"
-            all_tasks = self.redis.zrange(key, 0, -1)
-
-            for raw_task in all_tasks:
-                task = json.loads(raw_task)
-                if task["task_id"] == task_id:
-                    return task
+            raw = self.redis.hget(self.TASK_INDEX_KEY, task_id)
+            if raw:
+                return json.loads(raw)
             return None
         except Exception as e:
             logger.error(f"Failed to look up task {task_id}: {e}")
@@ -245,22 +234,46 @@ class DeadLetterQueue:
             Number of tasks removed
         """
         try:
-            if engagement_id:
+            cutoff = None
+            if older_than_hours:
+                cutoff = datetime.now(UTC).timestamp() - (older_than_hours * 3600)
+
+            if engagement_id and cutoff is not None:
+                # Both filters: purge old tasks for a specific engagement.
+                # Engagement-index key stores task_ids → iterate and check
+                # timestamps against the main key.
+                safe_id = self._sanitize_engagement_key(engagement_id)
+                main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
+                eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
+                eng_task_ids = self.redis.zrangebyscore(eng_key, 0, cutoff)
+                count = len(eng_task_ids)
+                if count > 0:
+                    # Remove from both the main key and the engagement index
+                    for tid in eng_task_ids:
+                        self.redis.zrem(main_key, tid)
+                    self.redis.zremrangebyscore(eng_key, 0, cutoff)
+                return count
+            elif engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 count = self.redis.zcard(key)
                 self.redis.delete(key)
                 return count
-            elif older_than_hours:
-                cutoff = datetime.now(UTC).timestamp() - (older_than_hours * 3600)
+            elif cutoff is not None:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 count = self.redis.zcount(key, 0, cutoff)
                 self.redis.zremrangebyscore(key, 0, cutoff)
+                # Best-effort index cleanup — remove stale entries
+                try:
+                    self.redis.delete(self.TASK_INDEX_KEY)
+                except Exception:
+                    pass
                 return count
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 count = self.redis.zcard(key)
                 self.redis.delete(key)
+                self.redis.delete(self.TASK_INDEX_KEY)
                 return count
 
         except Exception as e:

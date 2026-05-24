@@ -350,7 +350,7 @@ class IntelligenceEngine:
 
         return groups
 
-    def _build_and_persist_attack_graph(self, scored_findings: list[dict], context: dict) -> tuple[dict, Any]:
+    def _build_and_persist_attack_graph(self, enriched_findings: list[dict], context: dict) -> tuple[dict, Any]:
         """
         Build AttackGraph from scored findings and persist to database.
 
@@ -379,7 +379,7 @@ class IntelligenceEngine:
 
         graph = AttackGraph(engagement_id)
 
-        for finding_dict in scored_findings:
+        for finding_dict in enriched_findings:
             try:
                 severity_str = finding_dict.get("severity", "MEDIUM")
                 if isinstance(severity_str, str):
@@ -701,15 +701,18 @@ class IntelligenceEngine:
         """
         Enrich findings with CVE data, EPSS scores, and threat intelligence.
 
+        Parallelizes CVE/EPSS lookups across findings to reduce total
+        wall-clock time when many findings have CVE references.
+
         Args:
             findings: List of findings to enrich
 
         Returns:
             Enriched findings with threat intel metadata
         """
-        enriched = []
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        for finding in findings:
+        def _enrich_one(finding: dict) -> dict:
             enriched_finding = finding.copy()
             threat_intel = {}
 
@@ -717,23 +720,20 @@ class IntelligenceEngine:
             cve_ids = self._extract_cve_ids(finding)
             if cve_ids:
                 threat_intel["cve_ids"] = cve_ids
-                # Fetch CVE details from NVD (sync path only to avoid asyncio.run() conflicts)
                 nvd_data = self._fetch_nvd_cve_data(cve_ids)
                 threat_intel["cve_details"] = nvd_data
-
-            # Get EPSS scores for exploitability prediction
-            if cve_ids:
                 threat_intel["epss_scores"] = self._fetch_epss_scores(cve_ids)
 
-            # Check threat intelligence feeds
+            # Local-only lookups (fast, no I/O)
             threat_intel["threat_feed_hits"] = self._check_threat_feeds(finding)
-
-            # Run false positive detection
-            fp_result = self._detect_false_positive(finding)
-            threat_intel["fp_assessment"] = fp_result
+            threat_intel["fp_assessment"] = self._detect_false_positive(finding)
 
             enriched_finding["threat_intel"] = threat_intel
-            enriched.append(enriched_finding)
+            return enriched_finding
+
+        with ThreadPoolExecutor(max_workers=min(len(findings) or 1, 10)) as pool:
+            futures = [pool.submit(_enrich_one, f) for f in findings]
+            enriched = [future.result() for future in as_completed(futures)]
 
         return enriched
 
@@ -1076,7 +1076,12 @@ class IntelligenceEngine:
 
     def _calculate_overall_risk(self, findings: list[dict]) -> str:
         """
-        Calculate overall risk level based on findings and threat intel
+        Calculate overall risk level based on findings and threat intel.
+
+        Uses a weighted approach: CRITICAL/HIGH severity findings dominate,
+        with EPSS acting as a tiebreaker / amplifier rather than overriding
+        severity counts. This prevents low-severity findings with high EPSS
+        scores from driving the risk level unreasonably high.
 
         Args:
             findings: List of enriched findings
@@ -1086,20 +1091,34 @@ class IntelligenceEngine:
         """
         critical_count = sum(1 for f in findings if f.get("severity") == "CRITICAL")
         high_count = sum(1 for f in findings if f.get("severity") == "HIGH")
+        medium_count = sum(1 for f in findings if f.get("severity") == "MEDIUM")
 
-        # Adjust for EPSS scores
-        high_epss_findings = 0
+        # Adjust for EPSS scores — only amplify when paired with relevant severity.
+        # A MEDIUM+ finding with EPSS > 0.5 counts as a bonus high.
+        high_epss_count = 0
         for f in findings:
             intel = f.get("threat_intel", {})
             epss = intel.get("epss_scores", {})
             if any(score > 0.5 for score in epss.values()):
-                high_epss_findings += 1
+                sev = f.get("severity", "INFO")
+                if sev in ("CRITICAL", "HIGH"):
+                    high_epss_count += 1  # amplifier for already-significant findings
+                elif sev == "MEDIUM":
+                    high_epss_count += 0.5  # partial amplifier
 
-        if critical_count >= 3 or high_epss_findings >= 3:
+        effective_high = high_count + high_epss_count
+
+        if critical_count >= 3:
             return "critical"
-        elif critical_count >= 1 or high_count >= 3 or high_epss_findings >= 1:
+        elif critical_count >= 1 and effective_high >= 2:
+            return "critical"
+        elif critical_count >= 1:
             return "high"
+        elif effective_high >= 3:
+            return "critical" if high_epss_count >= 2 else "high"
         elif high_count >= 1:
+            return "high"
+        elif medium_count >= 3 or effective_high >= 1:
             return "medium"
         else:
             return "low"

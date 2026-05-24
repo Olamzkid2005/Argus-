@@ -28,18 +28,58 @@ from typing import Any
 # Celery's SoftTimeLimitExceeded is raised when a task exceeds its soft time limit.
 # We catch it here to transition the engagement to 'failed' with a clear message,
 # rather than leaving it stuck in an intermediate state.
+# Use the real Celery exception for reliable isinstance checks.
 try:
-    from billiard.exceptions import SoftTimeLimitExceeded
+    from celery.exceptions import SoftTimeLimitExceeded as _SoftTimeLimitExceeded
 except ImportError:
     try:
-        from celery.exceptions import SoftTimeLimitExceeded
+        from billiard.exceptions import SoftTimeLimitExceeded as _SoftTimeLimitExceeded
     except ImportError:
         # Neither library available — create a dummy so the except clause
         # in task_context doesn't raise TypeError on None.
-        class SoftTimeLimitExceeded(Exception):  # type: ignore
+        class _SoftTimeLimitExceeded(Exception):  # type: ignore
             pass
 
+# Public alias for use in except clauses throughout this module.
+# We also check by class name as a final fallback (see _is_soft_timeout).
+SoftTimeLimitExceeded = _SoftTimeLimitExceeded
+
+
+def _is_soft_timeout(exc: BaseException) -> bool:
+    """Check if *exc* is a soft time limit exceeded signal.
+
+    First tries isinstance against the known class, then falls back to
+    matching the class name so we never miss a timeout even when the
+    import chain above produced a dummy type.
+    """
+    if isinstance(exc, _SoftTimeLimitExceeded):
+        return True
+    return "SoftTimeLimitExceeded" in type(exc).__name__
+
 logger = logging.getLogger(__name__)
+
+
+def _transition_to_failed_on_timeout(
+    task, ctx, sm, engagement_id: str, job_type: str,
+    _lock_acquired: bool, _state_assigned: bool, slog,
+) -> None:
+    """Shared helper: transition engagement to 'failed' on soft time limit."""
+    if _lock_acquired:
+        try:
+            from tasks.utils import get_engagement_state as _ges
+            from database.connection import get_db as _get_db
+            current = sm.current_state if _state_assigned else _ges(engagement_id, os.getenv("DATABASE_URL"))
+            if current not in ("complete", "failed"):
+                if _state_assigned:
+                    ctx.state.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                else:
+                    sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                slog.phase_complete(job_type, status="failed", reason="soft_time_limit")
+                # Prevent double-transition by Celery's on_failure hook
+                # and any outer task_error_boundary.
+                task._failed_transition_done = True
+        except Exception as st_error:
+            logger.error("Failed to transition on soft time limit: %s", st_error)
 
 
 @dataclass
@@ -166,17 +206,8 @@ def task_context(
                 "Soft time limit exceeded for %s engagement %s — transitioning to failed",
                 job_type, engagement_id,
             )
-            if _lock_acquired:
-                try:
-                    current = sm.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
-                    if current not in ("complete", "failed"):
-                        if _state_assigned:
-                            ctx.state.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
-                        else:
-                            sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
-                        slog.phase_complete(job_type, status="failed", reason="soft_time_limit")
-                except Exception as st_error:
-                    logger.error("Failed to transition on soft time limit: %s", st_error)
+            _transition_to_failed_on_timeout(task, ctx, sm, engagement_id, job_type,
+                                             _lock_acquired, _state_assigned, slog)
             raise
         except LockAcquisitionError:
             # Lock contention is transient — don't mark engagement as failed.
@@ -184,6 +215,25 @@ def task_context(
             slog.warning("Lock acquisition failed for %s — will retry", engagement_id)
             raise
         except Exception as e:
+            # Catch SoftTimeLimitExceeded by name in case the imported class
+            # is a dummy that doesn't match the real exception type at runtime.
+            if _is_soft_timeout(e):
+                slog.error("Soft time limit exceeded (name-matched) — transitioning to failed")
+                _transition_to_failed_on_timeout(task, ctx, sm, engagement_id, job_type,
+                                                 _lock_acquired, _state_assigned, slog)
+                raise
+
+            # If a nested task_error_boundary already transitioned us to failed,
+            # skip the duplicate transition (bug #8 fix).
+            if getattr(task, '_failed_transition_done', False):
+                logger.warning(
+                    "Task %s already has _failed_transition_done set — "
+                    "skipping duplicate failed transition for %s",
+                    task.request.id if hasattr(task, 'request') else '?',
+                    engagement_id,
+                )
+                raise
+
             logger.error("Task failed for %s engagement %s: %s", job_type, engagement_id, e)
             if _lock_acquired:
                 try:
@@ -195,7 +245,8 @@ def task_context(
                             sm.transition("failed", f"{job_type} failed: {e}")
                         slog.phase_complete(job_type, status="failed", reason=str(e)[:100])
                         # Mark transition as done to prevent double-transition
-                        # in the Celery task's BaseTask.on_failure hook.
+                        # in the Celery task's BaseTask.on_failure hook AND
+                        # in any outer task_error_boundary.
                         task._failed_transition_done = True
                 except Exception as sm_error:
                     logger.error("State transition to failed error: %s", sm_error)
@@ -240,6 +291,9 @@ def task_error_boundary(
             "Soft time limit exceeded in %s for engagement %s — transitioning to failed",
             phase_name, engagement_id,
         )
+        # If an outer task_context already handled this, skip.
+        if getattr(task, '_failed_transition_done', False):
+            raise
         try:
             from database.connection import db_cursor
             with db_cursor() as cursor:
@@ -254,6 +308,10 @@ def task_error_boundary(
             logger.error("Failed to update engagement state on soft time limit: %s", state_error)
         raise
     except Exception as e:
+        # If an outer task_context already handled this, skip.
+        if getattr(task, '_failed_transition_done', False):
+            raise
+
         slog.error("%s failed: %s", phase_name, e)
         from error_classifier import classify_error_with_code, log_classified_error
 

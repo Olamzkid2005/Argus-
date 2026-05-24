@@ -10,6 +10,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import psycopg2
+import psycopg2.sql as pysql
 from psycopg2.extras import RealDictCursor
 
 from celery_app import app
@@ -45,8 +47,9 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     ) as ctx:
         # Idempotency check INSIDE the lock — query actual DB state,
         # not the client-side current_state which is forced to "reporting".
+        # Uses the same db_conn_string as task_context for connection pooling.
         from tasks.utils import get_engagement_state
-        db_state = get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
+        db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
         if db_state in ("complete", "failed"):
             logger.info("Engagement %s already in terminal state '%s' (DB) — skipping report generation", engagement_id, db_state)
             return {"status": "already_complete"}
@@ -144,55 +147,83 @@ def generate_scheduled_reports(self):
         due_reports = cursor.fetchall()
 
         for report in due_reports:
-            try:
-                # Generate report data
-                report_data = _generate_report_data(
-                    report["org_id"],
-                    report["engagement_ids"],
-                    report["report_type"],
-                    cursor,
-                )
-
-                # Send email (placeholder for actual email integration)
-                _send_report_email(
-                    report["email_recipients"],
-                    report["name"],
-                    report_data,
-                )
-
-                # Update next run time
-                next_run = _calculate_next_run(report["frequency"])
-                cursor.execute(
-                    """
-                    UPDATE scheduled_reports
-                    SET last_run_at = NOW(), next_run_at = %s
-                    WHERE id = %s
-                    """,
-                    (next_run, report["id"]),
-                )
-
-                # Log activity
-                cursor.execute(
-                    """
-                    INSERT INTO activity_feed (org_id, user_id, activity_type, entity_type, entity_id, metadata)
-                    VALUES (%s, %s, 'scheduled_report_sent', 'report', %s, %s)
-                    """,
-                    (
+            # Retry with exponential backoff on transient failures
+            max_attempts = 3
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    # Generate report data
+                    report_data = _generate_report_data(
                         report["org_id"],
-                        report["created_by"],
-                        report["id"],
-                        json.dumps({
-                            "recipients": report["email_recipients"],
-                            "report_name": report["name"],
-                        }),
-                    ),
-                )
+                        report["engagement_ids"],
+                        report["report_type"],
+                        cursor,
+                    )
 
-                conn.commit()
-            except Exception as e:
-                conn.rollback()
-                logger.error("Failed to generate scheduled report %s: %s", report["id"], e, exc_info=True)
-                continue
+                    # Send email (placeholder for actual email integration)
+                    _send_report_email(
+                        report["email_recipients"],
+                        report["name"],
+                        report_data,
+                    )
+
+                    # Update next run time
+                    next_run = _calculate_next_run(report["frequency"])
+                    cursor.execute(
+                        """
+                        UPDATE scheduled_reports
+                        SET last_run_at = NOW(), next_run_at = %s
+                        WHERE id = %s
+                        """,
+                        (next_run, report["id"]),
+                    )
+
+                    # Log activity
+                    cursor.execute(
+                        """
+                        INSERT INTO activity_feed (org_id, user_id, activity_type, entity_type, entity_id, metadata)
+                        VALUES (%s, %s, 'scheduled_report_sent', 'report', %s, %s)
+                        """,
+                        (
+                            report["org_id"],
+                            report["created_by"],
+                            report["id"],
+                            json.dumps({
+                                "recipients": report["email_recipients"],
+                                "report_name": report["name"],
+                            }),
+                        ),
+                    )
+
+                    conn.commit()
+                    break  # Success — exit retry loop
+                except Exception as e:
+                    conn.rollback()
+                    if attempt < max_attempts:
+                        wait = 2 ** attempt  # exponential backoff: 2s, 4s
+                        logger.warning(
+                            "Scheduled report %s attempt %d/%d failed, retrying in %ds: %s",
+                            report["id"], attempt, max_attempts, wait, e,
+                        )
+                        import time
+                        time.sleep(wait)
+                    else:
+                        logger.error(
+                            "Scheduled report %s failed after %d attempts: %s",
+                            report["id"], max_attempts, e, exc_info=True,
+                        )
+                        # Report to DLQ for manual investigation
+                        try:
+                            from dead_letter_queue import get_dlq
+                            get_dlq().enqueue(
+                                task_id=f"scheduled_report_{report['id']}",
+                                task_name="tasks.report.generate_scheduled_reports",
+                                args=[], kwargs={"report_id": report["id"]},
+                                error_message=str(e),
+                                error_class=type(e).__name__,
+                            )
+                        except Exception:
+                            pass
+                        continue
 
         return {"processed": len(due_reports)}
     finally:
@@ -213,9 +244,13 @@ def _generate_report_data(
         engagement_filter = " AND e.id = ANY(%s)"
         params.append(engagement_ids)
 
+    # Build dynamic WHERE clause safely using psycopg2.sql
+    where_clause = pysql.SQL("e.org_id = %s")
+    if engagement_ids:
+        where_clause = pysql.SQL("e.org_id = %s AND e.id = ANY(%s)")
+
     # Findings summary
-    cursor.execute(
-        f"""
+    query = pysql.SQL("""
         SELECT
             f.severity,
             COUNT(*) as count,
@@ -223,7 +258,7 @@ def _generate_report_data(
             f.source_tool
         FROM findings f
         JOIN engagements e ON f.engagement_id = e.id
-        WHERE e.org_id = %s {engagement_filter}
+        WHERE {where}
         GROUP BY f.severity, f.source_tool
         ORDER BY
             CASE f.severity
@@ -233,14 +268,12 @@ def _generate_report_data(
                 WHEN 'LOW' THEN 4
                 ELSE 5
             END
-        """,
-        params,
-    )
+    """).format(where=where_clause)
+    cursor.execute(query, params)
     findings = [dict(row) for row in cursor.fetchall()]
 
     # Engagement stats
-    cursor.execute(
-        f"""
+    query = pysql.SQL("""
         SELECT
             e.id,
             e.target_url,
@@ -249,12 +282,11 @@ def _generate_report_data(
             COUNT(f.id) as findings_count
         FROM engagements e
         LEFT JOIN findings f ON f.engagement_id = e.id
-        WHERE e.org_id = %s {engagement_filter}
+        WHERE {where}
         GROUP BY e.id
         ORDER BY e.created_at DESC
-        """,
-        params,
-    )
+    """).format(where=where_clause)
+    cursor.execute(query, params)
     engagements = [dict(row) for row in cursor.fetchall()]
 
     return {

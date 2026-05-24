@@ -75,7 +75,11 @@ def build_task_args(
             trace_id,
         ],
     }
-    return args_map.get(job_type, [engagement_id, target, budget, trace_id, agent_mode])
+    # Unknown job type — raise rather than silently returning a partial arg list
+    # that would cause a TypeError at call time.
+    if job_type not in args_map:
+        raise ValueError(f"Unknown job type: {job_type}. Valid types: {list(args_map.keys())}")
+    return args_map[job_type]
 
 
 @dataclass
@@ -108,6 +112,13 @@ class JobMessage:
                 "This may indicate a schema version mismatch between frontend and workers.",
                 len(unknown), sorted(unknown),
             )
+            # Increment a metric for monitoring schema drift
+            try:
+                from metrics import increment_counter
+                increment_counter("job_schema.unknown_fields", len(unknown),
+                                  tags={"engagement_id": data.get("engagement_id", "unknown")})
+            except Exception:
+                pass
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def to_celery_args(self) -> list:

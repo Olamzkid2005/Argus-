@@ -236,39 +236,70 @@ class ScanDiffEngine:
         curr_fps = set(curr.keys())
         prev_fps = set(prev.keys())
 
-        # Build fallback fingerprint maps for cross-scan matching
-        curr_fallback = {self._fallback_fingerprint(f): fp for fp, f in curr.items()}
-        prev_fallback = {self._fallback_fingerprint(f): fp for fp, f in prev.items()}
+        # Build fallback fingerprint maps for cross-scan matching.
+        # Use defaultdict(list) to handle collisions: multiple findings
+        # of the same type on the same endpoint (no payload) will share
+        # the same fallback fingerprint. We accumulate all matching
+        # primary fingerprints so the diff can check all candidates.
+        from collections import defaultdict
+        curr_fallback: dict[str, list[str]] = defaultdict(list)
+        for fp, f in curr.items():
+            curr_fallback[self._fallback_fingerprint(f)].append(fp)
+        prev_fallback: dict[str, list[str]] = defaultdict(list)
+        for fp, f in prev.items():
+            prev_fallback[self._fallback_fingerprint(f)].append(fp)
 
         # New: in current but not previous
         for fp in curr_fps - prev_fps:
             if fp in fixed_fps:
                 result[self.CAT_REGRESSED].append(curr[fp])
-            else:
-                # Check fallback fingerprint for cross-scan matching.
-                # Fallback is only valid when one or both sides lack a payload.
-                # If BOTH sides have payloads, different primary fingerprints
-                # mean genuinely different findings — not the same vuln.
-                fb_fp = self._fallback_fingerprint(curr[fp])
-                if fb_fp in prev_fallback:
-                    prev_fp = prev_fallback[fb_fp]
-                    prev_finding = prev[prev_fp]
-                    curr_has_payload = self._has_payload(curr[fp])
-                    prev_has_payload = self._has_payload(prev_finding)
-                    if curr_has_payload and prev_has_payload:
-                        # Both sides have payloads — different FP = different finding
-                        result[self.CAT_NEW].append(curr[fp])
-                    else:
-                        # One or both sides missing payload — likely same vulnerability
-                        result[self.CAT_PERSISTENT].append(curr[fp])
-                else:
-                    result[self.CAT_NEW].append(curr[fp])
+                continue
+
+            fb_fp = self._fallback_fingerprint(curr[fp])
+            if fb_fp not in prev_fallback:
+                result[self.CAT_NEW].append(curr[fp])
+                continue
+
+            # Fallback fingerprint matched — check all candidates.
+            # If BOTH sides have payloads and primary fingerprints differ,
+            # they are genuinely different findings (not the same vuln).
+            curr_has_payload = self._has_payload(curr[fp])
+            matched_as_persistent = False
+            for prev_fp in prev_fallback[fb_fp]:
+                prev_finding = prev[prev_fp]
+                prev_has_payload = self._has_payload(prev_finding)
+                if curr_has_payload and prev_has_payload:
+                    # Both have payloads but different FP — genuinely different
+                    continue
+                # One or both missing payload — likely same vulnerability
+                result[self.CAT_PERSISTENT].append(curr[fp])
+                # Remove from prev_fps so the "Fixed" branch doesn't
+                # also report it — it was already accounted for.
+                prev_fps.discard(prev_fp)
+                matched_as_persistent = True
+                break
+            if not matched_as_persistent:
+                result[self.CAT_NEW].append(curr[fp])
 
         # Fixed: in previous but not current — cross-check via fallback fingerprint
         for fp in prev_fps - curr_fps:
             fb_fp = self._fallback_fingerprint(prev[fp])
             if fb_fp in curr_fallback:
-                continue  # Already accounted as persistent in the New branch
+                # Already accounted as persistent in the New branch above,
+                # or there's a genuine fallback collision. Check whether any
+                # current finding with this fallback has a payload match.
+                any_real_persistent = False
+                for curr_fp in curr_fallback[fb_fp]:
+                    prev_f = prev[fp]
+                    curr_f = curr[curr_fp]
+                    if self._has_payload(prev_f) and self._has_payload(curr_f):
+                        # Both have payloads — different primary FP means
+                        # genuinely different findings. Not persistent.
+                        continue
+                    any_real_persistent = True
+                    break
+                if any_real_persistent:
+                    continue
             result[self.CAT_FIXED].append(prev[fp])
 
         # Changed: in both but severity differs

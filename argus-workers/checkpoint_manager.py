@@ -2,12 +2,15 @@
 Checkpoint Manager - Saves and recovers from checkpoints during long scans
 """
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from psycopg2.extras import Json, RealDictCursor
 
 from database.connection import get_db
+
+logger = logging.getLogger(__name__)
 
 
 class CheckpointManager:
@@ -56,7 +59,8 @@ class CheckpointManager:
         except Exception as e:
             if conn:
                 conn.rollback()
-            raise Exception(f"Failed to save checkpoint: {e}") from e
+            logger.error("Failed to save checkpoint for %s/%s: %s", engagement_id, phase, e)
+            raise
         finally:
             if cursor:
                 cursor.close()
@@ -97,6 +101,9 @@ class CheckpointManager:
 
             return None
 
+        except Exception as e:
+            logger.error("Failed to load checkpoint for %s: %s", engagement_id, e)
+            raise
         finally:
             if cursor:
                 cursor.close()
@@ -121,15 +128,18 @@ class CheckpointManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT COUNT(*) FROM checkpoints
+                SELECT 1 FROM checkpoints
                 WHERE engagement_id = %s
+                LIMIT 1
                 """,
                 (engagement_id,),
             )
 
-            count = cursor.fetchone()[0]
-            return count > 0
+            return cursor.fetchone() is not None
 
+        except Exception as e:
+            logger.error("Failed to check checkpoint existence for %s: %s", engagement_id, e)
+            return False
         finally:
             if cursor:
                 cursor.close()
@@ -196,7 +206,8 @@ class CheckpointManager:
         except Exception as e:
             if conn:
                 conn.rollback()
-            raise Exception(f"Failed to delete checkpoints: {e}") from e
+            logger.error("Failed to delete checkpoints for %s: %s", engagement_id, e)
+            raise
         finally:
             if cursor:
                 cursor.close()
@@ -216,6 +227,14 @@ class CheckpointManager:
         checkpoint = self.load_checkpoint(engagement_id)
 
         if not checkpoint:
+            return None
+
+        # Don't resume from terminal phases
+        if checkpoint["phase"] in ("complete", "failed"):
+            logger.info(
+                "Checkpoint for %s is in terminal phase '%s' — skipping resume",
+                engagement_id, checkpoint["phase"],
+            )
             return None
 
         return {
@@ -313,7 +332,8 @@ class CheckpointManager:
         except Exception as e:
             if conn:
                 conn.rollback()
-            raise Exception(f"Failed to cleanup checkpoints: {e}") from e
+            logger.error("Failed to cleanup checkpoints: %s", e)
+            raise
         finally:
             if cursor:
                 cursor.close()
@@ -347,9 +367,9 @@ class CheckpointContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Save checkpoint on exit if no exception"""
-        if exc_type is None:
-            # No exception - save checkpoint
+        """Save checkpoint on exit if no exception and results are non-empty"""
+        if exc_type is None and self.results:
+            # No exception and there are actual results — save checkpoint
             self.checkpoint_manager.save_checkpoint(
                 self.engagement_id, self.phase, self.results
             )

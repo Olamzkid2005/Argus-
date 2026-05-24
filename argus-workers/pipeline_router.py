@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def execute_recon_pipeline(
-    ctx, target: str, budget: dict, aggressiveness: str = "default"
+    ctx, target: str, budget: dict, aggressiveness: str | None = None
 ) -> tuple[list, object]:
     """
     Execute reconnaissance tools.
@@ -35,7 +35,7 @@ def execute_recon_pipeline(
 
 
 def execute_scan_pipeline(
-    ctx, targets: list[str], budget: dict, aggressiveness: str = "default",
+    ctx, targets: list[str], budget: dict, aggressiveness: str | None = None,
     auth_config: dict | None = None, dual_auth_config: dict | None = None,
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,

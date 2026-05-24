@@ -12,20 +12,31 @@ logger = logging.getLogger(__name__)
 
 
 @app.task(bind=True, name="tasks.analyze.run_analysis")
-def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
+def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None,
+                 bug_bounty_mode: bool | None = None):
     """
     Execute analysis phase for an engagement.
 
     Analysis is consumed by the agent loop as intelligence for decision-making,
     not dispatched as batch actions. The orchestrator's run_analysis() handles
     all analysis processing through the evaluate() → analyze_state() path.
+
+    Args:
+        engagement_id: Engagement UUID
+        budget: Budget config dict
+        trace_id: Optional trace ID
+        bug_bounty_mode: Forwarded from scan phase for report generation
     """
     from utils.logging_utils import ScanLogger
     slog = ScanLogger("analyze", engagement_id=engagement_id)
     slog.phase_header("ANALYZE PHASE")
 
+    job_extra = {"budget": budget}
+    if bug_bounty_mode is not None:
+        job_extra["bug_bounty_mode"] = bug_bounty_mode
+
     with task_context(self, engagement_id, "analyze",
-                      job_extra={"budget": budget},
+                      job_extra=job_extra,
                       trace_id=trace_id, current_state="analyzing") as ctx:
         result = ctx.orchestrator.run_analysis(ctx.job)
 
@@ -46,6 +57,8 @@ def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None):
         except Exception as e:
             logger.error("Failed to enqueue report for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.safe_transition("failed", f"Failed to enqueue report: {e}")
+            result["status"] = "failed"
+            result["reason"] = "report_dispatch_failed"
             return result
 
         ctx.state.transition("reporting", "Analysis complete — report dispatched")

@@ -37,10 +37,11 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
     from utils.logging_utils import ScanLogger
     slog = ScanLogger("recon", engagement_id=engagement_id)
 
-    # Forward prev_engagement_id through the chain via budget
-    if prev_engagement_id:
-        budget = dict(budget)
-        budget["prev_engagement_id"] = prev_engagement_id
+    # Forward prev_engagement_id through the chain via budget.
+    # Always copy so downstream consumers can rely on key presence
+    # (or None) rather than testing hasattr.
+    budget = dict(budget)
+    budget["prev_engagement_id"] = prev_engagement_id
 
     slog.phase_header("RECON PHASE", target=target, agent_mode=agent_mode)
 
@@ -98,7 +99,20 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                 save_recon_context(engagement_id, ctx_data)
                 slog.info("Saved recon context for scan phase")
             except Exception as e:
-                logger.warning("Failed to save recon context for %s — scan will fall back to deterministic: %s", engagement_id, e)
+                logger.error("Failed to save recon context for %s — scan will fall back to deterministic: %s", engagement_id, e, exc_info=True)
+                # Track this failure for observability
+                try:
+                    from dead_letter_queue import get_dlq
+                    get_dlq().enqueue(
+                        task_id="recon_context_save",
+                        task_name="tasks.recon.run_recon",
+                        args=[], kwargs={"engagement_id": engagement_id},
+                        error_message=str(e),
+                        error_class=type(e).__name__,
+                        engagement_id=engagement_id,
+                    )
+                except Exception:
+                    pass
 
         # Transition state AFTER dispatch succeeds. If the process crashes
         # between dispatch and this transition, the scan task handles
@@ -141,6 +155,13 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
 
     slog.phase_header("EXPAND RECON", targets=f"{len(valid_targets)} targets")
 
+    # NOTE: chain_transition() below uses SELECT ... FOR UPDATE on the
+    # engagement row while task_context holds the DistributedLock.
+    # This is safe because both locks are acquired in the same order
+    # (DistributedLock → DB FOR UPDATE) everywhere in the codebase.
+    # If a code path were to acquire FOR UPDATE outside the DistributedLock,
+    # a deadlock could occur (DistributedLock waits for FOR UPDATE, FOR UPDATE
+    # waits for DistributedLock). See bug #12.
     with task_context(self, engagement_id, "recon_expand",
                       job_extra={"target": valid_targets[0], "targets": valid_targets, "budget": budget},
                       trace_id=trace_id, current_state="recon") as ctx:
@@ -192,7 +213,19 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                 slog.info("Saved expanded recon context")
                 logger.info("Saved expanded recon context for %s", engagement_id)
             except Exception as e:
-                logger.warning("Failed to save expanded recon context for %s — scan will fall back to deterministic: %s", engagement_id, e)
+                logger.error("Failed to save expanded recon context for %s — scan will fall back to deterministic: %s", engagement_id, e, exc_info=True)
+                try:
+                    from dead_letter_queue import get_dlq
+                    get_dlq().enqueue(
+                        task_id="recon_context_save_expand",
+                        task_name="tasks.recon.expand_recon",
+                        args=[], kwargs={"engagement_id": engagement_id},
+                        error_message=str(e),
+                        error_class=type(e).__name__,
+                        engagement_id=engagement_id,
+                    )
+                except Exception:
+                    pass
 
         return result
 

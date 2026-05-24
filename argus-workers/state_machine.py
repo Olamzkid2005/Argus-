@@ -69,37 +69,56 @@ class EngagementStateMachine:
         # a frontend event so the orchestrator doesn't need duplicate publish calls.
         self._ws_publisher = None
 
-        # Handle None — query DB for actual state (issue 3.13)
-        resolved_state = current_state
-        if resolved_state is None:
-            try:
-                conn = self._get_connection()
-                try:
-                    c = conn.cursor()
-                    c.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
-                    row = c.fetchone()
-                    c.close()
-                    resolved_state = row[0] if row else "created"
-                finally:
-                    self._release_connection(conn)
-            except Exception as e:
+        # Handle None — defer resolution to first transition() call
+        # where it will be queried under the FOR UPDATE lock, avoiding
+        # a TOCTOU race between constructor and first transition.
+        if current_state is None:
+            self.current_state = None  # Mark as unresolved
+        else:
+            resolved_state = current_state
+            if resolved_state == "awaiting_approval":
                 logger.warning(
-                    "Could not query state for engagement %s, defaulting to 'created': %s",
-                    engagement_id, e,
+                    "Engagement %s has deprecated 'awaiting_approval' state — mapping to 'recon'",
+                    engagement_id,
                 )
-                resolved_state = "created"
+                resolved_state = "recon"
 
-        if resolved_state == "awaiting_approval":
+            if resolved_state not in self.STATES:
+                raise ValueError(f"Invalid state: {resolved_state}")
+
+            self.current_state = resolved_state
+
+    def _resolve_state_if_needed(self):
+        """Lazily resolve state from DB if it was None on construction.
+        
+        Called at the start of transition() and chain_transition() so
+        the FOR UPDATE lock is already held, preventing TOCTOU races.
+        """
+        if self.current_state is not None:
+            return
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
+            row = c.fetchone()
+            c.close()
+            resolved = row[0] if row else "created"
+        except Exception as e:
+            logger.warning(
+                "Could not query state for engagement %s, defaulting to 'created': %s",
+                self.engagement_id, e,
+            )
+            resolved = "created"
+        finally:
+            self._release_connection(conn)
+
+        if resolved == "awaiting_approval":
             logger.warning(
                 "Engagement %s has deprecated 'awaiting_approval' state — mapping to 'recon'",
-                engagement_id,
+                self.engagement_id,
             )
-            resolved_state = "recon"
-
-        if resolved_state not in self.STATES:
-            raise ValueError(f"Invalid state: {resolved_state}")
-
-        self.current_state = resolved_state
+            resolved = "recon"
+        self.current_state = resolved
 
     def _get_connection(self):
         """Get a database connection (external or from pool)"""
@@ -110,7 +129,10 @@ class EngagementStateMachine:
         return get_db().get_connection()
 
     def _release_connection(self, conn):
-        """Release connection back to pool or close raw connections"""
+        """Release connection back to pool or close raw connections.
+        
+        Never releases an external connection — the caller owns its lifecycle.
+        """
         if conn and not self._external_conn:
             if self._db_conn_string:
                 conn.close()
@@ -136,7 +158,12 @@ class EngagementStateMachine:
         if new_state not in self.STATES:
             raise ValueError(f"Invalid state: {new_state}")
 
-        # Check if transition is valid
+        # Resolve lazy state immediately so can_transition_to works.
+        # The real validation happens again under FOR UPDATE in
+        # _persist_state_and_budget, so there's no TOCTOU issue.
+        self._resolve_state_if_needed()
+
+        # Check if transition is valid (quick pre-check — final check under lock)
         if not self.can_transition_to(new_state):
             raise InvalidStateTransitionError(
                 f"Invalid transition from {self.current_state} to {new_state}. "
@@ -197,20 +224,19 @@ class EngagementStateMachine:
 
             current_db_state = locked_row[0]
             if current_db_state != from_state:
-                # State was already changed by another worker — this is a race
-                logger.warning(
+                # State was already changed by another worker — this is a race.
+                # The FOR UPDATE lock guarantees we have the latest value, so
+                # we reject the transition rather than silently accepting the
+                # new from_state. The caller should retry with fresh state.
+                logger.error(
                     "State race detected: expected %s, actual %s for engagement %s. "
-                    "Allowing transition to %s (FOR UPDATE guarantees ordering).",
+                    "Rejecting transition to %s — another worker changed state.",
                     from_state, current_db_state, self.engagement_id, to_state
                 )
-                # Update our local state to match DB before continuing
-                self.current_state = current_db_state
-                if to_state not in self.TRANSITIONS.get(current_db_state, []):
-                    raise InvalidStateTransitionError(
-                        f"Race: engagement {self.engagement_id} is {current_db_state}, "
-                        f"cannot transition to {to_state}. "
-                        f"Another worker changed state from {from_state}."
-                    )
+                raise InvalidStateTransitionError(
+                    f"Race: engagement {self.engagement_id} is {current_db_state}, "
+                    f"not {from_state}. Another worker changed state first."
+                )
 
             # Record state transition with trace_id for causality chain
             transition_id = str(uuid.uuid4())
@@ -248,18 +274,32 @@ class EngagementStateMachine:
             # Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) so the row is
             # auto-created for non-scheduled engagements that were created
             # without an explicit loop_budgets INSERT.
+            # Enforce max_cycles to prevent infinite looping.
             if from_state == "analyzing" and to_state == "recon":
+                # First, read current cycles to check against max
+                cursor.execute(
+                    "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                    (self.engagement_id,)
+                )
+                lb_row = cursor.fetchone()
+                current_cycles = lb_row[0] if lb_row else 0
+                max_cycles = lb_row[1] if lb_row else 5
+                if current_cycles >= max_cycles:
+                    raise InvalidStateTransitionError(
+                        f"Loop budget exhausted for engagement {self.engagement_id}: "
+                        f"{current_cycles}/{max_cycles} cycles used."
+                    )
                 cursor.execute(
                     """
                     INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
                                                current_cycles, current_depth, created_at)
-                    VALUES (%s, %s, 5, 3, 1, 0, NOW())
+                    VALUES (%s, %s, %s, 3, 1, 0, NOW())
                     ON CONFLICT (engagement_id)
                     DO UPDATE SET
                         current_cycles = loop_budgets.current_cycles + 1,
                         updated_at = NOW()
                     """,
-                    (str(uuid.uuid4()), self.engagement_id)
+                    (str(uuid.uuid4()), self.engagement_id, max_cycles)
                 )
 
             conn.commit()
@@ -272,8 +312,7 @@ class EngagementStateMachine:
         finally:
             if cursor:
                 cursor.close()
-            if conn and not self._external_conn:
-                self._release_connection(conn)
+            self._release_connection(conn)
 
     def get_transition_history(self) -> list[dict]:
         """
@@ -329,6 +368,12 @@ class EngagementStateMachine:
         has no outgoing transitions (e.g. already 'failed' or 'complete').
         Returns True if the transition was applied, False if skipped.
         """
+        if new_state not in self.STATES:
+            logger.warning(
+                "safe_transition: '%s' is not a valid state for engagement %s — skipping",
+                new_state, self.engagement_id,
+            )
+            return False
         if not self.can_transition_to(new_state):
             logger.warning(
                 "Skipping transition %s -> %s for engagement %s "
@@ -358,6 +403,10 @@ class EngagementStateMachine:
         """
         if not states:
             return self.current_state
+
+        # Resolve lazy state so terminal-state check is accurate.
+        # The FOR UPDATE lock in the DB ensures freshness.
+        self._resolve_state_if_needed()
 
         if self.current_state in ("complete", "failed"):
             logger.warning(
@@ -428,19 +477,34 @@ class EngagementStateMachine:
             # Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) so the row is
             # auto-created for non-scheduled engagements that were created
             # without an explicit loop_budgets INSERT.
+            # Enforce max_cycles to prevent infinite looping.
             recon_loop_count = sum(1 for f, t in states if f == "analyzing" and t == "recon")
             if recon_loop_count > 0:
+                # Read current cycles to check against max
+                cursor.execute(
+                    "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                    (self.engagement_id,)
+                )
+                lb_row = cursor.fetchone()
+                current_cycles = lb_row[0] if lb_row else 0
+                max_cycles = lb_row[1] if lb_row else 5
+                if current_cycles + recon_loop_count > max_cycles:
+                    conn.rollback()
+                    raise InvalidStateTransitionError(
+                        f"Loop budget exhausted for engagement {self.engagement_id}: "
+                        f"{current_cycles + recon_loop_count}/{max_cycles} cycles required."
+                    )
                 cursor.execute(
                     """
                     INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
                                                current_cycles, current_depth, created_at)
-                    VALUES (%s, %s, 5, 3, %s, 0, NOW())
+                    VALUES (%s, %s, %s, 3, %s, 0, NOW())
                     ON CONFLICT (engagement_id)
                     DO UPDATE SET
                         current_cycles = loop_budgets.current_cycles + %s,
                         updated_at = NOW()
                     """,
-                    (str(uuid.uuid4()), self.engagement_id, recon_loop_count, recon_loop_count),
+                    (str(uuid.uuid4()), self.engagement_id, max_cycles, recon_loop_count, recon_loop_count),
                 )
 
             conn.commit()
