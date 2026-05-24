@@ -564,3 +564,113 @@ class FindingRepository(BaseRepository):
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
+
+    def batch_create_or_update_findings(
+        self,
+        engagement_id: str,
+        findings: list[dict],
+    ) -> tuple[int, int]:
+        """
+        Insert or update multiple findings in a single database transaction.
+
+        Each finding dict must have: engagement_id, type, severity, endpoint,
+        evidence, source_tool. Optional: confidence, cvss_score, owasp_category,
+        cwe_id, evidence_strength, tool_agreement_level, fp_likelihood.
+
+        Uses INSERT ... ON CONFLICT for atomic upserts. The entire batch
+        either commits or rolls back — no partial commits.
+
+        Args:
+            engagement_id: Engagement UUID
+            findings: List of finding dicts
+
+        Returns:
+            Tuple of (inserted_count, updated_count)
+        """
+        if not findings:
+            return 0, 0
+
+        inserted_count = 0
+        updated_count = 0
+
+        with self.db_operation(commit=True) as (conn, cursor):
+            for f in findings:
+                try:
+                    finding_id = str(uuid.uuid4())
+                    _type = f.get("type", "UNKNOWN")
+                    _severity = f.get("severity", "INFO")
+                    _endpoint = f.get("endpoint", "")
+                    _evidence = f.get("evidence", {})
+                    _confidence = f.get("confidence", 0.5)
+                    _source_tool = f.get("source_tool", "") or ""
+                    _cvss = f.get("cvss_score")
+                    _owasp = f.get("owasp_category")
+                    _cwe = f.get("cwe_id")
+                    _ev_strength = f.get("evidence_strength")
+                    _tool_agree = f.get("tool_agreement_level")
+                    _fp_like = f.get("fp_likelihood")
+
+                    cursor.execute(
+                        """
+                        INSERT INTO findings (
+                            id, engagement_id, type, severity, confidence,
+                            endpoint, evidence, source_tool, cvss_score,
+                            owasp_category, cwe_id, evidence_strength,
+                            tool_agreement_level, fp_likelihood, verified, created_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                        )
+                        ON CONFLICT (engagement_id, endpoint, type, source_tool)
+                        DO UPDATE SET
+                            severity = EXCLUDED.severity,
+                            confidence = EXCLUDED.confidence,
+                            evidence = EXCLUDED.evidence,
+                            cvss_score = EXCLUDED.cvss_score,
+                            owasp_category = EXCLUDED.owasp_category,
+                            cwe_id = EXCLUDED.cwe_id,
+                            evidence_strength = EXCLUDED.evidence_strength,
+                            tool_agreement_level = EXCLUDED.tool_agreement_level,
+                            fp_likelihood = EXCLUDED.fp_likelihood,
+                            updated_at = NOW()
+                        RETURNING id, (xmax = 0) AS is_insert
+                        """,
+                        (
+                            finding_id, engagement_id, _type, _severity,
+                            _confidence, _endpoint, Json(_evidence),
+                            _source_tool, _cvss, _owasp, _cwe,
+                            _ev_strength, _tool_agree, _fp_like,
+                        ),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        if row[1]:
+                            inserted_count += 1
+                        else:
+                            updated_count += 1
+                        f["_saved_id"] = str(row[0])
+                    else:
+                        logger.warning(
+                            "batch_create_or_update: no row returned for type=%s endpoint=%s",
+                            _type, _endpoint,
+                        )
+                except psycopg2.errors.UniqueViolation:
+                    # ON CONFLICT didn't catch it — fall back to SELECT
+                    try:
+                        cursor.execute(
+                            "SELECT id FROM findings WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s",
+                            (engagement_id, _endpoint, _type, _source_tool),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            f["_saved_id"] = str(row[0])
+                            updated_count += 1
+                    except Exception as fb_err:
+                        logger.debug("Fallback query failed: %s", fb_err)
+                except psycopg2.Error as db_err:
+                    logger.warning(
+                        "batch_create_or_update: DB error for type=%s endpoint=%s: %s",
+                        _type, _endpoint, db_err,
+                    )
+                    continue
+
+        return inserted_count, updated_count

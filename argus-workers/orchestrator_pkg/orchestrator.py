@@ -302,179 +302,105 @@ class Orchestrator:
         if not findings:
             return 0
 
-        from database.connection import db_cursor
         from database.services.embedding_service import EmbeddingService
         emb_svc = EmbeddingService(self.engagement_id)
 
-        saved_count = 0
-        failed_count = 0
+        # Phase 1: Pre-process all findings (enrich metadata, classify, etc.)
+        # without touching the database.
+        bug_bounty = self.bug_bounty_mode
+        secret_tools = {"gitleaks", "trufflehog", "secret-scan"}
+        findings_to_save: list[dict] = []
+
         for finding in findings:
-            try:
-                # Tag findings with bugbounty source when in bug bounty mode
-                # so the Intelligence Engine applies the confidence cap.
-                bug_bounty = self.bug_bounty_mode
-                if bug_bounty:
-                    finding["bugbounty_source"] = True
-                    # Preserve original source — don't overwrite with "bugbounty"
-                    if "source" not in finding or finding["source"] == "bugbounty":
-                        finding["source"] = "bugbounty"
+            if bug_bounty:
+                finding["bugbounty_source"] = True
+                if "source" not in finding or finding["source"] == "bugbounty":
+                    finding["source"] = "bugbounty"
 
-                if finding.get("cvss_score") is None:
-                    try:
-                        from cvss_calculator import estimate_cvss
-                        finding["cvss_score"] = estimate_cvss(
-                            finding_type=finding.get("type", ""),
-                            severity=finding.get("severity", "MEDIUM"),
-                            evidence_strength=finding.get("evidence_strength", "moderate"),
-                        )
-                    except Exception as cvss_err:
-                        logger.warning(f"CVSS estimation failed (non-fatal): {cvss_err}")
-
-                # Classify finding with OWASP category and CWE ID if not already set
-                if not finding.get("owasp_category") or not finding.get("cwe_id"):
-                    ftype = finding.get("type", "")
-                    classification = self._classify_finding_type(ftype)
-                    if not finding.get("owasp_category"):
-                        finding["owasp_category"] = classification.get("owasp")
-                    if not finding.get("cwe_id"):
-                        finding["cwe_id"] = classification.get("cwe")
-
-                secret_tools = {"gitleaks", "trufflehog", "secret-scan"}
-                st = finding.get("tool") or finding.get("source_tool") or "unknown"
-                saved_id = None
-                if st in secret_tools or finding.get("type", "").startswith("COMMITTED_SECRET"):
-                    saved_id = self.finding_repo.upsert_secret_finding(
-                        engagement_id=self.engagement_id,
-                        finding_type=finding.get("type", "UNKNOWN"),
-                        severity=finding.get("severity", "INFO"),
-                        endpoint=finding.get("endpoint", ""),
-                        evidence=finding.get("evidence", {}),
-                        confidence=finding.get("confidence", 0.5),
-                        source_tool=st,
-                        cvss_score=finding.get("cvss_score"),
-                        owasp_category=finding.get("owasp_category"),
-                        cwe_id=finding.get("cwe_id"),
+            if finding.get("cvss_score") is None:
+                try:
+                    from cvss_calculator import estimate_cvss
+                    finding["cvss_score"] = estimate_cvss(
+                        finding_type=finding.get("type", ""),
+                        severity=finding.get("severity", "MEDIUM"),
+                        evidence_strength=finding.get("evidence_strength", "moderate"),
                     )
-                else:
-                    evidence_obj = finding.get('evidence') or {}
-                    payload_raw = evidence_obj.get('payload', '') if isinstance(evidence_obj, dict) else ''
-                    payload_str = str(payload_raw) if not isinstance(payload_raw, str) else payload_raw
-                    ftype = finding.get("type") or ""
-                    fep = finding.get("endpoint") or ""
-                    if payload_str and '__REDACTED__' not in payload_str:
-                        dedup_text = f"{ftype} {fep} {payload_str}"
-                    else:
-                        dedup_text = f"{ftype} {fep}"  # Fallback: type + endpoint only
-                    similar = emb_svc.find_existing_similar(dedup_text) if dedup_text.strip() else None
-                    if similar:
-                        try:
-                            with db_cursor() as cursor:
-                                cursor.execute(
-                                    "UPDATE findings SET last_seen_at = NOW(), severity = %s, confidence = %s, evidence = %s, source = %s, bugbounty_source = %s WHERE id = %s",
-                                    (finding.get("severity", "INFO"), finding.get("confidence", 0.5),
-                                     json.dumps(finding.get("evidence", {})), finding.get("source"), finding.get("bugbounty_source", False), similar["id"]),
-                                )
-                            saved_id = similar["id"]
-                            logger.debug(f"Updated existing finding {similar['id']} (similarity={similar['similarity']:.3f})")
-                        except Exception as e:
-                            logger.warning(f"Failed to update existing finding {similar['id']} — creating new instead: {e}")
-                            saved_id = self.finding_repo.create_finding(
-                                engagement_id=self.engagement_id,
-                                finding_type=finding.get("type", "UNKNOWN"),
-                                severity=finding.get("severity", "INFO"),
-                                endpoint=finding.get("endpoint", ""),
-                                evidence=finding.get("evidence", {}),
-                                confidence=finding.get("confidence", 0.5),
-                                source_tool=st,
-                                cvss_score=finding.get("cvss_score"),
-                                owasp_category=finding.get("owasp_category"),
-                                cwe_id=finding.get("cwe_id"),
-                            )
-                    else:
-                        saved_id = self.finding_repo.create_finding(
-                            engagement_id=self.engagement_id,
-                            finding_type=finding.get("type", "UNKNOWN"),
-                            severity=finding.get("severity", "INFO"),
-                            endpoint=finding.get("endpoint", ""),
-                            evidence=finding.get("evidence", {}),
-                            confidence=finding.get("confidence", 0.5),
-                            source_tool=st,
-                            cvss_score=finding.get("cvss_score"),
-                            owasp_category=finding.get("owasp_category"),
-                            cwe_id=finding.get("cwe_id"),
-                        )
+                except Exception as cvss_err:
+                    logger.warning(f"CVSS estimation failed (non-fatal): {cvss_err}")
 
-                if saved_id:
-                    saved_count += 1
+            if not finding.get("owasp_category") or not finding.get("cwe_id"):
+                ftype = finding.get("type", "")
+                classification = self._classify_finding_type(ftype)
+                if not finding.get("owasp_category"):
+                    finding["owasp_category"] = classification.get("owasp")
+                if not finding.get("cwe_id"):
+                    finding["cwe_id"] = classification.get("cwe")
 
-                if saved_id and finding.get("type") not in ("", "UNKNOWN") and finding.get("endpoint") and finding.get("severity", "").upper() not in ("INFO", "LOW", ""):
-                        try:
-                            emb_evidence = finding.get('evidence') or {}
-                            emb_payload = emb_evidence.get('payload', '') if isinstance(emb_evidence, dict) else ''
-                            emb_text = f"{finding.get('type') or ''} {finding.get('endpoint') or ''} {emb_payload}"
-                            embedding = emb_svc.get_embedding(emb_text)
-                            if embedding and EmbeddingService.is_valid_embedding(embedding):
-                                EmbeddingService.store_embedding(saved_id, self.engagement_id, embedding, emb_text)
-                        except Exception as e:
-                            logger.debug(f"Embedding storage failed (non-fatal): {e}")
+            st = finding.get("tool") or finding.get("source_tool") or "unknown"
+            if not finding.get("source_tool"):
+                finding["source_tool"] = st
 
-                if saved_id and finding.get("severity", "").upper() in ("CRITICAL", "HIGH"):
-                    try:
-                        from post_finding_hooks import fire_finding_webhooks
-                        fire_finding_webhooks({
-                            "id": saved_id, "engagement_id": self.engagement_id,
-                            "type": finding.get("type"), "severity": finding.get("severity"),
-                            "endpoint": finding.get("endpoint"), "source_tool": st,
-                            "confidence": finding.get("confidence", 0),
-                        })
-                    except Exception as hook_err:
-                        logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
+            findings_to_save.append(finding)
 
-                    # Verify HIGH/CRITICAL findings offline to reduce false positives
-                    try:
-                        from feature_flags import is_enabled as _ff_enabled
-                        if _ff_enabled("FINDING_VERIFICATION", default=False):
-                            from concurrent.futures import ThreadPoolExecutor
-                            from tools.finding_verifier import VERIFIERS, verify_finding
-                            ftype_key = (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
-                            if ftype_key in VERIFIERS:
-                                def _run_verification(finding_data):
-                                    import asyncio
-                                    try:
-                                        loop = asyncio.new_event_loop()
-                                        asyncio.set_event_loop(loop)
-                                        result = loop.run_until_complete(verify_finding(
-                                            finding_data, engagement_id=self.engagement_id,
-                                        ))
-                                        loop.close()
-                                        if result.get("verification", {}).get("confidence") == "low":
-                                            logger.info(
-                                                "Finding %s has low verification confidence — possible false positive",
-                                                saved_id,
-                                            )
-                                    except Exception as v_err:
-                                        logger.debug(f"Finding verification failed (non-fatal): {v_err}")
-                                with ThreadPoolExecutor(max_workers=2) as _vpool:
-                                    _vpool.submit(_run_verification, {
-                                        "id": saved_id,
-                                        "type": finding.get("type"),
-                                        "severity": finding.get("severity"),
-                                        "endpoint": finding.get("endpoint"),
-                                        "evidence": finding.get("evidence", {}),
-                                        "source_tool": st,
-                                    })
-                    except Exception as v_err:
-                        logger.debug(f"Finding verification dispatch failed (non-fatal): {v_err}")
-            except (ValueError, OSError, KeyError, json.JSONDecodeError) as finding_err:
-                failed_count += 1
-                logger.warning("Failed to save finding (type=%s, endpoint=%s): %s",
-                               finding.get("type", "?"), finding.get("endpoint", "?"), finding_err)
-                continue
+        if not findings_to_save:
+            return 0
+
+        # Phase 2: Batch save all non-secret findings in a single transaction.
+        # Secret findings use upsert_secret_finding individually (different conflict key).
+        non_secret = [f for f in findings_to_save
+                      if f.get("source_tool") not in secret_tools
+                      and not f.get("type", "").startswith("COMMITTED_SECRET")]
+        secret = [f for f in findings_to_save
+                  if f.get("source_tool") in secret_tools
+                  or f.get("type", "").startswith("COMMITTED_SECRET")]
+
+        failed_count = 0
+        if non_secret:
+            try:
+                inserted, updated = self.finding_repo.batch_create_or_update_findings(
+                    self.engagement_id, non_secret
+                )
+                logger.info(
+                    "_save_findings: batch saved %d (inserted=%d, updated=%d) findings for %s",
+                    inserted + updated, inserted, updated, self.engagement_id,
+                )
             except FindingCapExceededError:
+                logger.error("Finding cap exceeded for engagement %s during batch save", self.engagement_id)
+                failed_count += len(non_secret)
+            except Exception as e:
+                logger.error("_save_findings: batch save failed for %s: %s", self.engagement_id, e, exc_info=True)
+                failed_count += len(non_secret)
+
+        # Secret findings: save individually (different upsert logic)
+        for f in secret:
+            try:
+                self.finding_repo.upsert_secret_finding(
+                    engagement_id=self.engagement_id,
+                    finding_type=f.get("type", "UNKNOWN"),
+                    severity=f.get("severity", "INFO"),
+                    endpoint=f.get("endpoint", ""),
+                    evidence=f.get("evidence", {}),
+                    confidence=f.get("confidence", 0.5),
+                    source_tool=f.get("source_tool", "unknown"),
+                    cvss_score=f.get("cvss_score"),
+                )
+            except (ValueError, OSError, KeyError) as e:
                 failed_count += 1
-                logger.error("Finding cap exceeded for engagement %s — stopping save loop", self.engagement_id)
-                # Finding cap is a hard limit — stop trying to save more findings
-                break
+                logger.warning("Failed to save secret finding: %s", e)
+
+        # Phase 3: Post-save processing — webhooks for HIGH/CRITICAL findings.
+        for f in findings_to_save:
+            if f.get("_saved_id") and f.get("severity", "").upper() in ("CRITICAL", "HIGH"):
+                try:
+                    from post_finding_hooks import fire_finding_webhooks
+                    fire_finding_webhooks({
+                        "id": f["_saved_id"], "engagement_id": self.engagement_id,
+                        "type": f.get("type"), "severity": f.get("severity"),
+                        "endpoint": f.get("endpoint"), "source_tool": f.get("source_tool", ""),
+                        "confidence": f.get("confidence", 0),
+                    })
+                except Exception as hook_err:
+                    logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
 
         if failed_count > 0:
             logger.error("_save_findings: %d of %d findings failed to save for engagement %s",
