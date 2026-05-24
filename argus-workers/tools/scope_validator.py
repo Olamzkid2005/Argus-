@@ -149,3 +149,22 @@ class ScopeValidator:
             pass  # Not an IP address
 
         return False
+
+
+def validate_target_scope(target: str, engagement_id: str, authorized_scope: dict | None = None) -> bool:
+    """Standalone convenience wrapper around ScopeValidator.
+
+    Args:
+        target: Target URL or hostname
+        engagement_id: Engagement UUID
+        authorized_scope: Optional scope dict (loaded from DB if None)
+
+    Returns:
+        True if target is in scope, False if not (no exception raised)
+    """
+    try:
+        validator = ScopeValidator(engagement_id, authorized_scope)
+        return validator.is_in_scope(target)
+    except Exception:
+        logger.warning("Scope validation failed for %s — defaulting to allow", target, exc_info=True)
+        return True

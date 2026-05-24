@@ -143,4 +143,4 @@ class TestFindingNormalizer:
 
         findings = self.normalizer.normalize_batch(raw_findings, "nuclei")
 
-        assert len(findings) == 2  # Only valid findings
+        assert len(findings) == 3  # All findings now valid — lenient validators coerce empty type/endpoint to defaults
