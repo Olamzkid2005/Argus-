@@ -237,17 +237,16 @@ def _generate_report_data(
     org_id: str, engagement_ids: list[str] | None, report_type: str, cursor
 ) -> dict[str, Any]:
     """Generate report data based on type and engagements."""
-    engagement_filter = ""
     params = [org_id]
 
     if engagement_ids:
-        engagement_filter = " AND e.id = ANY(%s)"
         params.append(engagement_ids)
 
     # Build dynamic WHERE clause safely using psycopg2.sql
-    where_clause = pysql.SQL("e.org_id = %s")
     if engagement_ids:
         where_clause = pysql.SQL("e.org_id = %s AND e.id = ANY(%s)")
+    else:
+        where_clause = pysql.SQL("e.org_id = %s")
 
     # Findings summary
     query = pysql.SQL("""
