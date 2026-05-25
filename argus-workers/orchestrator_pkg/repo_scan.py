@@ -197,7 +197,8 @@ def check_maven_dependencies(repo_path: str) -> list[dict]:
     """Check Maven dependencies for known vulnerabilities using pom.xml parsing."""
     findings = []
     try:
-        import xml.etree.ElementTree as ET
+        # Use defusedxml for safe XML parsing (prevents XXE)
+        import defusedxml.ElementTree as ET
 
         pom_files = glob.glob(os.path.join(repo_path, '**/pom.xml'), recursive=True)
         for pom_file in pom_files:
@@ -875,7 +876,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 )
                 if spotbugs_result.success and spotbugs_result.stdout.strip():
                     try:
-                        import xml.etree.ElementTree as ET
+                        import defusedxml.ElementTree as ET
                         root = ET.fromstring(spotbugs_result.stdout)
                         count = 0
                         for bug_instance in root.findall(".//BugInstance"):
@@ -908,6 +909,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                 add_finding(normalized)
                                 count += 1
                         _emit("spotbugs", f"SpotBugs scan complete — found {count} bugs", "completed", items=count)
+                    except ET.ParseError:
+                        _emit("spotbugs", "SpotBugs XML output could not be parsed", "failed")
                     except Exception:
                         _emit("spotbugs", "SpotBugs output could not be parsed", "failed")
                 else:

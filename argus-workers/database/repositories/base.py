@@ -139,6 +139,40 @@ def validate_columns(table_name: str, columns: list[str]) -> list[str]:
     return columns
 
 
+# Allowlist of valid table and id_column names for injection prevention
+_ALLOWED_TABLE_NAMES = set(ALLOWED_COLUMNS.keys()) | {
+    "findings",
+    "engagements",
+    "users",
+    "loop_budgets",
+    "engagement_states",
+    "job_states",
+    "assets",
+    "agent_decisions",
+    "compliance_reports",
+    "reports",
+    "finding_feedback",
+    "rate_limits",
+    "tool_metrics",
+    "user_settings",
+}
+_ALLOWED_ID_COLUMNS = {"id", "finding_id", "engagement_id", "user_id", "report_id"}
+
+
+def _validate_table_name(table_name: str) -> str:
+    """Validate table name against allowlist to prevent SQL injection."""
+    if table_name not in _ALLOWED_TABLE_NAMES:
+        raise ValueError(f"Invalid table name: {table_name}")
+    return table_name
+
+
+def _validate_id_column(id_column: str) -> str:
+    """Validate id_column name against allowlist to prevent SQL injection."""
+    if id_column not in _ALLOWED_ID_COLUMNS:
+        raise ValueError(f"Invalid id_column name: {id_column}")
+    return id_column
+
+
 class BaseRepository:
     """
     Base repository class providing common database operations.
@@ -252,6 +286,8 @@ class BaseRepository:
             Dictionary of the record or None
         """
         start = time.time()
+        _validate_table_name(self.table_name)
+        _validate_id_column(self.id_column)
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             query = f"SELECT * FROM {self.table_name} WHERE {self.id_column} = %s"
             cursor.execute(query, (id,))
@@ -271,6 +307,7 @@ class BaseRepository:
             List of record dictionaries
         """
         start = time.time()
+        _validate_table_name(self.table_name)
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             query = f"SELECT * FROM {self.table_name} ORDER BY created_at DESC LIMIT %s OFFSET %s"
             cursor.execute(query, (limit, offset))
@@ -288,6 +325,8 @@ class BaseRepository:
         Returns:
             True if deleted, False if not found
         """
+        _validate_table_name(self.table_name)
+        _validate_id_column(self.id_column)
         with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 f"DELETE FROM {self.table_name} WHERE {self.id_column} = %s", (id,)
@@ -308,6 +347,8 @@ class BaseRepository:
         Raises:
             ValueError: If updates contain unauthorized columns
         """
+        _validate_table_name(self.table_name)
+        _validate_id_column(self.id_column)
         if not updates:
             return self.find_by_id(id)
 
@@ -352,6 +393,7 @@ class BaseRepository:
         Returns:
             Total number of records
         """
+        _validate_table_name(self.table_name)
         start = time.time()
         with self.db_operation() as (conn, cursor):
             query = f"SELECT COUNT(*) FROM {self.table_name}"

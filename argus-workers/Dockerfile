@@ -34,4 +34,10 @@ RUN pip install --no-cache-dir sqlmap
 
 COPY . .
 
+# Create a non-root user and switch to it for security
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --ingroup appgroup appuser
+
+USER appuser
+
 CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4"]

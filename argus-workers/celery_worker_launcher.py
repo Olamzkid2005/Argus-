@@ -49,6 +49,7 @@ def main():
         args,
         cwd=SCRIPT_DIR,
         env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
+        start_new_session=True,
     )
 
     print(f"Celery worker started with PID: {proc.pid}")
