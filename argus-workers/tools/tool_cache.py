@@ -40,6 +40,7 @@ PIP_ALLOWLIST = frozenset({
     "gau",
     "waybackurls",
     "whatweb",
+    "wafw00f",
     "wpscan",
     "alterx",
     "nikto",

@@ -496,6 +496,33 @@ _register(ToolDefinition(
 ))
 
 _register(ToolDefinition(
+    name="govulncheck",
+    description="Go vulnerability scanner for dependencies",
+    phases=["repo_scan"],
+    default_args=["./...", "-json"],
+    parameters=[
+        ToolParameter("target", "Target path (module pattern)", required=True),
+    ],
+    timeout=300,
+    signal_quality=SignalQuality.PROBABLE,
+        requires=ToolRequires(tech_contains=["go"])
+))
+
+_register(ToolDefinition(
+    name="trufflehog",
+    description="High-entropy secret scanner for git history",
+    phases=["repo_scan"],
+    default_args=["git", "--json", "--no-update"],
+    parameters=[
+        ToolParameter("target", "Target path", required=True),
+        ToolParameter("since_commit", "Scan from commit", flag="--since-commit"),
+        ToolParameter("max_depth", "Max commit depth", flag="--max-depth"),
+    ],
+    timeout=600,
+    signal_quality=SignalQuality.PROBABLE
+))
+
+_register(ToolDefinition(
     name="brakeman",
     description="Ruby on Rails security scanner",
     phases=["repo_scan"],
@@ -566,6 +593,20 @@ _register(ToolDefinition(
 # ── Specialized tools ──
 
 _register(ToolDefinition(
+    name="wafw00f",
+    description="Web Application Firewall fingerprinting and detection",
+    phases=["recon", "scan"],
+    binary="wafw00f",
+    default_args=["-a"],
+    parameters=[
+        ToolParameter("target", "Target URL", required=True),
+        ToolParameter("verbose", "Enable verbose output", flag="-v"),
+    ],
+    timeout=120,
+    signal_quality=SignalQuality.CONFIRMED
+))
+
+_register(ToolDefinition(
     name="wpscan",
     description="WordPress vulnerability scanner",
     phases=["scan"],
@@ -583,6 +624,7 @@ _register(ToolDefinition(
     name="pip_audit",
     description="Python dependency vulnerability scanner",
     phases=["repo_scan", "scan"],
+    binary="pip-audit",
     default_args=["--format", "json", "--quiet"],
     parameters=[
         ToolParameter("target", "Audit target path"),

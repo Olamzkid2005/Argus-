@@ -228,6 +228,19 @@ class FindingNormalizer:
         "gitleaks": 0.05,
         "trivy": 0.10,
         "gospider": 0.35,
+        # SCA tools
+        "npm_audit": 0.10,
+        "govulncheck": 0.10,
+        "trufflehog": 0.05,
+        "maven_check": 0.30,
+        # Language-specific SAST tools
+        "brakeman": 0.15,
+        "gosec": 0.12,
+        "eslint": 0.20,
+        "phpcs": 0.25,
+        "spotbugs": 0.15,
+        "secret-scan": 0.10,
+        "snyk": 0.10,
     }
 
     def normalize(

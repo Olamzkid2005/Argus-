@@ -1,0 +1,15 @@
+name: "wafw00f"
+command: "wafw00f"
+description: "Web Application Firewall fingerprinting and detection tool"
+args: ["-a"]
+enabled: true
+timeout: 120
+parameters:
+  - name: "target"
+    type: "string"
+    description: "Target URL"
+    required: true
+  - name: "verbose"
+    type: "boolean"
+    description: "Enable verbose output"
+    flag: "-v"

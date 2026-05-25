@@ -226,6 +226,14 @@ class MCPToolBridge:
                 ],
                 timeout=300),
             # ── Specialized tools ──
+            ToolDefinition("wafw00f", "wafw00f",
+                description="Web Application Firewall fingerprinting and detection",
+                args=["-a"],
+                parameters=[
+                    ToolSchema("target", "string", "Target URL", required=True),
+                    ToolSchema("verbose", "boolean", "Enable verbose output", flag="-v"),
+                ],
+                timeout=120),
             ToolDefinition("gospider", "gospider",
                 description="Web spider for endpoint discovery",
                 args=["-q", "-j"],
@@ -251,7 +259,7 @@ class MCPToolBridge:
         registered_count = 0
         skipped_tools = []
         for tool in tools:
-            if not _is_binary_available(tool.binary or tool.name):
+            if not _is_binary_available(getattr(tool, 'binary', None) or tool.name):
                 skipped_tools.append(tool.name)
                 slog.info(f"Skipping tool '{tool.name}' — binary not found on PATH")
                 continue
