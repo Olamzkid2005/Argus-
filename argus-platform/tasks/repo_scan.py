@@ -73,8 +73,8 @@ def detect_license(file_path):
                 data = json.load(f)
                 if 'license' in data:
                     return data['license']
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            logger.debug("Failed to parse package.json license: %s", e)
     
     return 'UNKNOWN'
 
