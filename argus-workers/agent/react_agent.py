@@ -461,7 +461,7 @@ class ReActAgent:
             )
 
             if decision.get("_fallback"):
-                logger.warning(f"LLM fallback: {decision.get('_reason')}")
+                logger.warning("LLM fallback: %s", decision.get("_reason"))
                 return None
 
             tool_name = decision.get("tool")
@@ -470,7 +470,7 @@ class ReActAgent:
                 return _DONE
 
             if not self.registry.get_tool(tool_name):
-                logger.warning(f"LLM selected unknown tool '{tool_name}', falling back")
+                logger.warning("LLM selected unknown tool '%s', falling back", tool_name)
                 raise ValueError(f"Unknown tool: {tool_name}")
 
             return AgentAction(
@@ -481,7 +481,7 @@ class ReActAgent:
             )
 
         except Exception as e:
-            logger.warning(f"LLM tool selection failed: {e}. Using deterministic fallback.")
+            logger.warning("LLM tool selection failed: %s. Using deterministic fallback.", e)
             return None
 
     def _deterministic_plan(self, task: str, tried_tools: set) -> AgentAction | None:
@@ -525,7 +525,7 @@ class ReActAgent:
             if param.get("required", False):
                 param_name = param.get("name", "")
                 if param_name not in action.arguments:
-                    logger.warning(f"Missing required param '{param_name}' for {action.tool}")
+                    logger.warning("Missing required param '%s' for %s", param_name, action.tool)
                     return False
 
         # Validate target is not internal/private if present.
@@ -711,8 +711,8 @@ class ReActAgent:
                 total_cost_usd += getattr(action, "cost_usd", 0.0)
                 if total_cost_usd > LLM_AGENT_MAX_COST_USD:
                     logger.warning(
-                        f"Cost guard: ${total_cost_usd:.4f} exceeds ${LLM_AGENT_MAX_COST_USD:.4f}. "
-                        f"Switching to deterministic for remaining tools."
+                        "Cost guard: $%.4f exceeds $%.4f. Switching to deterministic for remaining tools.",
+                        total_cost_usd, LLM_AGENT_MAX_COST_USD,
                     )
                     for tool_name in self.PHASE_TOOLS.get(self._phase, []):
                         if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
@@ -863,7 +863,7 @@ class ReActAgent:
                         output_tokens=None,
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to log decision: {e}")
+                    logger.warning("Failed to log decision: %s", e)
 
         slog.agent_complete(tools_ran=len(results), total_cost=total_cost_usd)
         return results

@@ -106,7 +106,7 @@ class SpecialistAgent(ABC):
                 output_tokens=None,
             )
         except Exception as e:
-            logger.debug(f"{self.DOMAIN}/log_decision failed (non-fatal): {e}")
+            logger.debug("%s/log_decision failed (non-fatal): %s", self.DOMAIN, e)
 
     def _run_tool(self, tool_name: str, args: list, timeout: int = TOOL_TIMEOUT_DEFAULT) -> list[dict]:
         """Run a single tool and return parsed findings."""
@@ -125,11 +125,11 @@ class SpecialistAgent(ABC):
                 for p in parsed:
                     findings.append(p)
             elif result.stderr:
-                logger.debug(f"{self.DOMAIN}/{tool_name} stderr: {result.stderr[:200]}")
+                logger.debug("%s/%s stderr: %s", self.DOMAIN, tool_name, result.stderr[:200])
         except ImportError as e:
-            logger.error(f"{self.DOMAIN}/{tool_name} missing dependency: {e}")
+            logger.error("%s/%s missing dependency: %s", self.DOMAIN, tool_name, e)
         except Exception as e:
-            logger.warning(f"{self.DOMAIN}/{tool_name} failed: {e}")
+            logger.warning("%s/%s failed: %s", self.DOMAIN, tool_name, e)
         finally:
             self._log_decision(tool_name, args, len(findings), success)
         return findings
@@ -203,7 +203,7 @@ class IDORAgent(SpecialistAgent):
 
         for target in targets:
             # 1. Arjun parameter discovery on API endpoints
-            logger.info(f"[IDOR] Running arjun on {target}")
+            logger.info("[IDOR] Running arjun on %s", target)
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
@@ -217,10 +217,10 @@ class IDORAgent(SpecialistAgent):
                 )
                 all_findings.extend(arjun_findings)
             except Exception as e:
-                logger.warning(f"[IDOR] arjun failed for {target}: {e}")
+                logger.warning("[IDOR] arjun failed for %s: %s", target, e)
 
             # 2. jwt_tool for token manipulation (IDOR via JWT)
-            logger.info(f"[IDOR] Running jwt_tool on {target}")
+            logger.info("[IDOR] Running jwt_tool on %s", target)
             try:
                 jwt_findings = self._run_tool(
                     "jwt_tool",
@@ -229,17 +229,17 @@ class IDORAgent(SpecialistAgent):
                 )
                 all_findings.extend(jwt_findings)
             except Exception as e:
-                logger.warning(f"[IDOR] jwt_tool failed for {target}: {e}")
+                logger.warning("[IDOR] jwt_tool failed for %s: %s", target, e)
 
         # 3. web_scanner IDOR-focused checks on all targets
         if targets:
             self.tools_attempted.add("web_scanner")
-            logger.info(f"[IDOR] Running web_scanner on {len(targets)} targets")
+            logger.info("[IDOR] Running web_scanner on %d targets", len(targets))
             for target in targets:
                 web_findings = self._run_tool("web_scanner", [target], timeout=TOOL_TIMEOUT_LONG)
                 all_findings.extend(web_findings)
 
-        logger.info(f"[IDOR] Total findings: {len(all_findings)}")
+        logger.info("[IDOR] Total findings: %d", len(all_findings))
         return self._tag_findings(all_findings)
 
 
@@ -278,7 +278,7 @@ class AuthAgent(SpecialistAgent):
 
         for target in scan_targets:
             # 1. jwt_tool checks on auth endpoints
-            logger.info(f"[Auth] Running jwt_tool on {target}")
+            logger.info("[Auth] Running jwt_tool on %s", target)
             try:
                 jwt_findings = self._run_tool(
                     "jwt_tool",
@@ -287,10 +287,10 @@ class AuthAgent(SpecialistAgent):
                 )
                 all_findings.extend(jwt_findings)
             except Exception as e:
-                logger.warning(f"[Auth] jwt_tool failed for {target}: {e}")
+                logger.warning("[Auth] jwt_tool failed for %s: %s", target, e)
 
             # 2. nuclei auth-related templates
-            logger.info(f"[Auth] Running nuclei auth templates on {target}")
+            logger.info("[Auth] Running nuclei auth templates on %s", target)
             try:
                 from orchestrator_pkg.utils import get_nuclei_templates_path
 
@@ -313,17 +313,17 @@ class AuthAgent(SpecialistAgent):
                 )
                 all_findings.extend(nuclei_findings)
             except Exception as e:
-                logger.warning(f"[Auth] nuclei failed for {target}: {e}")
+                logger.warning("[Auth] nuclei failed for %s: %s", target, e)
 
         # 3. Password reset / login flow testing via web_scanner
         if scan_targets:
             self.tools_attempted.add("web_scanner")
-            logger.info(f"[Auth] Running web_scanner on {len(scan_targets)} targets")
+            logger.info("[Auth] Running web_scanner on %d targets", len(scan_targets))
             for target in scan_targets:
                 web_findings = self._run_tool("web_scanner", [target], timeout=TOOL_TIMEOUT_LONG)
                 all_findings.extend(web_findings)
 
-        logger.info(f"[Auth] Total findings: {len(all_findings)}")
+        logger.info("[Auth] Total findings: %d", len(all_findings))
         return self._tag_findings(all_findings)
 
 
@@ -369,7 +369,7 @@ class APIAgent(SpecialistAgent):
 
         for target in scan_targets:
             # 1. arjun parameter discovery on API paths
-            logger.info(f"[API] Running arjun on {target}")
+            logger.info("[API] Running arjun on %s", target)
             try:
                 sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
                 if sandbox:
@@ -383,10 +383,10 @@ class APIAgent(SpecialistAgent):
                 )
                 all_findings.extend(arjun_findings)
             except Exception as e:
-                logger.warning(f"[API] arjun failed for {target}: {e}")
+                logger.warning("[API] arjun failed for %s: %s", target, e)
 
             # 2. nuclei API-* tagged templates
-            logger.info(f"[API] Running nuclei API templates on {target}")
+            logger.info("[API] Running nuclei API templates on %s", target)
             try:
                 from orchestrator_pkg.utils import get_nuclei_templates_path
 
@@ -409,10 +409,10 @@ class APIAgent(SpecialistAgent):
                 )
                 all_findings.extend(nuclei_findings)
             except Exception as e:
-                logger.warning(f"[API] nuclei failed for {target}: {e}")
+                logger.warning("[API] nuclei failed for %s: %s", target, e)
 
             # 3. dalfox XSS scanner on API params
-            logger.info(f"[API] Running dalfox on {target}")
+            logger.info("[API] Running dalfox on %s", target)
             try:
                 dalfox_findings = self._run_tool(
                     "dalfox",
@@ -421,7 +421,7 @@ class APIAgent(SpecialistAgent):
                 )
                 all_findings.extend(dalfox_findings)
             except Exception as e:
-                logger.warning(f"[API] dalfox failed for {target}: {e}")
+                logger.warning("[API] dalfox failed for %s: %s", target, e)
 
             # 4. sqlmap injection testing on API params
             # Re-validate target is in authorized scope before sqlmap execution
@@ -443,9 +443,9 @@ class APIAgent(SpecialistAgent):
                 )
                 all_findings.extend(sqlmap_findings)
             except Exception as e:
-                logger.warning(f"[API] sqlmap failed for {target}: {e}")
+                logger.warning("[API] sqlmap failed for %s: %s", target, e)
 
-        logger.info(f"[API] Total findings: {len(all_findings)}")
+        logger.info("[API] Total findings: %d", len(all_findings))
         return self._tag_findings(all_findings)
 
 
