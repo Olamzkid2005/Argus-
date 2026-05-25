@@ -36,7 +36,8 @@ class ToolDefinition:
     def __init__(self, name: str, command: str, description: str = "",
                  args: list[str] = None, parameters: list[dict] = None,
                  enabled: bool = True, timeout: int = 300,
-                 env: dict[str, str] = None):
+                 env: dict[str, str] = None,
+                 binary: str | None = None):
         self.name = name
         self.command = command
         self.description = description
@@ -45,6 +46,7 @@ class ToolDefinition:
         self.enabled = enabled
         self.timeout = timeout
         self.env = env or {}
+        self.binary = binary
 
     def to_dict(self) -> dict:
         """Serialize to MCP tool schema format."""
@@ -181,6 +183,21 @@ class MCPServer:
         """Get a tool definition by name."""
         return self._tools.get(name)
 
+    # Blocklist of dangerous shell metacharacters in argument values
+    # to prevent command injection via tool arguments
+    _SHELL_INJECTION_PATTERN = set(";&|`$(){}[]!<>\n\t\x00")
+
+    def _validate_args_safe(self, args: list[str]) -> None:
+        """Validate that no arguments contain shell injection characters.
+
+        Raises ValueError if any argument is unsafe.
+        """
+        for i, arg in enumerate(args):
+            if any(c in arg for c in self._SHELL_INJECTION_PATTERN):
+                raise ValueError(
+                    f"Argument at position {i} contains shell metacharacters: {arg!r}"
+                )
+
     def call_tool(self, name: str, arguments: dict = None, timeout: int = None) -> dict:
         """
         Execute a tool by name with arguments (mcp.tools/call equivalent).
@@ -192,6 +209,11 @@ class MCPServer:
 
         Returns:
             MCP-formatted result dict
+
+        Security:
+            - Validates all arguments against shell injection patterns
+            - Uses subprocess.run WITHOUT shell=True (safe by design)
+            - Commands are vetted at registration time against a dangerous-command blocklist
         """
         tool = self._tools.get(name)
         if not tool:
@@ -217,6 +239,18 @@ class MCPServer:
                     cmd.append(str(value))
                 else:
                     cmd.append(str(value))
+
+        # Validate all arguments for shell injection before executing
+        try:
+            self._validate_args_safe(cmd[1:])
+        except ValueError as e:
+            self._execution_stats[name]["calls"] += 1
+            self._execution_stats[name]["failures"] += 1
+            return MCPToolResult(
+                success=False,
+                error=f"Security validation failed: {e}",
+                tool=name,
+            ).to_dict()
 
         # Track execution
         start = time.time()

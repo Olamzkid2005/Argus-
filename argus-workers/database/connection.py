@@ -30,6 +30,11 @@ class ConnectionManager:
 
     Auto-initializes on first use with DATABASE_URL from environment.
     Supports PgBouncer transaction pooling mode.
+
+    Security features:
+    - statement_timeout enforced on every connection to prevent runaway queries
+    - SSL mode configurable via DB_SSLMODE env var (default: prefer)
+    - Connection acquisition timeout to prevent worker process stalls
     """
 
     _instance: Optional["ConnectionManager"] = None
@@ -55,9 +60,11 @@ class ConnectionManager:
         self._min_connections = int(os.getenv("DB_POOL_MIN", "2"))
         self._max_connections = int(os.getenv("DB_POOL_MAX", "20"))
         self._slow_query_threshold_ms = int(os.getenv("DB_SLOW_QUERY_MS", "500"))
+        self._statement_timeout_ms = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000"))  # 30s default
         self._pgbouncer_mode = os.getenv(
             "PGBOUNCER_MODE", "session"
         )  # session or transaction
+        self._ssl_mode = os.getenv("DB_SSLMODE", "prefer")  # prefer, require, verify-ca, verify-full
         self._metrics: dict[str, Any] = {
             "active_connections": 0,
             "idle_connections": 0,
@@ -73,17 +80,23 @@ class ConnectionManager:
         if not conn_string:
             raise DatabaseConnectionError("DATABASE_URL environment variable not set")
 
+        # Add SSL mode parameter if not already in connection string
+        if "sslmode" not in conn_string:
+            separator = "&" if "?" in conn_string else "?"
+            ssl_params = f"sslmode={self._ssl_mode}"
+            conn_string += f"{separator}{ssl_params}"
+
         # Configure for PgBouncer if detected
         if (
             "pgbouncer" in conn_string
             or os.getenv("USE_PGBOUNCER", "false").lower() == "true"
         ) and self._pgbouncer_mode == "transaction":
             # Add options to disable session features
-                if "?" not in conn_string:
-                    conn_string += "?"
-                else:
-                    conn_string += "&"
-                conn_string += "options=-c%20statement_timeout%3D0"
+            if "?" not in conn_string:
+                conn_string += "?"
+            else:
+                conn_string += "&"
+            conn_string += "options=-c%20statement_timeout%3D0"
 
         return conn_string
 
@@ -99,7 +112,9 @@ class ConnectionManager:
                         )
                         logger.info(
                             f"Database pool initialized (min={self._min_connections}, "
-                            f"max={self._max_connections}, pgbouncer_mode={self._pgbouncer_mode})"
+                            f"max={self._max_connections}, pgbouncer_mode={self._pgbouncer_mode}, "
+                            f"ssl_mode={self._ssl_mode}, "
+                            f"statement_timeout={self._statement_timeout_ms}ms)"
                         )
                     except psycopg2.Error as e:
                         raise DatabaseConnectionError(
@@ -152,6 +167,17 @@ class ConnectionManager:
                     time.sleep(0.1)
                     continue
             wait_time = (time.time() - wait_start) * 1000
+
+            # Enforce statement_timeout on each connection
+            # This prevents runaway queries from blocking the pool
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SET statement_timeout = %s",
+                        (self._statement_timeout_ms,)
+                    )
+            except psycopg2.Error:
+                pass  # Non-fatal; query will still run, just without timeout
 
             with self._metrics_lock:
                 self._metrics["active_connections"] += 1

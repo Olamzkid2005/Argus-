@@ -14,8 +14,10 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Default configuration (used if YAML file not found)
+# NOTE: Default host is 127.0.0.1 (not 0.0.0.0) to avoid binding to all
+# interfaces in production. Override via config file or env var.
 DEFAULT_CONFIG = {
-    "server": {"host": "0.0.0.0", "port": 9000, "workers": 4, "log_level": "INFO"},
+    "server": {"host": "127.0.0.1", "port": 9000, "workers": 4, "log_level": "INFO"},
     "database": {"pool_min": 2, "pool_max": 20, "slow_query_ms": 500},
     "redis": {"url": "redis://localhost:6379/0"},
     "tools": {

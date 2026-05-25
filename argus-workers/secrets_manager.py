@@ -3,6 +3,11 @@ Secrets Management
 
 Wraps HashiCorp Vault and AWS Secrets Manager for secure secret retrieval.
 Falls back to environment variables for local development.
+
+Security notes:
+- Default Vault URL uses HTTPS (not HTTP) to enforce TLS
+- Set VAULT_SKIP_VERIFY=true only for development with self-signed certs
+- Secrets are cached in-memory; use invalidate_cache() to clear
 """
 
 import logging
@@ -29,13 +34,31 @@ class SecretsManager:
         self._cache: dict[str, Any] = {}
 
     def _get_vault_client(self):
-        """Lazy init Vault client"""
+        """Lazy init Vault client with TLS enforcement"""
         if self._vault_client is None:
             try:
                 import hvac
+
+                vault_addr = os.getenv("VAULT_ADDR", "https://localhost:8200")
+                vault_token = os.getenv("VAULT_TOKEN")
+
+                # Warn if using HTTP without skip_verify
+                if vault_addr.startswith("http://"):
+                    skip_verify = os.getenv("VAULT_SKIP_VERIFY", "").lower() in ("true", "1", "yes")
+                    if not skip_verify:
+                        logger.warning(
+                            "Vault URL uses HTTP (not HTTPS): %s. "
+                            "Set VAULT_ADDR to an HTTPS URL in production, "
+                            "or set VAULT_SKIP_VERIFY=true for local dev only.",
+                            vault_addr,
+                        )
+
+                verify = os.getenv("VAULT_SKIP_VERIFY", "").lower() not in ("true", "1", "yes")
+
                 self._vault_client = hvac.Client(
-                    url=os.getenv("VAULT_ADDR", "http://localhost:8200"),
-                    token=os.getenv("VAULT_TOKEN")
+                    url=vault_addr,
+                    token=vault_token,
+                    verify=verify,
                 )
             except ImportError:
                 logger.warning("hvac not installed, Vault unavailable")
