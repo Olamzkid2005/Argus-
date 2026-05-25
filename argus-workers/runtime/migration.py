@@ -166,6 +166,7 @@ def _engagement_has_state_snapshot(engagement_id: str) -> bool:
             )
             return cursor.fetchone() is not None
     except Exception:
+        logger.debug("Failed to check state snapshot for %s", engagement_id, exc_info=True)
         return False
 
 

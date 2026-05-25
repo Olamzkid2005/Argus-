@@ -213,6 +213,16 @@ class ToolRunner:
             "SEMGREP_ENABLE_VERSION_CHECK": "0",
         }
 
+        # Also check for project venv bin and homebrew bin
+        project_venv_bin = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "venv", "bin")
+        )
+        if project_venv_bin not in env["PATH"] and os.path.isdir(project_venv_bin):
+            env["PATH"] = f"{project_venv_bin}:{env['PATH']}"
+        homebrew_bin = "/opt/homebrew/bin"
+        if homebrew_bin not in env["PATH"] and os.path.isdir(homebrew_bin):
+            env["PATH"] = f"{homebrew_bin}:{env['PATH']}"
+
         # For web scanning tools, strip proxy so they can reach the internet
         # Semgrep will get proxy settings from parent environment (for validation fallback)
         if tool in no_proxy_tools:
@@ -256,8 +266,8 @@ class ToolRunner:
                 return str(cached_path)
         except ImportError:
             pass  # ToolCache not available — skip
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"ToolCache lookup failed for {tool}: {e}")
 
         # Build a comprehensive PATH that includes venv/bin and ~/go/bin
         # so tools installed via pip or go install are always findable
@@ -311,7 +321,7 @@ class ToolRunner:
         # Cache check
         import hashlib
         args_key = str(tuple(args))
-        cache_key = f"tool_result:{tool}:{hashlib.md5(args_key.encode()).hexdigest()}"
+        cache_key = f"tool_result:{tool}:{hashlib.md5(args_key.encode(), usedforsecurity=False).hexdigest()}"
         cached_result = cache.get(cache_key)
         if cached_result is not None:
             return ToolResult(**cached_result)
