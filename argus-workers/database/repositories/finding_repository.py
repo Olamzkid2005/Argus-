@@ -508,7 +508,7 @@ class FindingRepository(BaseRepository):
                 params.append(finding_type)
 
             cursor.execute(
-                f"SELECT COUNT(*) AS total FROM findings {where_clause}",
+                f"SELECT COUNT(*) AS total FROM findings {where_clause}",  # noqa: S608 — where_clause is built from constant strings
                 params,
             )
             total = cursor.fetchone()["total"]
@@ -519,7 +519,7 @@ class FindingRepository(BaseRepository):
                 {where_clause}
                 ORDER BY created_at DESC
                 LIMIT %s OFFSET %s
-                """,
+                """,  # noqa: S608 — where_clause is built from constant strings
                 params + [limit, offset],
             )
             rows = cursor.fetchall()

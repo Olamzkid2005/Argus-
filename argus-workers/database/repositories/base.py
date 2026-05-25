@@ -7,7 +7,7 @@ Supports passing an external connection for transaction support.
 
 import logging
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from typing import Any
 
 import psycopg2
@@ -243,10 +243,8 @@ class BaseRepository:
                 conn.commit()
         except Exception:
             if commit and not self._external_conn:
-                try:
+                with suppress(Exception):
                     conn.rollback()
-                except Exception:
-                    pass
             raise
         finally:
             cursor.close()

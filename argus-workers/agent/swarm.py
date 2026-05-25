@@ -571,12 +571,11 @@ class SwarmOrchestrator:
             # by timed-out agents (process group signal to catch children).
             try:
                 import psutil
+                from contextlib import suppress
                 current_process = psutil.Process()
                 for child in current_process.children(recursive=True):
-                    try:
+                    with suppress(psutil.NoSuchProcess):
                         child.kill()
-                    except psutil.NoSuchProcess:
-                        pass
             except ImportError:
                 logger.warning(
                     "psutil not installed — cannot kill orphaned tool subprocesses. "
