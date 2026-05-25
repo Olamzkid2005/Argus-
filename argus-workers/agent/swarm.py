@@ -297,7 +297,7 @@ class AuthAgent(SpecialistAgent):
                 templates_path = get_nuclei_templates_path()
                 nuclei_cmd = [
                     "-u", target,
-                    "-jsonl-export", "-",
+                    "-jsonl",
                     "-silent",
                     "-severity", "medium,high,critical",
                 ]
@@ -393,7 +393,7 @@ class APIAgent(SpecialistAgent):
                 templates_path = get_nuclei_templates_path()
                 nuclei_cmd = [
                     "-u", target,
-                    "-jsonl-export", "-",
+                    "-jsonl",
                     "-silent",
                     "-severity", "medium,high,critical",
                 ]

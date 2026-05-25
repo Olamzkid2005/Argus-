@@ -302,7 +302,7 @@ def execute_scan_tools(
                 if normalized:
                     all_findings.append(normalized)
         except Exception as e:
-            logger.debug(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
+            logger.warning(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 
     for target_idx, target in enumerate(targets):
         # Skip None/empty targets
@@ -320,7 +320,7 @@ def execute_scan_tools(
         if "arjun" not in _skip:
             try:
                 import hashlib
-                _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
+                _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
                 sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
                 if sandbox:
                     sandbox.mkdir(parents=True, exist_ok=True)
@@ -337,6 +337,29 @@ def execute_scan_tools(
             except Exception as e:
                 logger.warning(f"arjun failed for {target}: {e}")
 
+        # Phase 1.5: WAF detection — run before vulnerability scanners
+        if "wafw00f" not in _skip:
+            try:
+                waf_timeout = 120
+                slog.tool_start("wafw00f", [target])
+                waf_result = ctx.tool_runner.run("wafw00f", [target, "-a"], timeout=waf_timeout)
+                if waf_result.success and waf_result.stdout:
+                    logger.info("WAF detection results for %s: %s", target, waf_result.stdout[:500])
+                    waf_finding = {
+                        "type": "WAF_DETECTED",
+                        "severity": "info",
+                        "endpoint": target,
+                        "evidence": {"raw_output": waf_result.stdout.strip()},
+                        "source_tool": "wafw00f",
+                    }
+                    normalized = ctx._normalize_finding(waf_finding, "wafw00f")
+                    if normalized:
+                        all_findings.append(normalized)
+                slog.tool_complete("wafw00f", success=waf_result.success)
+            except Exception as e:
+                slog.tool_complete("wafw00f", success=False)
+                logger.debug(f"wafw00f failed for {target}: {e}")
+
         # Phase 2: all vulnerability scanners run simultaneously
         scan_jobs = []
 
@@ -347,7 +370,7 @@ def execute_scan_tools(
 
         # Build and run nuclei command with streaming (real-time findings)
         if "nuclei" not in _skip:
-            nuclei_cmd = ["-u", target, "-jsonl-export", "-", "-silent"]
+            nuclei_cmd = ["-u", target, "-jsonl", "-silent"]
             if templates_exist:
                 nuclei_cmd.extend(["-t", str(nuclei_templates)])
             nuclei_timeout = TOOL_TIMEOUT_LONG
@@ -385,7 +408,7 @@ def execute_scan_tools(
         if "sqlmap" not in _skip and not _budget_exceeded():
             _tool_count += 1
             import hashlib
-            _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
+            _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 sandbox.mkdir(parents=True, exist_ok=True)
@@ -412,7 +435,7 @@ def execute_scan_tools(
         # Build commix command
         if "commix" not in _skip and not _budget_exceeded() and _should_run_tool("commix", recon_context=recon_context, tech_stack=tech_stack):
             import hashlib
-            _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
+            _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 sandbox.mkdir(parents=True, exist_ok=True)
@@ -428,7 +451,7 @@ def execute_scan_tools(
         # Build testssl command
         if "testssl" not in _skip and not _budget_exceeded() and _should_run_tool("testssl", target=target):
             import hashlib
-            _target_slug = hashlib.md5(target.encode()).hexdigest()[:8]
+            _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
             sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
             if sandbox:
                 sandbox.mkdir(parents=True, exist_ok=True)
