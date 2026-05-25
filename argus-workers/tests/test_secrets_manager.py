@@ -42,7 +42,11 @@ class TestSecretsManager:
             client = manager._get_vault_client()
 
         assert client is mock_client
-        mock_hvac.Client.assert_called_once_with(url="http://vault:8200", token="token123")
+        mock_hvac.Client.assert_called_once_with(
+            url="http://vault:8200",
+            token="token123",
+            verify=True,
+        )
 
     def test_get_vault_client_import_error(self, manager):
         """Test Vault client handles missing hvac gracefully"""
