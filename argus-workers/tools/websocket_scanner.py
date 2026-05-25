@@ -152,18 +152,11 @@ class WebSocketScanner:
                     })
                     await ws.close()
             except InvalidStatus:
-                pass  # Server rejected - expected for secure servers
+                logger.debug("Server rejected origin validation for %s with origin %s", ws_url, origin)
             except (OSError, TimeoutError):
-                pass  # Network error - server unreachable
+                logger.debug("Network error during origin validation for %s with origin %s", ws_url, origin)
             except WebSocketException:
-                pass  # WebSocket protocol error
-            except Exception:
-                logger.warning(
-                    "Unexpected error in origin validation test for %s with origin %s",
-                    ws_url,
-                    origin,
-                    exc_info=True,
-                )
+                logger.debug("WebSocket protocol error during origin validation for %s with origin %s", ws_url, origin)
 
         return findings
 
@@ -192,13 +185,11 @@ class WebSocketScanner:
                 })
                 await ws.close()
         except InvalidStatus:
-            pass
+            logger.debug("Server rejected auth test for %s (expected)", ws_url)
         except (OSError, TimeoutError):
-            pass
+            logger.debug("Network error during auth test for %s", ws_url)
         except WebSocketException:
-            pass
-        except Exception:
-            logger.warning("Unexpected error in auth test for %s", ws_url, exc_info=True)
+            logger.debug("WebSocket protocol error during auth test for %s", ws_url)
 
         return findings
 
@@ -245,13 +236,11 @@ class WebSocketScanner:
                         pass
                     await ws.close()
             except InvalidStatus:
-                pass
+                logger.debug("Server rejected injection test for %s (expected)", ws_url)
             except (OSError, TimeoutError):
-                pass
+                logger.debug("Network error during injection test for %s", ws_url)
             except WebSocketException:
-                pass
-            except Exception:
-                logger.warning("Unexpected error in injection test for %s", ws_url, exc_info=True)
+                logger.debug("WebSocket protocol error during injection test for %s", ws_url)
 
         return findings
 
@@ -304,13 +293,11 @@ class WebSocketScanner:
 
                 await ws.close()
         except InvalidStatus:
-            pass
+            logger.debug("Server rejected rate limit test for %s (expected)", ws_url)
         except (OSError, TimeoutError):
-            pass
+            logger.debug("Network error during rate limit test for %s", ws_url)
         except WebSocketException:
-            pass
-        except Exception:
-            logger.warning("Unexpected error in rate limit test for %s", ws_url, exc_info=True)
+            logger.debug("WebSocket protocol error during rate limit test for %s", ws_url)
 
         return findings
 

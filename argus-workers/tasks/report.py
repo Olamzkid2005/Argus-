@@ -221,8 +221,8 @@ def generate_scheduled_reports(self):
                                 error_message=str(e),
                                 error_class=type(e).__name__,
                             )
-                        except Exception:
-                            pass
+                        except Exception as dlq_e:
+                            logger.debug("DLQ enqueue failed for scheduled report %s: %s", report["id"], dlq_e)
                         continue
 
         return {"processed": len(due_reports)}
@@ -448,8 +448,8 @@ def generate_compliance_report(
             if conn:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_e:
+                    logger.debug("Rollback failed after compliance report error: %s", rb_e)
             raise
         finally:
             if cursor:
@@ -645,8 +645,8 @@ def generate_full_report(
             if conn:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_e:
+                    logger.debug("Rollback failed after full report error: %s", rb_e)
             raise
         finally:
             if cursor:

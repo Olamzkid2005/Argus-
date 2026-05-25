@@ -60,8 +60,8 @@ def _check_mass_assignment(target_url, session, findings):
                             }, 0.6))
                     except (json.JSONDecodeError, ValueError):
                         pass
-            except Exception:
-                logger.debug(f"Mass assignment request failed for {url}")
+            except requests.RequestException:
+                logger.debug("Mass assignment request failed for %s", url)
 
 
 def _check_openapi_discovery(target_url, session, findings):
@@ -84,7 +84,7 @@ def _check_openapi_discovery(target_url, session, findings):
                 }, 0.9))
                 break
         except json.JSONDecodeError:
-            pass
+            logger.debug("OpenAPI discovery: failed to parse JSON from %s", url)
 
 
 def _check_jwt_algorithm_confusion(target_url, session, findings):

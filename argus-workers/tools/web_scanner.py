@@ -1237,7 +1237,7 @@ class WebScanner:
                                 confidence=0.6,
                             )
                     except (json.JSONDecodeError, ValueError):
-                        pass
+                        logger.debug("Mass assignment: failed to parse JSON response from %s", url)
 
     def check_xss(self):
         """Check for reflected XSS with improved validation."""
@@ -1700,8 +1700,8 @@ class WebScanner:
                             },
                             confidence=0.8,
                         )
-                except Exception:
-                    continue
+                except (json.JSONDecodeError, KeyError):
+                    logger.debug("JWT session expiration check failed for %s", url, exc_info=False)
             break
 
     def check_password_reset_strength(self):

@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Engagements API error:", error);
+    log.error("Engagements API error:", err.message || String(err));
     const err = error as Error;
     if (err.message === "Unauthorized") {
       return createErrorResponse(

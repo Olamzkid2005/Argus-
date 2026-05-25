@@ -111,7 +111,8 @@ def main():
 
         result = dispatch_task(task_name, args)
 
-        print(json.dumps(result))
+        # Print to stdout so the parent process can capture the result
+        sys.stdout.write(json.dumps(result) + "\n")
 
     except Exception as e:
         logger.error(f"Error dispatching task: {e}")

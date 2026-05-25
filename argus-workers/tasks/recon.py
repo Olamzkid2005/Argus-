@@ -97,8 +97,8 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
                         error_class=type(e).__name__,
                         engagement_id=engagement_id,
                     )
-                except Exception:
-                    pass
+                except Exception as dlq_e:
+                    logger.debug("DLQ enqueue failed for recon context save: %s", dlq_e)
 
         # Dispatch scan AFTER saving context. If dispatch fails the
         # engagement transitions directly to "failed" — no orphaned state.
@@ -191,8 +191,8 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                         error_class=type(e).__name__,
                         engagement_id=engagement_id,
                     )
-                except Exception:
-                    pass
+                except Exception as dlq_e:
+                    logger.debug("DLQ enqueue failed for recon context save expand: %s", dlq_e)
 
         # Load scan flags from DB (expand_recon is not dispatched with full job payload)
         from tasks.utils import fetch_engagement_scan_options

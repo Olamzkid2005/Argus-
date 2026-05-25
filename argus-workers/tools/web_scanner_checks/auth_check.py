@@ -83,8 +83,8 @@ def _check_default_credentials(target_url, session, findings):
                         "password": password,
                         "redirect_to": location,
                     }, 0.9))
-            except Exception:
-                logger.debug("Default cred test failed for %s", url)
+            except requests.RequestException:
+                logger.debug("Default cred test failed for %s", url, exc_info=False)
 
 
 def _check_brute_force(target_url, session, findings):
@@ -108,8 +108,8 @@ def _check_brute_force(target_url, session, findings):
                         "message": "No rate limiting or lockout detected after 5 rapid failed logins",
                     }, 0.8,
                 ))
-        except Exception:
-            logger.debug("Brute force check failed for %s", url)
+        except requests.RequestException:
+            logger.debug("Brute force check failed for %s", url, exc_info=False)
 
 
 def _check_session_fixation(target_url, session, findings):
@@ -141,8 +141,8 @@ def _check_session_fixation(target_url, session, findings):
                         "message": "Session cookie not rotated after login attempt",
                     }, 0.7,
                 ))
-        except Exception:
-            logger.debug("Session fixation check failed for %s", url)
+        except (requests.RequestException, KeyError):
+            logger.debug("Session fixation check failed for %s", url, exc_info=False)
 
 
 def _find_session_cookie(cookies: dict) -> str | None:
@@ -186,8 +186,8 @@ def _check_password_reset(target_url, session, findings):
                         }, 0.8,
                     ))
                     break
-        except Exception:
-            logger.debug("Password reset check failed for %s", url)
+        except requests.RequestException:
+            logger.debug("Password reset check failed for %s", url, exc_info=False)
 
 
 def _check_registration_endpoints(target_url, session, findings):
@@ -200,8 +200,8 @@ def _check_registration_endpoints(target_url, session, findings):
                     "path": path,
                     "status_code": resp.status_code,
                 }, 0.9))
-        except Exception:
-            logger.debug("Registration endpoint check failed for %s", url)
+        except requests.RequestException:
+            logger.debug("Registration endpoint check failed for %s", url, exc_info=False)
 
 
 class AuthCheck:

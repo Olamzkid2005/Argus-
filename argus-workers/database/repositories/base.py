@@ -93,7 +93,8 @@ def _get_table_columns(table_name: str) -> list[str]:
         finally:
             cursor.close()
             get_db().release_connection(conn)
-    except Exception:
+    except Exception as e:
+        logging.getLogger(__name__).debug("Schema introspection failed for %s: %s — falling back to allowlist", table_name, e)
         # Fall back to allowlist if schema introspection fails
         return ALLOWED_COLUMNS.get(table_name, [])
 

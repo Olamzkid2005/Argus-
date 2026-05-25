@@ -53,8 +53,8 @@ def run_scan(
                 error_class=type(e).__name__,
                 engagement_id=engagement_id,
             )
-        except Exception:
-            pass
+        except Exception as dlq_e:
+            logger.debug("DLQ enqueue failed for recon context load: %s", dlq_e)
         # Notify UI
         try:
             from streaming import emit_thinking

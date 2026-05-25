@@ -845,8 +845,8 @@ class ReActAgent:
             ):
                 try:
                     self.engagement_state.execution_iteration = iteration + 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to track execution iteration: %s", e)
 
             # Log decision to repository
             if self.decision_repo:
@@ -954,8 +954,8 @@ class ReActAgent:
                             f"Phase {phase} complete — transitioning to "
                             f"{phases[phases.index(phase) + 1]}...",
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to emit phase transition thinking: %s", e)
 
         logger.info(
             "Agent lifecycle complete for %s — ran %d phases",

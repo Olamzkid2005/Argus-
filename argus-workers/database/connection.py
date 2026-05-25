@@ -228,8 +228,8 @@ class ConnectionManager:
                 try:
                     with conn.cursor() as cursor:
                         cursor.execute("SELECT set_tenant_context(%s)", (org_id,))
-                except Exception:
-                    pass
+                except Exception as ctx_e:
+                    logger.debug("Failed to set tenant context: %s", ctx_e)
 
             yield conn
             if commit:

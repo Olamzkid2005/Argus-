@@ -662,14 +662,14 @@ class FindingRepository(BaseRepository):
                     # Release the savepoint on success
                     try:
                         cursor.execute(f"RELEASE SAVEPOINT {sp_name}")
-                    except Exception:
-                        pass
+                    except psycopg2.Error as sp_err:
+                        logger.debug("Failed to release savepoint %s: %s", sp_name, sp_err)
                 except psycopg2.errors.UniqueViolation:
                     # Rollback savepoint to clear aborted transaction state
                     try:
                         cursor.execute(f"ROLLBACK TO SAVEPOINT {sp_name}")
-                    except Exception:
-                        pass
+                    except psycopg2.Error as sp_err:
+                        logger.debug("Failed to rollback savepoint %s: %s", sp_name, sp_err)
                     # ON CONFLICT didn't catch it — fall back to SELECT
                     try:
                         cursor.execute(
