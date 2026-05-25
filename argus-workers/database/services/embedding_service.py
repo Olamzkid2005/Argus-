@@ -126,7 +126,7 @@ class EmbeddingService:
         if not hasattr(self, '_get_embedding_cache'):
             self._get_embedding_cache = {}
         import hashlib
-        key = hashlib.md5(text.encode('utf-8', errors='replace')).hexdigest()
+        key = hashlib.md5(text.encode('utf-8', errors='replace'), usedforsecurity=False).hexdigest()
         if key in self._get_embedding_cache:
             return self._get_embedding_cache[key]
 

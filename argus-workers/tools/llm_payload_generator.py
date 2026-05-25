@@ -210,7 +210,7 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             slog.info(f"Cache miss: {cache_key}, generating payloads...")
 
             # Generate callback marker for detection
-            callback = f"LLM_{hashlib.md5(fingerprint.encode()).hexdigest()[:8]}"
+            callback = f"LLM_{hashlib.md5(fingerprint.encode(), usedforsecurity=False).hexdigest()[:8]}"
 
             # Build prompt
             prompt_text = self.PAYLOAD_PROMPT.format(
@@ -333,7 +333,7 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
 
         # Build hashable fingerprint
         raw = f"{vuln_class}|{param_name}|{param_type}|{context}|{framework}"
-        return hashlib.md5(raw.encode()).hexdigest()
+        return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
     def _parse_payloads(self, raw_text: str) -> list[str]:
         """

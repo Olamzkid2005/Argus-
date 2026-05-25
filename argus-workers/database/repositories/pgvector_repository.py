@@ -287,7 +287,7 @@ class PGVectorRepository:
         import hashlib
 
         # Generate deterministic "random" numbers from text hash
-        hash_bytes = hashlib.sha256(text.encode()).digest()
+        hash_bytes = hashlib.sha256(text.encode(), usedforsecurity=False).digest()
         embedding = []
 
         for i in range(0, min(len(hash_bytes), self.EMBEDDING_DIMENSIONS), 4):
