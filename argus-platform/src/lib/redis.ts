@@ -9,7 +9,40 @@ import type { JobMessage } from "./job-types";
 
 // Redis client for job queue (singleton via globalThis to survive hot reloads)
 const globalForRedis = globalThis as unknown as { __redis?: Redis };
-const redis = globalForRedis.__redis ?? (globalForRedis.__redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379"));
+
+function createRedisClient(): Redis {
+  const url = process.env.REDIS_URL || "redis://localhost:6379";
+  const enableTLS = ["true", "1", "yes"].includes((process.env.REDIS_TLS || "").toLowerCase())
+    || url.startsWith("rediss://");
+
+  const options: import("ioredis").RedisOptions = {
+    maxRetriesPerRequest: 3,
+    retryStrategy: (times: number) => {
+      if (times > 5) return null; // Give up after 5 retries
+      return Math.min(times * 200, 3000); // Exponential backoff up to 3s
+    },
+    enableOfflineQueue: false,
+    lazyConnect: false,
+  };
+
+  // Configure TLS if enabled via REDIS_TLS env var or rediss:// protocol
+  if (enableTLS) {
+    options.tls = {
+      rejectUnauthorized: process.env.NODE_ENV === "production",
+    };
+  }
+
+  const client = new Redis(url, options);
+
+  // Prevent unhandled error events from crashing the process
+  client.on("error", (err: Error) => {
+    console.error("Redis connection error:", err.message);
+  });
+
+  return client;
+}
+
+const redis = globalForRedis.__redis ?? (globalForRedis.__redis = createRedisClient());
 
 /**
  * Generate idempotency key for a job
