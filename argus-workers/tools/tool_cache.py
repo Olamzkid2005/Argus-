@@ -16,7 +16,7 @@ from utils.logging_utils import ScanLogger
 logger = logging.getLogger(__name__)
 
 # Tool cache directory
-TOOL_CACHE_DIR = Path("/tmp/argus_tool_cache")
+TOOL_CACHE_DIR = Path(tempfile.gettempdir()) / "argus_tool_cache"
 TOOL_CACHE_DIR.mkdir(exist_ok=True)
 
 # Strict allowlist of tool names that can be installed via pip.

@@ -689,7 +689,7 @@ def _build_target_context_paragraph(profile: dict) -> str:
             f"Detected stack: {_sanitize_for_prompt(', '.join(tech))}."
         )
 
-    return "=== WHAT WE KNOW ABOUT THIS TARGET ===\n" + " ".join(parts)
+    return "=== WHAT WE KNOW ABOUT THIS TARGET ===\n" + " ".join(parts)  # noqa: S608
 
 
 def build_tool_selection_prompt(
@@ -965,7 +965,7 @@ def build_synthesis_prompt(
 {paths_json}
 
 Analyze these findings and produce a structured synthesis.
-"""
+"""  # noqa: S608
 
 
 def build_report_prompt(
@@ -990,4 +990,4 @@ Type: {engagement.get("scan_type", "N/A")}
 {json.dumps(scored_findings[:100], indent=2, default=str)}
 
 Generate a professional penetration test report.
-"""
+"""  # noqa: S608

@@ -322,22 +322,18 @@ class PGVectorRepository:
 
                 # Build parameterized ILIKE ANY query
                 kw_patterns = [f"%{kw}%" for kw in keywords[:5]]
+                # Build placeholder string safely — only %s positions here
                 placeholders = ", ".join("%s" for _ in kw_patterns)
+                query = (
+                    "SELECT f.id, f.type, f.severity, f.endpoint, f.engagement_id, 0.5 AS similarity "
+                    "FROM findings f "
+                    "WHERE f.engagement_id != %s "
+                    "AND f.evidence::text ILIKE ANY(ARRAY[{}]) "
+                    "LIMIT %s"
+                ).format(placeholders)
 
                 cursor.execute(
-                    f"""
-                    SELECT
-                        f.id,
-                        f.type,
-                        f.severity,
-                        f.endpoint,
-                        f.engagement_id,
-                        0.5 AS similarity
-                    FROM findings f
-                    WHERE f.engagement_id != %s
-                      AND f.evidence::text ILIKE ANY(ARRAY[{placeholders}])
-                    LIMIT %s
-                    """,
+                    query,
                     [engagement_id] + kw_patterns + [limit]
                 )
 

@@ -7,6 +7,7 @@ import uuid
 
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor
+from psycopg2.sql import SQL, Identifier
 
 from database.repositories.base import BaseRepository
 
@@ -599,7 +600,7 @@ class FindingRepository(BaseRepository):
                 try:
                     # Create a savepoint before each finding so individual
                     # failures can be rolled back without aborting the batch.
-                    cursor.execute(f"SAVEPOINT {sp_name}")
+                    cursor.execute(SQL("SAVEPOINT {}").format(Identifier(sp_name)))
 
                     finding_id = str(uuid.uuid4())
                     _type = f.get("type", "UNKNOWN")
@@ -661,13 +662,13 @@ class FindingRepository(BaseRepository):
 
                     # Release the savepoint on success
                     try:
-                        cursor.execute(f"RELEASE SAVEPOINT {sp_name}")
+                        cursor.execute(SQL("RELEASE SAVEPOINT {}").format(Identifier(sp_name)))
                     except psycopg2.Error as sp_err:
                         logger.debug("Failed to release savepoint %s: %s", sp_name, sp_err)
                 except psycopg2.errors.UniqueViolation:
                     # Rollback savepoint to clear aborted transaction state
                     try:
-                        cursor.execute(f"ROLLBACK TO SAVEPOINT {sp_name}")
+                        cursor.execute(SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name)))
                     except psycopg2.Error as sp_err:
                         logger.debug("Failed to rollback savepoint %s: %s", sp_name, sp_err)
                     # ON CONFLICT didn't catch it — fall back to SELECT
@@ -691,7 +692,7 @@ class FindingRepository(BaseRepository):
                     # Without this, PostgreSQL rejects all subsequent statements
                     # with "current transaction is aborted, commands ignored".
                     try:
-                        cursor.execute(f"ROLLBACK TO SAVEPOINT {sp_name}")
+                        cursor.execute(SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name)))
                     except Exception as sp_err:
                         logger.warning(
                             "batch_create_or_update: savepoint rollback also failed for %s — aborting batch: %s",
