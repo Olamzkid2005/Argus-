@@ -51,7 +51,7 @@ class AttackGraphRepository:
                 try:
                     conn.close()
                 except Exception:
-                    pass
+                    logger.debug("Failed to close connection for %s", engagement_id, exc_info=True)
 
     def save_paths(self, engagement_id: str, graph: "AttackGraph") -> int:
         """
@@ -144,8 +144,8 @@ class AttackGraphRepository:
             if conn:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_e:
+                    logger.debug("Rollback failed after save error for %s: %s", engagement_id, rb_e)
             logger.error(
                 "Failed to save attack paths for engagement %s: %s",
                 engagement_id, e, exc_info=True,
@@ -289,8 +289,8 @@ class AttackGraphRepository:
             if conn:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_e:
+                    logger.debug("Rollback failed after delete error for %s: %s", engagement_id, rb_e)
             logger.error(
                 "Failed to delete attack paths for engagement %s: %s",
                 engagement_id, e,

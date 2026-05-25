@@ -91,7 +91,7 @@ class RuleRegistry:
             try:
                 data = json.loads(version_file.read_text())
                 versions.append(data)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 continue
 
         return sorted(versions, key=lambda x: x.get("version", 0), reverse=True)
@@ -177,7 +177,7 @@ class RuleRegistry:
             try:
                 data = json.loads(community_file.read_text())
                 rules.append(data)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 continue
         return rules
 

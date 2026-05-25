@@ -152,7 +152,7 @@ class SecurityAudit:
                                 remediation="Set permissions to 600: chmod 600 {filepath}",
                                 check_id="FILE-001"
                             ))
-                    except Exception:
+                    except OSError:
                         pass
 
     def check_dependencies(self):

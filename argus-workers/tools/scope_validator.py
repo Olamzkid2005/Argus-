@@ -179,10 +179,10 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
                 row = cursor.fetchone()
                 if row and row[0]:
                     authorized_scope = row[0]
-        except Exception:
+        except Exception as e:
             logger.warning(
-                "Scope validation: DB unavailable for %s — defaulting to deny",
-                target,
+                "Scope validation: DB unavailable for %s — defaulting to deny: %s",
+                target, e,
             )
             return False
 
@@ -193,9 +193,9 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
     try:
         validator = ScopeValidator(engagement_id, authorized_scope)
         return validator.is_in_scope(target)
-    except Exception:
+    except Exception as e:
         logger.warning(
-            "Scope validation failed for %s — failing closed (deny)",
-            target, exc_info=True,
+            "Scope validation failed for %s — failing closed (deny): %s",
+            target, e,
         )
         return False

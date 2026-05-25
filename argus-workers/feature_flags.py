@@ -143,7 +143,8 @@ class FeatureFlags:
                 )
                 row = cursor.fetchone()
                 return row[0] if row else None
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load feature flag '%s' from DB: %s", flag_name, e)
             return None
 
     def clear_cache(self):

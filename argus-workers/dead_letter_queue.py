@@ -267,7 +267,7 @@ class DeadLetterQueue:
                 try:
                     self.redis.delete(self.TASK_INDEX_KEY)
                 except Exception:
-                    pass
+                    logger.debug("Failed to clean up TASK_INDEX_KEY during purge", exc_info=True)
                 return count
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"

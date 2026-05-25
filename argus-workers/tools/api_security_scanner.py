@@ -562,7 +562,7 @@ class APISecurityScanner:
             except json.JSONDecodeError:
                 logger.warning("Failed to parse OpenAPI JSON body — YAML not supported")
             except Exception:
-                pass
+                logger.debug("Failed to parse OpenAPI spec (non-json body)", exc_info=True)
         return paths
 
     @staticmethod
