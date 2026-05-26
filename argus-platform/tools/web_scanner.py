@@ -124,7 +124,7 @@ def run_katana_crawl(target_url: str, timeout: int = 60) -> List[Dict[str, Any]]
             '-timeout', str(timeout)
         ]
         
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 — safe: cmd is a list ['katana', ...], no shell=True
             cmd,
             capture_output=True,
             text=True,

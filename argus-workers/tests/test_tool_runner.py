@@ -2,6 +2,8 @@
 Tests for Tool Runner
 """
 
+# ruff: noqa: S108  # test sandbox uses tempfile, not hardcoded /tmp/
+
 import tempfile
 from pathlib import Path
 

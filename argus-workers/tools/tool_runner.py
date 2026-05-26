@@ -373,7 +373,7 @@ class ToolRunner:
                 # Execute with locked environment
                 # Limit captured output to prevent OOM from large tool output
                 max_output_bytes = 10 * 1024 * 1024  # 10MB
-                result = subprocess.run(
+                result = subprocess.run(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
                     [tool_path] + args,
                     capture_output=True,
                     text=True,
@@ -550,7 +550,7 @@ class ToolRunner:
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         slog.tool_start(tool, f"streaming, timeout={timeout}s")
 
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
             [tool_path] + args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

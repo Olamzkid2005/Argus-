@@ -51,7 +51,7 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
         subprocess_args = [sys.executable, str(worker), target_url]
         if tech_stack:
             subprocess_args.append(json.dumps(tech_stack))
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 — safe: list form ([sys.executable, worker, target_url]), no shell=True
             subprocess_args,
             capture_output=True,
             text=True,

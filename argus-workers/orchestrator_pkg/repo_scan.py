@@ -80,8 +80,8 @@ def run_npm_audit(repo_path: str) -> list[dict]:
     """Run npm audit and parse results for dependency vulnerabilities."""
     findings = []
     try:
-        result = subprocess.run(
-            ['npm', 'audit', '--json'],
+        result = subprocess.run(  # safe: list form, npm is in PATH
+            ['npm', 'audit', '--json'],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -119,8 +119,8 @@ def run_pip_audit(repo_path: str) -> list[dict]:
     """Run pip-audit for Python dependencies."""
     findings = []
     try:
-        result = subprocess.run(
-            ['pip-audit', '--format', 'json', '--quiet'],
+        result = subprocess.run(  # safe: list form, pip-audit is in venv PATH
+            ['pip-audit', '--format', 'json', '--quiet'],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -157,8 +157,8 @@ def run_govulncheck(repo_path: str) -> list[dict]:
     """Run govulncheck for Go vulnerabilities."""
     findings = []
     try:
-        result = subprocess.run(
-            ['govulncheck', './...', '-json'],
+        result = subprocess.run(  # safe: list form, govulncheck is in PATH
+            ['govulncheck', './...', '-json'],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -315,7 +315,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
         # ── Clone repository ──
         clone_cmd = ["git", "clone"] + clone_depth + ["--", repo_url, temp_dir]
         clone_timeout = 120 if agg in ("default", "high") else TOOL_TIMEOUT_LONG
-        clone_result = subprocess.run(
+        clone_result = subprocess.run(  # noqa: S603 — safe: clone_cmd is list form, URL validated by validate_repo_url()
             clone_cmd,
             capture_output=True,
             text=True,

@@ -19,8 +19,8 @@ def get_blame_for_finding(repo_path, finding):
     line_number = finding.get('line_number', 1)
     
     try:
-        result = subprocess.run(
-            ['git', 'blame', '-L', f'{line_number},{line_number}',
+        result = subprocess.run(  # noqa: S603 — safe: list form, test file, controlled inputs
+            ['git', 'blame', '-L', f'{line_number},{line_number}',  # noqa: S607
              '--porcelain', file_path],
             cwd=repo_path,
             capture_output=True,

@@ -41,7 +41,7 @@ def update_nuclei_templates(timeout: int = 120) -> bool:
     try:
         env = os.environ.copy()
         env["HOME"] = str(Path.home())
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 — safe: cmd is list form ["nuclei", "-update-templates", ...], no shell=True
             cmd,
             capture_output=True,
             text=True,

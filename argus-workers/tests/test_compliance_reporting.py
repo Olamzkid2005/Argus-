@@ -73,7 +73,7 @@ class TestComplianceReportGenerator:
 
     @pytest.fixture
     def generator(self):
-        return ComplianceReportGenerator(templates_dir="/tmp/test_templates")
+        return ComplianceReportGenerator(templates_dir="/tmp/test_templates")  # noqa: S108 — test fixture
 
     @pytest.fixture
     def sample_findings(self):

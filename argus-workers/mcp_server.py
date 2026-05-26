@@ -257,7 +257,7 @@ class MCPServer:
         self._execution_stats[name]["calls"] += 1
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
                 cmd,
                 capture_output=True,
                 text=True,

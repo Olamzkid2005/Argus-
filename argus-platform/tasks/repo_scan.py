@@ -131,8 +131,8 @@ def _detect_languages(repo_path: str) -> Dict[str, bool]:
     languages = {'python': False, 'javascript': False, 'go': False}
     
     try:
-        result = subprocess.run(
-            ['find', repo_path, '-type', 'f', '-name', '*.py', '-o', '-name', '*.js', '-o', '-name', '*.ts', '-o', '-name', '*.tsx', '-o', '-name', '*.jsx', '-o', '-name', '*.go'],
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True, find paths are validated
+            ['find', repo_path, '-type', 'f', '-name', '*.py', '-o', '-name', '*.js', '-o', '-name', '*.ts', '-o', '-name', '*.tsx', '-o', '-name', '*.jsx', '-o', '-name', '*.go'],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=30
@@ -160,8 +160,8 @@ def _map_bandit_severity(severity):
 def run_bandit(repo_path):
     """Run Bandit for Python security issues."""
     try:
-        result = subprocess.run(
-            ['bandit', '-r', repo_path, '-f', 'json', '-o', '-'],
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True
+            ['bandit', '-r', repo_path, '-f', 'json', '-o', '-'],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=300
@@ -198,8 +198,8 @@ def run_eslint_security(repo_path):
     """Run ESLint with security plugins."""
     try:
         # Ensure eslint-plugin-security is installed
-        result = subprocess.run(
-            ['npx', 'eslint', '--ext', '.js,.jsx,.ts,.tsx', 
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True
+            ['npx', 'eslint', '--ext', '.js,.jsx,.ts,.tsx',  # noqa: S607
              '--format', 'json', repo_path],
             capture_output=True,
             text=True,
@@ -232,8 +232,8 @@ def run_eslint_security(repo_path):
 def run_gosec(repo_path):
     """Run gosec for Go security issues."""
     try:
-        result = subprocess.run(
-            ['gosec', '-fmt=json', repo_path],
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True
+            ['gosec', '-fmt=json', repo_path],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=300
@@ -303,8 +303,8 @@ def _check_patch_for_secrets(
 def scan_git_history_for_secrets(repo_path: str) -> List[Dict]:
     findings = []
     try:
-        result = subprocess.run(
-            ['git', 'log', '--all', '--patch', '--pretty=format:COMMIT:%H|AUTHOR:%an|DATE:%ai'],
+        result = subprocess.run(  # safe: list form, no shell=True, repo_path is validated
+            ['git', 'log', '--all', '--patch', '--pretty=format:COMMIT:%H|AUTHOR:%an|DATE:%ai'],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,

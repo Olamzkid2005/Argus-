@@ -4,6 +4,8 @@ End-to-end Integration Tests for the Argus Orchestrator Architecture
 Tests the MCP protocol server, ReAct agent loop, coordinator agent,
 and orchestrator pipeline with mocked subprocess execution but real import chains.
 """
+
+# ruff: noqa: S108  # test files use /tmp/ paths for MCP server test directories
 import json
 import os
 import sys

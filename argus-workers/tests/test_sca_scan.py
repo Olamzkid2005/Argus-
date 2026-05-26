@@ -2,6 +2,8 @@
 Tests for SCA (Software Composition Analysis) scanning functions.
 """
 
+# ruff: noqa: S108  # test files use /tmp/ paths for fake repo fixtures
+
 import json
 from unittest.mock import MagicMock, patch
 

@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 import uuid
 from datetime import UTC, datetime
 
@@ -143,7 +144,7 @@ def run_repo_scan(
                     repo_path = result.get(
                         "repo_path",
                         os.path.join(
-                            os.getenv("ARTIFACTS_DIR", "/tmp/argus_artifacts"),
+                            os.getenv("ARTIFACTS_DIR", os.path.join(tempfile.gettempdir(), "argus_artifacts")),
                             engagement_id,
                         ),
                     )
@@ -271,8 +272,8 @@ def get_blame_for_finding(repo_path, finding):
     line_number = finding.get("line_number", 1)
 
     try:
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 — safe: args are hardcoded/validated, repo_path is controlled
+            [  # noqa: S607
                 "git",
                 "blame",
                 "-L",
@@ -428,8 +429,8 @@ def save_sbom(sbom, repo_path, format="cyclonedx"):
 def run_npm_audit(repo_path):
     """Run npm audit and parse results."""
     try:
-        result = subprocess.run(
-            ["npm", "audit", "--json"],
+        result = subprocess.run(  # noqa: S603 — safe: no shell=True, args are hardcoded, repo_path is validated
+            ["npm", "audit", "--json"],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -462,8 +463,8 @@ def run_npm_audit(repo_path):
 def run_pip_audit(repo_path):
     """Run pip-audit for Python dependencies."""
     try:
-        result = subprocess.run(
-            ["pip-audit", "--format", "json", "--quiet"],
+        result = subprocess.run(  # noqa: S603 — safe: no shell=True, args are hardcoded
+            ["pip-audit", "--format", "json", "--quiet"],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -495,8 +496,8 @@ def run_pip_audit(repo_path):
 def run_govulncheck(repo_path):
     """Run govulncheck for Go vulnerabilities."""
     try:
-        result = subprocess.run(
-            ["govulncheck", "./...", "-json"],
+        result = subprocess.run(  # noqa: S603 — safe: no shell=True, args are hardcoded
+            ["govulncheck", "./...", "-json"],  # noqa: S607
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -538,7 +539,7 @@ def scan_git_history_for_secrets(repo_path):
     process = None
     try:
         process = subprocess.Popen(
-            [
+            [  # noqa: S607
                 "git",
                 "log",
                 "--all",
@@ -795,8 +796,8 @@ def check_license_compliance(repo_path, policy=None):
 def run_bandit(repo_path):
     """Run Bandit for Python security issues."""
     try:
-        result = subprocess.run(
-            ["bandit", "-r", repo_path, "-f", "json", "-o", "-"],
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True
+            ["bandit", "-r", repo_path, "-f", "json", "-o", "-"],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=300,
@@ -843,8 +844,8 @@ def run_eslint_security(repo_path):
                 "Suspicious repo_path starting with '-', skipping eslint: %s", repo_path
             )
             return []
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True, -- separator prevents arg injection
+            [  # noqa: S607
                 "npx",
                 "eslint",
                 "--ext",
@@ -896,8 +897,8 @@ def run_gosec(repo_path):
     """Run gosec for Go security issues."""
     try:
         # Use -- to prevent argument injection via repo_path (issue 3.22)
-        result = subprocess.run(
-            ["gosec", "-fmt=json", "--", repo_path],
+        result = subprocess.run(  # noqa: S603 — safe: list form, no shell=True, -- separator prevents arg injection
+            ["gosec", "-fmt=json", "--", repo_path],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=300,

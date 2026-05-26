@@ -32,8 +32,8 @@ def bootstrap_nuclei_templates():
 
     # Try git clone with shallow depth
     try:
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 — safe: list form, git command is controlled
+            [  # noqa: S607
                 "git", "clone",
                 "--depth", "1",
                 "--filter=blob:none",
@@ -64,8 +64,8 @@ def bootstrap_nuclei_templates():
         env = os.environ.copy()
         env["HOME"] = str(assets_dir)
 
-        result = subprocess.run(
-            ["nuclei", "-update-templates"],
+        result = subprocess.run(  # safe: list form, nuclei is installed in venv PATH
+            ["nuclei", "-update-templates"],  # noqa: S607
             env=env,
             capture_output=True,
             text=True,

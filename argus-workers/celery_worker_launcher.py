@@ -45,7 +45,7 @@ def main():
     print(f"PYTHONPATH: {os.environ.get('PYTHONPATH', 'not set')}")
 
     # Start the worker
-    proc = subprocess.Popen(
+    proc = subprocess.Popen(  # noqa: S603 — safe: no shell=True, args is a hardcoded list
         args,
         cwd=SCRIPT_DIR,
         env={**os.environ, "PYTHONPATH": PROJECT_ROOT},

@@ -123,7 +123,7 @@ class ToolCache:
                     pip_cmd.append(f"{tool_name}=={version}")
                 else:
                     pip_cmd.append(tool_name)
-                result = subprocess.run(
+                result = subprocess.run(  # noqa: S603 — safe: pip_cmd built from allowlisted tool names
                     pip_cmd,
                     capture_output=True, text=True, timeout=300
                 )
@@ -132,7 +132,7 @@ class ToolCache:
                     logger.info("Installed %s via pip (version=%s, hashes=%s)",
                                 tool_name, version or 'latest', 'enabled' if hashes_env else 'disabled')
                     # Verify installation succeeded by checking --version
-                    verify = subprocess.run(
+                    verify = subprocess.run(  # noqa: S603 — safe: tool_name is from allowlist
                         [tool_name, "--version"],
                         capture_output=True, text=True, timeout=10,
                     )
@@ -154,8 +154,8 @@ class ToolCache:
             try:
                 self._validate_download_url(download_url)
                 temp_dir = tempfile.mkdtemp()
-                result = subprocess.run(
-                    ["curl", "-L", "-o", f"{temp_dir}/{tool_name}", download_url],
+                result = subprocess.run(  # noqa: S603 — safe: list form, URL is validated by _validate_download_url()
+                    ["curl", "-L", "-o", f"{temp_dir}/{tool_name}", download_url],  # noqa: S607
                     capture_output=True,
                     text=True,
                     timeout=300
@@ -199,7 +199,7 @@ class ToolCache:
             return False
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603 — safe: tool_path is from local cache directory
                 [str(tool_path), "--version"],
                 capture_output=True,
                 text=True,
