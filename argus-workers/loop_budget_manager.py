@@ -98,6 +98,46 @@ class LoopBudgetManager:
             },
         }
 
+    def persist_to_db(self):
+        """
+        Persist current budget state to the database.
+
+        Uses UPSERT (INSERT ... ON CONFLICT DO UPDATE) so the row is
+        auto-created for engagements without an existing loop_budgets row.
+        Must be called after consume() to ensure budget counters survive
+        across analysis → recon loop iterations.
+        """
+        try:
+            from database.connection import db_cursor
+            with db_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO loop_budgets (
+                        engagement_id, max_cycles, max_depth,
+                        current_cycles, current_depth
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (engagement_id) DO UPDATE SET
+                        max_cycles = EXCLUDED.max_cycles,
+                        max_depth = EXCLUDED.max_depth,
+                        current_cycles = EXCLUDED.current_cycles,
+                        current_depth = EXCLUDED.current_depth,
+                        updated_at = NOW()
+                    """,
+                    (
+                        self.engagement_id,
+                        self.max_cycles,
+                        self.max_depth,
+                        self.current_cycles,
+                        self.current_depth,
+                    ),
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to persist budget for engagement %s: %s",
+                self.engagement_id, e,
+            )
+
     def reset(self):
         """Reset current values to zero"""
         self.current_cycles = 0

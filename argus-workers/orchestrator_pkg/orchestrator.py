@@ -623,23 +623,6 @@ class Orchestrator:
         if failed_saves > 0:
             slog.warning(f"{failed_saves}/{findings_count} scan findings failed to save")
 
-        from llm_client import load_llm_setting
-        llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
-        if llm_review_enabled and self.llm_client and self.llm_client.is_available():
-            try:
-                from tasks.llm_review import run_llm_review
-                run_llm_review.delay(engagement_id=self.engagement_id, budget=job.get("budget", {}), trace_id=get_trace_id())
-                logger.info(f"Enqueued LLM review for engagement {self.engagement_id}")
-                with contextlib.suppress(Exception):
-                    self.ws_publisher.publish_scanner_activity(
-                        engagement_id=self.engagement_id, tool_name="LLM Review",
-                        activity="review_enqueued", status="completed",
-                        target=str(targets),
-                        details="LLM review dispatched for post-scan analysis",
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to enqueue LLM review (non-fatal): {e}")
-
         slog.tool_complete("orchestrator.run_scan", success=True, findings=findings_count)
         return {"phase": "scan", "status": "completed", "findings_count": findings_count,
                 "next_state": "analyzing", "trace_id": get_trace_id()}
@@ -930,6 +913,12 @@ class Orchestrator:
                 "Fix generation batch failed (non-fatal): %s", e
             )
 
+        # ── Persist budget counters back to DB ──
+        # This ensures that if analysis loops back to recon and runs again,
+        # the budget counters continue from where they left off in memory
+        # rather than starting from the stale DB value (bug #3 fix).
+        budget_mgr.persist_to_db()
+
         # No batch actions to dispatch — analysis is consumed by the agent loop.
         # The analysis dict (risk_level, coverage_gaps, etc.) is returned for
         # the caller to use in reporting/progress tracking.
@@ -1055,21 +1044,11 @@ class Orchestrator:
                 "Target profile update failed (non-fatal): %s", e
             )
 
-        # ── Dispatch scan diff for scheduled engagements ──
-        try:
-            _budget = job.get("budget", {})
-            prev_id = _budget.get("prev_engagement_id") if _budget else None
-            if prev_id and _org_id:
-                from tasks.diff import run_scan_diff
-                run_scan_diff.delay(
-                    prev_engagement_id=prev_id,
-                    new_engagement_id=self.engagement_id,
-                    org_id=_org_id,
-                )
-        except Exception as e:
-            logger.warning(
-                "Scan diff dispatch failed (non-fatal): %s", e
-            )
+        # ── Scan diff dispatch removed from orchestrator ──
+        # This is now handled by tasks/report.py::generate_report() which
+        # queries the DB for the most recent completed engagement for the
+        # same target URL. The DB-based approach is more reliable because
+        # it doesn't depend on prev_engagement_id being set in the budget.
 
         slog.tool_complete("orchestrator.run_reporting", success=True)
         return {"phase": "report", "status": "completed", "next_state": "complete",

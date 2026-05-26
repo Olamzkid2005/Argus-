@@ -55,6 +55,21 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
             return {"status": "already_complete"}
 
         result = ctx.orchestrator.run_reporting(ctx.job)
+
+        # ── Dispatch LLM review BEFORE complete transition ──
+        # The engagement is still in "reporting" state, so the LLM review
+        # won't skip itself (it skips when engagement is already terminal).
+        try:
+            from tasks.llm_review import run_llm_review
+            run_llm_review.delay(
+                engagement_id=engagement_id,
+                budget=budget,
+                trace_id=trace_id or ctx.trace_id,
+            )
+            logger.info("Enqueued LLM review for engagement %s", engagement_id)
+        except Exception as e:
+            logger.warning("Failed to enqueue LLM review (non-fatal): %s", e)
+
         transitioned = ctx.state.safe_transition("complete", "Report generated")
         if not transitioned:
             logger.warning(
@@ -63,6 +78,41 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
                 engagement_id, ctx.state.current_state,
             )
         slog.phase_complete("report", status="completed")
+
+        # ── Dispatch scan diff for continuous monitoring ──
+        # Find the most recent completed engagement for the same target URL
+        # so the diff engine can compare findings between scans.
+        try:
+            from database.connection import db_cursor as _diff_cursor
+            with _diff_cursor() as _c:
+                _c.execute(
+                    "SELECT target_url, org_id FROM engagements WHERE id = %s",
+                    (engagement_id,),
+                )
+                _row = _c.fetchone()
+                if _row:
+                    _target_url, _org_id = _row[0], _row[1]
+                    _c.execute(
+                        """SELECT id FROM engagements
+                           WHERE target_url = %s AND org_id = %s AND status = 'complete' AND id != %s
+                           ORDER BY completed_at DESC NULLS LAST LIMIT 1""",
+                        (_target_url, _org_id, engagement_id),
+                    )
+                    _prev = _c.fetchone()
+                    if _prev:
+                        from tasks.diff import run_scan_diff
+                        run_scan_diff.delay(
+                            prev_engagement_id=str(_prev[0]),
+                            new_engagement_id=engagement_id,
+                            org_id=_org_id,
+                        )
+                        logger.info(
+                            "Dispatched scan diff for engagement %s (prev=%s)",
+                            engagement_id, str(_prev[0]),
+                        )
+        except Exception as _e:
+            logger.debug("Could not dispatch scan diff for %s: %s", engagement_id, _e)
+
         return result
 
 
