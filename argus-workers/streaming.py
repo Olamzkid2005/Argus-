@@ -329,6 +329,7 @@ def _maybe_transactional(engagement_id: str, event_type: str, data: dict) -> boo
             )
     except Exception:
         logger.debug("Transactional emitter delegate failed for %s", event_type, exc_info=True)
+        return False
     return True
 
 

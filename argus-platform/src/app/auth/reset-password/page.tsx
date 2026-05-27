@@ -9,9 +9,12 @@ import { motion } from "framer-motion";
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  // Token removed from URL query string for security (C-08).
+  // The token is sent in the email body and entered manually.
+  const legacyToken = searchParams.get("token");
   
   const [email, setEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -27,8 +30,11 @@ function ResetPasswordForm() {
     setIsLoading(true);
 
     try {
-      if (token) {
-        // Reset password with token
+      // Support both legacy token-in-URL and new code-based flow
+      const effectiveToken = resetCode || legacyToken;
+
+      if (effectiveToken) {
+        // Reset password with token/code
         if (password !== confirmPassword) {
           setError("Passwords do not match");
           setIsLoading(false);
@@ -43,7 +49,7 @@ function ResetPasswordForm() {
         const response = await fetch("/api/auth/reset-password", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, password }),
+          body: JSON.stringify({ token: effectiveToken, password }),
         });
 
         const data = await response.json();
@@ -176,12 +182,12 @@ function ResetPasswordForm() {
 
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-1">
-              {token ? "Set new password" : "Reset your password"}
+              {resetCode || legacyToken ? "Set new password" : "Reset your password"}
             </h1>
             <p className="text-sm text-gray-500">
-              {token 
+              {resetCode || legacyToken 
                 ? "Enter your new password below." 
-                : "Enter your email address and we'll send you a link to reset your password."}
+                : "Enter your email address and we'll send you a code to reset your password."}
             </p>
           </div>
 
@@ -196,14 +202,14 @@ function ResetPasswordForm() {
                 <CheckCircle size={32} className="text-green-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {token ? "Password reset successful!" : "Reset email sent!"}
+                {resetCode || legacyToken ? "Password reset successful!" : "Reset email sent!"}
               </h3>
               <p className="text-sm text-gray-500 mb-6">
-                {token 
+                {resetCode || legacyToken 
                   ? "Your password has been updated. Redirecting to sign in..." 
-                  : "Check your email for a link to reset your password. If it doesn't appear within a few minutes, check your spam folder."}
+                  : "Check your email for a code to reset your password. If it doesn't appear within a few minutes, check your spam folder."}
               </p>
-              {!token && (
+              {!(resetCode || legacyToken) && (
                 <Link
                   href="/auth/signin"
                   className="inline-flex items-center justify-center px-6 py-2.5 rounded-lg bg-[#6720FF] text-white text-sm font-semibold hover:bg-[#5a1be6] transition-all duration-200"
@@ -214,7 +220,7 @@ function ResetPasswordForm() {
             </motion.div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
-              {!token ? (
+              {!(resetCode || legacyToken) ? (
                 /* Email Field */
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -240,6 +246,31 @@ function ResetPasswordForm() {
                 </div>
               ) : (
                 <>
+                  {/* Reset Code — entered manually from email body (C-08) */}
+                  {!legacyToken && (
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Reset Code (from email)
+                      </label>
+                      <input
+                        type="text"
+                        name="resetCode"
+                        id="resetCode"
+                        value={resetCode}
+                        onChange={(e) => setResetCode(e.target.value)}
+                        onFocus={() => setFocusedField("resetCode")}
+                        onBlur={() => setFocusedField(null)}
+                        placeholder="Paste the code from your email"
+                        autoComplete="off"
+                        required
+                        className={`w-full px-4 py-2.5 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
+                          focusedField === "resetCode"
+                            ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
+                            : "border-transparent hover:bg-gray-200"
+                        }`}
+                      />
+                    </div>
+                  )}
                   {/* New Password */}
                   <div>
                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -335,7 +366,7 @@ function ResetPasswordForm() {
                     {token ? "Updating..." : "Sending..."}
                   </span>
                 ) : (
-                  token ? "Reset Password" : "Send Reset Link"
+                  (resetCode || legacyToken) ? "Reset Password" : "Send Reset Link"
                 )}
               </button>
             </form>

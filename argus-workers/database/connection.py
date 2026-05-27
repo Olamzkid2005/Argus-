@@ -235,13 +235,20 @@ class ConnectionManager:
             if commit:
                 conn.commit()
         except Exception:
-            if commit:
-                try:
-                    conn.rollback()
-                except Exception as rb_err:
-                    logger.warning("Rollback failed: %s", rb_err)
+            try:
+                conn.rollback()
+            except Exception as rb_err:
+                logger.warning("Rollback failed: %s", rb_err)
             raise
         finally:
+            # Reset tenant context to prevent cross-org data leakage
+            # on connection reuse (C-v3-03)
+            if org_id:
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT reset_tenant_context()")
+                except Exception as ctx_e:
+                    logger.debug("Failed to reset tenant context: %s", ctx_e)
             self.release_connection(conn)
 
     @contextmanager

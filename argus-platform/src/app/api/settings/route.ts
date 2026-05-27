@@ -111,18 +111,18 @@ export async function PUT(request: NextRequest) {
     
     // Store OpenRouter key (if not masked with •)
     if (openrouter_api_key && openrouter_api_key.length > 5 && !openrouter_api_key.includes("•")) {
-      await redis.setex(`settings:${email}:openrouter_api_key`, 86400, openrouter_api_key);
+      await redis.setex(`settings:${email}:openrouter_api_key`, 2592000, openrouter_api_key);
     }
     
     // Store preferred model
     if (preferred_ai_model && typeof preferred_ai_model === "string" && preferred_ai_model.length > 0) {
-      await redis.setex(`settings:${email}:preferred_ai_model`, 86400, preferred_ai_model);
+      await redis.setex(`settings:${email}:preferred_ai_model`, 2592000, preferred_ai_model);
     }
     
     // Store other settings
     for (const [key, value] of Object.entries(otherSettings)) {
       if (value && typeof value === "string" && value.length > 0) {
-        await redis.setex(`settings:${email}:${key}`, 86400, value);
+        await redis.setex(`settings:${email}:${key}`, 2592000, value);
       }
     }
     

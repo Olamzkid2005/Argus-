@@ -152,10 +152,13 @@ export async function POST(request: NextRequest) {
       const { pool: dbPool } = await import("@/lib/db");
       const ids = findings.map((f) => f.id);
       const idPlaceholders = ids.map((_, i) => `$${i + 1}`).join(",");
+      // Join with engagements to enforce org-level access control (C-06)
       const result = await dbPool.query(
-        `SELECT id, type, severity, endpoint, evidence, confidence, source_tool
-         FROM findings WHERE id IN (${idPlaceholders})`,
-        ids
+        `SELECT f.id, f.type, f.severity, f.endpoint, f.evidence, f.confidence, f.source_tool
+         FROM findings f
+         JOIN engagements e ON f.engagement_id = e.id
+         WHERE f.id IN (${idPlaceholders}) AND e.org_id = $${ids.length + 1}`,
+        [...ids, session.user.orgId]
       );
       const dbMap = new Map(result.rows.map((r: Record<string, unknown>) => [r.id as string, r]));
       findings = findings.map((f) => {

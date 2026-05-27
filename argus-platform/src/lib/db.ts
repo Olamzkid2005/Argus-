@@ -223,6 +223,14 @@ export async function withClient<T>(
     }
     return await callback(client as unknown as Pool);
   } finally {
+    // Reset tenant context to prevent cross-org data leakage (C-v3-03)
+    if (options?.orgId && process.env.PGBOUNCER_MODE !== "transaction") {
+      try {
+        await client.query("SELECT reset_tenant_context()");
+      } catch (error) {
+        log.db.queryError("reset_tenant_context", error);
+      }
+    }
     client.release();
   }
 }

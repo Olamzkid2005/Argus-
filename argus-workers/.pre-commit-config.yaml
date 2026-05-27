@@ -20,3 +20,9 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=1000"]
       - id: check-merge-conflict
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+        files: \.(js|ts|tsx|py|sql|yaml|yml|json|env.*)$

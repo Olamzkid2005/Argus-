@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { AuditAction } from "@/lib/audit";
 import { log } from "@/lib/logger";
+import { getToken } from "next-auth/jwt";
 
 /**
  * Middleware for security headers, rate limiting, API versioning,
@@ -154,30 +155,39 @@ export async function middleware(request: NextRequest) {
         }
 
         // Organization-level rate limiting
-        const orgId = request.headers.get("x-org-id");
-        if (orgId) {
-          const orgRatelimit = new Ratelimit({
-            redis,
-            limiter: Ratelimit.slidingWindow(500, "60s"),
-            prefix: "ratelimit:org:",
+        // Derive orgId from the session JWT, NOT from user-controlled headers (C-v3-01)
+        try {
+          const token = await getToken({
+            req: request,
+            secret: process.env.NEXTAUTH_SECRET,
           });
+          const orgId = token?.orgId as string | undefined;
+          if (orgId) {
+            const orgRatelimit = new Ratelimit({
+              redis,
+              limiter: Ratelimit.slidingWindow(500, "60s"),
+              prefix: "ratelimit:org:",
+            });
 
-          const { success: orgSuccess } = await orgRatelimit.limit(orgId);
+            const { success: orgSuccess } = await orgRatelimit.limit(orgId);
 
-          if (!orgSuccess) {
-            return NextResponse.json(
-              { error: "Organization rate limit exceeded." },
-              {
-                status: 429,
-                headers: {
-                  "Retry-After": "60",
-                  "X-RateLimit-Limit": "500",
-                  "X-RateLimit-Remaining": "0",
-                  "X-RateLimit-Scope": "organization",
+            if (!orgSuccess) {
+              return NextResponse.json(
+                { error: "Organization rate limit exceeded." },
+                {
+                  status: 429,
+                  headers: {
+                    "Retry-After": "60",
+                    "X-RateLimit-Limit": "500",
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Scope": "organization",
+                  },
                 },
-              },
-            );
+              );
+            }
           }
+        } catch {
+          // If token decoding fails, skip org-level rate limiting
         }
       } catch {
         // Rate limiting failed, continue without it

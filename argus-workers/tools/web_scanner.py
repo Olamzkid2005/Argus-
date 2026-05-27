@@ -318,16 +318,20 @@ class WebScanner:
         except requests.exceptions.SSLError as e:
             logger.warning("SSL certificate error for %s — reporting as finding and retrying without verification: %s", self.target_url, e)
             self._report_ssl_finding(str(e))
-            # Retry with verification disabled so the scan continues
-            self.session.verify = False
+            # Retry with a SEPARATE unverified session so the shared session
+            # maintains SSL verification for all subsequent requests (C-09)
+            unverified_session = requests.Session()
+            unverified_session.verify = False
             try:
-                resp = self.session.get(
+                resp = unverified_session.get(
                     self.target_url, timeout=self.timeout, allow_redirects=True
                 )
                 self._base_response = resp
             except Exception as retry_err:
                 logger.error("Web scanner: cannot connect to %s even without SSL verification: %s", self.target_url, retry_err)
                 return self.findings
+            finally:
+                unverified_session.close()
         except Exception as e:
             logger.error("Web scanner: failed to connect to %s: %s", self.target_url, e)
             return self.findings

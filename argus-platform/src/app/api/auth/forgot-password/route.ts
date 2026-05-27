@@ -74,23 +74,27 @@ export async function POST(req: Request) {
     // Generate cryptographically secure token
     const resetToken = crypto.randomBytes(32).toString("hex");
     const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
-    
+
+    // Send password reset email FIRST — only store token if delivery succeeds
+    const emailResult = await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+    if (!emailResult.success) {
+      console.error("Failed to send password reset email:", emailResult.error);
+      return NextResponse.json(
+        { message: "Unable to send reset email. Please try again later." },
+        { status: 500 }
+      );
+    }
+
     // Hash token before storing (treat like password)
     const hashedToken = await bcrypt.hash(resetToken, 12);
 
-    // Store hashed token in database
+    // Store hashed token in database ONLY after email sent successfully
     await pool.query(
       `UPDATE users 
        SET reset_token = $1, reset_token_expires_at = $2 
        WHERE id = $3`,
       [hashedToken, resetTokenExpiry, user.id]
     );
-
-    // Send password reset email
-    const emailResult = await sendPasswordResetEmail(email.toLowerCase(), resetToken);
-    if (!emailResult.success) {
-      console.error("Failed to send password reset email:", emailResult.error);
-    }
 
     return NextResponse.json(
       { message: "If an account exists, a reset email has been sent" },

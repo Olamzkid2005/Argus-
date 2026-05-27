@@ -12,7 +12,10 @@ const transporter = nodemailer.createTransport({
 
 export async function sendPasswordResetEmail(to: string, resetToken: string) {
   const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-  const resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
+  // Token is sent in the email body only, NOT in the URL (fix C-08).
+  // The user visits the reset page and enters the code manually,
+  // preventing token leakage via browser history, server logs, or Referer header.
+  const resetUrl = `${baseUrl}/auth/reset-password`;
 
   const mailOptions = {
     from: `"Argus Security" <${process.env.SMTP_USER || process.env.GMAIL_USER || 'noreply@argus.local'}>`,
@@ -21,11 +24,15 @@ export async function sendPasswordResetEmail(to: string, resetToken: string) {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #6720FF;">Argus Security Platform</h2>
-        <p>You requested a password reset. Click the button below to reset your password:</p>
+        <p>You requested a password reset. Use the code below to reset your password:</p>
+        <div style="background: #F3E8FF; border-radius: 8px; padding: 20px; text-align: center; margin: 16px 0;">
+          <code style="font-size: 24px; font-weight: bold; color: #6720FF; letter-spacing: 4px; word-break: break-all;">${resetToken}</code>
+        </div>
+        <p>Click the button below, then paste or enter the code above to set a new password:</p>
         <a href="${resetUrl}" style="display: inline-block; background: #6720FF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">
           Reset Password
         </a>
-        <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request this, ignore this email.</p>
+        <p style="color: #666; font-size: 14px;">This code expires in 1 hour. If you didn't request this, ignore this email.</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
         <p style="color: #999; font-size: 12px;">Argus Security Platform — AI-powered penetration testing</p>
       </div>
