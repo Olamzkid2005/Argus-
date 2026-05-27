@@ -25,6 +25,7 @@ from models.recon_context import ReconContext
 from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
+from compliance_posture_scorer import CompliancePostureScorer
 from streaming import (
     StreamingFindingEmitter,
     emit_thinking,
@@ -357,6 +358,39 @@ class Orchestrator:
 
         failed_count = 0
         _finding_emitter = StreamingFindingEmitter(self.engagement_id)
+
+        # Phase 2.5: Update compliance posture score after saving findings
+        # Computing posture requires the full set of saved findings. We query
+        # the DB for all engagement findings to get the latest state, then
+        # compute and persist a new posture snapshot.
+        try:
+            _posture_scorer = CompliancePostureScorer(self.engagement_id)
+            # Load all findings from the DB for an accurate posture calculation
+            all_db_findings, _ = self.finding_repo.get_findings_by_engagement(
+                self.engagement_id, limit=100000,
+            )
+            # Convert to dicts for the scorer
+            finding_dicts = []
+            for f in all_db_findings:
+                if hasattr(f, 'to_dict'):
+                    finding_dicts.append(f.to_dict())
+                elif isinstance(f, dict):
+                    finding_dicts.append(f)
+                elif isinstance(f, (list, tuple)):
+                    finding_dicts.append(dict(zip(
+                        ['id','type','severity','endpoint'], f[:4], strict=False
+                    )))
+            if finding_dicts:
+                snapshot = _posture_scorer.compute_and_save(finding_dicts)
+                logger.info(
+                    "Compliance posture updated for %s: composite=%s, trend=%s",
+                    self.engagement_id, snapshot.composite_score, snapshot.trend,
+                )
+        except Exception as posture_err:
+            logger.warning(
+                "Failed to update compliance posture (non-fatal): %s", posture_err,
+            )
+
         if non_secret:
             try:
                 inserted, updated = self.finding_repo.batch_create_or_update_findings(
@@ -747,6 +781,12 @@ class Orchestrator:
                 for bf in browser_findings:
                     norm = self._normalize_finding(bf, "browser_scanner")
                     if norm:
+                        # Emit in real-time via StreamingFindingEmitter
+                        try:
+                            _finding_emitter = StreamingFindingEmitter(self.engagement_id)
+                            _finding_emitter.emit_finding(norm)
+                        except Exception:
+                            logger.debug("Browser scanner finding emit skipped (non-fatal)", exc_info=True)
                         findings.append(norm)
         except Exception as e:
             logger.warning(f"Browser scanner failed (non-fatal): {e}")
