@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { log } from "@/lib/logger";
@@ -19,8 +19,21 @@ import {
   Loader2,
   Globe,
   XCircle,
+  Shield,
+  ShieldAlert,
+  Target,
+  LineChart,
 } from "lucide-react";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import SkeletonLoader from "@/components/ui-custom/SkeletonLoader";
 
 interface DiffSummary {
@@ -56,6 +69,21 @@ interface TargetProfile {
   confirmed_finding_types: string[];
 }
 
+interface CompliancePosture {
+  average_composite_score: number;
+  total_engagements: number;
+  engagements: Array<{
+    engagement_id: string;
+    target_url: string;
+    composite_score: number;
+    total_findings: number;
+    trend: string;
+    computed_at: string;
+  }>;
+  severity_counts: Record<string, number>;
+  trend: Array<{ day: string; avg_score: number }>;
+}
+
 const severityBg: Record<string, string> = {
   CRITICAL: "bg-red-500/20 text-red-400",
   HIGH: "bg-orange-500/20 text-orange-400",
@@ -63,6 +91,31 @@ const severityBg: Record<string, string> = {
   LOW: "bg-green-500/20 text-green-400",
   INFO: "bg-gray-500/20 text-gray-400",
 };
+
+function PostureScoreBadge({ score, size = "md" }: { score: number; size?: "sm" | "md" | "lg" }) {
+  const color =
+    score >= 80 ? "text-green-400" :
+    score >= 60 ? "text-amber-400" :
+    score >= 40 ? "text-orange-400" :
+    "text-red-400";
+  const bg =
+    score >= 80 ? "bg-green-500/10" :
+    score >= 60 ? "bg-amber-500/10" :
+    score >= 40 ? "bg-orange-500/10" :
+    "bg-red-500/10";
+  const dims = size === "sm" ? "text-lg w-10 h-10" : size === "lg" ? "text-4xl w-20 h-20" : "text-2xl w-16 h-16";
+  return (
+    <div className={`${dims} rounded-full ${bg} flex items-center justify-center font-headline font-bold ${color}`}>
+      {score}
+    </div>
+  );
+}
+
+function TrendIcon({ trend }: { trend: string }) {
+  if (trend === "improving") return <TrendingUp size={14} className="text-green-400" />;
+  if (trend === "declining") return <TrendingDown size={14} className="text-red-400" />;
+  return <ArrowRight size={14} className="text-on-surface-variant/60" />;
+}
 
 export default function MonitoringPage() {
   useEffect(() => {
@@ -78,7 +131,11 @@ export default function MonitoringPage() {
   const [diffLoading, setDiffLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchProfiles = async () => {
+  // Compliance posture state
+  const [posture, setPosture] = useState<CompliancePosture | null>(null);
+  const [postureLoading, setPostureLoading] = useState(true);
+
+  const fetchProfiles = useCallback(async () => {
     try {
       const response = await fetch("/api/assets");
       if (!response.ok) throw new Error("Failed to load profiles");
@@ -118,13 +175,31 @@ export default function MonitoringPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchPosture = useCallback(async () => {
+    try {
+      const response = await fetch("/api/compliance/posture");
+      if (response.ok) {
+        const data = await response.json();
+        setPosture(data);
+      }
+    } catch {
+      // Non-critical
+    } finally {
+      setPostureLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchProfiles();
-    const interval = setInterval(fetchProfiles, 30000);
+    fetchPosture();
+    const interval = setInterval(() => {
+      fetchProfiles();
+      fetchPosture();
+    }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchProfiles, fetchPosture]);
 
   const loadDiff = async (assetIdOrDomain: string, domain: string) => {
     setSelectedDomain(domain);
@@ -145,6 +220,10 @@ export default function MonitoringPage() {
   if (loading) {
     return <SkeletonLoader className="min-h-screen" />;
   }
+
+  const totalFindings = posture
+    ? Object.values(posture.severity_counts).reduce((a, b) => a + b, 0)
+    : 0;
 
   return (
     <div className="min-h-screen bg-background dark:bg-[#0A0A0F] matrix-grid">
@@ -167,7 +246,7 @@ export default function MonitoringPage() {
             Posture Monitoring
           </h1>
           <p className="text-sm font-body text-on-surface-variant dark:text-[#8A8A9E] mt-1">
-            Track scan diffs, regressions, and security posture changes across targets
+            Track scan diffs, regressions, and compliance posture changes across targets
           </p>
         </motion.div>
 
@@ -177,6 +256,182 @@ export default function MonitoringPage() {
             <p className="text-sm text-error">{error}</p>
           </div>
         )}
+
+        {/* ── Compliance Posture Dashboard ── */}
+        <ScrollReveal direction="up" delay={0.05}>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="mb-6 bg-surface-container-lowest dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-6"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-primary" />
+                <h2 className="text-lg font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">
+                  Live Compliance Posture
+                </h2>
+              </div>
+              <button
+                onClick={fetchPosture}
+                className="p-2 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24] transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw size={14} className="text-on-surface-variant dark:text-[#8A8A9E]" />
+              </button>
+            </div>
+
+            {postureLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={20} className="animate-spin text-primary" />
+              </div>
+            ) : posture ? (
+              <div className="space-y-5">
+                {/* Score Row */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center p-4 rounded-xl bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08]">
+                    <PostureScoreBadge score={posture.average_composite_score} size="lg" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant dark:text-[#8A8A9E] mt-2">
+                      Composite
+                    </span>
+                    <span className="text-[9px] text-on-surface-variant/60 mt-0.5">
+                      {posture.total_engagements} engagement{posture.total_engagements !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {/* Severity Counts */}
+                  <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/10 flex flex-col items-center justify-center">
+                    <div className="text-xl font-headline font-bold text-red-400">{posture.severity_counts.CRITICAL || 0}</div>
+                    <div className="text-[9px] font-medium text-red-400/70 uppercase tracking-wider mt-0.5">Critical</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10 flex flex-col items-center justify-center">
+                    <div className="text-xl font-headline font-bold text-orange-400">{posture.severity_counts.HIGH || 0}</div>
+                    <div className="text-[9px] font-medium text-orange-400/70 uppercase tracking-wider mt-0.5">High</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/10 flex flex-col items-center justify-center">
+                    <div className="text-xl font-headline font-bold text-yellow-400">{posture.severity_counts.MEDIUM || 0}</div>
+                    <div className="text-[9px] font-medium text-yellow-400/70 uppercase tracking-wider mt-0.5">Medium</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/10 flex flex-col items-center justify-center">
+                    <div className="text-xl font-headline font-bold text-primary">{totalFindings}</div>
+                    <div className="text-[9px] font-medium text-primary/70 uppercase tracking-wider mt-0.5">Total</div>
+                  </div>
+                </div>
+
+                {/* Trend Chart + Engagements */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Trend Chart */}
+                  <div className="md:col-span-2 p-4 rounded-xl bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08]">
+                    <div className="flex items-center gap-2 mb-3">
+                      <LineChart size={14} className="text-primary" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant dark:text-[#8A8A9E]">
+                        Posture Trend
+                      </span>
+                    </div>
+                    {posture.trend.length > 0 ? (
+                      <div className="h-40">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={posture.trend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+                            <defs>
+                              <linearGradient id="postureGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#6720FF" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#6720FF" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                            <XAxis
+                              dataKey="day"
+                              tick={{ fontSize: 9, fill: "#8A8A9E" }}
+                              tickFormatter={(v: string) => {
+                                const d = new Date(v);
+                                return `${d.getMonth() + 1}/${d.getDate()}`;
+                              }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis
+                              domain={[0, 100]}
+                              tick={{ fontSize: 9, fill: "#8A8A9E" }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                background: "#1A1A24",
+                                border: "1px solid rgba(255,255,255,0.08)",
+                                borderRadius: "8px",
+                                fontSize: "11px",
+                              }}
+                              labelFormatter={(v: string) => new Date(v).toLocaleDateString()}
+                              formatter={(value: number) => [`${value}`, "Score"]}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="avg_score"
+                              stroke="#6720FF"
+                              strokeWidth={2}
+                              fill="url(#postureGradient)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-40 text-[10px] text-on-surface-variant/40">
+                        No trend data yet — run some scans to see posture over time
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Per-Engagement Scores */}
+                  <div className="p-4 rounded-xl bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08]">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Target size={14} className="text-primary" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant dark:text-[#8A8A9E]">
+                        By Engagement
+                      </span>
+                    </div>
+                    {posture.engagements.length > 0 ? (
+                      <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                        {posture.engagements.map((eng) => (
+                          <div
+                            key={eng.engagement_id}
+                            className="flex items-center justify-between p-2 rounded-lg bg-surface-container-high dark:bg-[#2A2A35]"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10px] font-mono text-on-surface dark:text-[#F0F0F5] truncate">
+                                {eng.target_url?.replace(/^https?:\/\//, "") || "N/A"}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <TrendIcon trend={eng.trend} />
+                                <span className="text-[8px] text-on-surface-variant/60 uppercase tracking-wider">
+                                  {eng.trend}
+                                </span>
+                                <span className="text-[8px] text-on-surface-variant/40 ml-1">
+                                  {eng.total_findings} findings
+                                </span>
+                              </div>
+                            </div>
+                            <PostureScoreBadge score={Math.round(eng.composite_score)} size="sm" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-36 text-[10px] text-on-surface-variant/40">
+                        No engagements with posture scores yet
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-on-surface-variant/40 dark:text-[#8A8A9E]/40 gap-3">
+                <ShieldAlert size={32} />
+                <p className="text-[11px] font-mono uppercase tracking-widest text-center">No compliance posture data yet</p>
+                <p className="text-[10px] text-center">Complete a scan to see your compliance posture score</p>
+              </div>
+            )}
+          </motion.div>
+        </ScrollReveal>
 
         {/* Diff Summary Dashboard */}
         <ScrollReveal direction="up" delay={0.1}>

@@ -1029,64 +1029,88 @@ Examples:
                 </div>
               </div>
 
-              {/* Auth Wizard Toggle */}
+              {/* Authenticated Scanning — default part of flow for URL scans */}
               <div>
                 <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
                   Authenticated Scanning
                 </label>
-                <div className="flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Shield size={18} className={authConfig ? "text-green-500" : "text-on-surface-variant/40"} />
-                    <div>
-                      <div className="text-xs font-medium text-on-surface dark:text-[#F0F0F5]">
-                        {authConfig ? "Auth configured" : "No authentication"}
-                      </div>
-                      <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E]">
-                        {authConfig
-                          ? `Using ${authConfig.type === "form" ? "form login" : authConfig.type === "bearer" ? "bearer token" : "session cookie"} authentication`
-                          : "Configure credentials to scan authenticated areas"}
+                <div className="space-y-3">
+                  {/* Summary bar */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Shield size={18} className={authConfig ? "text-green-500" : "text-on-surface-variant/40"} />
+                      <div>
+                        <div className="text-xs font-medium text-on-surface dark:text-[#F0F0F5]">
+                          {authConfig
+                            ? `Auth configured — ${authConfig.type === "form" ? "form login" : authConfig.type === "bearer" ? "bearer token" : "session cookie"}`
+                            : "No authentication configured"}
+                        </div>
+                        <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E]">
+                          {authConfig
+                            ? "Scan will access authenticated areas and test for IDOR, privilege escalation, and BOLA"
+                            : "Most web apps have login pages. Authenticated scanning finds 3x more vulnerabilities."}
+                        </div>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                      {authConfig && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => { setAuthConfig(null); setShowAuthWizard(true); }}
+                            className="text-[9px] text-error hover:underline font-body"
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowAuthWizard(!showAuthWizard)}
+                            className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider border border-outline-variant dark:border-[#ffffff10] rounded-lg hover:border-primary/30 transition-all"
+                          >
+                            Change
+                          </button>
+                        </>
+                      )}
+                      {!authConfig && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAuthWizard(!showAuthWizard)}
+                          className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-all"
+                        >
+                          {showAuthWizard ? "Cancel" : "Configure Auth"}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {authConfig && (
-                      <button
-                        type="button"
-                        onClick={() => { setAuthConfig(null); setShowAuthWizard(false); }}
-                        className="text-[9px] text-error hover:underline font-body"
-                      >
-                        Clear
-                      </button>
-                    )}
+
+                  {/* Auth Wizard Panel — naturally triggered, always available */}
+                  {showAuthWizard && (
+                    <AuthWizard
+                      targetUrl={target}
+                      onComplete={(config) => {
+                        setAuthConfig(config as unknown as Record<string, unknown>);
+                        setShowAuthWizard(false);
+                      }}
+                      onSkip={() => {
+                        setAuthConfig(null);
+                        setShowAuthWizard(false);
+                      }}
+                    />
+                  )}
+
+                  {/* Auto-detection hint when target is set but wizard isn't open */}
+                  {!showAuthWizard && !authConfig && target && (
                     <button
                       type="button"
-                      onClick={() => setShowAuthWizard(!showAuthWizard)}
-                      className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
-                        showAuthWizard || authConfig ? "bg-primary" : "bg-surface-container-high dark:bg-[#2A2A35]"
-                      }`}
+                      onClick={() => setShowAuthWizard(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 text-[10px] text-primary/60 hover:text-primary transition-colors border border-dashed border-primary/20 rounded-lg hover:border-primary/40"
                     >
-                      <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${
-                        showAuthWizard || authConfig ? "left-[22px]" : "left-0.5"
-                      }`} />
+                      <Shield size={12} />
+                      Auto-detect login page and configure credentials
                     </button>
-                  </div>
+                  )}
                 </div>
               </div>
-
-              {/* Auth Wizard Panel */}
-              {showAuthWizard && (
-                <AuthWizard
-                  targetUrl={target}
-                  onComplete={(config) => {
-                    setAuthConfig(config as unknown as Record<string, unknown>);
-                    setShowAuthWizard(false);
-                  }}
-                  onSkip={() => {
-                    setAuthConfig(null);
-                    setShowAuthWizard(false);
-                  }}
-                />
-              )}
 
               <button
                 type="submit"
