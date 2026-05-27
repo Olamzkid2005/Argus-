@@ -34,6 +34,7 @@ from .agent_prompts import (
     BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT,
     REPO_TOOL_SELECTION_SYSTEM_PROMPT,
     _load_bugbounty_context,
+    _sanitize_for_llm,
     build_observation_summary,
     build_tech_aware_system_prompt,
     build_tool_selection_prompt,
@@ -400,19 +401,13 @@ class ReActAgent:
 
         # Sanitize recon context to prevent prompt injection from attacker-controlled data
         # (e.g., reflected XSS payloads, crawled endpoints with injected content).
-        # Truncate to 5000 chars, strip control characters and backtick delimiters.
-        import re as _re
-        def _sanitize(text: str) -> str:
-            cleaned = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text[:5000])
-            # Remove backtick fences that could break prompt structure
-            cleaned = cleaned.replace('```', '` ` `')
-            return cleaned
-
+        # Uses the comprehensive _sanitize_for_llm() from agent_prompts which handles
+        # backtick fences, prompt override patterns, and command injection patterns (H-v4-07).
         recon_section = f"""=== RECON FINDINGS (STRUCTURED) ===
-{_sanitize(str(recon_structured))}
+{_sanitize_for_llm(str(recon_structured))}
 
 === RECON SUMMARY (PROSE) ===
-{_sanitize(str(recon_summary))}"""
+{_sanitize_for_llm(str(recon_summary))}"""
 
         # Load Bug-Reaper methodology context in bug bounty mode
         bugbounty_context = ""

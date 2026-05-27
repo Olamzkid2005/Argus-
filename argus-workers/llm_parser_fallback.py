@@ -37,6 +37,45 @@ FALLBACK_SYSTEM_PROMPT = (
 )
 
 
+# Prompt injection patterns to redact from tool output before sending to LLM.
+# Prevents attacker-controlled target responses (which were scanned by security
+# tools) from injecting instructions into the LLM parser (H-v4-08).
+_FALLBACK_INJECTION_PATTERNS = [
+    r'(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions',
+    r'(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)',
+    r'(?i)override\s+(system|assistant)\s+(prompt|message)',
+    r'(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)',
+    r'(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)',
+    r'(?i)(subprocess|os\.system|eval|exec)\s*\(',
+    r'(?i)run\s+(the\s+following|this)\s+(command|tool)',
+    r'(?i)system\s+prompt\s*(=|\s+is\s*)',
+]
+
+
+def _sanitize_parser_input(text: str) -> str:
+    """Sanitize raw tool output before sending to LLM parser.
+
+    Strips control characters, backtick fences (which could break prompt
+    structure), and redacts known prompt injection patterns from
+    attacker-controlled data that may appear in tool output.
+
+    Args:
+        text: Raw tool output to sanitize
+
+    Returns:
+        Sanitized text safe to insert into LLM prompts
+    """
+    import re as _re
+    # Strip control characters (except newline/tab)
+    text = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    # Remove backtick fences that could break prompt structure
+    text = text.replace('```', '` ` `')
+    # Redact injection patterns
+    for pattern in _FALLBACK_INJECTION_PATTERNS:
+        text = _re.sub(pattern, '[REDACTED]', text)
+    return text
+
+
 class LLMParserFallback:
     """LLM-powered fallback that extracts findings from raw tool output.
 
@@ -124,9 +163,12 @@ class LLMParserFallback:
         if len(raw_output) > max_input_len:
             truncated += f"\n\n[output truncated — {len(raw_output)} chars total]"
 
+        # Sanitize the truncated output to prevent prompt injection from
+        # attacker-controlled data that may appear in tool output (H-v4-08).
+        sanitized_output = _sanitize_parser_input(truncated)
         user_prompt = (
             f"Tool: {tool_name}\n\n"
-            f"Raw output:\n```\n{truncated}\n```\n\n"
+            f"Raw output:\n```\n{sanitized_output}\n```\n\n"
             f"Does this output contain any security findings? "
             f"If yes, extract them as a JSON array."
         )
