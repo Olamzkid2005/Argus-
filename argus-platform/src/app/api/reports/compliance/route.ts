@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const validStandards = ["owasp_top10", "pci_dss", "soc2"];
+    const validStandards = ["owasp_top10", "pci_dss", "soc2", "nist_csf", "hipaa", "iso_27001"];
     if (!validStandards.includes(standard)) {
       return NextResponse.json(
         { error: `standard must be one of: ${validStandards.join(", ")}` },

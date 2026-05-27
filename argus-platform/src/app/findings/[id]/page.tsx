@@ -30,6 +30,7 @@ import {
   Package,
   GitBranch,
   Hash,
+  Link2,
 } from "lucide-react";
 
 // ── Types ──
@@ -164,6 +165,7 @@ export default function FindingDetailPage() {
   const [aiExplanation, setAiExplanation] = useState<AIExplanation | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [attackPathFindingIds, setAttackPathFindingIds] = useState<Set<string>>(new Set());
 
   // Fetch finding
   useEffect(() => {
@@ -183,6 +185,25 @@ export default function FindingDetailPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [findingId]);
+
+  // Fetch attack paths for chain membership indicator
+  useEffect(() => {
+    if (!finding?.engagement_id) return;
+    fetch(`/api/engagement/${finding.engagement_id}/attack-paths`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data?.attack_paths) return;
+        const ids = new Set<string>();
+        for (const path of data.attack_paths) {
+          const nodes = path.path_nodes?.nodes || [];
+          for (const node of nodes) {
+            if (node.id) ids.add(node.id);
+          }
+        }
+        setAttackPathFindingIds(ids);
+      })
+      .catch(() => { /* non-critical */ });
+  }, [finding?.engagement_id]);
 
   // Verify finding
   const handleVerify = useCallback(async () => {
@@ -317,6 +338,15 @@ export default function FindingDetailPage() {
                 ) : (
                   <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
                     Unverified
+                  </span>
+                )}
+                {attackPathFindingIds.has(finding.id) && (
+                  <span
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-500 border border-red-500/20"
+                    title="Part of an attack chain"
+                  >
+                    <Link2 size={12} />
+                    Chain
                   </span>
                 )}
               </div>
