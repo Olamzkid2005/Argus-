@@ -35,7 +35,7 @@ class EngagementRepository(BaseRepository):
             cursor.execute(
                 """
                 INSERT INTO engagements (
-                    id, org_id, target_url, authorization,
+                    id, org_id, target_url, authorization_proof,
                     authorized_scope, status, created_by, created_at
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, NOW()
@@ -46,7 +46,7 @@ class EngagementRepository(BaseRepository):
                     engagement_id,
                     engagement_data.get("org_id"),
                     engagement_data.get("target_url"),
-                    engagement_data.get("authorization"),
+                    engagement_data.get("authorization_proof") or engagement_data.get("authorization"),
                     Json(engagement_data.get("authorized_scope", {})),
                     engagement_data.get("status", "created"),
                     engagement_data.get("created_by"),

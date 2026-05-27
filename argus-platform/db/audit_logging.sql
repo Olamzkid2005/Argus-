@@ -62,7 +62,11 @@ BEGIN
         v_action,
         TG_TABLE_NAME,
         NEW.id,
+        -- Redact sensitive columns from audit log (H-30)
         to_jsonb(NEW)
+            - 'password_hash' - 'reset_token' - 'totp_secret'
+            - 'api_key' - 'secret' - 'token'
+            - 'auth_config' - 'dual_auth_config'
     );
     
     RETURN NEW;

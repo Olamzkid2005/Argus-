@@ -12,6 +12,16 @@ import pytest
 from database.repositories.rate_limit_repository import RateLimitRepository
 
 
+def _make_mock_db():
+    """Create a mock db with cursor() context manager that returns a mock cursor."""
+    mock_db = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = None
+    mock_cursor.fetchall.return_value = []
+    mock_db.cursor.return_value.__enter__.return_value = mock_cursor
+    return mock_db, mock_cursor
+
+
 @pytest.fixture(autouse=True)
 def reset_rate_limit_repo_singleton():
     """Reset _RATE_LIMIT_REPO singleton between tests so test ordering
@@ -33,8 +43,8 @@ class TestRateLimitRepositoryCreateEvent:
 
     def test_creates_event_with_correct_query_and_params(self):
         """Verifies create_event builds correct SQL and passes all params."""
-        mock_db = MagicMock()
-        mock_db.fetchrow.return_value = {
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchone.return_value = {
             "id": 1,
             "domain": "example.com",
             "event_type": "tool_rate_limited",
@@ -51,24 +61,24 @@ class TestRateLimitRepositoryCreateEvent:
             current_rps=0.0,
         )
 
-        mock_db.fetchrow.assert_called_once()
-        sql = mock_db.fetchrow.call_args[0][0]
+        mock_cursor.execute.assert_called_once()
+        sql = mock_cursor.execute.call_args[0][0]
         # Verify SQL structure
         assert "INSERT INTO rate_limit_events" in sql
         assert "RETURNING id" in sql
         # Verify params
-        assert mock_db.fetchrow.call_args[0][1] == "example.com"
-        assert mock_db.fetchrow.call_args[0][2] == "tool_rate_limited"
-        assert mock_db.fetchrow.call_args[0][3] == 429
-        assert mock_db.fetchrow.call_args[0][4] == 0.0
+        assert mock_cursor.execute.call_args[0][1][0] == "example.com"
+        assert mock_cursor.execute.call_args[0][1][1] == "tool_rate_limited"
+        assert mock_cursor.execute.call_args[0][1][2] == 429
+        assert mock_cursor.execute.call_args[0][1][3] == 0.0
         # Result is a dict
         assert result["domain"] == "example.com"
         assert result["status_code"] == 429
 
     def test_create_event_returns_none_when_db_returns_none(self):
-        """When db.fetchrow returns None, create_event returns None."""
-        mock_db = MagicMock()
-        mock_db.fetchrow.return_value = None
+        """When cursor.fetchone returns None, create_event returns None."""
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchone.return_value = None
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -82,8 +92,8 @@ class TestRateLimitRepositoryCreateEvent:
 
     def test_create_event_raises_on_db_error(self):
         """DB errors propagate up from create_event."""
-        mock_db = MagicMock()
-        mock_db.fetchrow.side_effect = Exception("Connection failed")
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.execute.side_effect = Exception("Connection failed")
         repo = RateLimitRepository(mock_db)
 
         with pytest.raises(Exception, match="Connection failed"):
@@ -96,8 +106,8 @@ class TestRateLimitRepositoryCreateEvent:
 
     def test_create_event_with_null_status_code(self):
         """status_code can be None (e.g., connection timeout)."""
-        mock_db = MagicMock()
-        mock_db.fetchrow.return_value = {
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchone.return_value = {
             "id": 2,
             "domain": "test.dev",
             "event_type": "timeout",
@@ -119,8 +129,8 @@ class TestRateLimitRepositoryCreateEvent:
 
     def test_create_event_with_nonzero_rps(self):
         """current_rps reflects actual rate when limit was hit."""
-        mock_db = MagicMock()
-        mock_db.fetchrow.return_value = {
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchone.return_value = {
             "id": 3,
             "domain": "bursty.app",
             "event_type": "tool_rate_limited",
@@ -145,8 +155,8 @@ class TestRateLimitRepositoryGetRecentEvents:
 
     def test_get_recent_events_calls_fetch_with_domain_and_limit(self):
         """Verifies correct SQL and params for retrieving recent events."""
-        mock_db = MagicMock()
-        mock_db.fetch.return_value = [
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchall.return_value = [
             {"id": 1, "domain": "example.com", "event_type": "tool_rate_limited",
              "status_code": 429, "current_rps": 0.0, "created_at": "2025-01-01T00:00:00Z"},
         ]
@@ -154,31 +164,31 @@ class TestRateLimitRepositoryGetRecentEvents:
 
         result = repo.get_recent_events(domain="example.com", limit=50)
 
-        mock_db.fetch.assert_called_once()
-        sql = mock_db.fetch.call_args[0][0]
+        mock_cursor.execute.assert_called_once()
+        sql = mock_cursor.execute.call_args[0][0]
         assert "SELECT id, domain, event_type" in sql
         assert "WHERE domain = %s" in sql
         assert "ORDER BY created_at DESC" in sql
         assert "LIMIT %s" in sql
-        assert mock_db.fetch.call_args[0][1] == "example.com"
-        assert mock_db.fetch.call_args[0][2] == 50
+        assert mock_cursor.execute.call_args[0][1][0] == "example.com"
+        assert mock_cursor.execute.call_args[0][1][1] == 50
         assert len(result) == 1
         assert result[0]["domain"] == "example.com"
 
     def test_get_recent_events_defaults_to_limit_100(self):
         """When limit is omitted, defaults to 100."""
-        mock_db = MagicMock()
-        mock_db.fetch.return_value = []
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchall.return_value = []
         repo = RateLimitRepository(mock_db)
 
         repo.get_recent_events(domain="example.com")
 
-        assert mock_db.fetch.call_args[0][2] == 100  # default limit
+        assert mock_cursor.execute.call_args[0][1][1] == 100  # default limit
 
     def test_get_recent_events_returns_empty_list_when_no_events(self):
         """No events returns empty list, not None."""
-        mock_db = MagicMock()
-        mock_db.fetch.return_value = []
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.fetchall.return_value = []
         repo = RateLimitRepository(mock_db)
 
         result = repo.get_recent_events(domain="example.com")
@@ -187,8 +197,8 @@ class TestRateLimitRepositoryGetRecentEvents:
 
     def test_get_recent_events_raises_on_db_error(self):
         """DB errors propagate from get_recent_events."""
-        mock_db = MagicMock()
-        mock_db.fetch.side_effect = Exception("DB unavailable")
+        mock_db, mock_cursor = _make_mock_db()
+        mock_cursor.execute.side_effect = Exception("DB unavailable")
         repo = RateLimitRepository(mock_db)
 
         with pytest.raises(Exception, match="DB unavailable"):

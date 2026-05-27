@@ -130,11 +130,11 @@ class LLMClient:
                 )
                 for key, value in cursor.fetchall():
                     if value and len(str(value)) > 10:
-                        logger.info(f"Loaded API key from database settings ({key})")
+                        logger.info("Loaded API key from database settings (%s)", "redacted")
                         return value
             return None
         except Exception as e:
-            logger.debug(f"Could not load API key from database settings: {e}")
+            logger.debug("Could not load API key from database settings: %s", e)
             return None
 
     def _load_key_from_redis(self, redis_url: str | None = None) -> str | None:
@@ -168,7 +168,7 @@ class LLMClient:
                     value = r.get(key)
                     if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
                         api_key = value.decode() if isinstance(value, bytes) else value
-                        logger.info(f"Loaded API key from Redis (key: {key.decode() if isinstance(key, bytes) else key})")
+                        logger.info("Loaded API key from Redis (key redacted)")
                         return api_key
                 if cursor == 0:
                     break

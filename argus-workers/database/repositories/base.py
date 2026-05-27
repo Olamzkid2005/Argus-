@@ -11,6 +11,7 @@ from contextlib import contextmanager, suppress
 from typing import Any
 
 import psycopg2
+import psycopg2.sql
 from psycopg2.extras import RealDictCursor
 
 from database.connection import get_db
@@ -287,7 +288,10 @@ class BaseRepository:
         _validate_table_name(self.table_name)
         _validate_id_column(self.id_column)
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            query = f"SELECT * FROM {self.table_name} WHERE {self.id_column} = %s"
+            query = psycopg2.sql.SQL("SELECT * FROM {} WHERE {} = %s").format(
+                psycopg2.sql.Identifier(self.table_name),
+                psycopg2.sql.Identifier(self.id_column),
+            )
             cursor.execute(query, (id,))
             row = cursor.fetchone()
             self._log_query_time(query, start, 1 if row else 0)
@@ -307,7 +311,9 @@ class BaseRepository:
         start = time.time()
         _validate_table_name(self.table_name)
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            query = f"SELECT * FROM {self.table_name} ORDER BY created_at DESC LIMIT %s OFFSET %s"
+            query = psycopg2.sql.SQL("SELECT * FROM {} ORDER BY created_at DESC LIMIT %s OFFSET %s").format(
+                psycopg2.sql.Identifier(self.table_name),
+            )
             cursor.execute(query, (limit, offset))
             rows = cursor.fetchall()
             self._log_query_time(query, start, len(rows))
@@ -326,9 +332,11 @@ class BaseRepository:
         _validate_table_name(self.table_name)
         _validate_id_column(self.id_column)
         with self.db_operation(commit=True) as (conn, cursor):
-            cursor.execute(
-                f"DELETE FROM {self.table_name} WHERE {self.id_column} = %s", (id,)
+            query = psycopg2.sql.SQL("DELETE FROM {} WHERE {} = %s").format(
+                psycopg2.sql.Identifier(self.table_name),
+                psycopg2.sql.Identifier(self.id_column),
             )
+            cursor.execute(query, (id,))
             return cursor.rowcount > 0
 
     def update_by_id(self, id: str, updates: dict) -> dict | None:
@@ -394,7 +402,9 @@ class BaseRepository:
         _validate_table_name(self.table_name)
         start = time.time()
         with self.db_operation() as (conn, cursor):
-            query = f"SELECT COUNT(*) FROM {self.table_name}"
+            query = psycopg2.sql.SQL("SELECT COUNT(*) FROM {}").format(
+                psycopg2.sql.Identifier(self.table_name),
+            )
             cursor.execute(query)
             result = cursor.fetchone()[0]
             self._log_query_time(query, start)

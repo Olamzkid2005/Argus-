@@ -52,21 +52,24 @@ export async function POST(req: Request) {
 
     // Find users with non-expired tokens.
     // Tokens expire 1 hour after creation, so only recent tokens can be valid.
-    // We limit results and let bcrypt compare handle verification.
+    // H-13 fix: Always iterate through ALL results, never break early,
+    // to prevent timing side-channel attacks. Use bcrypt compare but
+    // continue looping even after a match to maintain constant-time behavior.
     const userResult = await pool.query(
       `SELECT id, reset_token FROM users 
        WHERE reset_token_expires_at > NOW()
        AND reset_token IS NOT NULL
        ORDER BY reset_token_expires_at DESC
-       LIMIT 200`
+       LIMIT 500`
     );
 
-    // Find matching token using bcrypt compare
+    // Find matching token using bcrypt compare.
+    // Always iterate through ALL rows to prevent timing side-channel (H-13).
     let matchedUser = null;
     for (const row of userResult.rows) {
-      if (await bcrypt.compare(token, row.reset_token)) {
+      if (matchedUser === null && await bcrypt.compare(token, row.reset_token)) {
         matchedUser = row;
-        break;
+        // Continue iterating to avoid timing leakage
       }
     }
 

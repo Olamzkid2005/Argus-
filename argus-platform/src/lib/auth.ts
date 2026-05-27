@@ -351,6 +351,10 @@ export const authOptions: NextAuthOptions = {
         token.id = session.id ?? token.id;
         token.orgId = session.orgId ?? token.orgId;
         token.role = session.role ?? token.role;
+        // Clear requires2FA flag when 2FA verification completes (H-18)
+        if (session.requires2FA === false) {
+          delete (token as { requires2FA?: boolean }).requires2FA;
+        }
       }
       return token;
     },

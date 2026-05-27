@@ -6,6 +6,9 @@ const bundleAnalyzer = withBundleAnalyzer({
 
 /** @type {import('next').NextConfig } */
 const nextConfig = {
+  // Enable standalone output for Docker (C-03)
+  output: 'standalone',
+
   // Enable production optimizations
   productionBrowserSourceMaps: false,
 
