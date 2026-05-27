@@ -271,6 +271,7 @@ class WebScanner:
         self._auth_manager = auth_manager
         self._reauth_request_counter = 0
         self._reauth_interval = 10
+        self._reauth_lock = threading.Lock()
 
     @staticmethod
     def _redact_for_llm(text: str) -> str:
@@ -427,14 +428,20 @@ class WebScanner:
                     self._thread_session.session = req_session
 
             # In-flight re-authentication: periodically check session validity
+            # Uses a lock to protect the counter from concurrent access under
+            # ThreadPoolExecutor. Always re-auths when the counter trips because
+            # ensure_session() is cheap for valid sessions (single GET check).
             if self._auth_manager and hasattr(self, "target_url"):
-                self._reauth_request_counter += 1
-                if self._reauth_request_counter >= self._reauth_interval:
-                    self._reauth_request_counter = 0
-                    if req_session is self.session or req_session is session:
-                        self.session = self._auth_manager.ensure_session(
-                            self.session, self.target_url
-                        )
+                should_reauth = False
+                with self._reauth_lock:
+                    self._reauth_request_counter += 1
+                    if self._reauth_request_counter >= self._reauth_interval:
+                        self._reauth_request_counter = 0
+                        should_reauth = True
+                if should_reauth:
+                    self.session = self._auth_manager.ensure_session(
+                        self.session, self.target_url
+                    )
 
             # Token-bucket rate limiting with thread-safe lock
             with self._rate_lock:

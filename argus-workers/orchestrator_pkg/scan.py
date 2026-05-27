@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import socket
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from types import SimpleNamespace
 
@@ -179,7 +180,10 @@ def _is_reachable(target: str) -> bool:
 
 
 # In-memory dedup set to prevent emitting duplicate findings during streaming
+# Protected by _emitted_fingerprints_lock because _on_nuclei_line and
+# _run_scan_tool can run concurrently under ThreadPoolExecutor.
 _emitted_fingerprints: set[str] = set()
+_emitted_fingerprints_lock = threading.Lock()
 
 _streaming_tools: dict[str, dict] = {
     "dalfox": {"flag": "--json", "json_lines": True},
@@ -209,10 +213,12 @@ def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
             normalized = ctx._normalize_finding(item, tool_name)
             if normalized:
                 fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
-                if fp not in _emitted_fingerprints:
+                with _emitted_fingerprints_lock:
+                    if fp in _emitted_fingerprints:
+                        continue
                     _emitted_fingerprints.add(fp)
-                    emit_finding_rt(ctx.engagement_id, normalized, tool_name)
-                    all_findings.append(normalized)
+                emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                all_findings.append(normalized)
 
 
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list,
@@ -244,10 +250,12 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                     normalized = ctx._normalize_finding(p, tool_name)
                     if normalized:
                         fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
-                        if fp not in _emitted_fingerprints:
+                        with _emitted_fingerprints_lock:
+                            if fp in _emitted_fingerprints:
+                                continue
                             _emitted_fingerprints.add(fp)
-                            emit_finding_rt(ctx.engagement_id, normalized, tool_name)
-                            all_findings.append(normalized)
+                        emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                        all_findings.append(normalized)
                 success = True
             return tool_name, success, result.stdout if success else None
     except Exception as e:
@@ -367,11 +375,13 @@ def execute_scan_tools(
                 if normalized:
                     # In-flight dedup: check fingerprint before emitting
                     fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
-                    if fp not in _emitted_fingerprints:
+                    with _emitted_fingerprints_lock:
+                        if fp in _emitted_fingerprints:
+                            return
                         _emitted_fingerprints.add(fp)
-                        # Emit in real-time as nuclei streams findings
-                        emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
-                        all_findings.append(normalized)
+                    # Emit in real-time as nuclei streams findings
+                    emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
+                    all_findings.append(normalized)
         except Exception as e:
             logger.warning(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 
@@ -398,10 +408,12 @@ def execute_scan_tools(
                 normalized = ctx._normalize_finding(finding, tool_name)
                 if normalized:
                     fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
-                    if fp not in _emitted_fingerprints:
+                    with _emitted_fingerprints_lock:
+                        if fp in _emitted_fingerprints:
+                            return True
                         _emitted_fingerprints.add(fp)
-                        emit_finding_rt(ctx.engagement_id, normalized, tool_name)
-                        all_findings.append(normalized)
+                    emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                    all_findings.append(normalized)
             else:
                 if line_buffer is not None:
                     line_buffer.append(line)
@@ -635,10 +647,12 @@ def execute_scan_tools(
             normalized = ctx._normalize_finding(finding, tool)
             if normalized:
                 fingerprint = f"{normalized.get('type')}|{normalized.get('endpoint')}"
-                if fingerprint not in _emitted_fingerprints:
+                with _emitted_fingerprints_lock:
+                    if fingerprint in _emitted_fingerprints:
+                        return
                     _emitted_fingerprints.add(fingerprint)
-                    emit_finding_rt(eng_id, normalized, tool)
-                    all_findings.append(normalized)
+                emit_finding_rt(eng_id, normalized, tool)
+                all_findings.append(normalized)
 
         # Execute comprehensive web scanner
         slog.tool_start("web_scanner", [target])

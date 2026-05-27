@@ -125,7 +125,7 @@ export default function EngagementDetailPage() {
   const [attackPaths, setAttackPaths] = useState<Array<{
     id: string;
     risk_score: number;
-    path_nodes: { nodes: Array<{ type: string; data: Record<string, unknown> }> };
+    path_nodes?: { nodes: Array<{ type: string; data: Record<string, unknown> }> } | null;
     chain_exploit_script: Record<string, unknown> | null;
   }>>([]);
   const [attackPathsLoading, setAttackPathsLoading] = useState(true);

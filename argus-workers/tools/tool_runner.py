@@ -570,7 +570,7 @@ class ToolRunner:
                     proc.kill()
                     break
 
-                ready, _, _ = select.select([proc.stdout], [], [], 0.1)
+                ready, _, _ = select.select([proc.stdout], [], [], 0.5)
                 if ready:
                     line = proc.stdout.readline()
                     if line:

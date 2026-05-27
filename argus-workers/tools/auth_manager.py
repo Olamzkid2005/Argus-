@@ -49,10 +49,6 @@ class AuthConfig:
     # SAML assertion
     saml_assertion: str = ""
 
-    # SSO token endpoint
-    sso_token_url: str = ""
-
-
 COMMON_LOGIN_PATHS = [
     "/login",
     "/signin",
@@ -405,7 +401,10 @@ class AuthManager:
                 return session
 
         except Exception as exc:
-            raise AuthError(f"Browser authentication failed: {exc}") from exc
+            hint = ""
+            if "playwright" in str(type(exc)).lower() or "No module named 'playwright'" in str(exc):
+                hint = " Install Playwright with: pip install playwright && python -m playwright install chromium"
+            raise AuthError(f"Browser authentication failed: {exc}.{hint}") from exc
         finally:
             if browser:
                 import contextlib as _cl
@@ -464,7 +463,7 @@ class AuthManager:
                 session.cookies.set(c["name"], c["value"])
             logger.debug("Browser auth: extracted %d cookies", len(cookies))
         except Exception as e:
-            logger.debug("Browser auth: failed to extract cookies: %s", e)
+            logger.warning("Browser auth: failed to extract cookies: %s — session may be incomplete", e)
 
         # Extract localStorage tokens
         try:
@@ -478,7 +477,7 @@ class AuthManager:
                     logger.debug("Browser auth: extracted %s from localStorage", key)
                     break
         except Exception as e:
-            logger.debug("Browser auth: no localStorage tokens found: %s", e)
+            logger.warning("Browser auth: no localStorage tokens found: %s — session may be incomplete", e)
 
         return session
 

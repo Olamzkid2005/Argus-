@@ -656,14 +656,21 @@ class StreamingFindingEmitter:
             )
 
 
-# In-memory dedup set for emit_finding_rt to prevent duplicate
-# findings from being emitted via SSE/WebSocket.
-_rt_emitted_fingerprints: set[str] = set()
+# In-memory dedup for emit_finding_rt to prevent duplicate findings
+# from being emitted via SSE/WebSocket. Keyed by engagement_id so sets
+# are naturally scoped to a single scan and don't grow unbounded.
+_rt_emitted_fingerprints: dict[str, set[str]] = {}
 _rt_fingerprints_lock = threading.Lock()
 
 
-def _rt_fingerprint(finding_type: str, endpoint: str) -> str:
-    return f"{finding_type}|{endpoint}"
+def _rt_fingerprint(finding_type: str, endpoint: str, source_tool: str = "") -> str:
+    """Build a dedup key from type, endpoint, and source_tool.
+
+    Including source_tool prevents collisions where two different scanners
+    (e.g. web_scanner and nuclei) report the same type+endpoint for
+    genuinely distinct root causes.
+    """
+    return f"{finding_type}|{endpoint}|{source_tool}"
 
 
 def emit_finding_rt(
@@ -692,16 +699,18 @@ def emit_finding_rt(
     finding_type = finding.get("type", "UNKNOWN")
     severity = finding.get("severity", "INFO")
     endpoint = finding.get("endpoint", "")
+    source_tool = finding.get("source_tool", tool_name)
     confidence = finding.get("confidence", 0.5)
     finding_id = finding.get("_id", finding.get("id", ""))
 
-    # In-flight dedup: skip if we've already emitted this type+endpoint combo
-    fp = _rt_fingerprint(finding_type, endpoint)
+    # In-flight dedup: skip if we've already emitted this type+endpoint+tool combo
+    fp = _rt_fingerprint(finding_type, endpoint, source_tool)
     with _rt_fingerprints_lock:
-        if fp in _rt_emitted_fingerprints:
+        engagement_fps = _rt_emitted_fingerprints.setdefault(engagement_id, set())
+        if fp in engagement_fps:
             logger.log(5, "Dedup emit_finding_rt: %s", fp)
             return
-        _rt_emitted_fingerprints.add(fp)
+        engagement_fps.add(fp)
 
     # 1. SSE emission (in-process stream manager)
     try:
