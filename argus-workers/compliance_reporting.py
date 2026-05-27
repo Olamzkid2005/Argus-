@@ -22,6 +22,7 @@ class ComplianceStandard(StrEnum):
     OWASP_TOP10 = "owasp_top10"
     PCI_DSS = "pci_dss"
     SOC2 = "soc2"
+    NIST_CSF = "nist_csf"
 
 
 @dataclass
@@ -387,6 +388,91 @@ class ComplianceReportGenerator:
             template_used="soc2_template.html",
         )
 
+    def generate_nist_csf_report(
+        self,
+        engagement_id: str,
+        findings: list[dict],
+        report_id: str = None,
+    ) -> ComplianceReport:
+        """
+        Generate NIST CSF v1.1 compliance report
+
+        Args:
+            engagement_id: Engagement ID
+            findings: List of vulnerability findings
+            report_id: Optional report ID
+
+        Returns:
+            ComplianceReport instance
+        """
+        findings = findings or []
+        report_id = report_id or f"nist-csf-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+
+        # NIST CSF Core Functions: Identify, Protect, Detect, Respond, Recover
+        nist_functions = {
+            "PR.AC": "Access Control",
+            "PR.DS": "Data Security",
+            "PR.PT": "Protective Technology",
+            "PR.IP": "Information Protection",
+            "DE.AE": "Anomalies and Events",
+            "DE.CM": "Continuous Monitoring",
+            "DE.DP": "Detection Processes",
+        }
+
+        compliance_findings = []
+        function_findings = {func: [] for func in nist_functions}
+
+        for finding in findings:
+            nist_ref = self.mapper.map_to_nist_csf(finding.get("type", "UNKNOWN"))
+            func_prefix = nist_ref.split(".")[0]  # e.g. "PR"
+            sub_prefix = nist_ref.split(" ")[0]  # e.g. "PR.PT-3"
+
+            compliance_findings.append(ComplianceFinding(
+                finding_id=finding.get("id", ""),
+                type=finding.get("type", "UNKNOWN"),
+                severity=finding.get("severity", "INFO"),
+                endpoint=finding.get("endpoint", ""),
+                description=finding.get("description", ""),
+                remediation=finding.get("remediation", ""),
+                compliance_ref=nist_ref,
+                status=finding.get("status", "open"),
+            ))
+
+            # Track findings by function
+            for func_key in nist_functions:
+                if sub_prefix.startswith(func_key):
+                    function_findings[func_key].append(finding.get("id", ""))
+                    break
+
+        # Build summary with function-level stats
+        functions_summary = {}
+        for func_key, func_name in nist_functions.items():
+            finding_ids = function_findings[func_key]
+            functions_summary[func_key] = {
+                "name": func_name,
+                "finding_count": len(finding_ids),
+                "findings": finding_ids,
+            }
+
+        summary = {
+            "total_findings": len(findings),
+            "functions": functions_summary,
+            "passing_functions": sum(1 for f in function_findings.values() if len(f) == 0),
+            "failing_functions": sum(1 for f in function_findings.values() if len(f) > 0),
+            "total_functions": len(nist_functions),
+        }
+
+        return ComplianceReport(
+            id=report_id,
+            engagement_id=engagement_id,
+            standard=ComplianceStandard.NIST_CSF,
+            title=f"NIST Cybersecurity Framework v1.1 Report - {engagement_id}",
+            generated_at=datetime.now(),
+            findings=compliance_findings,
+            summary=summary,
+            template_used="nist_csf_report.html",
+        )
+
     def render_report(self, report: ComplianceReport) -> str:
         """
         Render compliance report using Jinja2 template
@@ -471,6 +557,8 @@ def generate_compliance_report(
         report = generator.generate_pci_dss_checklist(engagement_id, findings, report_id)
     elif standard == "soc2":
         report = generator.generate_soc2_template(engagement_id, findings, report_id)
+    elif standard == "nist_csf":
+        report = generator.generate_nist_csf_report(engagement_id, findings, report_id)
     else:
         raise ValueError(f"Unknown compliance standard: {standard}")
 

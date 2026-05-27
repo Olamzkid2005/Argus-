@@ -861,9 +861,29 @@ export default function EngagementDetailPage() {
                         {/* Generate Button for paths without scripts */}
                         {!exploitScript && engagement?.status === "complete" && (
                           <div className="mt-3 pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
-                            <p className="text-[9px] text-on-surface-variant/60 italic">
-                              Chain detected — exploit script not yet generated
-                            </p>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/engagement/${engagementId}/generate-chain-exploits`, {
+                                    method: "POST",
+                                  });
+                                  if (!res.ok) {
+                                    const err = await res.json();
+                                    console.error("Failed to generate chain exploits:", err);
+                                    return;
+                                  }
+                                  const data = await res.json();
+                                  console.log("Chain exploit generation queued:", data);
+                                  // Refresh the page to show updated paths
+                                  window.location.reload();
+                                } catch (err) {
+                                  console.error("Failed to generate chain exploits:", err);
+                                }
+                              }}
+                              className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 px-2 py-1 rounded hover:bg-primary/20 transition-colors"
+                            >
+                              Generate Exploit Script
+                            </button>
                           </div>
                         )}
                       </div>

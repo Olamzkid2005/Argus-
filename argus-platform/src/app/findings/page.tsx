@@ -374,6 +374,27 @@ export default function FindingsPage() {
     fetchFindings();
   }, [status, showToast, selectedEngagement, groupBy]);
 
+  // Fetch attack paths from DB on mount to populate chain membership badges
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (!selectedEngagement || selectedEngagement === "all") return;
+
+    const fetchAttackPaths = async () => {
+      try {
+        const res = await fetch(`/api/engagement/${selectedEngagement}/attack-paths`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.attack_paths && data.attack_paths.length > 0) {
+            setAttackPaths(data.attack_paths);
+          }
+        }
+      } catch {
+        // non-critical — chain badges simply won't show
+      }
+    };
+    fetchAttackPaths();
+  }, [status, selectedEngagement]);
+
   // ── Real-time finding stream subscription ──
   // When viewing a specific engagement, subscribe to finding_discovered events
   // and prepend new findings to the list as they arrive from live scans.

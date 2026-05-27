@@ -4,12 +4,14 @@ import { log } from "@/lib/logger";
 
 interface AuthTestRequest {
   targetUrl: string;
-  authType: "form" | "bearer" | "cookie";
+  authType: "form" | "bearer" | "cookie" | "api_key";
   username?: string;
   password?: string;
   token?: string;
   cookie?: string;
   loginUrl?: string;
+  api_key?: string;
+  api_key_header?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
     const body: AuthTestRequest = await req.json();
-    const { targetUrl, authType, username, password, token, cookie, loginUrl } = body;
+    const { targetUrl, authType, username, password, token, cookie, loginUrl, api_key, api_key_header } = body;
 
     if (!targetUrl) {
       return NextResponse.json({ error: "targetUrl is required" }, { status: 400 });
@@ -264,6 +266,47 @@ export async function POST(req: NextRequest) {
           } catch (err) {
             results.errors.push(
               `Cookie test: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`
+            );
+          }
+          break;
+        }
+
+        case "api_key": {
+          if (!api_key) {
+            return NextResponse.json(
+              { error: "API key is required for API key auth" },
+              { status: 400 }
+            );
+          }
+
+          const headerName = api_key_header || "X-API-Key";
+          const testUrl = `${baseUrl}/`;
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+
+            const testResponse = await fetch(testUrl, {
+              method: "GET",
+              signal: controller.signal,
+              headers: {
+                "User-Agent": "Mozilla/5.0 (compatible; ArgusSecurity/1.0)",
+                [headerName]: api_key,
+                Accept: "application/json, text/html",
+              },
+            });
+            clearTimeout(timeout);
+
+            const apiKeyValid = testResponse.status !== 401 && testResponse.status !== 403;
+            results.success = apiKeyValid;
+            results.details = {
+              statusCode: testResponse.status,
+              contentType: testResponse.headers.get("content-type") || "unknown",
+              headerName,
+              bodyPreview: apiKeyValid ? (await testResponse.text()).slice(0, 200) : "Access denied",
+            };
+          } catch (err) {
+            results.errors.push(
+              `API key test: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`
             );
           }
           break;

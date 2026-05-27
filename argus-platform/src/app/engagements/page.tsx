@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/Toast";
 import { motion } from "framer-motion";
 import { log } from "@/lib/logger";
+import { extractTemplateVariables, applyTemplateVariables } from "@/lib/template-variables";
 import {
   Shield,
   Globe,
@@ -147,6 +148,7 @@ export default function EngagementsPage() {
   }, []);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const { showToast } = useToast();
 
@@ -163,6 +165,11 @@ export default function EngagementsPage() {
   const [rescannings, setRescannings] = useState<Set<string>>(new Set());
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
+
+  // Template variable substitution state
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [showVariablePrompt, setShowVariablePrompt] = useState(false);
+  const [pendingTemplateConfig, setPendingTemplateConfig] = useState<Record<string, unknown> | null>(null);
 
   // Natural Language scan config state
   const [configMode, setConfigMode] = useState<"standard" | "nl">("standard");
@@ -206,6 +213,44 @@ export default function EngagementsPage() {
     };
     fetchTemplates();
   }, [status]);
+
+  // Handle clone parameter from URL — load engagement config and pre-fill form
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const cloneId = searchParams.get("clone");
+    if (!cloneId) return;
+
+    const fetchCloneEngagement = async () => {
+      try {
+        const res = await fetch(`/api/engagement/${cloneId}`);
+        if (!res.ok) {
+          showToast("error", "Failed to load engagement for cloning");
+          return;
+        }
+        const data = await res.json();
+        const eng = data.engagement;
+        if (!eng) return;
+
+        // Pre-fill all fields from the source engagement
+        if (eng.target_url) setTarget(eng.target_url);
+        if (eng.scan_type) setScanType(eng.scan_type as "url" | "repo");
+        if (eng.scan_aggressiveness) setScanAggressiveness(eng.scan_aggressiveness);
+        if (eng.agent_mode !== undefined) setAgentMode(Boolean(eng.agent_mode));
+        if (eng.scan_mode) setScanMode(eng.scan_mode as "agent" | "swarm");
+        if (eng.bug_bounty_mode) setBugBounty(Boolean(eng.bug_bounty_mode));
+
+        // Restore auth config type hint
+        if (eng.auth_config?.type) {
+          setShowAuthWizard(true);
+        }
+
+        showToast("success", `Cloning "${eng.target_url}" — adjust settings and launch`);
+      } catch {
+        showToast("error", "Failed to load engagement for cloning");
+      }
+    };
+    fetchCloneEngagement();
+  }, [status, searchParams, showToast]);
 
   // Load user's default aggressiveness from settings
   useEffect(() => {
@@ -906,7 +951,7 @@ Examples:
                   <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
                     From Template
                   </label>
-                  <select
+                   <select
                     value={selectedTemplateId}
                     onChange={(e) => {
                       const id = e.target.value;
@@ -916,7 +961,17 @@ Examples:
                       if (!tmpl) return;
                       const cfg = tmpl.config;
                       if (cfg.target_url_pattern && typeof cfg.target_url_pattern === "string") {
-                        setTarget(cfg.target_url_pattern);
+                        const pattern = cfg.target_url_pattern as string;
+                        const vars = extractTemplateVariables(pattern);
+                        if (vars.length > 0) {
+                          // Template has variables — store config and show prompt
+                          setPendingTemplateConfig(cfg);
+                          setTemplateVariables(Object.fromEntries(vars.map(v => [v, ""])));
+                          setShowVariablePrompt(true);
+                        } else {
+                          // No variables — apply directly
+                          setTarget(pattern);
+                        }
                       }
                       if (cfg.scan_type && typeof cfg.scan_type === "string") {
                         setScanType(cfg.scan_type as "url" | "repo");
@@ -952,6 +1007,53 @@ Examples:
                       Template selected — fields pre-filled above
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Template Variable Prompt */}
+              {showVariablePrompt && pendingTemplateConfig && (
+                <div className="p-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] font-body">
+                      Fill Template Variables
+                    </label>
+                    <button
+                      onClick={() => { setShowVariablePrompt(false); setPendingTemplateConfig(null); }}
+                      className="text-on-surface-variant/60 hover:text-on-surface transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant/70 mb-2">
+                    This template uses variables. Fill in the values below:
+                  </p>
+                  <div className="space-y-2">
+                    {Object.keys(templateVariables).map((key) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-primary min-w-[80px]">{"{"}{key}{"}"}</span>
+                        <input
+                          type="text"
+                          value={templateVariables[key]}
+                          onChange={(e) => setTemplateVariables(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={`Enter ${key}`}
+                          className="flex-1 px-2 py-1.5 bg-background dark:bg-[#0A0A0F] border border-outline-variant dark:border-[#ffffff10] rounded text-xs font-mono text-on-surface outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        if (!pendingTemplateConfig?.target_url_pattern) return;
+                        const pattern = pendingTemplateConfig.target_url_pattern as string;
+                        const resolved = applyTemplateVariables(pattern, templateVariables);
+                        setTarget(resolved);
+                        setShowVariablePrompt(false);
+                        setPendingTemplateConfig(null);
+                      }}
+                      className="w-full mt-2 px-3 py-2 bg-primary/10 text-primary border border-primary/20 rounded-lg text-xs font-mono hover:bg-primary/20 transition-colors"
+                    >
+                      Apply Variables
+                    </button>
+                  </div>
                 </div>
               )}
 

@@ -104,6 +104,7 @@ class JobMessage:
     created_at: str = ""
     platform: str = ""
     output_path: str = ""
+    generate_chain_exploits: bool | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "JobMessage":
@@ -142,4 +143,5 @@ class JobMessage:
             scan_mode=self.scan_mode,
             bug_bounty_mode=self.bug_bounty_mode,
             budget_for_report=self.budget,
+            generate_chain_exploits=self.generate_chain_exploits,
         )

@@ -184,7 +184,7 @@ _emitted_fingerprints: set[str] = set()
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 
-    Findings are emitted in real-time via _emit_finding_rt as each tool
+    Findings are emitted in real-time via emit_finding_rt as each tool
     parses them, so analysts can start triaging critical findings while
     other tools are still running.
     """
@@ -197,7 +197,7 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
             for p in parsed:
                 normalized = ctx._normalize_finding(p, tool_name)
                 if normalized:
-                    _emit_finding_rt(ctx, normalized, tool_name)
+                    emit_finding_rt(ctx.engagement_id, normalized, tool_name)
                     all_findings.append(normalized)
             success = True
         return tool_name, success, result.stdout if success else None

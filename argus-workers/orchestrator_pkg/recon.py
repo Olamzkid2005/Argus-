@@ -159,7 +159,7 @@ def execute_recon_tools(
                     normalized = ctx._normalize_finding(p, tool_name)
                     if normalized:
                         # Emit in real-time as each finding is discovered
-                        _emit_finding_rt(ctx, normalized, tool_name)
+                        emit_finding_rt(ctx.engagement_id, normalized, tool_name)
                         # Note: list.append is thread-safe under GIL
                         all_findings.append(normalized)
                         parsed_count += 1

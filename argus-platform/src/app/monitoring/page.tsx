@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { log } from "@/lib/logger";
+import { createWebSocketConnection } from "@/lib/websocket";
+import { WebSocketEvent } from "@/lib/websocket-events";
 import {
   ShieldCheck,
   Activity,
@@ -23,6 +25,7 @@ import {
   ShieldAlert,
   Target,
   LineChart,
+  X,
 } from "lucide-react";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import {
@@ -136,6 +139,35 @@ export default function MonitoringPage() {
   // Compliance posture state
   const [posture, setPosture] = useState<CompliancePosture | null>(null);
   const [postureLoading, setPostureLoading] = useState(true);
+  const [alertBanner, setAlertBanner] = useState<{ level: string; message: string } | null>(null);
+
+  // WebSocket listener for compliance alerts — triggers immediate posture refresh
+  const wsRef = useRef<ReturnType<typeof createWebSocketConnection> | null>(null);
+
+  useEffect(() => {
+    // Listen for compliance alert events to trigger immediate refresh
+    wsRef.current = createWebSocketConnection({
+      engagementId: "", // global — listen to all engagements
+      onEvent: (event: WebSocketEvent) => {
+        if (event.type === "error" && event.data.error_code === "compliance_alert") {
+          const level = (event.data.alert_level as string) || "info";
+          const score = event.data.composite_score as number;
+          setAlertBanner({
+            level,
+            message: `Compliance alert: ${level.toUpperCase()} — score ${score?.toFixed(1) || "changed"}`,
+          });
+          // Immediately refresh posture data
+          fetchPosture();
+          // Auto-dismiss after 10s
+          setTimeout(() => setAlertBanner(null), 10000);
+        }
+      },
+    });
+
+    return () => {
+      wsRef.current?.stop();
+    };
+  }, [fetchPosture]);
 
   const fetchProfiles = useCallback(async () => {
     try {
@@ -257,6 +289,50 @@ export default function MonitoringPage() {
             <AlertTriangle size={18} className="text-error shrink-0" />
             <p className="text-sm text-error">{error}</p>
           </div>
+        )}
+
+        {/* Compliance Alert Banner — real-time from WebSocket */}
+        {alertBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`mb-6 p-4 rounded-xl border flex items-center justify-between ${
+              alertBanner.level === "critical"
+                ? "bg-red-500/10 border-red-500/20"
+                : alertBanner.level === "warning"
+                  ? "bg-amber-500/10 border-amber-500/20"
+                  : "bg-blue-500/10 border-blue-500/20"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <AlertTriangle
+                size={18}
+                className={`shrink-0 ${
+                  alertBanner.level === "critical"
+                    ? "text-red-400"
+                    : alertBanner.level === "warning"
+                      ? "text-amber-400"
+                      : "text-blue-400"
+                }`}
+              />
+              <p className={`text-sm font-mono ${
+                alertBanner.level === "critical"
+                  ? "text-red-400"
+                  : alertBanner.level === "warning"
+                    ? "text-amber-400"
+                    : "text-blue-400"
+              }`}>
+                {alertBanner.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setAlertBanner(null)}
+              className="text-on-surface-variant/60 hover:text-on-surface transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </motion.div>
         )}
 
         {/* ── Compliance Posture Dashboard ── */}

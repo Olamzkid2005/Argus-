@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
       // Validate auth config if provided
       let effectiveAuthConfig = null;
       if (authConfig) {
-        const validTypes = ["form", "bearer", "cookie"];
+        const validTypes = ["form", "bearer", "cookie", "api_key"];
         if (!validTypes.includes(authConfig.type)) {
           return createErrorResponse(
             `authConfig.type must be one of: ${validTypes.join(", ")}`,
@@ -157,13 +157,21 @@ export async function POST(req: NextRequest) {
             400,
           );
         }
+        if (authConfig.type === "api_key" && (!authConfig.api_key || !authConfig.api_key_header)) {
+          return createErrorResponse(
+            "authConfig requires api_key and api_key_header for API key auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
         effectiveAuthConfig = authConfig;
       }
 
       // Validate dual auth config if provided
       let effectiveDualAuthConfig = null;
       if (dualAuthConfig) {
-        const validTypes = ["form", "bearer", "cookie"];
+        const validTypes = ["form", "bearer", "cookie", "api_key"];
         if (!validTypes.includes(dualAuthConfig.type)) {
           return createErrorResponse(
             `dualAuthConfig.type must be one of: ${validTypes.join(", ")}`,
@@ -191,6 +199,14 @@ export async function POST(req: NextRequest) {
         if (dualAuthConfig.type === "cookie" && !dualAuthConfig.cookie) {
           return createErrorResponse(
             "dualAuthConfig requires cookie string for cookie auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        if (dualAuthConfig.type === "api_key" && (!dualAuthConfig.api_key || !dualAuthConfig.api_key_header)) {
+          return createErrorResponse(
+            "dualAuthConfig requires api_key and api_key_header for API key auth",
             ErrorCodes.VALIDATION_ERROR,
             undefined,
             400,
