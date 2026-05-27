@@ -49,8 +49,31 @@ export async function middleware(request: NextRequest) {
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
   response.headers.set("X-Request-ID", requestId);
 
-  // API Version headers
   const path = request.nextUrl.pathname;
+
+  // ============================================================
+  // C-01: Route protection — redirect unauthenticated users from
+  // protected pages before page load (edge-level auth check)
+  // ============================================================
+  const protectedPaths = ['/dashboard', '/findings', '/engagements', '/settings', '/reports', '/admin'];
+  if (protectedPaths.some(p => path === p || path.startsWith(p + '/'))) {
+    try {
+      const token = await getToken({
+        req: request,
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+      if (!token) {
+        const signinUrl = new URL('/auth/signin', request.url);
+        signinUrl.searchParams.set('callbackUrl', request.url);
+        return NextResponse.redirect(signinUrl);
+      }
+      response.headers.set('X-Auth-Status', 'authenticated');
+    } catch {
+      response.headers.set('X-Auth-Status', 'unverified');
+    }
+  }
+
+  // API Version headers
   if (path.startsWith("/api/")) {
     // Add default rate limit headers to all API responses
     response.headers.set("X-RateLimit-Limit", "100");
@@ -228,12 +251,15 @@ export async function middleware(request: NextRequest) {
   );
 
   // Enhanced Content Security Policy
-  // In production, Next.js inline scripts need hashes; we use 'unsafe-inline'
-  // as a transitional measure. 'unsafe-eval' is removed for production builds.
+  // Uses 'strict-dynamic' as transitional approach away from 'unsafe-inline' (C-04).
+  // 'unsafe-inline' is kept as a fallback for browsers that don't support
+  // 'strict-dynamic' but still protected by the nonce-based restriction.
+  // In development, 'unsafe-eval' is needed for Next.js HMR.
   const isDev = process.env.NODE_ENV === "development";
+  const nonce = crypto.randomUUID();
   const scriptSrc = isDev
     ? "'self' 'unsafe-inline' 'unsafe-eval'"
-    : "'self' 'unsafe-inline'";
+    : "'strict-dynamic' 'nonce-" + nonce + "' 'unsafe-inline'";
 
   response.headers.set(
     "Content-Security-Policy",
@@ -246,7 +272,8 @@ export async function middleware(request: NextRequest) {
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
       "form-action 'self'; " +
-      "upgrade-insecure-requests;",
+      "upgrade-insecure-requests; " +
+      "report-uri /api/csp-report;",
   );
 
   // Additional security headers

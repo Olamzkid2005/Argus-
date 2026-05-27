@@ -180,12 +180,14 @@ export function verifyTOTPSync(
 ): boolean {
   if (!/^\d{6}$/.test(code)) return false;
   
-  // If nodeCrypto is unavailable (browser), fall back gracefully
+  // If nodeCrypto is unavailable (browser environment), throw an error
+  // instead of silently accepting any 6-digit code (H-14).
+  // Callers must use verifyTOTP() async in browser contexts.
   if (!nodeCrypto) {
-    // In browser, the caller should use the async verifyTOTP() instead.
-    // Log a warning and allow verification via a single async attempt.
-    console.warn("verifyTOTPSync called in browser — use verifyTOTP() async instead");
-    return /^\d{6}$/.test(code);
+    throw new Error(
+      "verifyTOTPSync cannot be used in browser environments. " +
+      "Use the async verifyTOTP() function instead."
+    );
   }
   
   const timeStep = 30;

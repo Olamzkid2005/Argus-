@@ -1620,14 +1620,16 @@ class WebScanner:
 
     def check_file_upload(self):
         """Test file upload endpoints for security controls."""
-        # Small PHP webshell payload
-        php_payload = b"<?php @eval($_POST['cmd']); ?>"
+        # Benign, uniquely identifiable payload (C-v3-06) — previously used a live
+        # PHP webshell (<?php @eval($_POST['cmd']); ?>) which could compromise the
+        # target. Replaced with a harmless text marker that cannot execute.
+        benign_marker = b"ARGUS_UPLOAD_TEST_MARKER_%s" % uuid.uuid4().hex[:8].encode()
         malicious_payloads = [
-            ("shell.php", php_payload, "application/x-php"),
-            ("test.php.jpg", b"<?php phpinfo(); ?>", "image/jpeg"),
+            ("shell.php.txt", benign_marker, "text/plain"),
+            ("test.php.jpg", b"ARGUS_UPLOAD_TEST_JPG", "image/jpeg"),
             ("../../../etc/passwd", b"content", "text/plain"),
-            ("test.phtml", php_payload, "application/x-httpd-php"),
-            ("test.phar", php_payload, "application/octet-stream"),
+            ("test.phtml.txt", benign_marker, "text/plain"),
+            ("test.phar.txt", benign_marker, "application/octet-stream"),
         ]
 
         for path in self.UPLOAD_PATHS:

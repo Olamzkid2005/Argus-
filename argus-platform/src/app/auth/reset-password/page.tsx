@@ -40,8 +40,8 @@ function ResetPasswordForm() {
           setIsLoading(false);
           return;
         }
-        if (password.length < 8) {
-          setError("Password must be at least 8 characters");
+        if (password.length < 12) {
+          setError("Password must be at least 12 characters");
           setIsLoading(false);
           return;
         }
@@ -288,7 +288,7 @@ function ResetPasswordForm() {
                         placeholder="••••••••"
                         autoComplete="new-password"
                         required
-                        minLength={8}
+                        minLength={12}
                         className={`w-full px-4 py-2.5 pr-12 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none transition-all duration-200 placeholder:text-gray-400 border ${
                           focusedField === "password"
                             ? "border-[#6720FF] ring-2 ring-[#6720FF]/10 bg-white"
@@ -304,7 +304,7 @@ function ResetPasswordForm() {
                       </button>
                     </div>
                     <p className="text-[10px] text-gray-400 mt-1">
-                      Must be at least 8 characters
+                      Must be at least 12 characters
                     </p>
                   </div>
 

@@ -8,15 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import Redis from "ioredis";
-
-function getRedisClient() {
-  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-  return new Redis(redisUrl, {
-    maxRetriesPerRequest: 1,
-    lazyConnect: true,
-  });
-}
+import { redis } from "@/lib/redis";
 
 interface Finding {
   id: string;
@@ -78,42 +70,49 @@ IMPORTANT RULES:
 async function callOpenRouter(apiKey: string, finding: Finding, model: string): Promise<string> {
   const prompt = buildExplanationPrompt(finding);
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-      "X-Title": "Argus Pentest Platform",
-    },
-    body: JSON.stringify({
-      model: model || "anthropic/claude-3.5-sonnet",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a cybersecurity expert explaining vulnerabilities to developers. Be factual, specific, and provide actionable fix guidance. Never hallucinate vulnerabilities not present in the evidence.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-    }),
-  });
+  // Add AbortController with 30-second timeout to prevent hanging (M-v5-02)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenRouter error: ${response.status} - ${errorText}`);
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "Argus Pentest Platform",
+      },
+      body: JSON.stringify({
+        model: model || "anthropic/claude-3.5-sonnet",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a cybersecurity expert explaining vulnerabilities to developers. Be factual, specific, and provide actionable fix guidance. Never hallucinate vulnerabilities not present in the evidence.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "No explanation generated";
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "No explanation generated";
 }
 
 // POST - Generate explanations for findings
 export async function POST(request: NextRequest) {
-  let redis: Redis | null = null;
-
   try {
     const session = await getServerSession(authOptions);
 
@@ -180,7 +179,6 @@ export async function POST(request: NextRequest) {
 
     const findingsToExplain = findings.slice(0, 10);
 
-    redis = getRedisClient();
     const email = session.user.email;
 
     const apiKey = await redis.get(`settings:${email}:openrouter_api_key`);
@@ -227,15 +225,11 @@ export async function POST(request: NextRequest) {
       { error: "Failed to generate explanations" },
       { status: 500 }
     );
-  } finally {
-    if (redis) redis.disconnect();
   }
 }
 
 // GET - Check if AI is configured
 export async function GET() {
-  let redis: Redis | null = null;
-
   try {
     const session = await getServerSession(authOptions);
 
@@ -243,7 +237,6 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    redis = getRedisClient();
     const email = session.user.email;
 
     const apiKey = await redis.get(`settings:${email}:openrouter_api_key`);
@@ -257,7 +250,5 @@ export async function GET() {
   } catch (error) {
     console.error("AI status check error:", error);
     return NextResponse.json({ error: "Failed to check AI status" }, { status: 500 });
-  } finally {
-    if (redis) redis.disconnect();
   }
 }

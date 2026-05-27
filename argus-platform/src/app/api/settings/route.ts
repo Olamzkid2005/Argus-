@@ -7,29 +7,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import Redis from "ioredis";
-import { checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
-
-// Redis client for settings storage
-function getRedisClient() {
-  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-  return new Redis(redisUrl, { 
-    maxRetriesPerRequest: 1,
-    lazyConnect: true,
-    enableOfflineQueue: false,
-  });
-}
-
-async function connectRedis(redis: Redis): Promise<void> {
-  if (redis.status !== "ready") {
-    await redis.connect();
-  }
-}
+import { redis, checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
+import { log as logger } from "@/lib/logger";
 
 // GET - retrieve settings from Redis
 export async function GET() {
-  let redis: Redis | null = null;
-  
   try {
     const session = await getServerSession(authOptions);
     
@@ -38,8 +20,6 @@ export async function GET() {
     }
     
     const email = session.user.email;
-    redis = getRedisClient();
-    await connectRedis(redis);
     
     const openrouterKey = await redis.get(`settings:${email}:openrouter_api_key`);
     const preferredModel = await redis.get(`settings:${email}:preferred_ai_model`);
@@ -70,17 +50,11 @@ export async function GET() {
   } catch (error) {
     console.error("Settings GET error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: "Failed to get settings" }, { status: 500 });
-  } finally {
-    if (redis) {
-      redis.disconnect();
-    }
   }
 }
 
 // PUT - update settings in Redis
 export async function PUT(request: NextRequest) {
-  let redis: Redis | null = null;
-  
   try {
     const session = await getServerSession(authOptions);
     
@@ -106,9 +80,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(JSON.parse(cachedResult), { status: 200 });
     }
     
-    redis = getRedisClient();
-    await connectRedis(redis);
-    
     // Store OpenRouter key (if not masked with •)
     if (openrouter_api_key && openrouter_api_key.length > 5 && !openrouter_api_key.includes("•")) {
       await redis.setex(`settings:${email}:openrouter_api_key`, 2592000, openrouter_api_key);
@@ -119,8 +90,22 @@ export async function PUT(request: NextRequest) {
       await redis.setex(`settings:${email}:preferred_ai_model`, 2592000, preferred_ai_model);
     }
     
-    // Store other settings
+    // Store other settings — only allow known setting keys (H-15)
+    const ALLOWED_SETTING_KEYS = new Set([
+      'scan_aggressiveness',
+      'llm_review_enabled',
+      'llm_payload_generation_enabled',
+      'preferred_ai_model',
+      'scan_timeout',
+      'max_concurrent_scans',
+      'notification_email',
+      'webhook_url',
+    ]);
     for (const [key, value] of Object.entries(otherSettings)) {
+      if (!ALLOWED_SETTING_KEYS.has(key)) {
+        logger.warn(`Blocked attempt to set unknown setting key: ${key}`);
+        continue;
+      }
       if (value && typeof value === "string" && value.length > 0) {
         await redis.setex(`settings:${email}:${key}`, 2592000, value);
       }
@@ -144,9 +129,5 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error("Settings PUT error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
-  } finally {
-    if (redis) {
-      redis.disconnect();
-    }
   }
 }

@@ -30,13 +30,15 @@ if PROJECT_ROOT not in sys.path:
 
 def main():
     """Launch the Celery worker."""
+    # Read concurrency from environment, default to 8 (H-22)
+    concurrency = os.environ.get("CELERY_CONCURRENCY", "8")
     args = [
         VENV_PYTHON,
         CELERY_BIN,
         "-A", "celery_app",
         "worker",
         "--loglevel=info",
-        "--concurrency=8",  # Matches CELERY_CONCURRENCY default in celery_app.py
+        "--concurrency", concurrency,
         "-Q", "celery,recon,scan,analyze,report,repo_scan",
     ]
 

@@ -32,15 +32,17 @@ export function useThemeColors(): ThemeColors {
       const style = getComputedStyle(document.documentElement);
       
       setColors({
-        primary: style.getPropertyValue("--color-primary").trim() || "#6720FF",
-        background: style.getPropertyValue("--color-background").trim() || "#ffffff",
-        surface: style.getPropertyValue("--color-surface").trim() || "#f5f5f5",
-        text: style.getPropertyValue("--color-text").trim() || "#171717",
-        border: style.getPropertyValue("--color-border").trim() || "#e5e5e5",
-        success: style.getPropertyValue("--color-success").trim() || "#10B981",
-        error: style.getPropertyValue("--color-error").trim() || "#EF4444",
-        warning: style.getPropertyValue("--color-warning").trim() || "#F59E0B",
-        info: style.getPropertyValue("--color-info").trim() || "#3B82F6",
+        // Use CSS variable names as defined in globals.css (no --color- prefix)
+        // See: argus-platform/src/app/globals.css (H-08)
+        primary: style.getPropertyValue("--primary").trim() || "#6720FF",
+        background: style.getPropertyValue("--background").trim() || "#ffffff",
+        surface: style.getPropertyValue("--surface").trim() || "#f5f5f5",
+        text: style.getPropertyValue("--text").trim() || "#171717",
+        border: style.getPropertyValue("--border").trim() || "#e5e5e5",
+        success: style.getPropertyValue("--success").trim() || "#10B981",
+        error: style.getPropertyValue("--error").trim() || "#EF4444",
+        warning: style.getPropertyValue("--warning").trim() || "#F59E0B",
+        info: style.getPropertyValue("--info").trim() || "#3B82F6",
       });
     };
 
