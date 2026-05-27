@@ -24,6 +24,10 @@ import {
   AlertCircle,
   Brain,
   Sparkles,
+  Save,
+  FileText,
+  X,
+  CheckCircle,
 } from "lucide-react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import type { AgentDecisionEvent } from "@/lib/websocket-events";
@@ -101,6 +105,10 @@ export default function EngagementDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRescanning, setIsRescanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   // Real-time events for agent reasoning feed
   const { events } = useEngagementEvents({
@@ -239,6 +247,43 @@ export default function EngagementDetailPage() {
     }
   };
 
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const config = {
+        target_url_pattern: engagement?.target_url || "",
+        scan_type: engagement?.scan_type || "url",
+        aggressiveness: engagement?.scan_aggressiveness || "default",
+        agent_mode: engagement?.agent_mode || false,
+        scan_mode: engagement?.scan_mode || "agent",
+        bug_bounty_mode: engagement?.bug_bounty_mode || false,
+      };
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          description: templateDescription.trim(),
+          config,
+        }),
+      });
+      if (res.ok) {
+        showToast("success", "Template saved");
+        setShowSaveTemplate(false);
+        setTemplateName("");
+        setTemplateDescription("");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast("error", data.error || "Failed to save template");
+      }
+    } catch {
+      showToast("error", "Failed to save template");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
   if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background dark:bg-[#0A0A0F]">
@@ -315,18 +360,27 @@ export default function EngagementDetailPage() {
               </button>
             )}
             {engagement && ["complete", "failed", "paused"].includes(engagement.status) && (
-              <button
-                onClick={handleRescan}
-                disabled={isRescanning}
-                className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 text-primary text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-primary/20 transition-all disabled:opacity-50"
-              >
-                {isRescanning ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={12} />
-                )}
-                Rescan
-              </button>
+              <>
+                <button
+                  onClick={handleRescan}
+                  disabled={isRescanning}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 text-primary text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-primary/20 transition-all disabled:opacity-50"
+                >
+                  {isRescanning ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={12} />
+                  )}
+                  Rescan
+                </button>
+                <button
+                  onClick={() => setShowSaveTemplate(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 text-green-500 text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-green-500/20 transition-all"
+                >
+                  <Save size={12} />
+                  Save as Template
+                </button>
+              </>
             )}
             <button
               onClick={handleDelete}
@@ -343,6 +397,105 @@ export default function EngagementDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Save as Template Modal */}
+      <AnimatePresence>
+      {showSaveTemplate && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowSaveTemplate(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface dark:bg-[#12121A] border border-outline-variant dark:border-[#ffffff10] rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-primary" />
+                <h3 className="text-sm font-headline font-semibold text-on-surface dark:text-[#F0F0F5]">Save as Template</h3>
+              </div>
+              <button
+                onClick={() => setShowSaveTemplate(false)}
+                className="p-1.5 rounded-lg hover:bg-surface-container dark:hover:bg-[#1A1A24] text-on-surface-variant transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5 font-body">
+                  Template Name
+                </label>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="e.g. Quarterly Banking App Scan"
+                  className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5 font-body">
+                  Description (optional)
+                </label>
+                <textarea
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  placeholder="What is this template for?"
+                  rows={2}
+                  className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200 resize-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-lg bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08]">
+                <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Config will save:</span>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <span className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{engagement?.scan_type || "url"}</span>
+                  <span className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{engagement?.scan_aggressiveness || "default"}</span>
+                  {engagement?.agent_mode && (
+                    <span className="text-[9px] font-mono bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded">AI Agent</span>
+                  )}
+                  <span className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{engagement?.scan_mode || "agent"} mode</span>
+                </div>
+                <p className="text-[9px] text-on-surface-variant/60 mt-2">
+                  Target URL pattern, scan type, aggressiveness, agent mode, and scan mode
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setShowSaveTemplate(false)}
+                  className="flex-1 py-2.5 border border-outline-variant dark:border-[#ffffff10] text-on-surface-variant text-[10px] font-bold uppercase tracking-wider rounded-lg hover:border-primary/30 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveTemplate}
+                  disabled={savingTemplate || !templateName.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary text-on-primary text-[10px] font-bold uppercase tracking-wider rounded-lg hover:opacity-90 transition-all disabled:opacity-50"
+                >
+                  {savingTemplate ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <CheckCircle size={12} />
+                  )}
+                  Save Template
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-12 gap-6">
         {/* Left column — Engagement Info */}

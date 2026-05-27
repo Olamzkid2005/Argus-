@@ -176,11 +176,35 @@ export default function EngagementsPage() {
   const [authConfig, setAuthConfig] = useState<Record<string, unknown> | null>(null);
   const [showAuthWizard, setShowAuthWizard] = useState(false);
 
+  // Engagement Templates state
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; description: string; config: Record<string, unknown> }>>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
   const { history, addToHistory, removeFromHistory, clearHistory } = useURLHistory();
 
   // Live engagements state
   const [liveEngagements, setLiveEngagements] = useState<Engagement[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
+
+  // Load engagement templates
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const fetchTemplates = async () => {
+      try {
+        const res = await fetch("/api/templates");
+        if (res.ok) {
+          const data = await res.json();
+          setTemplates(data.templates || []);
+        }
+      } catch {
+        // non-critical
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+    fetchTemplates();
+  }, [status]);
 
   // Load user's default aggressiveness from settings
   useEffect(() => {
@@ -873,6 +897,55 @@ Examples:
                    </div>
                  </div>
                )}
+
+              {/* Engagement Templates — From Template */}
+              {templates.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
+                    From Template
+                  </label>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedTemplateId(id);
+                      if (!id) return;
+                      const tmpl = templates.find((t) => t.id === id);
+                      if (!tmpl) return;
+                      const cfg = tmpl.config;
+                      if (cfg.target_url_pattern && typeof cfg.target_url_pattern === "string") {
+                        setTarget(cfg.target_url_pattern);
+                      }
+                      if (cfg.scan_type && typeof cfg.scan_type === "string") {
+                        setScanType(cfg.scan_type as "url" | "repo");
+                      }
+                      if (cfg.aggressiveness && typeof cfg.aggressiveness === "string") {
+                        setScanAggressiveness(cfg.aggressiveness);
+                      }
+                      if (cfg.agent_mode !== undefined) {
+                        setAgentMode(Boolean(cfg.agent_mode));
+                      }
+                      if (cfg.scan_mode && typeof cfg.scan_mode === "string") {
+                        setScanMode(cfg.scan_mode as "agent" | "swarm");
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200 appearance-none cursor-pointer"
+                  >
+                    <option value="">New configuration (no template)</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}{t.description ? ` — ${t.description}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTemplateId && (
+                    <p className="text-[9px] text-green-500 mt-1.5 flex items-center gap-1">
+                      <CheckCircle size={10} />
+                      Template selected — fields pre-filled above
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Scan Aggressiveness */}
               <div>
