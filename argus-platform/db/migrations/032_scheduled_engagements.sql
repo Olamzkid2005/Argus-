@@ -8,7 +8,7 @@
 CREATE TABLE IF NOT EXISTS scheduled_engagements (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    created_by      UUID NOT NULL REFERENCES users(id),
+    created_by      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     target_url      VARCHAR(2048) NOT NULL,
     authorized_scope JSONB NOT NULL DEFAULT '{}',
     scan_type       VARCHAR(50) NOT NULL DEFAULT 'url',

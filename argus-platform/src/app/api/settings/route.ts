@@ -9,6 +9,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redis, checkIdempotency, setAPIIdempotencyResult, generateAPIIdempotencyKey } from "@/lib/redis";
 import { log as logger } from "@/lib/logger";
+import { moderateRateLimit } from "@/lib/rate-limiter";
 
 // GET - retrieve settings from Redis
 export async function GET() {
@@ -55,6 +56,11 @@ export async function GET() {
 
 // PUT - update settings in Redis
 export async function PUT(request: NextRequest) {
+  // M-32: Rate limit settings mutations (20/min per user)
+  const rateLimitResponse = await moderateRateLimit(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
   try {
     const session = await getServerSession(authOptions);
     

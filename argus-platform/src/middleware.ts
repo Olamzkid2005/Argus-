@@ -94,14 +94,43 @@ export async function middleware(request: NextRequest) {
     }
     response.headers.set("X-API-Deprecated", "false");
 
-    // CORS origin validation for production
+    // ============================================================
+    // M-21: Content-Type validation for state-changing API methods.
+    // Reject POST/PUT/PATCH with no Content-Type or non-JSON types.
+    // ============================================================
+    if (["POST", "PUT", "PATCH"].includes(request.method)) {
+      const contentType = request.headers.get("content-type") || "";
+      if (!contentType.includes("application/json") && !contentType.includes("multipart/form-data")) {
+        log.warn(`Content-Type validation failed for ${request.method} ${path}: ${contentType}`);
+        return NextResponse.json(
+          { error: "Content-Type must be application/json" },
+          { status: 415 },
+        );
+      }
+    }
+
+    // ============================================================
+    // H-05: CSRF protection — Origin header check for state-changing
+    // methods. When the browser sends an Origin header (same-origin or
+    // cross-origin), validate it against allowed origins. Combined with
+    // SameSite=Strict cookie (set in auth.ts), this prevents CSRF.
+    // ============================================================
     const origin = request.headers.get("origin");
     const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
+    const isMutatingMethod = ["POST", "PUT", "DELETE", "PATCH"].includes(request.method);
 
     // Only validate origins in production
     if (process.env.NODE_ENV === "production" && allowedOrigins.length > 0) {
       if (origin && !allowedOrigins.some((o) => o.trim() === origin)) {
-        // Invalid origin - still process but don't expose CORS headers
+        // For state-changing methods, reject invalid origins (CSRF)
+        if (isMutatingMethod) {
+          log.warn(`CSRF blocked: ${request.method} ${path} from origin ${origin}`);
+          return NextResponse.json(
+            { error: "Cross-origin request blocked" },
+            { status: 403 },
+          );
+        }
+        // For read methods, still process but don't expose CORS headers
         response.headers.set("X-Origin-Validated", "invalid");
       } else if (origin) {
         response.headers.set("X-Origin-Validated", "valid");

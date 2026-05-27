@@ -4,8 +4,14 @@ import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { validateWebhookUrl } from "@/lib/url-validator";
+import { lenientRateLimit } from "@/lib/rate-limiter";
 
 export async function POST(req: NextRequest) {
+  // M-09: Rate limit webhook creation (20/min per user)
+  const rateLimitResponse = await lenientRateLimit(req);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
   log.api('POST', '/api/webhooks');
   try {
     const session = await requireAuth();

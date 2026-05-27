@@ -708,6 +708,20 @@ export default function FindingsPage() {
     }
   }, [selectedFindings, selectedFindingId, showToast]);
 
+  // M-16: Sanitize CSV cells to prevent formula injection (=cmd, +cmd, -cmd, @cmd)
+  const sanitizeCSV = (value: unknown): string => {
+    const str = String(value ?? "");
+    // Prefix dangerous leading characters with a single quote to prevent
+    // Excel/Sheets from interpreting them as formulas
+    if (/^[=+\-@]/.test(str)) {
+      return "'" + str;
+    }
+    // Escape embedded quotes by doubling them (standard CSV escaping)
+    return str.includes(",") || str.includes('"') || str.includes("\n")
+      ? '"' + str.replace(/"/g, '""') + '"'
+      : str;
+  };
+
   const handleBulkExport = useCallback(async () => {
     if (selectedFindings.size === 0) return;
     setIsBulkExporting(true);
@@ -716,7 +730,9 @@ export default function FindingsPage() {
       const csv = [
         ["ID", "Type", "Severity", "Endpoint", "Verified", "Confidence"].join(","),
         ...selectedFindingsData.map((f) =>
-          [f.id, f.type, f.severity, f.endpoint, f.verified, f.confidence || 0].join(",")
+          [f.id, f.type, f.severity, f.endpoint, f.verified, f.confidence || 0]
+            .map(sanitizeCSV)
+            .join(",")
         ),
       ].join("\n");
 

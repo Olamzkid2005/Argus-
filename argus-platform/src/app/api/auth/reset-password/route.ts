@@ -8,10 +8,9 @@ const MAX_ATTEMPTS_PER_IP = 5; // 5 attempts per hour per IP
 
 async function checkRateLimit(identifier: string): Promise<boolean> {
   const key = `ratelimit:reset-password:${identifier}`;
-  const current = await redis.incr(key);
-  if (current === 1) {
-    await redis.expire(key, RATE_LIMIT_WINDOW);
-  }
+  // M-18: Use SET NX EX for atomic init to fix INCR+EXPIRE race condition
+  const setResult = await redis.set(key, 1, "EX", RATE_LIMIT_WINDOW, "NX");
+  const current = setResult === "OK" ? 1 : await redis.incr(key);
   return current <= MAX_ATTEMPTS_PER_IP;
 }
 

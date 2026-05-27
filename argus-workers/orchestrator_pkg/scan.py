@@ -2,6 +2,7 @@
 Scan execution logic extracted from Orchestrator.
 """
 
+import asyncio
 import ipaddress
 import json
 import logging
@@ -182,6 +183,36 @@ def _is_reachable(target: str) -> bool:
     except Exception as e:
         logger.warning(f"DNS resolution for {hostname} failed with unexpected error — assuming NOT reachable: {e}")
         return False
+
+
+# ---------------------------------------------------------------------------
+# Thread-based async runner (H-04)
+# Uses a dedicated daemon thread with a persistent event loop to safely call
+# async code from synchronous functions without creating new event loops
+# (which crashes with "asyncio.run() cannot be called from a running loop").
+# ---------------------------------------------------------------------------
+_ASYNC_LOOP: asyncio.AbstractEventLoop | None = None
+_ASYNC_LOOP_LOCK = threading.Lock()
+
+
+def _get_async_loop() -> asyncio.AbstractEventLoop:
+    """Get or create the persistent async event loop running in a daemon thread."""
+    global _ASYNC_LOOP
+    if _ASYNC_LOOP is None or _ASYNC_LOOP.is_closed():
+        with _ASYNC_LOOP_LOCK:
+            if _ASYNC_LOOP is None or _ASYNC_LOOP.is_closed():
+                loop = asyncio.new_event_loop()
+                t = threading.Thread(target=loop.run_forever, daemon=True, name="async-worker")
+                t.start()
+                _ASYNC_LOOP = loop
+    return _ASYNC_LOOP
+
+
+def _run_async(coro) -> any:
+    """Run a coroutine on the persistent background event loop from a sync context."""
+    loop = _get_async_loop()
+    fut = asyncio.run_coroutine_threadsafe(coro, loop)
+    return fut.result()
 
 
 # Per-engagement in-memory dedup to prevent emitting duplicate findings during
@@ -800,7 +831,7 @@ def execute_scan_tools(
                 # Discover WebSocket URLs from the target page
                 ws_urls = []
                 try:
-                    ws_urls = asyncio.run(WebSocketScanner.discover_websocket_urls(target))
+                    ws_urls = _run_async(WebSocketScanner.discover_websocket_urls(target))
                 except Exception as disc_err:
                     logger.debug(f"WebSocket URL discovery failed for {target}: {disc_err}")
 
@@ -809,7 +840,7 @@ def execute_scan_tools(
                     for ws_url in ws_urls:
                         try:
                             scanner = WebSocketScanner(timeout=SSL_TIMEOUT)
-                            result = asyncio.run(scanner.scan(ws_url))
+                            result = _run_async(scanner.scan(ws_url))
                             ws_findings.extend(result)
                         except RuntimeError as ws_err:
                             # Missing dependency (websockets or httpx) — skip gracefully

@@ -122,8 +122,9 @@ async function checkAccountLockout(
       return { locked: false };
     } catch (error) {
       log.authError("Lockout check error", { error: String(error) });
-      // Fail open - don't block login if check fails
-      return { locked: false };
+      // M-22: Fail closed — if we can't verify lockout status, deny login
+      // to prevent bypass during database or Redis outages.
+      return { locked: true, reason: "Unable to verify account status. Please try again later." };
     }
   }
 }
@@ -328,7 +329,7 @@ export const authOptions: NextAuthOptions = {
       options: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        sameSite: "strict",  // H-05: Strictest CSRF protection — cookie not sent cross-origin
         path: "/",
         maxAge: 24 * 60 * 60,
       },
