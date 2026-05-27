@@ -584,7 +584,9 @@ class ToolRunner:
                             break
                         stdout_lines.append(line)
                         try:
-                            on_line(line.rstrip("\n\r"))
+                            if on_line(line.rstrip("\n\r")) is False:
+                                proc.kill()
+                                break
                         except Exception as line_err:
                             logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
 
@@ -593,7 +595,8 @@ class ToolRunner:
                 for line in remaining.splitlines(keepends=True):
                     stdout_lines.append(line)
                     try:
-                        on_line(line.rstrip("\n\r"))
+                        if on_line(line.rstrip("\n\r")) is False:
+                            break
                     except Exception as line_err:
                         logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
 

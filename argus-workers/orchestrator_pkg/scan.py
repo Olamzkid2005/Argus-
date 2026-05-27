@@ -181,29 +181,75 @@ def _is_reachable(target: str) -> bool:
 # In-memory dedup set to prevent emitting duplicate findings during streaming
 _emitted_fingerprints: set[str] = set()
 
-def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
+_streaming_tools: dict[str, dict] = {
+    "dalfox": {"flag": "--json", "json_lines": True},
+    "sqlmap": {"flag": "--output-format=json", "json_lines": False, "batch_json": True},
+}
+
+
+def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
+    """Parse accumulated JSON output from a streaming tool (e.g. sqlmap batch JSON)."""
+    accumulated = "\n".join(line_buffer).strip()
+    if not accumulated:
+        return
+    start = accumulated.find("{")
+    end = accumulated.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        json_str = accumulated[start:end + 1]
+    else:
+        json_str = accumulated
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError:
+        logger.log(5, f"{tool_name} accumulated output is not valid JSON")
+        return
+    items = data if isinstance(data, list) else [data]
+    for item in items:
+        if isinstance(item, dict):
+            normalized = ctx._normalize_finding(item, tool_name)
+            if normalized:
+                fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                if fp not in _emitted_fingerprints:
+                    _emitted_fingerprints.add(fp)
+                    emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                    all_findings.append(normalized)
+
+
+def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list,
+                   on_line: callable | None = None,
+                   line_buffer: list | None = None) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 
     Findings are emitted in real-time via emit_finding_rt as each tool
     parses them, so analysts can start triaging critical findings while
     other tools are still running.
+
+    If on_line is provided, uses run_streaming for real-time line processing.
+    line_buffer is used for batch-JSON tools (sqlmap) that emit JSON at the end.
     """
     success = False
     try:
         emit_tool_start(ctx.engagement_id, tool_name, args)
-        result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
-        if result.success and result.stdout:
-            parsed = ctx.parser.parse(tool_name, result.stdout)
-            for p in parsed:
-                normalized = ctx._normalize_finding(p, tool_name)
-                if normalized:
-                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
-                    if fp not in _emitted_fingerprints:
-                        _emitted_fingerprints.add(fp)
-                        emit_finding_rt(ctx.engagement_id, normalized, tool_name)
-                        all_findings.append(normalized)
-            success = True
-        return tool_name, success, result.stdout if success else None
+        if on_line:
+            result = ctx.tool_runner.run_streaming(tool_name, args, timeout, on_line)
+            if line_buffer is not None and any(line_buffer):
+                _parse_line_buffer(ctx, tool_name, line_buffer, all_findings)
+            success = result.success
+            return tool_name, success, result.stdout if success else None
+        else:
+            result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
+            if result.success and result.stdout:
+                parsed = ctx.parser.parse(tool_name, result.stdout)
+                for p in parsed:
+                    normalized = ctx._normalize_finding(p, tool_name)
+                    if normalized:
+                        fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                        if fp not in _emitted_fingerprints:
+                            _emitted_fingerprints.add(fp)
+                            emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                            all_findings.append(normalized)
+                success = True
+            return tool_name, success, result.stdout if success else None
     except Exception as e:
         logger.warning(f"{tool_name} failed: {e}")
         return tool_name, False, None
@@ -329,6 +375,39 @@ def execute_scan_tools(
         except Exception as e:
             logger.warning(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 
+    # Factory for per-tool streaming callbacks (captures ctx, all_findings via closure)
+    def _make_on_tool_line(tool_name, json_lines=True, line_buffer=None):
+        _json_acc = ""
+        def on_tool_line(line: str) -> bool:
+            nonlocal _json_acc
+            line = line.strip()
+            if not line:
+                return True
+            if json_lines:
+                if _json_acc:
+                    _json_acc += line
+                elif line.startswith("{"):
+                    _json_acc = line
+                else:
+                    return True
+                try:
+                    finding = json.loads(_json_acc)
+                    _json_acc = ""
+                except json.JSONDecodeError:
+                    return True
+                normalized = ctx._normalize_finding(finding, tool_name)
+                if normalized:
+                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                    if fp not in _emitted_fingerprints:
+                        _emitted_fingerprints.add(fp)
+                        emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                        all_findings.append(normalized)
+            else:
+                if line_buffer is not None:
+                    line_buffer.append(line)
+            return True
+        return on_tool_line
+
     for target_idx, target in enumerate(targets):
         # Skip None/empty targets
         if not target:
@@ -443,7 +522,7 @@ def execute_scan_tools(
                 import os
                 import tempfile
                 sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_{_target_slug}.json")
-            sqlmap_cmd = ["-u", target, "--json-output", sqlmap_out]
+            sqlmap_cmd = ["-u", target, "--output-format=json", "--json-output", sqlmap_out]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
@@ -497,10 +576,25 @@ def execute_scan_tools(
         slog.info(f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel")
         if scan_jobs:
             with ThreadPoolExecutor(max_workers=5) as pool:
-                futures = {
-                    pool.submit(_run_scan_tool, ctx, name, args, timeout, all_findings): name
-                    for name, args, timeout in scan_jobs
-                }
+                futures = {}
+                for name, args, timeout in scan_jobs:
+                    config = _streaming_tools.get(name)
+                    if config:
+                        line_buffer = [] if config.get("batch_json") else None
+                        on_line = _make_on_tool_line(
+                            name,
+                            json_lines=config["json_lines"],
+                            line_buffer=line_buffer,
+                        )
+                        future = pool.submit(
+                            _run_scan_tool, ctx, name, args, timeout, all_findings,
+                            on_line=on_line, line_buffer=line_buffer,
+                        )
+                    else:
+                        future = pool.submit(
+                            _run_scan_tool, ctx, name, args, timeout, all_findings,
+                        )
+                    futures[future] = name
                 try:
                     for future in as_completed(futures, timeout=max(TOOL_TIMEOUT_LONG + 60, 900)):
                         tool_name = futures[future]

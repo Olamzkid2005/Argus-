@@ -41,6 +41,8 @@ export interface JobMessage {
   auth_config?: Record<string, unknown> | null;
   /** Second auth config for dual-account BOLA/BOPLA testing (DualAuthScanner) */
   dual_auth_config?: Record<string, unknown> | null;
+  /** Vulnerability classes to prioritize for severity escalation */
+  priority_vuln_classes?: string[];
   trace_id: string;
   created_at: string;
   platform?: string;

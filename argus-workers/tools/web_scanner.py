@@ -231,7 +231,7 @@ class WebScanner:
                  llm_payload_generator=None, session: requests.Session | None = None,
                  tech_stack: list[str] | None = None, verify: bool = True,
                  engagement_id: str = "", user_agent: str = "",
-                 emit_finding_callback=None):
+                 emit_finding_callback=None, auth_manager=None):
         """
         Initialize web scanner.
 
@@ -248,6 +248,7 @@ class WebScanner:
                                    called inline each time a finding is discovered for real-time streaming.
                                    If provided, findings are emitted as they're found rather than
                                    batched until scan() completes.
+            auth_manager: Optional AuthManager instance for in-flight session re-authentication.
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
@@ -267,6 +268,9 @@ class WebScanner:
         self._last_request_time = 0.0  # For token-bucket rate limiting
         self._rate_lock = threading.Lock()  # Thread safety for rate limiting
         self.slog = ScanLogger("web_scanner", engagement_id=self.engagement_id)
+        self._auth_manager = auth_manager
+        self._reauth_request_counter = 0
+        self._reauth_interval = 10
 
     @staticmethod
     def _redact_for_llm(text: str) -> str:
@@ -421,6 +425,17 @@ class WebScanner:
                         "Accept": "*/*",
                     })
                     self._thread_session.session = req_session
+
+            # In-flight re-authentication: periodically check session validity
+            if self._auth_manager and hasattr(self, "target_url"):
+                self._reauth_request_counter += 1
+                if self._reauth_request_counter >= self._reauth_interval:
+                    self._reauth_request_counter = 0
+                    if req_session is self.session or req_session is session:
+                        self.session = self._auth_manager.ensure_session(
+                            self.session, self.target_url
+                        )
+
             # Token-bucket rate limiting with thread-safe lock
             with self._rate_lock:
                 now = time.time()

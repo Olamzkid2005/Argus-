@@ -158,6 +158,7 @@ export default function EngagementsPage() {
   const [agentMode, setAgentMode] = useState(false);
   const [scanMode, setScanMode] = useState<"agent" | "swarm">("agent");
   const [bugBounty, setBugBounty] = useState(false);
+  const [priorityVulnClasses, setPriorityVulnClasses] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [progressStep, setProgressStep] = useState("");
   const [error, setError] = useState("");
@@ -456,6 +457,7 @@ export default function EngagementsPage() {
           bugBounty: bugBounty,
           authConfig: authConfig,
           dualAuthConfig: dualAuthConfig,
+          priorityVulnClasses: priorityVulnClasses,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: validatedScope,
         }),
@@ -990,6 +992,9 @@ Examples:
                         // Open Auth Wizard with the configured type pre-selected
                         // The user will need to enter credentials (security: never stored in templates)
                         setShowAuthWizard(true);
+                      }
+                      if (cfg.priority_vuln_classes && Array.isArray(cfg.priority_vuln_classes)) {
+                        setPriorityVulnClasses(cfg.priority_vuln_classes as string[]);
                       }
                     }}
                     className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200 appearance-none cursor-pointer"

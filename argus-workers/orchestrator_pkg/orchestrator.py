@@ -156,16 +156,62 @@ class Orchestrator:
                 if not row:
                     return []
                 org_id = row[0]
+
+                # First check for engagement-specific rules via junction table
+                cursor.execute("""
+                    SELECT cr.id, cr.name, cr.description, cr.severity,
+                           cr.category, cr.rule_yaml, cr.tags
+                    FROM custom_rules cr
+                    INNER JOIN engagement_custom_rules ecr
+                        ON cr.id = ecr.rule_id
+                    WHERE ecr.engagement_id = %s
+                      AND cr.status = 'active'
+                    ORDER BY cr.created_at DESC
+                """, (engagement_id,))
+                columns = [desc[0] for desc in cursor.description]
+                engagement_rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+
+                if engagement_rules:
+                    logger.info(
+                        "Loaded %d engagement-specific custom rule(s) for engagement %s",
+                        len(engagement_rules), engagement_id,
+                    )
+                    return engagement_rules
+
+                # Fallback: load org-level rules when no engagement-specific rules exist
+                logger.info(
+                    "No engagement-specific custom rules for %s, falling back to org-level rules",
+                    engagement_id,
+                )
                 cursor.execute("""
                     SELECT id, name, description, severity, category, rule_yaml, tags
                     FROM custom_rules WHERE org_id = %s AND status = 'active'
                     ORDER BY created_at DESC
                 """, (org_id,))
-                columns = [desc[0] for desc in cursor.description]
-                rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-                return rules
+                org_rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                logger.info(
+                    "Loaded %d org-level custom rule(s) for org %s", len(org_rules), org_id,
+                )
+                return org_rules
         except Exception as e:
             logger.warning(f"Failed to load custom rules: {e}")
+            return []
+
+    def _load_priority_vuln_classes(self) -> list[str]:
+        """Load priority_vuln_classes from the engagement record."""
+        from database.connection import db_cursor
+        try:
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT priority_vuln_classes FROM engagements WHERE id = %s",
+                    (self.engagement_id,),
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return list(row[0])
+                return []
+        except Exception as e:
+            logger.warning(f"Failed to load priority_vuln_classes: {e}")
             return []
 
     def run(self, job: dict) -> dict:
@@ -843,6 +889,14 @@ class Orchestrator:
         # Load org_id for learned FP rate lookups in IntelligenceEngine
         org_id = self._get_org_id()
         snapshot["org_id"] = org_id
+        # Load priority vulnerability classes for severity escalation
+        priority_classes = self._load_priority_vuln_classes()
+        if priority_classes:
+            snapshot["priority_vuln_classes"] = priority_classes
+            logger.info(
+                "Loaded %d priority vuln classes for engagement %s: %s",
+                len(priority_classes), self.engagement_id, priority_classes,
+            )
         # Pass EngagementState reference for AttackGraph integration (Step 11)
         if hasattr(self, "state"):
             snapshot["_engagement_state"] = self.state

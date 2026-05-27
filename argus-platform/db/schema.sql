@@ -49,6 +49,7 @@ CREATE TABLE engagements (
     agent_mode BOOLEAN NOT NULL DEFAULT false,
     auth_config JSONB DEFAULT '{}'::jsonb, -- {type: "form"|"bearer"|"cookie"|"api_key", username, password, token, cookie, login_url}
     dual_auth_config JSONB DEFAULT '{}'::jsonb, -- Secondary auth config for dual-account BOLA/BOPLA testing
+    priority_vuln_classes TEXT[] DEFAULT '{}', -- Vulnerability classes to prioritize for severity escalation
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP WITH TIME ZONE,
@@ -432,6 +433,20 @@ CREATE TABLE custom_rule_versions (
 
 CREATE INDEX idx_custom_rules_org_id ON custom_rules(org_id);
 CREATE INDEX idx_custom_rules_status ON custom_rules(status);
+
+-- Junction table linking custom rules to specific engagements
+CREATE TABLE IF NOT EXISTS engagement_custom_rules (
+    engagement_id UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+    rule_id UUID NOT NULL REFERENCES custom_rules(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (engagement_id, rule_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_engagement_custom_rules_engagement_id ON engagement_custom_rules(engagement_id);
+CREATE INDEX IF NOT EXISTS idx_engagement_custom_rules_rule_id ON engagement_custom_rules(rule_id);
+
+-- Index for priority_vuln_classes GIN queries
+CREATE INDEX IF NOT EXISTS idx_engagements_priority_vuln_classes ON engagements USING GIN (priority_vuln_classes);
 CREATE INDEX idx_custom_rules_category ON custom_rules(category);
 CREATE INDEX idx_custom_rule_versions_rule_id ON custom_rule_versions(rule_id);
 

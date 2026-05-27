@@ -31,6 +31,9 @@ import {
   Sword,
   Code2,
   Copy,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import type { AgentDecisionEvent } from "@/lib/websocket-events";
@@ -53,6 +56,7 @@ interface Engagement {
   bug_bounty_mode?: boolean;
   auth_config?: Record<string, unknown> | null;
   dual_auth_config?: Record<string, unknown> | null;
+  priority_vuln_classes?: string[];
 }
 
 interface Finding {
@@ -127,9 +131,18 @@ export default function EngagementDetailPage() {
   const [attackPathsLoading, setAttackPathsLoading] = useState(true);
   const [showAuthWizard, setShowAuthWizard] = useState(false);
   const [updatingAuth, setUpdatingAuth] = useState(false);
+  const [linkedRules, setLinkedRules] = useState<Array<{
+    id: string; name: string; severity: string; category: string; linked_at: string;
+  }>>([]);
+  const [showRuleSelector, setShowRuleSelector] = useState(false);
+  const [availableRules, setAvailableRules] = useState<Array<{
+    id: string; name: string; severity: string; category: string;
+  }>>([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
+  const [linkingRules, setLinkingRules] = useState(false);
 
-  // Real-time events for agent reasoning feed
-  const { events } = useEngagementEvents({
+  // Real-time events for agent reasoning feed and posture updates
+  const { events, postureScore, postureTrend } = useEngagementEvents({
     engagementId,
     enabled: status === "authenticated" && !!engagementId,
     pollingInterval: 2000,
@@ -192,6 +205,26 @@ export default function EngagementDetailPage() {
     } catch { /* timeline optional */ }
   }, [engagementId]);
 
+  const fetchLinkedRules = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/engagement/${engagementId}/rules`);
+      if (res.ok) {
+        const data = await res.json();
+        setLinkedRules(data.rules || []);
+      }
+    } catch { /* non-critical */ }
+  }, [engagementId]);
+
+  const fetchAvailableRules = useCallback(async () => {
+    try {
+      const res = await fetch("/api/rules?status=active&limit=200");
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableRules(data.rules || []);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
   const fetchAttackPaths = useCallback(async () => {
     try {
       const res = await fetch(`/api/engagement/${engagementId}/attack-paths`);
@@ -211,7 +244,8 @@ export default function EngagementDetailPage() {
     fetchFindings();
     fetchTimeline();
     fetchAttackPaths();
-  }, [status, engagementId, fetchEngagement, fetchFindings, fetchTimeline, fetchAttackPaths]);
+    fetchLinkedRules();
+  }, [status, engagementId, fetchEngagement, fetchFindings, fetchTimeline, fetchAttackPaths, fetchLinkedRules]);
 
   // Poll engagement status every 5s while active
   useEffect(() => {
@@ -292,6 +326,7 @@ export default function EngagementDetailPage() {
         agent_mode: engagement?.agent_mode || false,
         scan_mode: engagement?.scan_mode || "agent",
         bug_bounty_mode: engagement?.bug_bounty_mode || false,
+        priority_vuln_classes: engagement?.priority_vuln_classes || [],
       };
       // Save auth config type if configured (strip credentials for security)
       if (authCfg && typeof authCfg === "object" && authCfg.type) {
@@ -610,6 +645,20 @@ export default function EngagementDetailPage() {
                 <span className="text-xs text-on-surface mt-0.5 block capitalize">{engagement?.scan_aggressiveness || "-"}</span>
               </div>
               <div>
+                <span className="text-[10px] font-mono text-on-surface-variant block">Priority Vuln Classes</span>
+                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                  {engagement?.priority_vuln_classes && engagement.priority_vuln_classes.length > 0 ? (
+                    engagement.priority_vuln_classes.map((cls) => (
+                      <span key={cls} className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
+                        {cls}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[10px] font-mono text-on-surface-variant/60">None</span>
+                  )}
+                </div>
+              </div>
+              <div>
                 <span className="text-[10px] font-mono text-on-surface-variant block">Auth Config</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   {Boolean((engagement?.auth_config as Record<string, string | undefined> | null)?.type) ? (
@@ -679,9 +728,176 @@ export default function EngagementDetailPage() {
                   {findings.filter(f => f.verified).length}
                 </div>
               </div>
+              {postureScore != null && (
+                <div className="col-span-2 bg-surface-container dark:bg-[#1A1A24] rounded-lg p-3 border border-outline-variant dark:border-[#ffffff08]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider">Posture Score</div>
+                      <div className="text-xl font-headline font-bold text-on-surface mt-1">
+                        {Math.round(postureScore)}
+                        <span className="text-sm font-mono ml-2 text-on-surface-variant">/ 100</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {postureTrend === "improving" && (
+                        <span className="flex items-center gap-1 text-[10px] font-mono text-green-500 bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
+                          <TrendingUp size={12} />
+                          Improving
+                        </span>
+                      )}
+                      {postureTrend === "declining" && (
+                        <span className="flex items-center gap-1 text-[10px] font-mono text-error bg-error/10 px-2 py-1 rounded border border-error/20">
+                          <TrendingDown size={12} />
+                          Declining
+                        </span>
+                      )}
+                      {postureTrend === "stable" && (
+                        <span className="flex items-center gap-1 text-[10px] font-mono text-on-surface-variant bg-surface-container-high px-2 py-1 rounded border border-outline-variant">
+                          <Minus size={12} />
+                          Stable
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${postureScore}%`,
+                        background: postureScore >= 80
+                          ? "linear-gradient(90deg, #00FF88, #00CC6A)"
+                          : postureScore >= 50
+                            ? "linear-gradient(90deg, #FF8800, #FFAA33)"
+                            : "linear-gradient(90deg, #FF4444, #FF6644)",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>
+
+        {/* Custom Rules */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest font-headline">
+              Custom Rules
+            </h3>
+            <button
+              onClick={() => {
+                fetchAvailableRules();
+                setShowRuleSelector(!showRuleSelector);
+              }}
+              className="text-[9px] font-mono text-primary hover:text-primary/80 transition-colors"
+            >
+              {showRuleSelector ? "Cancel" : linkedRules.length > 0 ? "Manage" : "Link Rules"}
+            </button>
+          </div>
+
+          {linkedRules.length === 0 && !showRuleSelector ? (
+            <p className="text-[10px] font-mono text-on-surface-variant/40">
+              No custom rules linked to this engagement
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {linkedRules.map((rule) => (
+                <div
+                  key={rule.id}
+                  className="flex items-center justify-between px-3 py-2 bg-surface-container dark:bg-[#1A1A24] rounded-lg border border-outline-variant dark:border-[#ffffff08]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-mono text-on-surface truncate block">
+                      {rule.name}
+                    </span>
+                    <span className={`text-[9px] font-mono ${rule.severity === "CRITICAL" ? "text-error" : rule.severity === "HIGH" ? "text-orange-500" : "text-on-surface-variant"}`}>
+                      {rule.severity}
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch(`/api/engagement/${engagementId}/rules`, {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ruleIds: [rule.id] }),
+                      });
+                      if (res.ok) fetchLinkedRules();
+                    }}
+                    className="text-[9px] font-mono text-error/60 hover:text-error transition-colors shrink-0 ml-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Rule Selector Panel */}
+          {showRuleSelector && (
+            <div className="mt-3 space-y-2">
+              <div className="max-h-[200px] overflow-y-auto space-y-1 pr-1">
+                {availableRules
+                  .filter((r) => !linkedRules.find((lr) => lr.id === r.id))
+                  .map((rule) => (
+                    <label
+                      key={rule.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-container-high dark:hover:bg-[#2A2A35] cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedRuleIds.has(rule.id)}
+                        onChange={() => {
+                          const next = new Set(selectedRuleIds);
+                          if (next.has(rule.id)) next.delete(rule.id);
+                          else next.add(rule.id);
+                          setSelectedRuleIds(next);
+                        }}
+                        className="rounded border-outline-variant"
+                      />
+                      <span className="text-[11px] font-mono text-on-surface truncate flex-1">
+                        {rule.name}
+                      </span>
+                      <span className={`text-[9px] font-mono shrink-0 ${rule.severity === "CRITICAL" ? "text-error" : rule.severity === "HIGH" ? "text-orange-500" : "text-on-surface-variant"}`}>
+                        {rule.severity}
+                      </span>
+                    </label>
+                  ))}
+                {availableRules.filter((r) => !linkedRules.find((lr) => lr.id === r.id)).length === 0 && (
+                  <p className="text-[10px] font-mono text-on-surface-variant/40 text-center py-3">
+                    No additional rules available
+                  </p>
+                )}
+              </div>
+              <button
+                disabled={selectedRuleIds.size === 0 || linkingRules}
+                onClick={async () => {
+                  setLinkingRules(true);
+                  try {
+                    const res = await fetch(`/api/engagement/${engagementId}/rules`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ruleIds: Array.from(selectedRuleIds) }),
+                    });
+                    if (res.ok) {
+                      setSelectedRuleIds(new Set());
+                      fetchLinkedRules();
+                    }
+                  } finally {
+                    setLinkingRules(false);
+                  }
+                }}
+                className="w-full py-2 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-mono hover:bg-primary/20 transition-colors disabled:opacity-50"
+              >
+                {linkingRules ? "Linking..." : `Link Selected (${selectedRuleIds.size})`}
+              </button>
+            </div>
+          )}
+        </motion.div>
 
         {/* Auth Wizard — inline when active */}
         {showAuthWizard && engagement && (

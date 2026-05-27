@@ -112,6 +112,7 @@ class EventType:
     SWARM_AGENT_ACTION = "swarm_agent_action"
     SWARM_AGENT_COMPLETE = "swarm_agent_complete"
     SWARM_MERGE_COMPLETE = "swarm_merge_complete"
+    POSTURE_UPDATE = "posture_update"
 
 
 # ── EventBus Port (ABC) ──
@@ -548,6 +549,38 @@ def emit_swarm_merge_complete(
             "dedup_removed": dedup_removed,
         },
     ))
+
+
+def emit_posture_update(
+    engagement_id: str,
+    composite_score: float,
+    framework_scores: dict[str, float],
+    trend: str,
+    total_findings: int,
+) -> None:
+    """Emit a compliance posture update event via SSE and WebSocket."""
+    get_stream_manager().publish(Event(
+        type=EventType.POSTURE_UPDATE,
+        engagement_id=engagement_id,
+        data={
+            "composite_score": composite_score,
+            "framework_scores": framework_scores,
+            "trend": trend,
+            "total_findings": total_findings,
+        },
+    ))
+    try:
+        from websocket_events import get_websocket_publisher
+        ws = get_websocket_publisher()
+        ws.publish_posture_update(
+            engagement_id=engagement_id,
+            composite_score=composite_score,
+            framework_scores=framework_scores,
+            trend=trend,
+            total_findings=total_findings,
+        )
+    except Exception as e:
+        logger.debug("WS posture update emit failed (non-fatal): %s", e)
 
 
 # ── StreamingFindingEmitter: unified finding stream ──

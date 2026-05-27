@@ -29,6 +29,8 @@ export interface UseEngagementEventsReturn {
   error: Error | null;
   reconnect: () => void;
   clearEvents: () => void;
+  postureScore: number | null;
+  postureTrend: string | null;
 }
 
 const STORAGE_KEY = (id: string) => `argus:events:${id}`;
@@ -93,6 +95,8 @@ export function useEngagementEvents(
   );
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [postureScore, setPostureScore] = useState<number | null>(null);
+  const [postureTrend, setPostureTrend] = useState<string | null>(null);
 
   // SSE refs
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -192,6 +196,15 @@ export function useEngagementEvents(
             lastTimestampRef.current = latestEvent.timestamp;
           }
 
+          // Track posture updates from polling
+          for (const evt of data.events) {
+            if (evt.type === "posture_updated" && evt.data?.composite_score != null) {
+              setPostureScore(evt.data.composite_score as number);
+              setPostureTrend(evt.data.trend as string);
+              break;
+            }
+          }
+
           if (onEventRef.current) {
             data.events.forEach((event: WebSocketEvent) => {
               onEventRef.current!(event);
@@ -274,6 +287,11 @@ export function useEngagementEvents(
           if (event.type === "state_transition" && event.data?.to_state) {
             setCurrentState(event.data.to_state as string);
             saveStoredState(eventEngagementId, event.data.to_state as string);
+          }
+
+          if (event.type === "posture_updated" && event.data?.composite_score != null) {
+            setPostureScore(event.data.composite_score as number);
+            setPostureTrend(event.data.trend as string);
           }
 
           onEventRef.current?.(event as WebSocketEvent);
@@ -424,6 +442,8 @@ export function useEngagementEvents(
     error,
     reconnect,
     clearEvents,
+    postureScore,
+    postureTrend,
   };
 }
 

@@ -45,6 +45,7 @@ class WebSocketEventPublisher:
     EVENT_SCANNER_ACTIVITY = "scanner_activity"
     EVENT_ERROR = "error"
     EVENT_AGENT_DECISION = "agent_decision"
+    EVENT_POSTURE_UPDATED = "posture_updated"
 
     # Severity levels
     SEVERITY_CRITICAL = "CRITICAL"
@@ -497,6 +498,37 @@ class WebSocketEventPublisher:
         }
         self._publish_event(event)
 
+    def publish_posture_update(
+        self,
+        engagement_id: str,
+        composite_score: float,
+        framework_scores: dict[str, float],
+        trend: str,
+        total_findings: int,
+    ) -> None:
+        """
+        Publish a compliance posture update event for real-time display.
+
+        Args:
+            engagement_id: Engagement ID
+            composite_score: Overall composite posture score (0-100)
+            framework_scores: Per-framework scores dict
+            trend: Trend direction (improving, declining, stable)
+            total_findings: Total active finding count
+        """
+        event = {
+            "type": self.EVENT_POSTURE_UPDATED,
+            "engagement_id": engagement_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "data": {
+                "composite_score": composite_score,
+                "framework_scores": framework_scores,
+                "trend": trend,
+                "total_findings": total_findings,
+            }
+        }
+        self._publish_event(event)
+
     def _persist_scanner_activity(
         self,
         engagement_id: str,
@@ -639,4 +671,21 @@ def publish_rate_limit_event(
         current_rps=current_rps,
         status_code=status_code,
         message=message,
+    )
+
+
+def publish_posture_update(
+    engagement_id: str,
+    composite_score: float,
+    framework_scores: dict[str, float],
+    trend: str,
+    total_findings: int,
+) -> None:
+    """Publish a compliance posture update event"""
+    get_websocket_publisher().publish_posture_update(
+        engagement_id=engagement_id,
+        composite_score=composite_score,
+        framework_scores=framework_scores,
+        trend=trend,
+        total_findings=total_findings,
     )

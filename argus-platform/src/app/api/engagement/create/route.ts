@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       bugBounty,
       authConfig,
       dualAuthConfig,
+      priorityVulnClasses,
     } = body;
 
     // Default authorization proof if not provided (NOT NULL column)
@@ -217,8 +218,8 @@ export async function POST(req: NextRequest) {
 
       const engagementResult = await client.query(
         `INSERT INTO engagements 
-         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, dual_auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, dual_auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, priority_vuln_classes, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
          RETURNING *`,
         [
           engagementId,
@@ -236,6 +237,7 @@ export async function POST(req: NextRequest) {
           effectiveAgentMode,
           scanMode || "agent",
           bugBounty === true,
+          priorityVulnClasses || [],
         ],
       );
 
@@ -281,6 +283,7 @@ export async function POST(req: NextRequest) {
             agent_mode: effectiveAgentMode,
             scan_mode: scanMode || "agent",
             bug_bounty_mode: bugBounty === true,
+            priority_vuln_classes: priorityVulnClasses || [],
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });
@@ -300,6 +303,7 @@ export async function POST(req: NextRequest) {
             bug_bounty_mode: bugBounty === true,
             auth_config: effectiveAuthConfig,
             dual_auth_config: effectiveDualAuthConfig,
+            priority_vuln_classes: priorityVulnClasses || [],
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });

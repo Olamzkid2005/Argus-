@@ -71,7 +71,7 @@ class CompliancePostureScorer:
     regulatory framework supported by Argus.
     """
 
-    SUPPORTED_FRAMEWORKS = ["owasp_top10", "pci_dss", "soc2", "nist_csf"]
+    SUPPORTED_FRAMEWORKS = ["owasp_top10", "pci_dss", "soc2", "nist_csf", "hipaa", "iso_27001"]
 
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
@@ -94,6 +94,18 @@ class CompliancePostureScorer:
             "owasp_top10": owasp,
             "pci_dss": pci,
             "soc2": soc2,
+        }
+
+    def _map_finding_full(self, finding: dict) -> dict[str, str | None]:
+        """Map a finding to ALL supported compliance frameworks."""
+        finding_type = finding.get("type", "UNKNOWN")
+        return {
+            "owasp_top10": self._mapper.map_to_owasp(finding_type),
+            "pci_dss": self._mapper.map_to_pci(finding_type),
+            "soc2": self._mapper.map_to_soc2(finding_type),
+            "nist_csf": self._mapper.map_to_nist_csf(finding_type),
+            "hipaa": self._mapper.map_to_hipaa(finding_type),
+            "iso_27001": self._mapper.map_to_iso_27001(finding_type),
         }
 
     # ── Score computation ──
@@ -178,6 +190,8 @@ class CompliancePostureScorer:
             ComplianceMapper.map_to_pci: "pci_dss",
             ComplianceMapper.map_to_soc2: "soc2",
             ComplianceMapper.map_to_nist_csf: "nist_csf",
+            ComplianceMapper.map_to_hipaa: "hipaa",
+            ComplianceMapper.map_to_iso_27001: "iso_27001",
         }
         return name_map.get(mapper_fn, "unknown")
 
@@ -214,6 +228,8 @@ class CompliancePostureScorer:
             ("pci_dss", ComplianceMapper.map_to_pci),
             ("soc2", ComplianceMapper.map_to_soc2),
             ("nist_csf", ComplianceMapper.map_to_nist_csf),
+            ("hipaa", ComplianceMapper.map_to_hipaa),
+            ("iso_27001", ComplianceMapper.map_to_iso_27001),
         ]:
             frameworks[framework] = self._compute_framework_score(findings, mapper_fn)
 
@@ -523,6 +539,8 @@ class CompliancePostureScorer:
                 ("pci_dss", ComplianceMapper.map_to_pci),
                 ("soc2", ComplianceMapper.map_to_soc2),
                 ("nist_csf", ComplianceMapper.map_to_nist_csf),
+                ("hipaa", ComplianceMapper.map_to_hipaa),
+                ("iso_27001", ComplianceMapper.map_to_iso_27001),
             ]:
                 control_map[fw_name] = {}
                 for f in findings:
@@ -615,6 +633,21 @@ class CompliancePostureScorer:
         snapshot = self.compute(findings)
         self.save_snapshot(snapshot)
         self.save_control_scores(snapshot, findings, org_id)
+
+        # Publish real-time posture update
+        try:
+            from websocket_events import get_websocket_publisher
+            ws = get_websocket_publisher()
+            ws.publish_posture_update(
+                engagement_id=self.engagement_id,
+                composite_score=snapshot.composite_score,
+                framework_scores={fw: fp.score for fw, fp in snapshot.frameworks.items()},
+                trend=snapshot.trend,
+                total_findings=snapshot.total_findings,
+            )
+        except Exception as e:
+            logger.debug("Failed to publish posture update (non-fatal): %s", e)
+
         return snapshot
 
     def to_api_dict(self, snapshot: PostureSnapshot) -> dict:

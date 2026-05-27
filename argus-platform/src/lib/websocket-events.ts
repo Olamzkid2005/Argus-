@@ -13,6 +13,7 @@ export type WebSocketEventType =
   | "job_completed"
   | "scanner_activity"
   | "agent_decision"
+  | "posture_updated"
   | "error";
 
 export interface WebSocketEvent {
@@ -130,6 +131,18 @@ export interface ErrorEvent {
     error_message: string;
     error_code: string;
     context: Record<string, unknown>;
+  };
+}
+
+export interface PostureUpdateEvent {
+  type: "posture_updated";
+  engagement_id: string;
+  timestamp: string;
+  data: {
+    composite_score: number;
+    framework_scores: Record<string, number>;
+    trend: string;
+    total_findings: number;
   };
 }
 
