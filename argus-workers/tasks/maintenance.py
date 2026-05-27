@@ -1,10 +1,13 @@
 """
 Celery tasks for maintenance operations
+
+Uses shared ConnectionManager for database access (H-23).
 """
 import logging
 from datetime import UTC, datetime, timedelta
 
 from celery_app import app
+from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -19,58 +22,33 @@ def cleanup_old_results(self):
     - Clean up old decision snapshots
     - Clean up old checkpoints
     """
-    import os
-
-    import psycopg2
-
-    db_conn = os.getenv("DATABASE_URL")
-
-    if not db_conn:
-        return {"status": "skipped", "reason": "No DATABASE_URL configured"}
-
-    conn = psycopg2.connect(db_conn)
-    cursor = conn.cursor()
-
     try:
         cutoff_date = datetime.now(UTC) - timedelta(days=30)
 
-        cursor.execute(
-            """
-            DELETE FROM decision_snapshots
-            WHERE created_at < %s
-            """,
-            (cutoff_date,)
-        )
-        snapshots_deleted = cursor.rowcount
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                "DELETE FROM decision_snapshots WHERE created_at < %s",
+                (cutoff_date,)
+            )
+            snapshots_deleted = cursor.rowcount
 
-        cursor.execute(
-            """
-            DELETE FROM checkpoints
-            WHERE created_at < %s
-            """,
-            (cutoff_date,)
-        )
-        checkpoints_deleted = cursor.rowcount
+            cursor.execute(
+                "DELETE FROM checkpoints WHERE created_at < %s",
+                (cutoff_date,)
+            )
+            checkpoints_deleted = cursor.rowcount
 
-        cursor.execute(
-            """
-            DELETE FROM raw_outputs
-            WHERE created_at < %s
-            """,
-            (cutoff_date,)
-        )
-        raw_outputs_deleted = cursor.rowcount
+            cursor.execute(
+                "DELETE FROM raw_outputs WHERE created_at < %s",
+                (cutoff_date,)
+            )
+            raw_outputs_deleted = cursor.rowcount
 
-        cursor.execute(
-            """
-            DELETE FROM query_performance_log
-            WHERE created_at < %s
-            """,
-            (cutoff_date,)
-        )
-        perf_logs_deleted = cursor.rowcount
-
-        conn.commit()
+            cursor.execute(
+                "DELETE FROM query_performance_log WHERE created_at < %s",
+                (cutoff_date,)
+            )
+            perf_logs_deleted = cursor.rowcount
 
         return {
             "status": "completed",
@@ -80,11 +58,8 @@ def cleanup_old_results(self):
             "perf_logs_deleted": perf_logs_deleted,
         }
     except Exception as e:
-        conn.rollback()
+        logger.error("cleanup_old_results failed: %s", e)
         return {"status": "error", "error": str(e)}
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @app.task(bind=True, name="tasks.maintenance.cleanup_failed_engagements")
@@ -92,188 +67,112 @@ def cleanup_failed_engagements(self):
     """
     Clean up engagements that have been in failed state for more than 7 days
     """
-    import os
-
-    import psycopg2
-
-    db_conn = os.getenv("DATABASE_URL")
-
-    if not db_conn:
-        return {"status": "skipped", "reason": "No DATABASE_URL configured"}
-
-    conn = psycopg2.connect(db_conn)
-    cursor = conn.cursor()
-
     try:
         cutoff_date = datetime.now(UTC) - timedelta(days=7)
 
-        cursor.execute(
-            """
-            DELETE FROM engagement_states
-            WHERE engagement_id IN (
-                SELECT id FROM engagements
-                WHERE status = 'failed'
-                AND updated_at < %s
+        with db_cursor(commit=True) as cursor:
+            cursor.execute(
+                """DELETE FROM engagement_states
+                 WHERE engagement_id IN (
+                     SELECT id FROM engagements
+                     WHERE status = 'failed'
+                     AND updated_at < %s
+                 )""",
+                (cutoff_date,)
             )
-            """,
-            (cutoff_date,)
-        )
-        states_deleted = cursor.rowcount
+            states_deleted = cursor.rowcount
 
-        cursor.execute(
-            """
-            DELETE FROM loop_budgets
-            WHERE engagement_id IN (
-                SELECT id FROM engagements
-                WHERE status = 'failed'
-                AND updated_at < %s
+            cursor.execute(
+                """DELETE FROM loop_budgets
+                 WHERE engagement_id IN (
+                     SELECT id FROM engagements
+                     WHERE status = 'failed'
+                     AND updated_at < %s
+                 )""",
+                (cutoff_date,)
             )
-            """,
-            (cutoff_date,)
-        )
-        budgets_deleted = cursor.rowcount
+            budgets_deleted = cursor.rowcount
 
-        cursor.execute(
-            """
-            DELETE FROM engagements
-            WHERE status = 'failed'
-            AND updated_at < %s
-            """,
-            (cutoff_date,)
-        )
-        engagements_deleted = cursor.rowcount
+            cursor.execute(
+                """DELETE FROM scanner_activities
+                 WHERE engagement_id IN (
+                     SELECT id FROM engagements
+                     WHERE status = 'failed'
+                     AND updated_at < %s
+                 )""",
+                (cutoff_date,)
+            )
+            activities_deleted = cursor.rowcount
 
-        conn.commit()
+            cursor.execute(
+                """DELETE FROM findings
+                 WHERE engagement_id IN (
+                     SELECT id FROM engagements
+                     WHERE status = 'failed'
+                     AND updated_at < %s
+                 )""",
+                (cutoff_date,)
+            )
+            findings_deleted = cursor.rowcount
+
+            cursor.execute(
+                "DELETE FROM engagements WHERE status = 'failed' AND updated_at < %s",
+                (cutoff_date,)
+            )
+            engagements_deleted = cursor.rowcount
 
         return {
             "status": "completed",
-            "engagements_deleted": engagements_deleted,
             "states_deleted": states_deleted,
             "budgets_deleted": budgets_deleted,
+            "activities_deleted": activities_deleted,
+            "findings_deleted": findings_deleted,
+            "engagements_deleted": engagements_deleted,
         }
     except Exception as e:
-        conn.rollback()
+        logger.error("cleanup_failed_engagements failed: %s", e)
         return {"status": "error", "error": str(e)}
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @app.task(bind=True, name="tasks.maintenance.cleanup_checkpoints")
 def cleanup_checkpoints(self):
-    """Clean up old checkpoints using CheckpointManager"""
-    import os
-
-    from checkpoint_manager import CheckpointManager
-
-    db_conn = os.getenv("DATABASE_URL")
-    if not db_conn:
-        return {"status": "skipped", "reason": "No DATABASE_URL configured"}
-
+    """
+    Clean up old checkpoints based on retention policy
+    """
     try:
-        manager = CheckpointManager(db_conn)
-        deleted = manager.cleanup_old_checkpoints(max_age_days=7)
-        return {"status": "completed", "checkpoints_deleted": deleted}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+        # Keep 90 days of checkpoints for active engagements,
+        # 30 days for completed/failed
+        cutoff_active = datetime.now(UTC) - timedelta(days=90)
+        cutoff_completed = datetime.now(UTC) - timedelta(days=30)
 
+        with db_cursor(commit=True) as cursor:
+            # Delete old checkpoints for active engagements
+            cursor.execute(
+                """DELETE FROM checkpoints
+                 WHERE created_at < %s
+                 AND engagement_id IN (
+                     SELECT id FROM engagements WHERE status IN ('running', 'pending')
+                 )""",
+                (cutoff_active,)
+            )
+            active_deleted = cursor.rowcount
 
-@app.task(bind=True, name="tasks.maintenance.refresh_views")
-def refresh_views(self):
-    """Refresh materialized views for query performance"""
-    import os
-
-    import psycopg2
-
-    db_conn = os.getenv("DATABASE_URL")
-    if not db_conn:
-        return {"status": "skipped", "reason": "No DATABASE_URL configured"}
-
-    conn = psycopg2.connect(db_conn)
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute("SELECT refresh_mv_org_dashboard()")
-        cursor.execute("SELECT refresh_mv_engagement_findings()")
-        cursor.execute("SELECT refresh_mv_tool_performance()")
-        conn.commit()
-
-        return {"status": "completed", "views_refreshed": 3}
-    except Exception as e:
-        conn.rollback()
-        return {"status": "error", "error": str(e)}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@app.task(bind=True, name="tasks.maintenance.worker_health_check")
-def worker_health_check(self):
-    """Check worker health, send heartbeat, and cleanup dead workers"""
-    from health_monitor import get_health_monitor
-
-    try:
-        monitor = get_health_monitor()
-        monitor.send_heartbeat()
-        unhealthy = monitor.get_unhealthy_workers()
-        cleaned = monitor.cleanup_dead_workers()
-
-        if unhealthy:
-            logger.warning(f"Found {len(unhealthy)} unhealthy workers")
+            # Delete old checkpoints for completed/failed engagements
+            cursor.execute(
+                """DELETE FROM checkpoints
+                 WHERE created_at < %s
+                 AND engagement_id IN (
+                     SELECT id FROM engagements WHERE status IN ('completed', 'failed', 'cancelled')
+                 )""",
+                (cutoff_completed,)
+            )
+            completed_deleted = cursor.rowcount
 
         return {
             "status": "completed",
-            "unhealthy_workers": len(unhealthy),
-            "cleaned_workers": cleaned,
+            "active_engagement_checkpoints_deleted": active_deleted,
+            "completed_engagement_checkpoints_deleted": completed_deleted,
         }
     except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
-@app.task(bind=True, name="tasks.maintenance.cleanup_dlq")
-def cleanup_dlq(self):
-    """
-    Purge old DLQ items that have exceeded retention period.
-
-    Runs periodically via Celery Beat to prevent DLQ from growing unbounded.
-    """
-    from dead_letter_queue import get_dlq
-
-    try:
-        dlq = get_dlq()
-        purged = dlq.purge(older_than_hours=48)
-        if purged:
-            logger.info(f"Cleaned up {purged} old DLQ items older than 48 hours")
-        else:
-            logger.debug("No old DLQ items to clean up")
-        return {"status": "completed", "purged": purged}
-    except Exception as e:
-        logger.error(f"DLQ cleanup task failed: {e}")
-        return {"status": "error", "error": str(e)}
-
-
-@app.task(bind=True, name="tasks.maintenance.update_nuclei_templates")
-def update_nuclei_templates(self):
-    """
-    Update nuclei vulnerability templates to latest version.
-
-    Runs daily via Celery Beat to ensure new CVEs are detected.
-    """
-    logger.info("Starting daily nuclei templates update")
-    try:
-        from tools.update_nuclei_templates import get_template_count
-        from tools.update_nuclei_templates import update_nuclei_templates as _do_update
-
-        success = _do_update(timeout=300)
-        count = get_template_count()
-        logger.info(
-            f"Nuclei templates update {'succeeded' if success else 'failed'}. "
-            f"Total templates: {count}"
-        )
-        return {
-            "status": "completed" if success else "failed",
-            "template_count": count,
-        }
-    except Exception as e:
-        logger.error(f"Nuclei templates update task failed: {e}")
+        logger.error("cleanup_checkpoints failed: %s", e)
         return {"status": "error", "error": str(e)}

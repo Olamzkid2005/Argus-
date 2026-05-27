@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  # PostgreSQL 16 with pgvector for similarity search
+  postgres:
+    image: pgvector/pgvector:0.7.4-pg16
+    environment:
+      POSTGRES_USER: argus_user
+      POSTGRES_PASSWORD: argus_dev_password_change_in_production
+      POSTGRES_DB: argus_pentest
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./argus-platform/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./argus-platform/db/audit_logging.sql:/docker-entrypoint-initdb.d/02-audit.sql
+      - ./argus-platform/db/performance.sql:/docker-entrypoint-initdb.d/03-perf.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argus_user -d argus_pentest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 7 for Celery broker, caching, and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js platform (frontend + API)
+  platform:
+    build:
+      context: ./argus-platform
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://argus_user:argus_dev_password_change_in_production@postgres:5432/argus_pentest
+      REDIS_URL: redis://redis:6379
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-argus_dev_secret_key_change_in_production}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery worker (distributed scan tasks)
+  worker:
+    build:
+      context: ./argus-workers
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://argus_user:argus_dev_password_change_in_production@postgres:5432/argus_pentest
+      REDIS_URL: redis://redis:6379
+      CELERY_CONCURRENCY: "4"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Beat (scheduled tasks)
+  celery-beat:
+    build:
+      context: ./argus-workers
+      dockerfile: Dockerfile
+    command: celery -A celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://argus_user:argus_dev_password_change_in_production@postgres:5432/argus_pentest
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

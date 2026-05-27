@@ -5,6 +5,8 @@ Keeps the local nuclei-templates directory fresh so new CVEs are detected.
 Can be called:
 - At scan start (gated by feature flag ARGUS_FF_NUCLEI_TEMPLATES_AUTO_UPDATE)
 - As a daily Celery Beat task
+
+Uses a restricted environment to avoid leaking secrets (H-24, H-v3-10).
 """
 import logging
 import os
@@ -23,6 +25,8 @@ def update_nuclei_templates(timeout: int = 120) -> bool:
     """
     Run nuclei -update-templates to refresh the local template cache.
 
+    Uses a restricted environment to avoid leaking parent process secrets (H-v3-10).
+
     Args:
         timeout: Maximum seconds to wait for the update (default 120)
 
@@ -38,46 +42,53 @@ def update_nuclei_templates(timeout: int = 120) -> bool:
     slog.info(f"Updating nuclei templates: {' '.join(cmd)}")
     logger.info(f"Updating nuclei templates: {' '.join(cmd)}")
 
+    # Construct a restricted environment (H-24, H-v3-10)
+    # Only pass PATH and HOME — do NOT inherit parent's full env including secrets
+    restricted_env = {
+        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "HOME": str(Path.home()),
+    }
+
     try:
-        env = os.environ.copy()
-        env["HOME"] = str(Path.home())
-        result = subprocess.run(  # noqa: S603 — safe: cmd is list form ["nuclei", "-update-templates", ...], no shell=True
+        result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=env,
+            env=restricted_env,
         )
 
         if result.returncode == 0:
             slog.info("Nuclei templates updated successfully")
             logger.info(
-                f"Nuclei templates updated successfully. "
-                f"stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
+                "Nuclei templates updated successfully. "
+                "stdout: %s, stderr: %s",
+                result.stdout[:500], result.stderr[:500],
             )
             return True
         else:
             slog.warn(f"Nuclei templates update returned code {result.returncode}")
             logger.warning(
-                f"Nuclei templates update returned code {result.returncode}. "
-                f"stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
+                "Nuclei templates update returned code %d. "
+                "stdout: %s, stderr: %s",
+                result.returncode, result.stdout[:500], result.stderr[:500],
             )
             return False
 
     except subprocess.TimeoutExpired:
         slog.warn(f"Nuclei templates update timed out after {timeout}s")
-        logger.error(f"Nuclei templates update timed out after {timeout}s")
+        logger.error("Nuclei templates update timed out after %ds", timeout)
         return False
     except FileNotFoundError:
         slog.warn(f"Nuclei binary '{NUCLEI_BINARY}' not found on PATH")
         logger.warning(
-            f"Nuclei binary '{NUCLEI_BINARY}' not found on PATH. "
-            f"Skipping template update."
+            "Nuclei binary '%s' not found on PATH. Skipping template update.",
+            NUCLEI_BINARY,
         )
         return False
     except Exception as e:
         slog.warn(f"Nuclei templates update failed: {e}")
-        logger.error(f"Nuclei templates update failed: {e}")
+        logger.error("Nuclei templates update failed: %s", e)
         return False
 
 

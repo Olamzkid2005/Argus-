@@ -1,8 +1,7 @@
 /**
  * Admin Migration API - One-time migration to create user_settings table
  * 
- * POST /api/admin/migrate - Run migrations
- * Use ?secret=dev to bypass auth in development
+ * POST /api/admin/migrate - Run migrations (admin role required)
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";

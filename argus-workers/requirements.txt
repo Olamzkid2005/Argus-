@@ -5,7 +5,9 @@ celery[redis]==5.4.0
 redis==5.2.1
 
 # Database
-psycopg2-binary==2.9.10
+# Use psycopg2 for production (requires libpq-dev). Use psycopg2-binary for dev only.
+# psycopg2-binary can segfault under libpq version mismatch and lags security patches.
+psycopg2>=2.9.10,<3
 sqlalchemy==2.0.36
 
 # HTTP Clients
