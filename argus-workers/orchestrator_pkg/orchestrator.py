@@ -26,6 +26,7 @@ from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
 from streaming import (
+    StreamingFindingEmitter,
     emit_thinking,
     emit_tool_complete,
     emit_tool_start,
@@ -355,6 +356,7 @@ class Orchestrator:
                   or f.get("type", "").startswith("COMMITTED_SECRET")]
 
         failed_count = 0
+        _finding_emitter = StreamingFindingEmitter(self.engagement_id)
         if non_secret:
             try:
                 inserted, updated = self.finding_repo.batch_create_or_update_findings(
@@ -364,6 +366,13 @@ class Orchestrator:
                     "_save_findings: batch saved %d (inserted=%d, updated=%d) findings for %s",
                     inserted + updated, inserted, updated, self.engagement_id,
                 )
+                # Emit real-time finding events for all saved findings
+                for f in non_secret:
+                    if f.get("_saved_id"):
+                        try:
+                            _finding_emitter.emit_finding(f)
+                        except Exception as emit_err:
+                            logger.warning("Failed to emit finding event (non-fatal): %s", emit_err)
             except FindingCapExceededError:
                 logger.error("Finding cap exceeded for engagement %s during batch save", self.engagement_id)
                 failed_count += len(non_secret)
@@ -386,6 +395,11 @@ class Orchestrator:
                 )
                 if saved_id:
                     f["_saved_id"] = saved_id
+                    # Emit real-time finding event for each secret finding
+                    try:
+                        _finding_emitter.emit_finding(f)
+                    except Exception as emit_err:
+                        logger.warning("Failed to emit finding event (non-fatal): %s", emit_err)
             except (ValueError, OSError, KeyError) as e:
                 failed_count += 1
                 logger.warning("Failed to save secret finding: %s", e)

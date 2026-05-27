@@ -37,6 +37,7 @@ import { MarkdownRenderer } from "@/components/ui-custom/MarkdownRenderer";
 import { ScrollReveal } from "@/components/animations/ScrollReveal";
 import { StaggerContainer, StaggerItem } from "@/components/animations/StaggerContainer";
 import SecurityRating from "@/components/security/SecurityRating";
+import { useEngagementEvents } from "@/lib/use-engagement-events";
 
 
 // ── Types ──
@@ -268,6 +269,9 @@ export default function FindingsPage() {
   const [activeTab, setActiveTab] = useState<FindingTab>("overview");
   const [remediationContent, setRemediationContent] = useState<Record<string, string>>({});
   const [similarFindings, setSimilarFindings] = useState<Finding[]>([]);
+  const [liveCount, setLiveCount] = useState(0);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const lastEventTimeRef = useRef<number>(0);
 
   // Fetch remediation content when the remediation tab is activated
   useEffect(() => {
@@ -368,6 +372,87 @@ export default function FindingsPage() {
     };
     fetchFindings();
   }, [status, showToast, selectedEngagement, groupBy]);
+
+  // ── Real-time finding stream subscription ──
+  // When viewing a specific engagement, subscribe to finding_discovered events
+  // and prepend new findings to the list as they arrive from live scans.
+  const uniqueEngagementId = selectedEngagement !== "all" ? selectedEngagement : "";
+  // Only enable streaming when viewing a specific active engagement
+  const streamingEnabled = uniqueEngagementId.length > 0 && status === "authenticated";
+
+  const {
+    isConnected: streamConnected,
+  } = useEngagementEvents({
+    engagementId: uniqueEngagementId,
+    enabled: streamingEnabled,
+    onEvent: useCallback((event) => {
+      if (event.type === "finding_discovered") {
+        const data = event.data as {
+          finding_id?: string;
+          finding_type?: string;
+          severity?: string;
+          confidence?: number;
+          endpoint?: string;
+          source_tool?: string;
+        };
+        if (!data.finding_id) return;
+
+        // Debounce: skip events that arrive within 50ms of each other
+        // (batch saves emit many events at once, we only need the first)
+        const now = Date.now();
+        if (now - lastEventTimeRef.current < 50) {
+          lastEventTimeRef.current = now;
+          return;
+        }
+        lastEventTimeRef.current = now;
+
+        // Count live events for the badge
+        setLiveCount((c) => c + 1);
+
+        // Construct a minimal finding and prepend to the list
+        const minimalFinding: Finding = {
+          id: data.finding_id,
+          engagement_id: event.engagement_id,
+          type: data.finding_type || "UNKNOWN",
+          severity: (data.severity as Finding["severity"]) || "INFO",
+          endpoint: data.endpoint || "",
+          source_tool: data.source_tool || "unknown",
+          verified: false,
+          confidence: data.confidence || 0.5,
+          created_at: event.timestamp,
+        };
+
+        setFindings((prev) => {
+          // Avoid duplicates — check if finding_id already exists
+          if (prev.some((f) => f.id === minimalFinding.id)) {
+            return prev;
+          }
+          return [minimalFinding, ...prev];
+        });
+      }
+    }, []),
+  });
+
+  // Track connection state for live badge display
+  useEffect(() => {
+    setIsLiveConnected(streamConnected);
+    if (!streamConnected) {
+      // Reset live count when connection drops (stale events cleared)
+      // but only if we haven't received events recently
+      if (Date.now() - lastEventTimeRef.current > 10000) {
+        setLiveCount(0);
+      }
+    }
+  }, [streamConnected]);
+
+  // Auto-clear live badge after 30s of inactivity
+  useEffect(() => {
+    if (liveCount === 0) return;
+    const timer = setTimeout(() => {
+      setLiveCount(0);
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [liveCount]);
 
   const handleExplainAll = async () => {
     if (filtered.length === 0) {
@@ -697,10 +782,39 @@ export default function FindingsPage() {
           </span>
           <AIStatusBadge />
         </div>
-        <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Findings</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-semibold text-on-surface tracking-tight font-headline">Findings</h1>
+          {/* Real-time streaming indicator */}
+          {isLiveConnected && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10"
+            >
+              <motion.span
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="w-1.5 h-1.5 rounded-full bg-emerald-500"
+              />
+              <span className="text-[10px] font-bold font-mono text-emerald-400 uppercase tracking-wider">
+                LIVE
+              </span>
+              {liveCount > 0 && (
+                <span className="text-[10px] font-mono text-emerald-400/80">
+                  +{liveCount}
+                </span>
+              )}
+            </motion.div>
+          )}
+        </div>
         <p className="text-sm text-on-surface-variant mt-1 font-body">
           {findings.length} total vulnerabilities discovered
           {selectedEngagement !== "all" ? ` in selected engagement` : " across all engagements"}
+          {liveCount > 0 && (
+            <span className="text-emerald-400 ml-1">
+              ({liveCount} new this session)
+            </span>
+          )}
         </p>
       </motion.div>
 

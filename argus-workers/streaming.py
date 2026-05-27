@@ -550,6 +550,79 @@ def emit_swarm_merge_complete(
     ))
 
 
+# ── StreamingFindingEmitter: unified finding stream ──
+
+class StreamingFindingEmitter:
+    """
+    Unified emitter that publishes finding events to both SSE and Redis WebSocket channels.
+
+    Every normalized finding that gets persisted to the database also gets emitted
+    as a real-time event so analysts can start triaging critical findings while the
+    scan is still running.
+
+    Uses lazy initialization for both stream manager and WS publisher to avoid
+    import-time side effects.
+    """
+
+    def __init__(self, engagement_id: str):
+        self.engagement_id = engagement_id
+        self._stream = None
+        self._ws_publisher = None
+
+    @property
+    def stream(self):
+        if self._stream is None:
+            self._stream = get_stream_manager()
+        return self._stream
+
+    @property
+    def ws_publisher(self):
+        if self._ws_publisher is None:
+            from websocket_events import get_websocket_publisher
+            self._ws_publisher = get_websocket_publisher()
+        return self._ws_publisher
+
+    def emit_finding(self, finding: dict) -> None:
+        """Emit a finding event through both SSE and WebSocket channels.
+
+        Args:
+            finding: Finding dict containing at minimum:
+                - _saved_id or id: Finding UUID
+                - type: Finding type (SQL_INJECTION, XSS, etc.)
+                - severity: CRITICAL, HIGH, MEDIUM, LOW, INFO
+                - endpoint: Affected endpoint
+                - source_tool: Tool that discovered the finding
+                - confidence: Confidence score 0.0-1.0
+        """
+        finding_id = finding.get("_saved_id") or finding.get("id") or ""
+        finding_type = finding.get("type", "UNKNOWN")
+        severity = finding.get("severity", "INFO")
+        endpoint = finding.get("endpoint", "")
+        source_tool = finding.get("source_tool", "unknown")
+        confidence = finding.get("confidence", 0.5)
+        title = f"{finding_type} on {endpoint}"
+
+        # 1. SSE event via emit_finding (in-process stream manager)
+        emit_finding(self.engagement_id, finding_type, severity, endpoint, title)
+
+        # 2. WebSocket event via WebSocketEventPublisher (Redis pub/sub)
+        try:
+            self.ws_publisher.publish_finding(
+                engagement_id=self.engagement_id,
+                finding_id=finding_id,
+                finding_type=finding_type,
+                severity=severity,
+                confidence=confidence,
+                endpoint=endpoint,
+                source_tool=source_tool,
+                use_batch=False,
+            )
+        except Exception as e:
+            logger.debug(
+                "Failed to publish WebSocket finding event (non-fatal): %s", e,
+            )
+
+
 # Singleton
 _stream_manager: StreamManager | None = None
 _stream_lock = threading.Lock()
