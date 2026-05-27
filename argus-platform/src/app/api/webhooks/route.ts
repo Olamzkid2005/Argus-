@@ -38,6 +38,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Verify engagement belongs to user's org if engagement_id provided (H-v3-11)
+    if (engagement_id) {
+      const client = await pool.connect();
+      try {
+        const engResult = await client.query(
+          `SELECT id FROM engagements WHERE id = $1 AND org_id = $2`,
+          [engagement_id, session.user.orgId],
+        );
+        if (engResult.rows.length === 0) {
+          return NextResponse.json(
+            { error: "Engagement not found or access denied" },
+            { status: 404 },
+          );
+        }
+      } finally {
+        client.release();
+      }
+    }
+
     const client = await pool.connect();
 
     try {

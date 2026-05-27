@@ -338,24 +338,25 @@ class APISecurityScanner:
 
         # Test for missing authentication on endpoints
         test_url = urljoin(self.target_url, "/api/admin")
-        # Temporarily remove auth headers
+        # Temporarily remove auth headers, restoring in finally (H-v3-13)
         original_headers = dict(self.session.headers)
-        for h in ["Authorization", "X-API-Key"]:
-            self.session.headers.pop(h, None)
+        try:
+            for h in ["Authorization", "X-API-Key"]:
+                self.session.headers.pop(h, None)
 
-        resp = self._safe_request("GET", test_url)
-        if resp and resp.status_code == 200:
-            self._add_finding(
-                finding_type="MISSING_AUTHENTICATION",
-                severity="CRITICAL",
-                endpoint=test_url,
-                evidence={
-                    "message": "Sensitive endpoint accessible without authentication"
-                },
-                confidence=0.85,
-            )
-
-        self.session.headers.update(original_headers)
+            resp = self._safe_request("GET", test_url)
+            if resp and resp.status_code == 200:
+                self._add_finding(
+                    finding_type="MISSING_AUTHENTICATION",
+                    severity="CRITICAL",
+                    endpoint=test_url,
+                    evidence={
+                        "message": "Sensitive endpoint accessible without authentication"
+                    },
+                    confidence=0.85,
+                )
+        finally:
+            self.session.headers.update(original_headers)
 
     def _test_jwt_token(self, token: str):
         """Test JWT token for common weaknesses."""

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { generateSecret, generateOtpAuthUrl, verifyTOTP } from "@/lib/totp";
+import { strictRateLimit } from "@/lib/rate-limiter";
 
 // Import requireAuth type
 type AuthUser = {
@@ -15,6 +16,12 @@ type AuthUser = {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 requests per minute per user for 2FA operations (H-v3-20)
+    const rateLimitResponse = await strictRateLimit(req);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const session = await requireAuth();
     const { action } = await req.json();
 

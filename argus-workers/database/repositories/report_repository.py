@@ -75,8 +75,7 @@ class ReportRepository:
                         medium_count = EXCLUDED.medium_count,
                         low_count = EXCLUDED.low_count,
                         model_used = EXCLUDED.model_used,
-                        sbom_json = EXCLUDED.sbom_json,
-                        created_at = CURRENT_TIMESTAMP
+                        sbom_json = EXCLUDED.sbom_json
                     RETURNING id
                     """,
                     (

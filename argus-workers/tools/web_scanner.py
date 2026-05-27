@@ -406,30 +406,20 @@ class WebScanner:
         })
 
     def _safe_request(self, method: str, url: str, session: requests.Session | None = None, **kwargs) -> requests.Response | None:
-        """Make HTTP request with error handling. Thread-safe — uses per-thread sessions.
+        """Make HTTP request with error handling. Thread-safe.
+
+        Uses self.session (which carries cookies/auth headers) by default.
+        Pass an explicit session only when a different auth context is needed.
 
         Args:
-            session: Optional pre-authenticated session. When provided, it is used
-                     instead of the thread-local session (carries cookies/auth headers).
+            session: Optional explicit session. Defaults to self.session (authenticated).
         """
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)  # Verify SSL certs by default
-            # Use provided session, or fall back to thread-local
-            if session is not None:
-                req_session = session
-            else:
-                if not hasattr(self, "_thread_session"):
-                    self._thread_session = threading.local()
-                req_session = getattr(self._thread_session, "session", None)
-                if req_session is None:
-                    req_session = requests.Session()
-                    req_session.headers.update({
-                        "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
-                        "Accept": "*/*",
-                    })
-                    self._thread_session.session = req_session
+            # Use the authenticated self.session by default (H-v4-04 fix)
+            req_session = session if session is not None else self.session
 
             # In-flight re-authentication: periodically check session validity
             # Uses a lock to protect the counter from concurrent access under

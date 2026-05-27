@@ -22,6 +22,10 @@ function getRedisClient(): Redis {
       enableOfflineQueue: false,
       lazyConnect: true,
     });
+    // Prevent process crash on Redis connection errors (H-v4-02)
+    redisClient.on("error", (err) => {
+      console.error("Rate limiter Redis error:", err);
+    });
   }
   return redisClient;
 }

@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 import { NextResponse } from "next/server";
+import { log } from "./logger";
 import redis from "./redis";
 
 const SESSION_TTL = 24 * 60 * 60; // 24 hours (reduced from 30 days for security)
@@ -51,7 +52,9 @@ export async function storeSessionInRedis(
       JSON.stringify(sessionData)
     );
   } catch (error) {
-    console.error("Failed to store session in Redis:", error);
+    // Structured logging — session storage failure doesn't break the request
+    // but should be monitored (H-v4-06)
+    log.error("Failed to store session in Redis:", error);
   }
 }
 
@@ -66,7 +69,7 @@ export async function getSessionFromRedis(
     if (!data) return null;
     return JSON.parse(data);
   } catch (error) {
-    console.error("Failed to get session from Redis:", error);
+    log.error("Failed to get session from Redis:", error);
     return null;
   }
 }
@@ -78,6 +81,6 @@ export async function destroySessionInRedis(sessionId: string): Promise<void> {
   try {
     await redis.del(`session:${sessionId}`);
   } catch (error) {
-    console.error("Failed to destroy session in Redis:", error);
+    log.error("Failed to destroy session in Redis:", error);
   }
 }

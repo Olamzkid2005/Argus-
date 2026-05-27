@@ -345,8 +345,16 @@ class ToolRunner:
         sanitized_args = []
         i = 0
         while i < len(args):
-            if any(args[i].startswith(p) for p in sensitive_prefixes):
-                flag = args[i]
+            arg = args[i]
+            # Handle --flag=value format (H-v3-14): split on '=' and check the key part
+            if "=" in arg and any(arg.split("=")[0].startswith(p) for p in sensitive_prefixes):
+                flag_key, flag_value = arg.split("=", 1)
+                env[f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"] = flag_value
+                sanitized_args.append(flag_key + "=__REDACTED__")
+                i += 1
+                continue
+            if any(arg.startswith(p) for p in sensitive_prefixes):
+                flag = arg
                 value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
                 if value:
                     env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = value
@@ -354,7 +362,7 @@ class ToolRunner:
                     sanitized_args.append("__REDACTED__")
                     i += 2
                     continue
-            sanitized_args.append(args[i])
+            sanitized_args.append(arg)
             i += 1
         args = sanitized_args
 
@@ -534,8 +542,16 @@ class ToolRunner:
         sanitized_args = []
         i = 0
         while i < len(args):
-            if any(args[i].startswith(p) for p in sensitive_prefixes):
-                flag = args[i]
+            arg = args[i]
+            # Handle --flag=value format (H-v3-14): split on '=' and check the key part
+            if "=" in arg and any(arg.split("=")[0].startswith(p) for p in sensitive_prefixes):
+                flag_key, flag_value = arg.split("=", 1)
+                env[f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"] = flag_value
+                sanitized_args.append(flag_key + "=__REDACTED__")
+                i += 1
+                continue
+            if any(arg.startswith(p) for p in sensitive_prefixes):
+                flag = arg
                 value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
                 if value:
                     env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = value
@@ -543,7 +559,7 @@ class ToolRunner:
                     sanitized_args.append("__REDACTED__")
                     i += 2
                     continue
-            sanitized_args.append(args[i])
+            sanitized_args.append(arg)
             i += 1
         args = sanitized_args
 

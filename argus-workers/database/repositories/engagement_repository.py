@@ -140,12 +140,13 @@ class EngagementRepository(BaseRepository):
         """
         return self.update_by_id(engagement_id, {"status": status})
 
-    def find_by_status(self, status: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    def find_by_status(self, status: str, org_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
         """
-        Find engagements by status
+        Find engagements by status, optionally scoped to an organization.
 
         Args:
             status: Status to filter by
+            org_id: Optional organization ID to scope results (H-v3-08)
             limit: Maximum number of records
             offset: Number of records to skip
 
@@ -153,14 +154,25 @@ class EngagementRepository(BaseRepository):
             List of engagement dictionaries
         """
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            cursor.execute(
-                """
-                SELECT * FROM engagements
-                WHERE status = %s
-                ORDER BY created_at DESC
-                LIMIT %s OFFSET %s
-                """,
-                (status, limit, offset)
-            )
+            if org_id:
+                cursor.execute(
+                    """
+                    SELECT * FROM engagements
+                    WHERE status = %s AND org_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (status, org_id, limit, offset)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM engagements
+                    WHERE status = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (status, limit, offset)
+                )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]

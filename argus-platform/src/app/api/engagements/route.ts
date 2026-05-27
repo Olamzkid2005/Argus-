@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createErrorResponse, ErrorCodes } from "@/lib/api/errors";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   try {
@@ -133,8 +134,8 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    log.error("Engagements API error:", err.message || String(err));
     const err = error as Error;
+    log.error("Engagements API error:", err.message || String(err));
     if (err.message === "Unauthorized") {
       return createErrorResponse(
         "Unauthorized",
