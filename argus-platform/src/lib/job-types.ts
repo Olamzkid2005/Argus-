@@ -4,7 +4,7 @@
 export type JobType =
   | "recon" | "scan" | "analyze" | "report" | "repo_scan"
   | "compliance_report" | "full_report" | "asset_discovery" | "asset_risk_scoring"
-  | "bugbounty_report";
+  | "bugbounty_report" | "posture_recompute";
 
 export const TASK_NAME_MAP: Record<JobType, string> = {
   recon: "tasks.recon.run_recon",
@@ -17,6 +17,7 @@ export const TASK_NAME_MAP: Record<JobType, string> = {
   asset_discovery: "tasks.asset_discovery.run_asset_discovery",
   asset_risk_scoring: "tasks.asset_discovery.update_asset_risk_scores",
   bugbounty_report: "tasks.bugbounty.generate_bugbounty_report",
+  posture_recompute: "tasks.posture.recompute_posture",
 };
 
 export interface JobMessage {

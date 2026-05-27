@@ -30,6 +30,7 @@ import {
   CheckCircle,
   Sword,
   Code2,
+  Copy,
 } from "lucide-react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import type { AgentDecisionEvent } from "@/lib/websocket-events";
@@ -399,6 +400,13 @@ export default function EngagementDetailPage() {
             )}
             {engagement && ["complete", "failed", "paused"].includes(engagement.status) && (
               <>
+                <button
+                  onClick={() => router.push(`/engagements?clone=${engagement.id}`)}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 text-primary text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-primary/20 transition-all"
+                >
+                  <Copy size={12} />
+                  Clone
+                </button>
                 <button
                   onClick={handleRescan}
                   disabled={isRescanning}

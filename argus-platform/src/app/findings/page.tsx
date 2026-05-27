@@ -255,6 +255,7 @@ export default function FindingsPage() {
   const [selectedModel, setSelectedModel] = useState<string>("opencode");
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [chainAnalysis, setChainAnalysis] = useState<string | null>(null);
+  const [attackPaths, setAttackPaths] = useState<any[]>([]);
   const [isChaining, setIsChaining] = useState(false);
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [selectedEngagement, setSelectedEngagement] = useState<string>("all");
@@ -498,6 +499,9 @@ export default function FindingsPage() {
         return;
       }
       setChainAnalysis(data.analysis);
+      if (data.paths) {
+        setAttackPaths(data.paths);
+      }
       showToast("success", "Attack chain analysis generated");
     } catch (err) {
       showToast("error", "Failed to generate chain analysis");
@@ -754,6 +758,16 @@ export default function FindingsPage() {
   }, [filtered, selectedEngagement]);
 
   const hasExplanations = Object.keys(explanations).length > 0;
+  const attackPathFindingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const path of attackPaths) {
+      const nodes = path.path_nodes || [];
+      for (const node of nodes) {
+        if (node.id) ids.add(node.id);
+      }
+    }
+    return ids;
+  }, [attackPaths]);
   const explainedCount = filtered.filter((f) => explanations[f.id]).length;
   const selectedFinding = findings.find((f) => f.id === selectedFindingId) || null;
 
@@ -1163,6 +1177,15 @@ export default function FindingsPage() {
                         <Shield size={10} />
                         {finding.severity}
                       </span>
+                      {attackPathFindingIds.has(finding.id) && (
+                        <span
+                          className="flex items-center gap-1 text-[10px] font-mono text-error bg-error/10 border border-error/20 px-1.5 py-0.5 rounded"
+                          title="Part of attack chain"
+                        >
+                          <Link2 size={10} />
+                          Chain
+                        </span>
+                      )}
                       {hasExplanation && (
                         <span className="flex items-center gap-1 text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
                           <Brain size={10} />

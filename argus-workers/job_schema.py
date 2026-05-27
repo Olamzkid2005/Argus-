@@ -14,6 +14,7 @@ JOB_TYPES = [
     "asset_discovery",
     "asset_risk_scoring",
     "bugbounty_report",
+    "posture_recompute",
 ]
 
 TASK_NAME_MAP: dict[str, str] = {
@@ -27,6 +28,7 @@ TASK_NAME_MAP: dict[str, str] = {
     "asset_discovery": "tasks.asset_discovery.run_asset_discovery",
     "asset_risk_scoring": "tasks.asset_discovery.update_asset_risk_scores",
     "bugbounty_report": "tasks.bugbounty.generate_bugbounty_report",
+    "posture_recompute": "tasks.posture.recompute_posture",
 }
 
 
@@ -74,6 +76,7 @@ def build_task_args(
             kwargs.get("output_path", ""),
             trace_id,
         ],
+        "posture_recompute": [engagement_id, kwargs.get("org_id")],
     }
     # Unknown job type — raise rather than silently returning a partial arg list
     # that would cause a TypeError at call time.

@@ -19,7 +19,7 @@ import {
   LogIn,
 } from "lucide-react";
 
-type AuthMethod = "form" | "bearer" | "cookie";
+type AuthMethod = "form" | "bearer" | "cookie" | "api_key";
 
 interface AuthConfig {
   type: AuthMethod;
@@ -27,6 +27,8 @@ interface AuthConfig {
   password?: string;
   token?: string;
   cookie?: string;
+  api_key?: string;
+  api_key_header?: string;
   loginUrl?: string;
   loginMethod?: string;
   dualConfig?: AuthConfig; // second account for BOLA testing (User B)
@@ -143,6 +145,8 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
           password: config.password,
           token: config.token,
           cookie: config.cookie,
+          api_key: config.api_key,
+          api_key_header: config.api_key_header,
           loginUrl: selectedLoginUrl || config.loginUrl,
         }),
       });
@@ -310,6 +314,39 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
           </div>
         );
 
+      case "api_key":
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5 font-body">
+                API Key
+              </label>
+              <textarea
+                value={config.api_key || ""}
+                onChange={(e) => handleConfigChange("api_key", e.target.value)}
+                placeholder="sk-..."
+                rows={3}
+                className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200 resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5 font-body">
+                Header Name
+              </label>
+              <input
+                type="text"
+                value={config.api_key_header || "X-API-Key"}
+                onChange={(e) => handleConfigChange("api_key_header", e.target.value)}
+                placeholder="X-API-Key"
+                className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200"
+              />
+            </div>
+            <p className="text-[9px] text-on-surface-variant/60">
+              The scanner will attach the API key as a custom header (default: X-API-Key).
+            </p>
+          </div>
+        );
+
       case "cookie":
         return (
           <div className="space-y-4">
@@ -344,6 +381,8 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
         return config.token;
       case "cookie":
         return config.cookie;
+      case "api_key":
+        return config.api_key;
       default:
         return false;
     }
@@ -518,6 +557,13 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
                   desc: "Paste cookie string",
                   color: "text-cyan-500",
                 },
+                {
+                  method: "api_key" as AuthMethod,
+                  icon: <Key size={18} />,
+                  label: "API Key",
+                  desc: "Key in header",
+                  color: "text-violet-500",
+                },
               ].map((option) => (
                 <button
                   key={option.method}
@@ -601,6 +647,7 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
               { method: "form" as AuthMethod, icon: <Lock size={18} />, label: "Form Login", desc: "Username & password", color: "text-primary" },
               { method: "bearer" as AuthMethod, icon: <Key size={18} />, label: "Bearer Token", desc: "JWT or API token", color: "text-amber-500" },
               { method: "cookie" as AuthMethod, icon: <Cookie size={18} />, label: "Session Cookie", desc: "Paste cookie string", color: "text-cyan-500" },
+              { method: "api_key" as AuthMethod, icon: <Key size={18} />, label: "API Key", desc: "Key in header", color: "text-violet-500" },
             ].map((option) => (
               <button
                 key={option.method}
@@ -679,6 +726,23 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
                 className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all resize-none" />
             </div>
           )}
+          {dualConfig.type === "api_key" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5">API Key (User B)</label>
+                <textarea value={dualConfig.api_key || ""} onChange={(e) => setDualConfig({ ...dualConfig, api_key: e.target.value })}
+                  placeholder="sk-..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all resize-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5">Header Name (User B)</label>
+                <input type="text" value={dualConfig.api_key_header || "X-API-Key"} onChange={(e) => setDualConfig({ ...dualConfig, api_key_header: e.target.value })}
+                  placeholder="X-API-Key"
+                  className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all" />
+              </div>
+            </div>
+          )}
           <div className="flex justify-between pt-2">
             <button
               type="button"
@@ -705,7 +769,7 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
             <div className="flex flex-col items-center gap-3 py-6">
               <Loader2 size={24} className="animate-spin text-primary" />
               <div className="text-xs text-on-surface-variant animate-pulse">
-                Testing {authMethod === "form" ? "form login" : authMethod === "bearer" ? "bearer token" : "session cookie"}...
+                Testing {authMethod === "form" ? "form login" : authMethod === "bearer" ? "bearer token" : authMethod === "api_key" ? "API key" : "session cookie"}...
               </div>
             </div>
           ) : testResult ? (

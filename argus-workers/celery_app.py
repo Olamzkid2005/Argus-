@@ -100,6 +100,7 @@ app = Celery(
         "tasks.scheduled",
         "tasks.replay",
         "tasks.diff",
+        "tasks.posture",
     ],
 )
 
@@ -152,6 +153,7 @@ app.conf.update(
         "tasks.analyze.*": {"queue": "analyze"},
         "tasks.report.*": {"queue": "report"},
         "tasks.repo_scan.*": {"queue": "repo_scan"},
+        "tasks.posture.*": {"queue": "analyze"},
     },
     # Task Priority
     task_default_priority=5,

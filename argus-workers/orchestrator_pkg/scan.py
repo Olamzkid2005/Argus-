@@ -178,6 +178,9 @@ def _is_reachable(target: str) -> bool:
         return False
 
 
+# In-memory dedup set to prevent emitting duplicate findings during streaming
+_emitted_fingerprints: set[str] = set()
+
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 
@@ -527,8 +530,11 @@ def execute_scan_tools(
         def _stream_finding(eng_id, finding, tool):
             normalized = ctx._normalize_finding(finding, tool)
             if normalized:
-                emit_finding_rt(eng_id, normalized, tool)
-                all_findings.append(normalized)
+                fingerprint = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                if fingerprint not in _emitted_fingerprints:
+                    _emitted_fingerprints.add(fingerprint)
+                    emit_finding_rt(eng_id, normalized, tool)
+                    all_findings.append(normalized)
 
         # Execute comprehensive web scanner
         slog.tool_start("web_scanner", [target])

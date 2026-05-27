@@ -33,6 +33,8 @@ class AuthConfig:
     login_url: str = ""
     login_data: dict | None = None
     login_method: str = "POST"
+    api_key: str = ""
+    api_key_header: str = "X-API-Key"
 
 
 COMMON_LOGIN_PATHS = [
@@ -102,6 +104,11 @@ class AuthManager:
             )
             return session
 
+        if self._config.api_key:
+            slog.info(f"Setting {self._config.api_key_header} header with API key")
+            session.headers[self._config.api_key_header] = self._config.api_key
+            return session
+
         if self._config.username and self._config.password:
             return self._login(session, target_url, auth_endpoints, slog)
 
@@ -121,6 +128,9 @@ class AuthManager:
             session.headers[self._config.token_header] = (
                 f"Bearer {self._config.token}"
             )
+
+        if self._config.api_key:
+            session.headers[self._config.api_key_header] = self._config.api_key
 
         return session
 
