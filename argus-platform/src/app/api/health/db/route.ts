@@ -34,9 +34,10 @@ export async function GET() {
       client.release();
     }
     
-    // 4. Check for long-running queries
+    // 4. Check for long-running queries (H-v4-11: exclude query text to prevent
+    // cross-tenant SQL query leakage via the health endpoint response)
     const longRunning = await pool.query(`
-      SELECT pid, now() - pg_stat_activity.query_start as duration, query
+      SELECT pid, now() - pg_stat_activity.query_start as duration
       FROM pg_stat_activity 
       WHERE state = 'active' 
         AND now() - pg_stat_activity.query_start > interval '5 seconds'

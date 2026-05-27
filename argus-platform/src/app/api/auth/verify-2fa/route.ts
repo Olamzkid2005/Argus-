@@ -4,8 +4,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { verifyTOTP } from "@/lib/totp";
+import { strictRateLimit } from "@/lib/rate-limiter";
 
 export async function POST(req: NextRequest) {
+  // Apply strict rate limiting to prevent brute-force attacks (H-17)
+  const rateLimitResponse = await strictRateLimit(req);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
   try {
     const session = await getServerSession(authOptions);
 

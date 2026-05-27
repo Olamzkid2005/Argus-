@@ -34,9 +34,11 @@ export function createRateLimit(config: RateLimitConfig = defaultConfig) {
   return async function rateLimit(
     req: NextRequest,
   ): Promise<NextResponse | null> {
+    // Use request.ip (server-recognized address) first — x-forwarded-for can be
+    // spoofed by attackers to bypass rate limits (H-v5-01).
     const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       req.ip ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown";
 
     const key = `${ip}:${config.windowMs}:${config.maxRequests}`;
@@ -96,8 +98,8 @@ function fallbackRateLimit(
   config: RateLimitConfig,
 ): NextResponse | null {
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.ip ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     "unknown";
   const key = `fallback:${ip}`;
   const now = Date.now();

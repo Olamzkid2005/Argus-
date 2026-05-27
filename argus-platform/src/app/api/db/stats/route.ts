@@ -10,7 +10,12 @@ import { getPoolStats, pool } from "@/lib/db";
  */
 export async function GET(req: Request) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+
+    // Only admins can view system-wide database stats (H-v4-10)
+    if (session.user.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const client = await pool.connect();
 

@@ -109,10 +109,19 @@ export async function getAPIIdempotencyResult(key: string): Promise<string | nul
 }
 
 /**
- * Store API response for idempotency (TTL: 24 hours)
+ * Store API response for idempotency.
+ *
+ * @param key - The idempotency key
+ * @param response - The response JSON to cache
+ * @param ttlSeconds - TTL in seconds (default: 24 hours, pass a short TTL for
+ *                     processing markers to avoid stuck keys if the request fails)
  */
-export async function setAPIIdempotencyResult(key: string, response: string): Promise<void> {
-  await redis.setex(`api_idempotency:${key}`, 86400, response);
+export async function setAPIIdempotencyResult(
+  key: string,
+  response: string,
+  ttlSeconds: number = 86400,
+): Promise<void> {
+  await redis.setex(`api_idempotency:${key}`, ttlSeconds, response);
 }
 
 /**

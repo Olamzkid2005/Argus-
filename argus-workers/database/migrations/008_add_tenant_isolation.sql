@@ -41,20 +41,21 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Engagement RLS policy
+-- Engagement RLS policy (H-v3-19: removed OR NULL fallback that caused policies
+-- to fail open when tenant context was missing — now strictly enforces org_id)
 CREATE POLICY engagement_org_isolation ON engagements
-    USING (org_id = get_current_org_id() OR get_current_org_id() IS NULL);
+    USING (org_id = get_current_org_id());
 
 -- Findings RLS policy (via engagement)
 CREATE POLICY findings_org_isolation ON findings
     USING (engagement_id IN (
         SELECT id FROM engagements 
-        WHERE org_id = get_current_org_id() OR get_current_org_id() IS NULL
+        WHERE org_id = get_current_org_id()
     ));
 
 -- Audit logs RLS policy
 CREATE POLICY audit_logs_org_isolation ON audit_logs
-    USING (org_id = get_current_org_id() OR get_current_org_id() IS NULL);
+    USING (org_id = get_current_org_id());
 
 -- ============================================================================
 -- TENANT-AWARE CONNECTION POOLING HELPERS

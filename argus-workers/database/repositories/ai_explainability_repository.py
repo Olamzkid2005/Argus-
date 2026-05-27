@@ -2,25 +2,66 @@
 Repository for AI explainability data.
 
 Uses standard psycopg2 cursor pattern (compatible with the rest of the codebase).
+
+Transaction safety: This repository does NOT call commit() or rollback() on
+shared connections to avoid interfering with caller-managed transactions.
+Instead, it manages its own isolated connection from the connection pool.
+H-v3-21.
 """
 
 import json
 import logging
 
+from database.connection import get_db
+
 logger = logging.getLogger(__name__)
 
 
 class AIExplainabilityRepository:
-    """Repository for managing AI explanations and traces."""
+    """Repository for managing AI explanations and traces.
 
-    def __init__(self, db_connection):
+    Manages its own isolated database connection (not a shared one) so that
+    commit() and rollback() calls inside this repository do not interfere
+    with caller transactions (H-v3-21).
+    """
+
+    def __init__(self, db_connection=None):
         """
         Initialize repository.
 
         Args:
-            db_connection: psycopg2 connection (not asyncpg)
+            db_connection: Deprecated. If provided, a warning is logged but
+                           the repository uses its own isolated connection.
+                           Pass None to use the connection pool.
         """
-        self.db = db_connection
+        self._db = None
+        self._pool = None
+        if db_connection is not None:
+            logger.warning(
+                "AIExplainabilityRepository received a shared connection — "
+                "using isolated connection from pool instead to avoid "
+                "transaction interference (H-v3-21). The passed connection "
+                "will be ignored."
+            )
+
+    @property
+    def db(self):
+        """Get an isolated database connection (lazy, per-instance)."""
+        if self._db is None or self._db.closed:
+            self._db = get_db().get_connection()
+        return self._db
+
+    def close(self):
+        """Return the connection to the pool."""
+        if self._db is not None and not self._db.closed:
+            get_db().release_connection(self._db)
+            self._db = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass  # Swallow errors during interpreter shutdown
 
     def create_explanation(
         self,

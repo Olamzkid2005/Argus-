@@ -83,6 +83,28 @@ class DeadLetterQueue:
         from utils.validation import sanitize_redis_key
         return sanitize_redis_key(engagement_id)
 
+    @staticmethod
+    def _redact_sensitive_fields(data: dict) -> dict:
+        """Redact sensitive credential fields before persisting to DLQ.
+
+        Prevents credentials (passwords, tokens, API keys, secrets) from being
+        stored in plaintext in the dead letter queue where they could be viewed
+        via the API or leaked in logs. H-v3-22.
+        """
+        SENSITIVE_KEYS = {"password", "passwd", "token", "secret", "api_key",
+                         "auth", "credentials", "cookie",
+                         "totp_secret", "two_factor_secret", "private_key"}
+        # Note: "auth" covers "authorization", "auth_token", etc. via substring match
+        redacted = {}
+        for key, value in data.items():
+            if any(s in key.lower() for s in SENSITIVE_KEYS):
+                redacted[key] = "__REDACTED__"
+            elif isinstance(value, dict):
+                redacted[key] = DeadLetterQueue._redact_sensitive_fields(value)
+            else:
+                redacted[key] = value
+        return redacted
+
     def enqueue(
         self,
         task_id: str,
@@ -97,6 +119,8 @@ class DeadLetterQueue:
     ) -> bool:
         """
         Add a failed task to the dead letter queue.
+
+        Credential fields in kwargs are redacted before storage (H-v3-22).
 
         Args:
             task_id: Celery task ID
@@ -113,11 +137,14 @@ class DeadLetterQueue:
             True if successfully added to DLQ
         """
         try:
+            # Redact sensitive fields from kwargs before storing (H-v3-22)
+            safe_kwargs = self._redact_sensitive_fields(kwargs)
+
             failed_task = FailedTask(
                 task_id=task_id,
                 task_name=task_name,
                 args=args,
-                kwargs=kwargs,
+                kwargs=safe_kwargs,
                 error_message=error_message,
                 error_class=error_class,
                 worker_id=worker_id,

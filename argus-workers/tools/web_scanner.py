@@ -29,6 +29,10 @@ import threading
 import time
 from urllib.parse import urljoin, urlparse
 
+# Allowed URL schemes for scan targets — blocks dangerous protocols like
+# file:// and gopher:// that could be used for SSRF (H-v3-24)
+_ALLOWED_SCAN_SCHEMES = frozenset({"http", "https"})
+
 import requests
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
@@ -318,7 +322,18 @@ class WebScanner:
 
         Returns:
             List of vulnerability findings
+
+        Raises:
+            ValueError: If target_url uses a disallowed scheme (SSRF prevention)
         """
+        # SSRF prevention: reject dangerous URL schemes before any requests (H-v3-24)
+        parsed = urlparse(target_url)
+        if parsed.scheme not in _ALLOWED_SCAN_SCHEMES:
+            raise ValueError(
+                f"Disallowed URL scheme '{parsed.scheme}' in target {target_url}. "
+                f"Only http:// and https:// targets are permitted (H-v3-24 SSRF prevention)."
+            )
+
         self.findings = []
         self.target_url = target_url.rstrip("/")
 

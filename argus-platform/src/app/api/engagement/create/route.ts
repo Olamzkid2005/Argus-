@@ -38,6 +38,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(JSON.parse(cachedResult), { status: 200 });
     }
 
+    // Set a processing marker BEFORE the transaction starts to prevent TOCTOU
+    // races where duplicate requests both pass the idempotency check before
+    // either completes (H-v3-06). Uses a short 60s TTL so it self-clears if
+    // the request fails before the real response is stored.
+    const processingKey = idempotencyKey || generateAPIIdempotencyKey(
+      session.user.id,
+      "/api/engagement/create",
+      body
+    );
+    await setAPIIdempotencyResult(
+      processingKey,
+      JSON.stringify({ status: "processing" }),
+      60, // 60-second TTL — short enough to not block retries on failure
+    );
+
     const {
       targetUrl,
       authorization,

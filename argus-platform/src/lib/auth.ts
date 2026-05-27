@@ -12,93 +12,181 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
 const SESSION_MAX_AGE = 24 * 60 * 60; // 24 hours
 
+import Redis from "ioredis";
+
+// Redis client for atomic lockout tracking (H-16)
+function getLockoutRedis(): Redis {
+  const globalForRedis = globalThis as unknown as { __lockoutRedis?: Redis };
+  if (!globalForRedis.__lockoutRedis) {
+    globalForRedis.__lockoutRedis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+      keyPrefix: "lockout:",
+      enableOfflineQueue: false,
+      lazyConnect: true,
+    });
+    globalForRedis.__lockoutRedis.on("error", (err) => {
+      console.error("Lockout Redis error:", err);
+    });
+  }
+  return globalForRedis.__lockoutRedis;
+}
+
 /**
- * Check if account is locked out due to failed login attempts
+ * Check if account is locked out — uses atomic Redis INCR with EXPIRE
+ * to prevent TOCTOU races between SELECT and UPDATE (H-16).
+ *
+ * If Redis is unavailable, falls back to database query (non-atomic).
  */
 async function checkAccountLockout(
   email: string,
 ): Promise<{ locked: boolean; reason?: string }> {
   try {
-    const result = await pool.query(
-      `SELECT locked_until, failed_login_attempts 
-       FROM users WHERE email = $1`,
-      [email.toLowerCase()],
-    );
-
-    if (result.rows.length === 0) {
-      return { locked: false };
-    }
-
-    const user = result.rows[0];
-
-    // Check if account is currently locked
-    if (user.locked_until && new Date(user.locked_until) > new Date()) {
-      const lockedUntil = new Date(user.locked_until);
-      const minutesLeft = Math.ceil(
-        (lockedUntil.getTime() - Date.now()) / 60000,
+    // Try Redis-based atomic lockout first
+    const redis = getLockoutRedis();
+    const lockKey = `locked:${email.toLowerCase()}`;
+    const lockedUntil = await redis.get(lockKey);
+    if (lockedUntil) {
+      const remaining = Math.ceil(
+        (parseInt(lockedUntil, 10) - Date.now()) / 60000,
       );
       return {
         locked: true,
-        reason: `Account locked. Try again in ${minutesLeft} minute(s).`,
+        reason: `Account locked. Try again in ${Math.max(remaining, 1)} minute(s).`,
       };
     }
-
-    // Check if max attempts reached
-    if (user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS) {
-      const lockoutUntil = new Date(
-        Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000,
-      );
-      await pool.query(
-        `UPDATE users SET locked_until = $1, failed_login_attempts = 0 
-         WHERE email = $2`,
-        [lockoutUntil, email.toLowerCase()],
+    const attemptKey = `attempts:${email.toLowerCase()}`;
+    const attempts = await redis.get(attemptKey);
+    if (attempts && parseInt(attempts, 10) >= MAX_LOGIN_ATTEMPTS) {
+      // Atomically set lockout and reset counter in Lua script
+      const lua = `
+        redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+        redis.call('DEL', KEYS[2])
+        return 1
+      `;
+      await redis.eval(
+        lua,
+        2,
+        lockKey,
+        attemptKey,
+        String(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000),
+        String(LOCKOUT_DURATION_MINUTES * 60 * 1000),
       );
       return {
         locked: true,
         reason: `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
       };
     }
-
     return { locked: false };
-  } catch (error) {
-    log.authError("Lockout check error", { error: String(error) });
-    // Fail open - don't block login if check fails
-    return { locked: false };
-  }
-}
+  } catch (_redisErr) {
+    // Redis unavailable — fall back to database-based check
+    try {
+      const result = await pool.query(
+        `SELECT locked_until, failed_login_attempts 
+         FROM users WHERE email = $1`,
+        [email.toLowerCase()],
+      );
 
-/**
- * Record failed login attempt and update lockout if needed
- */
-async function recordFailedLoginAttempt(email: string): Promise<void> {
-  try {
-    const result = await pool.query(
-      `SELECT failed_login_attempts FROM users WHERE email = $1`,
-      [email.toLowerCase()],
-    );
+      if (result.rows.length === 0) {
+        return { locked: false };
+      }
 
-    if (result.rows.length > 0) {
-      const attempts = (result.rows[0].failed_login_attempts || 0) + 1;
+      const user = result.rows[0];
 
-      // If max attempts reached, lock the account
-      if (attempts >= MAX_LOGIN_ATTEMPTS) {
+      // Check if account is currently locked
+      if (user.locked_until && new Date(user.locked_until) > new Date()) {
+        const lockedUntil = new Date(user.locked_until);
+        const minutesLeft = Math.ceil(
+          (lockedUntil.getTime() - Date.now()) / 60000,
+        );
+        return {
+          locked: true,
+          reason: `Account locked. Try again in ${minutesLeft} minute(s).`,
+        };
+      }
+
+      // Check if max attempts reached
+      if (user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS) {
         const lockoutUntil = new Date(
           Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000,
         );
         await pool.query(
-          `UPDATE users SET failed_login_attempts = $1, locked_until = $2 
-           WHERE email = $3`,
-          [attempts, lockoutUntil, email.toLowerCase()],
+          `UPDATE users SET locked_until = $1, failed_login_attempts = 0 
+           WHERE email = $2`,
+          [lockoutUntil, email.toLowerCase()],
         );
-      } else {
-        await pool.query(
-          `UPDATE users SET failed_login_attempts = $1 WHERE email = $2`,
-          [attempts, email.toLowerCase()],
-        );
+        return {
+          locked: true,
+          reason: `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
+        };
       }
+
+      return { locked: false };
+    } catch (error) {
+      log.authError("Lockout check error", { error: String(error) });
+      // Fail open - don't block login if check fails
+      return { locked: false };
     }
-  } catch (error) {
-    log.authError("Failed to record login attempt", { error: String(error) });
+  }
+}
+
+/**
+ * Record failed login attempt — uses atomic Redis INCR (H-16).
+ * Falls back to database UPDATE if Redis is unavailable.
+ */
+async function recordFailedLoginAttempt(email: string): Promise<void> {
+  try {
+    const redis = getLockoutRedis();
+    const attemptKey = `attempts:${email.toLowerCase()}`;
+    const attempts = await redis.incr(attemptKey);
+    if (attempts === 1) {
+      await redis.pexpire(attemptKey, LOCKOUT_DURATION_MINUTES * 60 * 1000);
+    }
+
+    if (attempts >= MAX_LOGIN_ATTEMPTS) {
+      const lockKey = `locked:${email.toLowerCase()}`;
+      const lockLua = `
+        redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+        redis.call('DEL', KEYS[2])
+        return 1
+      `;
+      await redis.eval(
+        lockLua,
+        2,
+        lockKey,
+        attemptKey,
+        String(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000),
+        String(LOCKOUT_DURATION_MINUTES * 60 * 1000),
+      );
+    }
+  } catch {
+    // Redis unavailable — fall back to database-based recording
+    try {
+      const result = await pool.query(
+        `SELECT failed_login_attempts FROM users WHERE email = $1`,
+        [email.toLowerCase()],
+      );
+
+      if (result.rows.length > 0) {
+        const attempts = (result.rows[0].failed_login_attempts || 0) + 1;
+
+        if (attempts >= MAX_LOGIN_ATTEMPTS) {
+          const lockoutUntil = new Date(
+            Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000,
+          );
+          await pool.query(
+            `UPDATE users SET failed_login_attempts = $1, locked_until = $2 
+             WHERE email = $3`,
+            [attempts, lockoutUntil, email.toLowerCase()],
+          );
+        } else {
+          await pool.query(
+            `UPDATE users SET failed_login_attempts = $1 WHERE email = $2`,
+            [attempts, email.toLowerCase()],
+          );
+        }
+      }
+    } catch (error) {
+      log.authError("Failed to record login attempt", { error: String(error) });
+    }
   }
 }
 
