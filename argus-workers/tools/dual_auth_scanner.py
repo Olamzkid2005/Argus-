@@ -59,6 +59,7 @@ class DualAuthScanner:
         rate_limit: float = 0.3,
         verify: bool = True,
         engagement_id: str = "",
+        emit_finding_callback=None,
     ):
         """
         Args:
@@ -68,6 +69,8 @@ class DualAuthScanner:
             rate_limit: Seconds between requests.
             verify: SSL certificate verification.
             engagement_id: Engagement ID for log/trace correlation.
+            emit_finding_callback: Optional callable(engagement_id, finding_dict, tool_name)
+                                   called inline per finding for real-time streaming.
         """
         from tools.auth_manager import AuthConfig, AuthManager
 
@@ -79,8 +82,22 @@ class DualAuthScanner:
         self.rate_limit = rate_limit
         self.verify = verify
         self.engagement_id = engagement_id
+        self.emit_finding_callback = emit_finding_callback
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
+
+    def _emit_finding(self, finding: dict) -> None:
+        """Emit a finding in real-time if callback is configured.
+
+        This enables per-finding streaming so analysts see results as they're
+        discovered rather than waiting for the entire dual-auth scan to complete.
+        """
+        self.findings.append(finding)
+        if self.emit_finding_callback and self.engagement_id:
+            try:
+                self.emit_finding_callback(self.engagement_id, finding, "dual_auth_scanner")
+            except Exception:
+                logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
 
     def scan(self, target_url: str) -> list[dict]:
         """
@@ -95,7 +112,7 @@ class DualAuthScanner:
         """
         slog = ScanLogger("dual_auth_scanner", engagement_id=self.engagement_id)
         self.target_url = target_url.rstrip("/")
-        findings = []
+        self.findings: list[dict] = []
 
         slog.phase_header("Dual-Auth Scan", target=self.target_url)
         logger.info(f"Starting dual-auth scan: {self.target_url}")
@@ -109,7 +126,7 @@ class DualAuthScanner:
         except Exception as e:
             slog.warn(f"User A authentication failed: {e}")
             logger.warning(f"User A authentication failed: {e}")
-            return findings
+            return self.findings
 
         slog.tool_start("resource_discovery")
         owned_resources = self._discover_owned_resources(session_a)
@@ -120,9 +137,10 @@ class DualAuthScanner:
         if not owned_resources:
             slog.info("No owned resources — skipping cross-account tests")
             # Still run BOPLA check on User A session
-            findings.extend(self._check_bopla(session_a, "user_a"))
-            slog.tool_complete("dual_auth_scan", findings=len(findings))
-            return findings
+            for bopla in self._check_bopla(session_a, "user_a"):
+                self._emit_finding(bopla)
+            slog.tool_complete("dual_auth_scan", findings=len(self.findings))
+            return self.findings
 
         # Phase 2: Authenticate as User B and test cross-account access
         slog.info("Phase 2: Authenticating as User B")
@@ -134,23 +152,27 @@ class DualAuthScanner:
             slog.warn(f"User B authentication failed: {e}")
             logger.warning(f"User B authentication failed: {e}")
             # Still run BOPLA on User A session
-            findings.extend(self._check_bopla(session_a, "user_a"))
-            slog.tool_complete("dual_auth_scan", findings=len(findings))
-            return findings
+            for bopla in self._check_bopla(session_a, "user_a"):
+                self._emit_finding(bopla)
+            slog.tool_complete("dual_auth_scan", findings=len(self.findings))
+            return self.findings
 
         slog.tool_start("cross_account_access")
         bola_findings = self._test_cross_account_access(session_b, owned_resources)
-        findings.extend(bola_findings)
+        for bf in bola_findings:
+            self._emit_finding(bf)
         slog.tool_complete("cross_account_access", findings=len(bola_findings))
 
         # Phase 3: BOPLA check on both sessions
         slog.info("Phase 3: Checking BOPLA on both sessions")
-        findings.extend(self._check_bopla(session_a, "user_a"))
-        findings.extend(self._check_bopla(session_b, "user_b"))
+        for bopla in self._check_bopla(session_a, "user_a"):
+            self._emit_finding(bopla)
+        for bopla in self._check_bopla(session_b, "user_b"):
+            self._emit_finding(bopla)
 
-        slog.tool_complete("dual_auth_scan", findings=len(findings))
-        logger.info(f"Dual-auth scan complete: {len(findings)} findings")
-        return findings
+        slog.tool_complete("dual_auth_scan", findings=len(self.findings))
+        logger.info(f"Dual-auth scan complete: {len(self.findings)} findings")
+        return self.findings
 
     # --- Private helpers ---
 

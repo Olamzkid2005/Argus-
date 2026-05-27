@@ -90,6 +90,26 @@ class ComplianceMapper:
         "LOGGING_FAILURE": "10.2 - Audit trail coverage",
     }
 
+    # NIST CSF (Cybersecurity Framework) v1.1 mapping
+    NIST_CSF_MAPPING = {
+        "SQL_INJECTION": "PR.PT-3 - System and data protection (least functionality)",
+        "COMMAND_INJECTION": "PR.PT-3 - System and data protection",
+        "XSS": "PR.AC-4 - Access permissions management",
+        "BROKEN_ACCESS_CONTROL": "PR.AC-4 - Access permissions management",
+        "IDOR": "PR.AC-4 - Access permissions management",
+        "PATH_TRAVERSAL": "PR.AC-4 - Access permissions management",
+        "CRYPTOGRAPHIC_FAILURE": "PR.DS-1 - Data-at-rest protection",
+        "WEAK_TLS": "PR.DS-2 - Data-in-transit protection",
+        "AUTH_FAILURE": "PR.AC-7 - Authentication",
+        "SESSION_MANAGEMENT": "PR.AC-7 - Authentication",
+        "SECURITY_MISCONFIGURATION": "PR.IP-1 - Configuration management",
+        "VULNERABLE_COMPONENT": "DE.CM-8 - Vulnerability scans",
+        "SSRF": "PR.AC-5 - Network integrity",
+        "LOGGING_FAILURE": "DE.AE-3 - Event data analysis",
+        "SOFTWARE_INTEGRITY": "PR.DS-6 - Integrity checks",
+        "INSECURE_DESIGN": "PR.IP-1 - Baseline configuration",
+    }
+
     # SOC 2 Trust Services Criteria mapping
     SOC2_MAPPING = {
         "AUTH_FAILURE": "CC6.1 - Logical access security",
@@ -120,6 +140,11 @@ class ComplianceMapper:
     def map_to_soc2(cls, finding_type: str) -> str:
         """Map finding type to SOC 2 criteria"""
         return cls.SOC2_MAPPING.get(finding_type.upper(), "CC7.1 - Vulnerability detection")
+
+    @classmethod
+    def map_to_nist_csf(cls, finding_type: str) -> str:
+        """Map finding type to NIST CSF v1.1 category"""
+        return cls.NIST_CSF_MAPPING.get(finding_type.upper(), "DE.CM-8 - Vulnerability scans")
 
 
 class ComplianceReportGenerator:

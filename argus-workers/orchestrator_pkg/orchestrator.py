@@ -381,7 +381,8 @@ class Orchestrator:
                         ['id','type','severity','endpoint'], f[:4], strict=False
                     )))
             if finding_dicts:
-                snapshot = _posture_scorer.compute_and_save(finding_dicts)
+                _org_id = self._get_org_id()
+                snapshot = _posture_scorer.compute_and_save(finding_dicts, org_id=_org_id)
                 logger.info(
                     "Compliance posture updated for %s: composite=%s, trend=%s",
                     self.engagement_id, snapshot.composite_score, snapshot.trend,

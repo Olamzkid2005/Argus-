@@ -48,6 +48,7 @@ CREATE TABLE engagements (
     bug_bounty_mode BOOLEAN NOT NULL DEFAULT false,
     agent_mode BOOLEAN NOT NULL DEFAULT false,
     auth_config JSONB DEFAULT '{}'::jsonb, -- {type: "form"|"bearer"|"cookie"|"api_key", username, password, token, cookie, login_url}
+    dual_auth_config JSONB DEFAULT '{}'::jsonb, -- Secondary auth config for dual-account BOLA/BOPLA testing
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP WITH TIME ZONE,

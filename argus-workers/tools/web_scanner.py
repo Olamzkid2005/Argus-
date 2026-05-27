@@ -230,7 +230,8 @@ class WebScanner:
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
                  llm_payload_generator=None, session: requests.Session | None = None,
                  tech_stack: list[str] | None = None, verify: bool = True,
-                 engagement_id: str = "", user_agent: str = ""):
+                 engagement_id: str = "", user_agent: str = "",
+                 emit_finding_callback=None):
         """
         Initialize web scanner.
 
@@ -243,6 +244,10 @@ class WebScanner:
             verify: Verify SSL certificates
             engagement_id: Engagement ID for log/trace correlation
             user_agent: Custom User-Agent string (falls back to WEB_SCANNER_USER_AGENT env or default)
+            emit_finding_callback: Optional callable(engagement_id, finding_dict, tool_name)
+                                   called inline each time a finding is discovered for real-time streaming.
+                                   If provided, findings are emitted as they're found rather than
+                                   batched until scan() completes.
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
@@ -251,6 +256,7 @@ class WebScanner:
         self.verify = verify
         self.engagement_id = engagement_id
         self.session = session or requests.Session()
+        self.emit_finding_callback = emit_finding_callback
         _default_ua = "Argus-Scanner/1.0 (security-automation)"
         _ua = user_agent or os.environ.get("WEB_SCANNER_USER_AGENT", _default_ua)
         self.session.headers.setdefault("User-Agent", _ua)
@@ -430,7 +436,12 @@ class WebScanner:
 
     def _add_finding(self, finding_type: str, severity: str, endpoint: str,
                      evidence: dict, confidence: float = 0.8):
-        """Add a finding to the results with sanitized evidence."""
+        """Add a finding to the results with sanitized evidence.
+
+        If an emit_finding_callback was provided, this also streams the finding
+        in real-time via SSE and WebSocket so analysts can see findings as they're
+        discovered rather than waiting for scan() to complete.
+        """
         # Import sanitization utilities
         try:
             from utils.sanitization import sanitize_evidence
@@ -439,14 +450,22 @@ class WebScanner:
             # If sanitization not available, use evidence as-is
             sanitized_evidence = evidence
 
-        self.findings.append({
+        finding = {
             "type": finding_type,
             "severity": severity,
             "endpoint": endpoint,
             "evidence": sanitized_evidence,
             "confidence": confidence,
             "source_tool": "web_scanner",
-        })
+        }
+        self.findings.append(finding)
+
+        # Real-time streaming: emit as soon as each finding is discovered
+        if self.emit_finding_callback and self.engagement_id:
+            try:
+                self.emit_finding_callback(self.engagement_id, finding, "web_scanner")
+            except Exception:
+                logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
 
     def _detect_framework(self, response) -> str:
         """

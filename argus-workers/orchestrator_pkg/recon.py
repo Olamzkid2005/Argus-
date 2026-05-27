@@ -322,11 +322,63 @@ def execute_recon_tools(
     return all_findings, recon_context
 
 
+def _probe_login_pages(
+    target: str,
+    auth_endpoints: list[str],
+    timeout: int = 10,
+) -> tuple[list[str], bool]:
+    """Actively probe discovered auth endpoints to verify they host login forms.
+
+    Makes HTTP GET requests to each candidate endpoint and checks for
+    HTML login form indicators (password fields, form tags with auth keywords).
+
+    Args:
+        target: Base target URL
+        auth_endpoints: List of candidate paths discovered via URL keyword matching
+        timeout: HTTP request timeout in seconds
+
+    Returns:
+        Tuple of (verified_auth_endpoints, has_login_form)
+    """
+    import requests
+    from urllib.parse import urljoin
+
+    verified: list[str] = []
+    has_login_form = False
+
+    for path in auth_endpoints:
+        url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))
+        try:
+            resp = requests.get(url, timeout=timeout, allow_redirects=True, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; ArgusRecon/1.0)",
+                "Accept": "text/html,application/xhtml+xml",
+            })
+            if resp.status_code != 200:
+                continue
+
+            body = resp.text.lower()
+            # Look for HTML form with password field — strongest signal
+            has_password = 'type="password"' in body or "type='password'" in body
+            has_form = "<form" in body
+            has_auth_keywords = any(kw in body for kw in
+                                    ("login", "signin", "sign in", "log in"))
+
+            if has_password or (has_form and has_auth_keywords):
+                verified.append(url)
+                has_login_form = True
+        except requests.RequestException:
+            logger.debug("Login probe failed for %s", url)
+            continue
+
+    return verified, has_login_form
+
+
 def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
     """
     Convert raw recon findings list into ReconContext.
 
     Called at end of execute_recon_tools() before returning.
+    Actively probes discovered auth endpoints to verify login pages.
 
     Args:
         target: Target URL
@@ -373,6 +425,22 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
 
     all_paths = [f.get("endpoint", "").lower() for f in findings]
 
+    # Keyword-based auth endpoint discovery (passive)
+    keyword_auth_endpoints = [
+        p for p in crawled_paths if any(k in p.lower() for k in auth_kw)
+    ]
+    keyword_has_login = any(any(k in p for k in auth_kw) for p in all_paths)
+
+    # Active probe: verify discovered auth endpoints host real login forms
+    # This is what makes Argus different — it doesn't just guess, it verifies
+    verified_endpoints, verified_has_login = _probe_login_pages(
+        target, keyword_auth_endpoints
+    )
+
+    # Prefer verified endpoints; fall back to keyword-based if probing fails
+    auth_endpoints = verified_endpoints if verified_endpoints else keyword_auth_endpoints
+    has_login_page = verified_has_login if verified_endpoints else keyword_has_login
+
     return ReconContext(
         target_url=target,
         live_endpoints=list(set(live_endpoints))[:100],
@@ -381,12 +449,10 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
         tech_stack=list(set(tech_stack))[:20],
         crawled_paths=crawled_paths,
         parameter_bearing_urls=param_urls[:30],
-        auth_endpoints=[
-            p for p in crawled_paths if any(k in p.lower() for k in auth_kw)
-        ],
+        auth_endpoints=auth_endpoints,
         api_endpoints=[p for p in crawled_paths if any(k in p.lower() for k in api_kw)],
         findings_count=len(findings),
-        has_login_page=any(any(k in p for k in auth_kw) for p in all_paths),
+        has_login_page=has_login_page,
         has_api=any(any(k in p for k in api_kw) for p in all_paths),
         has_file_upload=any(any(k in p for k in upload_kw) for p in all_paths),
     )

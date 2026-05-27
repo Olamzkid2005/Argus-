@@ -135,6 +135,7 @@ class AIVulnScanner:
         session: requests.Session | None = None,
         verify: bool = True,
         engagement_id: str = "",
+        emit_finding_callback=None,
     ):
         """
         Args:
@@ -143,16 +144,27 @@ class AIVulnScanner:
             session: Optional pre-authenticated requests.Session.
             verify: SSL certificate verification.
             engagement_id: Engagement ID for log/trace correlation.
+            emit_finding_callback: Optional callable(engagement_id, finding_dict, tool_name)
+                                   for real-time streaming of findings as they're discovered.
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self._provided_session = session  # Stored for authenticated use
         self.verify = verify
         self.engagement_id = engagement_id
+        self.emit_finding_callback = emit_finding_callback
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
         self._detected_format = None  # Cached successful AI payload format
         self._thread_session = threading.local()  # Thread-local sessions
+
+    def _emit_finding(self, finding: dict) -> None:
+        """Emit a finding in real-time if callback is configured."""
+        if self.emit_finding_callback and self.engagement_id:
+            try:
+                self.emit_finding_callback(self.engagement_id, finding, "ai_vuln_scanner")
+            except Exception:
+                logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
 
     def scan(
         self,
@@ -189,11 +201,15 @@ class AIVulnScanner:
             slog.tool_start("prompt_injection", [endpoint])
             injection_findings = self._test_prompt_injection(url)
             slog.tool_complete("prompt_injection", success=True, findings=len(injection_findings))
+            for f in injection_findings:
+                self._emit_finding(f)
             findings.extend(injection_findings)
 
             slog.tool_start("info_disclosure", [endpoint])
             disclosure_findings = self._test_information_disclosure(url)
             slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
+            for f in disclosure_findings:
+                self._emit_finding(f)
             findings.extend(disclosure_findings)
 
         slog.tool_complete("ai_vuln_scan", success=True, findings=len(findings))

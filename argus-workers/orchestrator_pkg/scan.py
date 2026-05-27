@@ -520,6 +520,16 @@ def execute_scan_tools(
             except Exception as e:
                 logger.warning(f"Authentication failed for {target}: {e}")
 
+        # ── Real-time finding streamer ──
+        # Normalizes and emits findings inline as each scanner discovers them,
+        # rather than waiting for the tool to complete. This lets analysts start
+        # triaging critical findings during active scanning.
+        def _stream_finding(eng_id, finding, tool):
+            normalized = ctx._normalize_finding(finding, tool)
+            if normalized:
+                emit_finding_rt(eng_id, normalized, tool)
+                all_findings.append(normalized)
+
         # Execute comprehensive web scanner
         slog.tool_start("web_scanner", [target])
         try:
@@ -530,6 +540,7 @@ def execute_scan_tools(
                 session=authenticated_session,
                 tech_stack=tech_stack,
                 engagement_id=ctx.engagement_id,
+                emit_finding_callback=_stream_finding,
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
             web_findings = web_scanner.scan(target)
@@ -550,11 +561,18 @@ def execute_scan_tools(
                             logger.debug(f"Failed to log rate limit event: {rl_err}")
 
             slog.tool_complete("web_scanner", success=True, findings=len(web_findings))
+            # Findings already emitted inline via _stream_finding callback.
+            # Batch loop below catches any that the callback missed (edge case).
             for wf in web_findings:
                 normalized = ctx._normalize_finding(wf, "web_scanner")
                 if normalized:
-                    emit_finding_rt(ctx.engagement_id, normalized, "web_scanner")
-                    all_findings.append(normalized)
+                    dedup_key = (normalized.get("type"), normalized.get("endpoint"))
+                    if not any(
+                        f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
+                        for f in all_findings
+                    ):
+                        emit_finding_rt(ctx.engagement_id, normalized, "web_scanner")
+                        all_findings.append(normalized)
         except Exception as e:
             slog.tool_complete("web_scanner", success=False)
             logger.warning(f"WebScanner failed for {target}: {e}")
@@ -570,15 +588,24 @@ def execute_scan_tools(
                     timeout=SSL_TIMEOUT,
                     rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
                     engagement_id=ctx.engagement_id,
+                    emit_finding_callback=_stream_finding,
                 )
                 emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
                 dual_findings = dual_scanner.scan(target)
                 slog.tool_complete("dual_auth_scanner", success=True, findings=len(dual_findings))
+                # Findings already emitted inline via _stream_finding callback
+                # Collect any remaining that weren't streamed (backward compat)
                 for df in dual_findings:
                     normalized = ctx._normalize_finding(df, "dual_auth_scanner")
                     if normalized:
-                        emit_finding_rt(ctx.engagement_id, normalized, "dual_auth_scanner")
-                        all_findings.append(normalized)
+                        # Dedup: only add if not already in all_findings (streamed inline)
+                        dedup_key = (normalized.get("type"), normalized.get("endpoint"))
+                        if not any(
+                            f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
+                            for f in all_findings
+                        ):
+                            emit_finding_rt(ctx.engagement_id, normalized, "dual_auth_scanner")
+                            all_findings.append(normalized)
                 emit_tool_complete(ctx.engagement_id, "dual_auth_scanner", True, 0,
                                     finding_count=len(dual_findings))
                 logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
@@ -595,15 +622,23 @@ def execute_scan_tools(
                 rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
                 session=authenticated_session,
                 engagement_id=ctx.engagement_id,
+                emit_finding_callback=_stream_finding,
             )
             emit_tool_start(ctx.engagement_id, "ai_vuln_scanner", [target])
             ai_findings = ai_scanner.scan(target)
             slog.tool_complete("ai_vuln_scanner", success=True, findings=len(ai_findings))
+            # Findings already emitted inline via _stream_finding callback
+            # Collect any remaining that weren't streamed (backward compat)
             for af in ai_findings:
                 normalized = ctx._normalize_finding(af, "ai_vuln_scanner")
                 if normalized:
-                    emit_finding_rt(ctx.engagement_id, normalized, "ai_vuln_scanner")
-                    all_findings.append(normalized)
+                    dedup_key = (normalized.get("type"), normalized.get("endpoint"))
+                    if not any(
+                        f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
+                        for f in all_findings
+                    ):
+                        emit_finding_rt(ctx.engagement_id, normalized, "ai_vuln_scanner")
+                        all_findings.append(normalized)
             emit_tool_complete(ctx.engagement_id, "ai_vuln_scanner", True, 0,
                                 finding_count=len(ai_findings))
             if ai_findings:

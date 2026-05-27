@@ -70,11 +70,12 @@ class SnapshotManager:
                 )
                 findings = [dict(row) for row in cursor.fetchall()]
 
-                # Capture attack graph (attack_paths)
+                # Capture attack graph (attack_paths) including chain exploit scripts
                 cursor.execute(
                     """
                     SELECT
-                        id, path_nodes, risk_score, normalized_severity, created_at
+                        id, path_nodes, risk_score, normalized_severity,
+                        chain_exploit_script, created_at
                     FROM attack_paths
                     WHERE engagement_id = %s
                     ORDER BY risk_score DESC

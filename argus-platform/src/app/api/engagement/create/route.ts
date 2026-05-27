@@ -201,8 +201,8 @@ export async function POST(req: NextRequest) {
 
       const engagementResult = await client.query(
         `INSERT INTO engagements 
-         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, dual_auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
          RETURNING *`,
         [
           engagementId,
@@ -214,6 +214,7 @@ export async function POST(req: NextRequest) {
           session.user.id,
           rateLimitConfig ? JSON.stringify(rateLimitConfig) : null,
           effectiveAuthConfig ? JSON.stringify(effectiveAuthConfig) : null,
+          effectiveDualAuthConfig ? JSON.stringify(effectiveDualAuthConfig) : null,
           effectiveScanType,
           effectiveAggressiveness,
           effectiveAgentMode,

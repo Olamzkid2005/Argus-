@@ -47,6 +47,13 @@ COMMON_LOGIN_PATHS = [
 COMMON_USERNAME_FIELDS = ["username", "email", "login", "user", "user_login"]
 COMMON_PASSWORD_FIELDS = ["password", "passwd", "pass", "user_pass"]
 
+# Common CSRF token field names in login forms
+CSRF_TOKEN_FIELDS = [
+    "csrf_token", "csrf", "_csrf", "csrfmiddlewaretoken",
+    "authenticity_token", "__csrf", "csrf-token", "xsrf-token",
+    "_token", "token", "csrfKey", "csrf_param",
+]
+
 
 class AuthManager:
     """
@@ -121,13 +128,82 @@ class AuthManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _extract_csrf_token(self, login_page_url: str, session: requests.Session) -> str | None:
+        """Fetch the login page and extract CSRF token from hidden form fields.
+
+        Many web applications embed a CSRF token in the login form that must
+        be submitted with the credentials. This method fetches the page and
+        looks for common CSRF token field names in hidden inputs.
+
+        Args:
+            login_page_url: URL of the login page to fetch
+            session: Requests session to use for the GET
+
+        Returns:
+            The CSRF token value, or None if no token was found.
+        """
+        try:
+            resp = session.get(
+                login_page_url,
+                timeout=15,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)"},
+            )
+            if resp.status_code != 200:
+                return None
+
+            import re
+            body = resp.text
+
+            # Search for hidden input fields with CSRF token names
+            for field_name in CSRF_TOKEN_FIELDS:
+                # Pattern: <input ... name="csrf_token" ... value="abc123" ...>
+                patterns = [
+                    re.compile(
+                        rf'<input[^>]*name=["\']{re.escape(field_name)}["\'][^>]*value=["\']([^"\']+)["\']',
+                        re.IGNORECASE,
+                    ),
+                    re.compile(
+                        rf'<input[^>]*value=["\']([^"\']+)["\'][^>]*name=["\']{re.escape(field_name)}["\']',
+                        re.IGNORECASE,
+                    ),
+                ]
+                for pat in patterns:
+                    match = pat.search(body)
+                    if match:
+                        token = match.group(1)
+                        logger.debug("Extracted CSRF token '%s' from field '%s'", token[:20], field_name)
+                        return token
+
+            # Also check for meta tags with CSRF tokens (common in SPAs)
+            meta_patterns = [
+                re.compile(
+                    r'<meta[^>]*name=["\']csrf-token["\'][^>]*content=["\']([^"\']+)["\']',
+                    re.IGNORECASE,
+                ),
+            ]
+            for pat in meta_patterns:
+                match = pat.search(body)
+                if match:
+                    token = match.group(1)
+                    logger.debug("Extracted CSRF token from meta tag: '%s'", token[:20])
+                    return token
+
+            return None
+        except requests.RequestException as e:
+            logger.debug("Failed to fetch login page for CSRF extraction: %s", e)
+            return None
+
     def _login(
         self,
         session: requests.Session,
         target_url: str,
         auth_endpoints: list[str] | None,
     ) -> requests.Session:
-        """Try each candidate login URL until one succeeds."""
+        """Try each candidate login URL until one succeeds.
+
+        Before POSTing credentials, fetches the login page to extract
+        any CSRF token that must be submitted with the form.
+        """
         candidates: list[str] = []
 
         if auth_endpoints:
@@ -146,8 +222,14 @@ class AuthManager:
             seen.add(normalized)
 
             logger.debug("Attempting login at %s", normalized)
+
+            # Pre-fetch login page to extract CSRF token
+            csrf_token = self._extract_csrf_token(normalized, session)
+            if csrf_token:
+                logger.debug("Found CSRF token for %s", normalized)
+
             try:
-                if self._try_login(session, normalized):
+                if self._try_login(session, normalized, csrf_token):
                     logger.info("Authentication succeeded at %s", normalized)
                     return session
             except AuthError:
@@ -159,10 +241,11 @@ class AuthManager:
             f"(tried {len(seen)} URLs)"
         )
 
-    def _try_login(self, session: requests.Session, url: str) -> bool:
+    def _try_login(self, session: requests.Session, url: str, csrf_token: str | None = None) -> bool:
         """
         Attempt a single login POST.
 
+        Includes any extracted CSRF token in the form payload.
         Returns True if a session cookie was captured.
         """
         username = self._config.username
@@ -170,6 +253,19 @@ class AuthManager:
         login_data = self._config.login_data
 
         payload = login_data or self._build_form_payload(username, password)
+
+        # Inject CSRF token into form payload if one was extracted
+        if csrf_token and isinstance(payload, dict):
+            # Try to find which CSRF field name the app expects
+            # First check if any CSRF field name already exists in payload
+            csrf_key_found = None
+            for field in CSRF_TOKEN_FIELDS:
+                if field in payload:
+                    csrf_key_found = field
+                    break
+            if not csrf_key_found:
+                # Default to 'csrf_token' — apps usually accept their own field name
+                payload["csrf_token"] = csrf_token
 
         pre_cookies = dict(session.cookies)
 

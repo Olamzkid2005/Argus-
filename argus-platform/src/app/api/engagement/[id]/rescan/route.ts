@@ -36,11 +36,19 @@ export async function POST(
     let body: any = {};
     try { body = await _req.json(); } catch { /* no body, that's fine */ }
 
+    let agentMode = false;
+    let scanMode = 'agent';
+    let bugBountyMode = false;
+    let authConfig = null;
+    let dualAuthConfig = null;
+
     // Try to look up the original engagement
     try {
       const sourceResult = await client.query(
         `SELECT target_url, authorization_proof, authorized_scope,
-                scan_type, scan_aggressiveness, rate_limit_config
+                scan_type, scan_aggressiveness, rate_limit_config,
+                agent_mode, scan_mode, bug_bounty_mode,
+                auth_config, dual_auth_config
          FROM engagements WHERE id = $1`,
         [engagementId],
       );
@@ -53,6 +61,11 @@ export async function POST(
         scanType = source.scan_type || 'url';
         scanAggressiveness = source.scan_aggressiveness || 'default';
         rateLimitConfig = source.rate_limit_config;
+        agentMode = source.agent_mode || false;
+        scanMode = source.scan_mode || 'agent';
+        bugBountyMode = source.bug_bounty_mode || false;
+        authConfig = source.auth_config;
+        dualAuthConfig = source.dual_auth_config;
         foundOriginal = true;
       }
     } catch (lookupErr) {
@@ -89,8 +102,8 @@ export async function POST(
     const newEngagementId = uuidv4();
     await client.query(
       `INSERT INTO engagements
-       (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+       (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, dual_auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())`,
       [
         newEngagementId,
         session.user.orgId,
@@ -100,8 +113,13 @@ export async function POST(
         "created",
         session.user.id,
         rateLimitConfig,
+        authConfig,
+        dualAuthConfig,
         scanType,
         scanAggressiveness,
+        agentMode,
+        scanMode,
+        bugBountyMode,
       ],
     );
 
@@ -135,6 +153,11 @@ export async function POST(
           repo_url: targetUrl,
           budget: { max_cycles: 5, max_depth: 3 },
           aggressiveness: scanAggressiveness,
+          agent_mode: agentMode,
+          scan_mode: scanMode,
+          bug_bounty_mode: bugBountyMode,
+          auth_config: authConfig,
+          dual_auth_config: dualAuthConfig,
           trace_id: traceId,
           created_at: new Date().toISOString(),
         });
@@ -145,6 +168,11 @@ export async function POST(
           target: targetUrl,
           budget: { max_cycles: 5, max_depth: 3 },
           aggressiveness: scanAggressiveness,
+          agent_mode: agentMode,
+          scan_mode: scanMode,
+          bug_bounty_mode: bugBountyMode,
+          auth_config: authConfig,
+          dual_auth_config: dualAuthConfig,
           trace_id: traceId,
           created_at: new Date().toISOString(),
         });

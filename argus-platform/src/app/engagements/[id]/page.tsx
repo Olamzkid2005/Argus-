@@ -50,6 +50,7 @@ interface Engagement {
   scan_mode?: string;
   bug_bounty_mode?: boolean;
   auth_config?: Record<string, unknown> | null;
+  dual_auth_config?: Record<string, unknown> | null;
 }
 
 interface Finding {
@@ -279,6 +280,7 @@ export default function EngagementDetailPage() {
     setSavingTemplate(true);
     try {
       const authCfg = engagement?.auth_config;
+      const dualAuthCfg = engagement?.dual_auth_config;
       const config: Record<string, unknown> = {
         target_url_pattern: engagement?.target_url || "",
         scan_type: engagement?.scan_type || "url",
@@ -290,6 +292,10 @@ export default function EngagementDetailPage() {
       // Save auth config type if configured (strip credentials for security)
       if (authCfg && typeof authCfg === "object" && authCfg.type) {
         config.auth_config_type = authCfg.type;
+      }
+      // Save dual-auth config type if configured (strip credentials for security)
+      if (dualAuthCfg && typeof dualAuthCfg === "object" && dualAuthCfg.type) {
+        config.dual_auth_config_type = dualAuthCfg.type;
       }
       const res = await fetch("/api/templates", {
         method: "POST",
@@ -497,12 +503,15 @@ export default function EngagementDetailPage() {
                     <span className="text-[9px] font-mono bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded">AI Agent</span>
                   )}
                   <span className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{engagement?.scan_mode || "agent"} mode</span>
-                  {engagement?.auth_config?.type && (
-                    <span className="text-[9px] font-mono bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded">auth: {String(engagement.auth_config.type)}</span>
+                  {Boolean((engagement?.auth_config as Record<string, string | undefined> | null)?.type) && (
+                    <span className="text-[9px] font-mono bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded">
+                      auth: {String((engagement?.auth_config as Record<string, string>)?.type)}
+                      {(engagement?.dual_auth_config as Record<string, string | undefined> | null)?.type ? " + dual" : ""}
+                    </span>
                   )}
                 </div>
                 <p className="text-[9px] text-on-surface-variant/60 mt-2">
-                  Target URL, scan type, aggressiveness, agent mode, scan mode, and auth config type
+                  Target URL, scan type, aggressiveness, agent mode, scan mode, auth config, and dual-auth config
                 </p>
               </div>
 
@@ -833,9 +842,9 @@ export default function EngagementDetailPage() {
                                   ? exploitScript
                                   : JSON.stringify(exploitScript, null, 2)}
                             </pre>
-                            {exploitScript.impact_summary && (
+                            {Boolean((exploitScript as Record<string, unknown>).impact_summary) && (
                               <p className="text-[9px] text-on-surface-variant/60 mt-2 italic">
-                                Impact: {String(exploitScript.impact_summary)}
+                                Impact: {String((exploitScript as Record<string, unknown>).impact_summary)}
                               </p>
                             )}
                           </div>

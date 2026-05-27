@@ -77,6 +77,29 @@ class AttackGraphRepository:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # ── Preserve existing chain_exploit_script values ──
+            # AttackGraphRepository.save_paths is a full replace (delete + re-insert).
+            # We need to preserve any existing chain_exploit_script entries that were
+            # saved by ChainExploitGenerator so they aren't lost on path re-save.
+            cursor.execute(
+                "SELECT id, path_nodes, chain_exploit_script FROM attack_paths "
+                "WHERE engagement_id = %s AND chain_exploit_script IS NOT NULL",
+                (engagement_id,),
+            )
+            existing_scripts: dict[str, str] = {}  # fingerprint -> script JSON
+            for row in cursor.fetchall():
+                old_path_id, old_path_nodes_json, script = row
+                if script:
+                    # Build a fingerprint from the path node types to match across re-saves
+                    try:
+                        old_nodes = json.loads(old_path_nodes_json) if isinstance(old_path_nodes_json, str) else old_path_nodes_json
+                        node_types = tuple(
+                            n.get("type", "") for n in (old_nodes.get("nodes") or [])
+                        )
+                        existing_scripts[str(node_types)] = script
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+
             # Delete old paths for this engagement
             cursor.execute(
                 "DELETE FROM attack_paths WHERE engagement_id = %s",
@@ -117,26 +140,47 @@ class AttackGraphRepository:
 
                 normalized_severity = self._risk_to_normalized_severity(risk)
 
-                cursor.execute(
-                    """
-                    INSERT INTO attack_paths
-                        (id, engagement_id, path_nodes, risk_score, normalized_severity)
-                    VALUES (%s, %s, %s::jsonb, %s, %s)
-                    """,
-                    (
-                        str(uuid.uuid4()),
-                        engagement_id,
-                        json.dumps(path_nodes),
-                        round(risk, 2),
-                        normalized_severity,
-                    ),
-                )
+                # Re-associate any previously-saved chain_exploit_script
+                node_types = tuple(n.get("type", "") for n in path_nodes["nodes"])
+                chain_script = existing_scripts.get(str(node_types))
+
+                if chain_script:
+                    cursor.execute(
+                        """
+                        INSERT INTO attack_paths
+                            (id, engagement_id, path_nodes, risk_score, normalized_severity, chain_exploit_script)
+                        VALUES (%s, %s, %s::jsonb, %s, %s, %s)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            engagement_id,
+                            json.dumps(path_nodes),
+                            round(risk, 2),
+                            normalized_severity,
+                            chain_script,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO attack_paths
+                            (id, engagement_id, path_nodes, risk_score, normalized_severity)
+                        VALUES (%s, %s, %s::jsonb, %s, %s)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            engagement_id,
+                            json.dumps(path_nodes),
+                            round(risk, 2),
+                            normalized_severity,
+                        ),
+                    )
                 saved_count += 1
 
             conn.commit()
             logger.info(
-                "Saved %d attack paths for engagement %s",
-                saved_count, engagement_id,
+                "Saved %d attack paths (with %d preserved chain scripts) for engagement %s",
+                saved_count, len(existing_scripts), engagement_id,
             )
             return saved_count
 
