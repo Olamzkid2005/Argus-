@@ -181,6 +181,14 @@ export async function query<T = unknown>(
     const result = await client.query(text, params);
     return { rows: result.rows as T[], rowCount: result.rowCount ?? 0 };
   } finally {
+    // Reset tenant context to prevent cross-org data leakage (C-v3-03)
+    if (options?.orgId && process.env.PGBOUNCER_MODE !== "transaction") {
+      try {
+        await client.query("SELECT reset_tenant_context()");
+      } catch (error) {
+        log.db.queryError("reset_tenant_context", error);
+      }
+    }
     client.release();
 
     const duration = performance.now() - start;

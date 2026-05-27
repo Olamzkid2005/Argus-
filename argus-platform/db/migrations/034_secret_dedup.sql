@@ -1,4 +1,4 @@
--- Migration 015: Add last_seen_at for secret finding deduplication.
+-- Migration 034: Add last_seen_at for secret finding deduplication.
 --
 -- Tracks when a secret was last detected across repeated scans.
 -- The unique constraint on (engagement_id, type, endpoint) prevents
