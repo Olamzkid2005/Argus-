@@ -93,6 +93,31 @@ export function createRateLimit(config: RateLimitConfig = defaultConfig) {
 // Fallback in-memory rate limiter (per-instance, used when Redis is unavailable)
 const memoryLimits = new Map<string, { count: number; resetTime: number }>();
 
+// M-23: Periodic cleanup of expired in-memory rate limit entries to prevent
+// unbounded memory growth under sustained traffic. Runs every 60 seconds.
+const CLEANUP_INTERVAL_MS = 60000;
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+function startCleanupIfNeeded() {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of memoryLimits) {
+      if (now > record.resetTime) {
+        memoryLimits.delete(key);
+      }
+    }
+    // Clear the timer if the map is empty to avoid unnecessary cycles
+    if (memoryLimits.size === 0 && cleanupTimer) {
+      clearInterval(cleanupTimer);
+      cleanupTimer = null;
+    }
+  }, CLEANUP_INTERVAL_MS);
+  // Allow the timer to not block process exit
+  if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
+    cleanupTimer.unref();
+  }
+}
+
 function fallbackRateLimit(
   req: NextRequest,
   config: RateLimitConfig,
@@ -107,7 +132,7 @@ function fallbackRateLimit(
   let record = memoryLimits.get(key);
   if (!record || now > record.resetTime) {
     record = { count: 0, resetTime: now + config.windowMs };
-  }
+    startCleanupIfNeeded(); // M-23: Start periodic cleanup when first entry is created
 
   record.count++;
   memoryLimits.set(key, record);

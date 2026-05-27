@@ -109,7 +109,7 @@ export async function POST(
         session.user.orgId,
         targetUrl,
         authorizationProof,
-        authorizedScope || JSON.stringify({ domains: [new URL(targetUrl).hostname] }),
+        authorizedScope || (() => { try { return JSON.stringify({ domains: [new URL(targetUrl).hostname] }); } catch { return JSON.stringify({ domains: [] }); } })(),
         "created",
         session.user.id,
         rateLimitConfig,

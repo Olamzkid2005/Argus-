@@ -78,15 +78,23 @@ export default function DashboardPage() {
     return () => log.pageUnmount("Dashboard");
   }, []);
 
-  const [engagementId, setEngagementId] = useState<string>(() => {
+  // L-16: Validate localStorage engagement ID — use URL param as source of truth,
+  // only fall back to localStorage if no URL param is set, and validate the
+  // stored value is a plausible UUID before trusting it.
+  const getStoredEngagementId = (): string => {
     if (typeof window === "undefined") return "";
     const urlId = new URL(window.location.href).searchParams.get("engagement");
-    return urlId || localStorage.getItem("argus:active_engagement") || "";
-  });
+    if (urlId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(urlId)) {
+      return urlId;
+    }
+    const stored = localStorage.getItem("argus:active_engagement") || "";
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stored) ? stored : "";
+  };
+
+  const [engagementId, setEngagementId] = useState<string>(getStoredEngagementId);
   const [isConnected, setIsConnected] = useState(() => {
     if (typeof window === "undefined") return false;
-    const urlId = new URL(window.location.href).searchParams.get("engagement");
-    return !!(urlId || localStorage.getItem("argus:active_engagement"));
+    return !!getStoredEngagementId();
   });
   const [currentState, setCurrentState] = useState<string>(() => {
     if (typeof window === "undefined") return "created";

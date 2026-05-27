@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { verifyTOTP } from "@/lib/totp";
 import { strictRateLimit } from "@/lib/rate-limiter";
+import { log } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
   // Apply strict rate limiting to prevent brute-force attacks (H-17)
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("2FA verification error:", error);
+    log.error("2FA verification error:", error);
     return NextResponse.json(
       { error: "Failed to verify 2FA" },
       { status: 500 },

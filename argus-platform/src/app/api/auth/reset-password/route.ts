@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { redis } from "@/lib/redis";
+import { log } from "@/lib/logger";
 
 const RATE_LIMIT_WINDOW = 3600; // 1 hour
 const MAX_ATTEMPTS_PER_IP = 5; // 5 attempts per hour per IP
@@ -99,7 +100,7 @@ export async function POST(req: Request) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Reset password error:", error);
+    log.error("Reset password error:", error);
     return NextResponse.json(
       { message: "An error occurred" },
       { status: 500 }

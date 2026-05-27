@@ -23,6 +23,13 @@ venv/
 node_modules/
 .next/
 .npm/
+playwright-report/
+test-results/
+
+# Testing
+coverage/
+.nyc_output/
+*.testoutput/
 
 # OS
 .DS_Store

@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { generateSecret, generateOtpAuthUrl, verifyTOTP } from "@/lib/totp";
 import { strictRateLimit } from "@/lib/rate-limiter";
+import { log } from "@/lib/logger";
 
 // Import requireAuth type
 type AuthUser = {
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("2FA setup error:", error);
+    log.error("2FA setup error:", error);
     return NextResponse.json({ error: "Failed to setup 2FA" }, { status: 500 });
   }
 }

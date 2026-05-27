@@ -49,7 +49,7 @@ export async function GET() {
     return NextResponse.json({ settings });
     
   } catch (error) {
-    console.error("Settings GET error:", error instanceof Error ? error.message : String(error));
+    logger.error("Settings GET error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: "Failed to get settings" }, { status: 500 });
   }
 }
@@ -133,7 +133,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(response);
 
   } catch (error) {
-    console.error("Settings PUT error:", error instanceof Error ? error.message : String(error));
+    logger.error("Settings PUT error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
   }
 }

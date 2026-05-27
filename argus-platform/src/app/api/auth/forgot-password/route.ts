@@ -4,6 +4,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { redis } from "@/lib/redis";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { log } from "@/lib/logger";
 
 const RATE_LIMIT_WINDOW = 3600; // 1 hour
 const MAX_REQUESTS_PER_EMAIL = 3; // 3 attempts per hour per email
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
       // Send password reset email FIRST — only store token if delivery succeeds
       const emailResult = await sendPasswordResetEmail(email.toLowerCase(), resetToken);
       if (!emailResult.success) {
-        console.error("Failed to send password reset email:", emailResult.error);
+        log.error("Failed to send password reset email:", emailResult.error);
         return NextResponse.json(
           { message: "Unable to send reset email. Please try again later." },
           { status: 500 }
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Forgot password error:", error);
+    log.error("Forgot password error:", error);
     return NextResponse.json(
       { message: "An error occurred" },
       { status: 500 }

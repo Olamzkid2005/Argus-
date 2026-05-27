@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "@/lib/db";
 import { redis } from "@/lib/redis";
+import { log } from "@/lib/logger";
 
 const RATE_LIMIT_WINDOW = 3600; // 1 hour
 const MAX_SIGNUPS_PER_EMAIL = 5; // 5 attempts per hour per email
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
       client.release();
     }
   } catch (error) {
-    console.error("Signup error:", error);
+    log.error("Signup error:", error);
     return NextResponse.json(
       { error: "An error occurred during sign up. Please try again." },
       { status: 500 },

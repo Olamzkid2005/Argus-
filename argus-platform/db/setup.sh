@@ -14,7 +14,14 @@ NC='\033[0m' # No Color
 # Default values
 DB_NAME="${POSTGRES_DB:-argus_pentest}"
 DB_USER="${POSTGRES_USER:-argus_user}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-changeme}"
+# L-13: Password must be set via environment — never use a default
+if [ -z "${POSTGRES_PASSWORD}" ]; then
+    echo -e "${RED}Error: POSTGRES_PASSWORD environment variable is required.${NC}"
+    echo "Usage: POSTGRES_PASSWORD=<secure_password> $0"
+    echo "Generate one with: openssl rand -base64 32"
+    exit 1
+fi
+DB_PASSWORD="${POSTGRES_PASSWORD}"
 DB_HOST="${POSTGRES_HOST:-localhost}"
 DB_PORT="${POSTGRES_PORT:-5432}"
 
