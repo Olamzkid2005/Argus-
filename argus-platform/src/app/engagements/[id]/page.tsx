@@ -28,6 +28,8 @@ import {
   FileText,
   X,
   CheckCircle,
+  Sword,
+  Code2,
 } from "lucide-react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import type { AgentDecisionEvent } from "@/lib/websocket-events";
@@ -109,6 +111,13 @@ export default function EngagementDetailPage() {
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [attackPaths, setAttackPaths] = useState<Array<{
+    id: string;
+    risk_score: number;
+    path_nodes: { nodes: Array<{ type: string; data: Record<string, unknown> }> };
+    chain_exploit_script: Record<string, unknown> | null;
+  }>>([]);
+  const [attackPathsLoading, setAttackPathsLoading] = useState(true);
 
   // Real-time events for agent reasoning feed
   const { events } = useEngagementEvents({
@@ -174,12 +183,26 @@ export default function EngagementDetailPage() {
     } catch { /* timeline optional */ }
   }, [engagementId]);
 
+  const fetchAttackPaths = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/engagement/${engagementId}/attack-paths`);
+      if (res.ok) {
+        const data = await res.json();
+        setAttackPaths((data.attack_paths || []).filter(
+          (p: { risk_score: number }) => parseFloat(String(p.risk_score)) >= 5.0
+        ));
+      }
+    } catch { /* non-critical */ }
+    finally { setAttackPathsLoading(false); }
+  }, [engagementId]);
+
   useEffect(() => {
     if (status !== "authenticated" || !engagementId) return;
     fetchEngagement();
     fetchFindings();
     fetchTimeline();
-  }, [status, engagementId, fetchEngagement, fetchFindings, fetchTimeline]);
+    fetchAttackPaths();
+  }, [status, engagementId, fetchEngagement, fetchFindings, fetchTimeline, fetchAttackPaths]);
 
   // Poll engagement status every 5s while active
   useEffect(() => {
@@ -709,6 +732,117 @@ export default function EngagementDetailPage() {
               decisions={agentDecisions}
               isActive={engagement.status === "scanning"}
             />
+          )}
+
+          {/* Attack Chains — shown for completed/analyzing engagements */}
+          {engagement && ["analyzing", "complete", "reporting"].includes(engagement.status) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Sword size={14} className="text-primary" />
+                <h3 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest font-headline">
+                  Attack Chains
+                </h3>
+                {attackPaths.length > 0 && (
+                  <span className="text-[9px] font-mono bg-error/10 text-error px-1.5 py-0.5 rounded ml-auto">
+                    {attackPaths.filter((p) => p.chain_exploit_script).length} verified
+                  </span>
+                )}
+              </div>
+
+              {attackPathsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 size={16} className="animate-spin text-primary" />
+                </div>
+              ) : attackPaths.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Shield size={24} className="mx-auto text-on-surface-variant/20 mb-2" />
+                  <p className="text-[11px] font-mono text-on-surface-variant/40 uppercase tracking-widest">
+                    No high-risk attack chains detected
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                  {attackPaths.map((path) => {
+                    const vulnNodes = (path.path_nodes?.nodes || []).filter(
+                      (n: { type: string }) => n.type === "vulnerability"
+                    );
+                    const chainName = vulnNodes
+                      .map((n: { data: Record<string, unknown> }) => String(n.data?.type || "UNKNOWN").replace(/_/g, " "))
+                      .join(" → ");
+                    const riskColor = path.risk_score >= 8 ? "text-error" : path.risk_score >= 6 ? "text-orange-500" : "text-amber-500";
+                    const exploitScript = path.chain_exploit_script as Record<string, unknown> | null;
+
+                    return (
+                      <div
+                        key={path.id}
+                        className="p-4 rounded-lg bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08]"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-on-surface dark:text-[#F0F0F5] truncate">
+                                {chainName || "Unknown Chain"}
+                              </span>
+                              <span className={`text-[9px] font-bold uppercase ${riskColor}`}>
+                                CVSS {path.risk_score}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {vulnNodes.map((n: { data: Record<string, unknown> }, i: number) => (
+                                <span key={i} className="text-[9px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                  {String(n.data?.type || "?").replace(/_/g, " ")}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${riskColor.replace("text-", "bg-")}/10`}>
+                            {path.risk_score}
+                          </span>
+                        </div>
+
+                        {/* Exploit Script Section */}
+                        {exploitScript && (
+                          <div className="mt-3 pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Code2 size={11} className="text-green-500" />
+                              <span className="text-[9px] font-bold text-green-500 uppercase tracking-wider">
+                                Chain Exploit Script
+                              </span>
+                            </div>
+                            <pre className="text-[9px] font-mono leading-relaxed bg-surface-container-high dark:bg-[#2A2A35] rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto text-on-surface-variant dark:text-[#B0B0C0] whitespace-pre-wrap">
+                              {typeof exploitScript.script === "string"
+                                ? exploitScript.script
+                                : typeof exploitScript === "string"
+                                  ? exploitScript
+                                  : JSON.stringify(exploitScript, null, 2)}
+                            </pre>
+                            {exploitScript.impact_summary && (
+                              <p className="text-[9px] text-on-surface-variant/60 mt-2 italic">
+                                Impact: {String(exploitScript.impact_summary)}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Generate Button for paths without scripts */}
+                        {!exploitScript && engagement?.status === "complete" && (
+                          <div className="mt-3 pt-3 border-t border-outline-variant dark:border-[#ffffff08]">
+                            <p className="text-[9px] text-on-surface-variant/60 italic">
+                              Chain detected — exploit script not yet generated
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </motion.div>
           )}
 
           {/* Explainability — shown only for completed engagements */}

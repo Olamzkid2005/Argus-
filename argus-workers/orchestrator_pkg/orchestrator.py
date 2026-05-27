@@ -910,6 +910,76 @@ class Orchestrator:
                 "PoC generation batch failed (non-fatal): %s", e
             )
 
+        # ── Chain Exploit Generation for CRITICAL/HIGH attack paths ──
+        try:
+            from chain_exploit_generator import ChainExploitGenerator
+            chain_gen = ChainExploitGenerator(llm_client=self.llm_client)
+
+            # Load attack paths and build findings map
+            attack_paths = []
+            findings_map: dict[str, dict] = {}
+            conn = None
+            cursor = None
+            try:
+                from database.connection import get_db
+                db = get_db()
+                conn = db.get_connection()
+                cursor = conn.cursor()
+
+                # Fetch attack paths
+                cursor.execute(
+                    "SELECT id, path_nodes, risk_score, normalized_severity "
+                    "FROM attack_paths WHERE engagement_id = %s",
+                    (self.engagement_id,),
+                )
+                cols = ["id", "path_nodes", "risk_score", "normalized_severity"]
+                for row in cursor.fetchall():
+                    attack_paths.append(dict(zip(cols, row, strict=False)))
+
+                # Fetch findings with evidence and PoCs
+                cursor.execute(
+                    "SELECT id, type, endpoint, evidence, poc_generated "
+                    "FROM findings WHERE engagement_id = %s",
+                    (self.engagement_id,),
+                )
+                fcols = ["id", "type", "endpoint", "evidence", "poc_generated"]
+                for row in cursor.fetchall():
+                    f = dict(zip(fcols, row, strict=False))
+                    findings_map[f["id"]] = f
+            except Exception:
+                logger.debug("Failed to load attack paths for chain exploit gen", exc_info=True)
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn and db:
+                    db.release_connection(conn)
+
+            if attack_paths and findings_map and engagement_cost_tracker and llm_svc:
+                scripts = chain_gen.generate_for_engagement(
+                    engagement_id=self.engagement_id,
+                    attack_paths=attack_paths,
+                    findings_map=findings_map,
+                    llm_service=llm_svc,
+                    cost_tracker=engagement_cost_tracker,
+                    max_chains=3,
+                )
+                if scripts:
+                    saved = ChainExploitGenerator.save_scripts_to_db(
+                        self.engagement_id, scripts,
+                    )
+                    logger.info(
+                        "Generated %d chain exploit scripts for engagement %s",
+                        saved, self.engagement_id,
+                    )
+            elif not engagement_cost_tracker:
+                logger.debug("No cost tracker — skipping chain exploit generation")
+            elif not llm_svc:
+                logger.debug("No LLM service — skipping chain exploit generation")
+        except Exception as e:
+            logger.warning(
+                "Chain exploit generation failed (non-fatal): %s", e,
+            )
+
         # ── Developer Fix Generation for MEDIUM+ findings ──
         try:
             from developer_fix_assistant import (
