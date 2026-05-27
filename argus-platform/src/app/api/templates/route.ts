@@ -75,12 +75,16 @@ export async function POST(req: NextRequest) {
 
       log.apiEnd('POST', '/api/templates', 200, { templateId: id });
       return NextResponse.json({ template: result.rows[0] }, { status: 201 });
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
-    return NextResponse.json(
-      { error: "Failed to create template" },
-      { status: 500 },
-    );
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    log.error("Create template error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json({ error: "Failed to create template" }, { status: 500 });
   }
 }
 
@@ -159,18 +163,5 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.json({ error: "Failed to update template" }, { status: 500 });
-  }
-}
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    log.error("Create template error:", error);
-    const err = error as Error;
-    if (err.message === "Unauthorized") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    return NextResponse.json({ error: "Failed to create template" }, { status: 500 });
   }
 }

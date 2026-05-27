@@ -29,6 +29,13 @@ interface AuthConfig {
   cookie?: string;
   loginUrl?: string;
   loginMethod?: string;
+  dualConfig?: AuthConfig; // second account for BOLA testing (User B)
+}
+
+interface DualAuthState {
+  method: AuthMethod | null;
+  config: AuthConfig;
+  selectedLoginUrl: string;
 }
 
 interface LoginPageResult {
@@ -48,6 +55,9 @@ interface AuthWizardProps {
 
 export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizardProps) {
   const [step, setStep] = useState<"detect" | "method" | "configure" | "test">("detect");
+  const [dualMode, setDualMode] = useState(false);
+  const [dualConfig, setDualConfig] = useState<AuthConfig | null>(null);
+  const [dualStep, setDualStep] = useState<"method" | "configure" | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [loginPages, setLoginPages] = useState<LoginPageResult[]>([]);
   const [detectError, setDetectError] = useState("");
@@ -107,6 +117,11 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
   // Step 3: Configure credentials
   const handleConfigure = () => {
     if (!config) return;
+    if (dualMode && !dualStep) {
+      // After User A config, move to User B setup
+      setDualStep("method");
+      return;
+    }
     setStep("test");
     testAuth();
   };
@@ -150,6 +165,13 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
       ...config,
       loginUrl: selectedLoginUrl || config.loginUrl,
     };
+    // If dual mode is active and a second account was configured, attach it
+    if (dualMode && dualConfig) {
+      finalConfig.dualConfig = {
+        ...dualConfig,
+        loginUrl: dualConfig.loginUrl || "",
+      };
+    }
     onComplete(finalConfig);
   };
 
@@ -444,6 +466,35 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
                 </div>
               </div>
             )}
+
+            {/* Dual-Account Mode toggle */}
+            <div className="mb-3 flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
+              <div className="flex items-center gap-3">
+                <Shield size={16} className={dualMode ? "text-amber-500" : "text-on-surface-variant/40"} />
+                <div>
+                  <div className="text-[10px] font-medium text-on-surface dark:text-[#F0F0F5]">
+                    Dual-Account Mode (BOLA Testing)
+                  </div>
+                  <div className="text-[8px] text-on-surface-variant dark:text-[#8A8A9E]">
+                    {dualMode
+                      ? "Configure a second user account to test cross-account access control (BOLA/BOPLA)"
+                      : "Single account — no cross-account privilege escalation testing"}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDualMode(!dualMode)}
+                className={`relative w-10 h-5 rounded-full transition-all duration-300 ${
+                  dualMode ? "bg-amber-500" : "bg-surface-container-high dark:bg-[#2A2A35]"
+                }`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${
+                  dualMode ? "left-[20px]" : "left-0.5"
+                }`} />
+              </button>
+            </div>
+
             <div className="grid grid-cols-3 gap-3">
               {[
                 {
@@ -528,6 +579,120 @@ export default function AuthWizard({ targetUrl, onComplete, onSkip }: AuthWizard
             >
               Test Authentication
               <ChevronRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dual-Account: Step 2b — Select User B's auth method */}
+      {dualMode && dualStep === "method" && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Shield size={14} className="text-amber-500" />
+            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+              User B — Attacker Account
+            </span>
+          </div>
+          <p className="text-[9px] text-on-surface-variant/70 mb-3">
+            Configure a second account to test cross-account access. User A (owner) creates resources; User B (attacker) attempts to access them.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { method: "form" as AuthMethod, icon: <Lock size={18} />, label: "Form Login", desc: "Username & password", color: "text-primary" },
+              { method: "bearer" as AuthMethod, icon: <Key size={18} />, label: "Bearer Token", desc: "JWT or API token", color: "text-amber-500" },
+              { method: "cookie" as AuthMethod, icon: <Cookie size={18} />, label: "Session Cookie", desc: "Paste cookie string", color: "text-cyan-500" },
+            ].map((option) => (
+              <button
+                key={option.method}
+                type="button"
+                onClick={() => {
+                  setDualConfig({ type: option.method });
+                  setDualStep("configure");
+                }}
+                className="flex flex-col items-center gap-2 p-4 border border-outline-variant dark:border-[#ffffff10] rounded-xl hover:border-amber-500/30 hover:bg-amber-500/5 transition-all duration-300 group"
+              >
+                <span className={`${option.color} group-hover:scale-110 transition-transform`}>{option.icon}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface dark:text-[#F0F0F5]">{option.label}</span>
+                <span className="text-[9px] text-on-surface-variant text-center">{option.desc}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-between pt-2">
+            <button
+              type="button"
+              onClick={() => { setDualStep(null); setStep("configure"); }}
+              className="flex items-center gap-1 text-[10px] text-on-surface-variant hover:text-on-surface transition-colors font-body"
+            >
+              <ArrowLeft size={10} /> Back to User A
+            </button>
+            <button
+              type="button"
+              onClick={() => { setDualConfig(null); setDualStep(null); setStep("test"); testAuth(); }}
+              className="text-[10px] text-on-surface-variant hover:text-on-surface transition-colors font-body"
+            >
+              Skip User B — single account only
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dual-Account: Step 3b — Configure User B credentials */}
+      {dualMode && dualStep === "configure" && dualConfig && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Shield size={14} className="text-amber-500" />
+            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+              User B — Attacker Credentials
+            </span>
+          </div>
+          {dualConfig.type === "form" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5">Username / Email</label>
+                <input type="text" value={dualConfig.username || ""} onChange={(e) => setDualConfig({ ...dualConfig, username: e.target.value })}
+                  placeholder="attacker@example.com"
+                  className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5">Password</label>
+                <input type="password" value={dualConfig.password || ""} onChange={(e) => setDualConfig({ ...dualConfig, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all" />
+              </div>
+            </div>
+          )}
+          {dualConfig.type === "bearer" && (
+            <div>
+              <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5">Bearer Token (User B)</label>
+              <textarea value={dualConfig.token || ""} onChange={(e) => setDualConfig({ ...dualConfig, token: e.target.value })}
+                placeholder="eyJhbGciOiJIUzI1NiIs..."
+                rows={3}
+                className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all resize-none" />
+            </div>
+          )}
+          {dualConfig.type === "cookie" && (
+            <div>
+              <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1.5">Session Cookie (User B)</label>
+              <textarea value={dualConfig.cookie || ""} onChange={(e) => setDualConfig({ ...dualConfig, cookie: e.target.value })}
+                placeholder="session=abc123; token=xyz789"
+                rows={3}
+                className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant rounded-lg text-xs font-mono text-on-surface outline-none focus:border-primary transition-all resize-none" />
+            </div>
+          )}
+          <div className="flex justify-between pt-2">
+            <button
+              type="button"
+              onClick={() => setDualStep("method")}
+              className="flex items-center gap-1 text-[10px] text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              <ArrowLeft size={10} /> Change Method
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStep("test"); testAuth(); }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:opacity-90 transition-all"
+            >
+              Continue <ChevronRight size={12} />
             </button>
           </div>
         </div>

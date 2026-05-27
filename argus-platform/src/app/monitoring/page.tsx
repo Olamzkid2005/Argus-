@@ -79,9 +79,11 @@ interface CompliancePosture {
     total_findings: number;
     trend: string;
     computed_at: string;
+    framework_scores?: Record<string, { score: number; total_findings: number; critical_count: number; high_count: number; medium_count: number }>;
   }>;
   severity_counts: Record<string, number>;
   trend: Array<{ day: string; avg_score: number }>;
+  framework_averages?: Record<string, number>;
 }
 
 const severityBg: Record<string, string> = {
@@ -317,6 +319,53 @@ export default function MonitoringPage() {
                     <div className="text-[9px] font-medium text-primary/70 uppercase tracking-wider mt-0.5">Total</div>
                   </div>
                 </div>
+
+                {/* Per-Framework Breakdown */}
+                {posture.framework_averages && Object.keys(posture.framework_averages).length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {Object.entries(posture.framework_averages).map(([fw, score]) => {
+                      const label = fw.replace(/_/g, " ").toUpperCase();
+                      const color = score >= 80 ? "text-green-400 border-green-500/20 bg-green-500/5"
+                        : score >= 60 ? "text-amber-400 border-amber-500/20 bg-amber-500/5"
+                        : "text-red-400 border-red-500/20 bg-red-500/5";
+                      return (
+                        <div key={fw} className={`p-3 rounded-xl border ${color}`}>
+                          <div className="text-[9px] font-bold uppercase tracking-wider opacity-70">{label}</div>
+                          <div className="text-lg font-headline font-bold mt-0.5">{score}</div>
+                          <div className="text-[8px] opacity-50 mt-0.5">avg score</div>
+                        </div>
+                      );
+                    })}
+                    {/* Per-engagement framework drill-down */}
+                    {posture.engagements.filter(e => e.framework_scores).length > 0 && (
+                      <details className="col-span-full">
+                        <summary className="text-[9px] text-primary cursor-pointer hover:underline font-bold uppercase tracking-wider">
+                          Per-engagement framework details
+                        </summary>
+                        <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                          {posture.engagements.filter(e => e.framework_scores).map(eng => (
+                            <div key={eng.engagement_id} className="p-2 rounded-lg bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff08]">
+                              <div className="text-[9px] font-mono text-on-surface-variant truncate mb-1">
+                                {eng.target_url?.replace(/^https?:\/\//, "") || "N/A"}
+                              </div>
+                              <div className="flex gap-2 flex-wrap">
+                                {Object.entries(eng.framework_scores || {}).map(([fw, fwData]) => (
+                                  <span key={fw} className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${
+                                    fwData.score >= 80 ? "bg-green-500/10 text-green-400"
+                                      : fwData.score >= 60 ? "bg-amber-500/10 text-amber-400"
+                                      : "bg-red-500/10 text-red-400"
+                                  }`}>
+                                    {fw.replace(/_/g, " ").toUpperCase().slice(0, 8)} {Math.round(fwData.score)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )}
 
                 {/* Trend Chart + Engagements */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

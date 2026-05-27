@@ -59,11 +59,32 @@ export async function GET(req: NextRequest) {
         [session.user.orgId],
       );
 
-      const engagements = orgResult.rows || [];
+      const engagements = (orgResult.rows || []).map((r: Record<string, unknown>) => ({
+        ...r,
+        framework_scores: typeof r.framework_scores === "string"
+          ? JSON.parse(r.framework_scores as string)
+          : r.framework_scores,
+      }));
       let avgScore = 100.0;
       if (engagements.length > 0) {
         const total = engagements.reduce((sum, r) => sum + parseFloat(r.composite_score || 100), 0);
         avgScore = Math.round((total / engagements.length) * 10) / 10;
+      }
+
+      // Aggregate per-framework scores across all engagements
+      const frameworkTotals: Record<string, { score: number; count: number }> = {};
+      for (const eng of engagements) {
+        const fw = eng.framework_scores as Record<string, { score: number }> | undefined;
+        if (!fw) continue;
+        for (const [fwName, fwData] of Object.entries(fw)) {
+          if (!frameworkTotals[fwName]) frameworkTotals[fwName] = { score: 0, count: 0 };
+          frameworkTotals[fwName].score += Number(fwData.score) || 0;
+          frameworkTotals[fwName].count += 1;
+        }
+      }
+      const frameworkAverages: Record<string, number> = {};
+      for (const [fwName, data] of Object.entries(frameworkTotals)) {
+        frameworkAverages[fwName] = Math.round((data.score / data.count) * 10) / 10;
       }
 
       // Count by severity across all engagements
@@ -102,6 +123,7 @@ export async function GET(req: NextRequest) {
         engagements,
         severity_counts: severityCounts,
         trend: trendResult.rows || [],
+        framework_averages: frameworkAverages,
         computed_at: new Date().toISOString(),
       });
     } finally {

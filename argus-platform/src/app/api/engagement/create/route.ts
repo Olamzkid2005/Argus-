@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       scanMode,
       bugBounty,
       authConfig,
+      dualAuthConfig,
     } = body;
 
     // Default authorization proof if not provided (NOT NULL column)
@@ -159,6 +160,45 @@ export async function POST(req: NextRequest) {
         effectiveAuthConfig = authConfig;
       }
 
+      // Validate dual auth config if provided
+      let effectiveDualAuthConfig = null;
+      if (dualAuthConfig) {
+        const validTypes = ["form", "bearer", "cookie"];
+        if (!validTypes.includes(dualAuthConfig.type)) {
+          return createErrorResponse(
+            `dualAuthConfig.type must be one of: ${validTypes.join(", ")}`,
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        if (dualAuthConfig.type === "form" && (!dualAuthConfig.username || !dualAuthConfig.password)) {
+          return createErrorResponse(
+            "dualAuthConfig requires username and password for form-based auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        if (dualAuthConfig.type === "bearer" && !dualAuthConfig.token) {
+          return createErrorResponse(
+            "dualAuthConfig requires token for bearer auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        if (dualAuthConfig.type === "cookie" && !dualAuthConfig.cookie) {
+          return createErrorResponse(
+            "dualAuthConfig requires cookie string for cookie auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        effectiveDualAuthConfig = dualAuthConfig;
+      }
+
       const engagementResult = await client.query(
         `INSERT INTO engagements 
          (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
@@ -242,6 +282,7 @@ export async function POST(req: NextRequest) {
             scan_mode: scanMode || "agent",
             bug_bounty_mode: bugBounty === true,
             auth_config: effectiveAuthConfig,
+            dual_auth_config: effectiveDualAuthConfig,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });

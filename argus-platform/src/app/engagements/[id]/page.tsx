@@ -46,6 +46,10 @@ interface Engagement {
   max_cycles?: number;
   current_cycles?: number;
   current_depth?: number;
+  agent_mode?: boolean;
+  scan_mode?: string;
+  bug_bounty_mode?: boolean;
+  auth_config?: Record<string, unknown> | null;
 }
 
 interface Finding {
@@ -274,7 +278,8 @@ export default function EngagementDetailPage() {
     if (!templateName.trim()) return;
     setSavingTemplate(true);
     try {
-      const config = {
+      const authCfg = engagement?.auth_config;
+      const config: Record<string, unknown> = {
         target_url_pattern: engagement?.target_url || "",
         scan_type: engagement?.scan_type || "url",
         aggressiveness: engagement?.scan_aggressiveness || "default",
@@ -282,6 +287,10 @@ export default function EngagementDetailPage() {
         scan_mode: engagement?.scan_mode || "agent",
         bug_bounty_mode: engagement?.bug_bounty_mode || false,
       };
+      // Save auth config type if configured (strip credentials for security)
+      if (authCfg && typeof authCfg === "object" && authCfg.type) {
+        config.auth_config_type = authCfg.type;
+      }
       const res = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -488,9 +497,12 @@ export default function EngagementDetailPage() {
                     <span className="text-[9px] font-mono bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded">AI Agent</span>
                   )}
                   <span className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">{engagement?.scan_mode || "agent"} mode</span>
+                  {engagement?.auth_config?.type && (
+                    <span className="text-[9px] font-mono bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded">auth: {String(engagement.auth_config.type)}</span>
+                  )}
                 </div>
                 <p className="text-[9px] text-on-surface-variant/60 mt-2">
-                  Target URL pattern, scan type, aggressiveness, agent mode, and scan mode
+                  Target URL, scan type, aggressiveness, agent mode, scan mode, and auth config type
                 </p>
               </div>
 

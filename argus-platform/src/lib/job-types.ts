@@ -38,6 +38,8 @@ export interface JobMessage {
   bug_bounty_mode?: boolean;
   /** Authentication config for authenticated scanning */
   auth_config?: Record<string, unknown> | null;
+  /** Second auth config for dual-account BOLA/BOPLA testing (DualAuthScanner) */
+  dual_auth_config?: Record<string, unknown> | null;
   trace_id: string;
   created_at: string;
   platform?: string;

@@ -500,8 +500,8 @@ class Orchestrator:
         return self._update_finding_jsonb(finding_id, "remediation_fix", fix_data, log_label="remediation fix")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
-                            authorized_scope=None, auth_config=None, bug_bounty_mode=False,
-                            budget=None):
+                            authorized_scope=None, auth_config=None, dual_auth_config=None,
+                            bug_bounty_mode=False, budget=None):
         from agent import AgentResult, create_phase_agent
         from database.repositories.agent_decision_repository import (
             AgentDecisionRepository,
@@ -594,6 +594,7 @@ class Orchestrator:
                 logger.warning(f"Agent scan failed for {target}: {e} — falling back to deterministic", exc_info=True)
                 per_target_tools.append(set())
                 fallback = execute_scan_pipeline(self, [target], budget, aggressiveness, auth_config,
+                                                  dual_auth_config=dual_auth_config,
                                                   tech_stack=recon_context.tech_stack if recon_context else None)
                 for f in fallback:
                     norm = self._normalize_finding(f, f.get("source_tool", "fallback"))
@@ -627,6 +628,7 @@ class Orchestrator:
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         recon_context = job.get("recon_context") or load_recon_context(self.engagement_id)
         auth_config = job.get("auth_config", {})
+        dual_auth_config = job.get("dual_auth_config") or None  # None = skip DualAuthScanner
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
         # Respect user-configured scan mode and agent mode.
@@ -650,6 +652,7 @@ class Orchestrator:
             tech_stack = recon_context.tech_stack if recon_context else None
             findings = execute_scan_pipeline(
                 self, targets, budget, scan_aggressiveness, auth_config,
+                dual_auth_config=dual_auth_config,
                 tech_stack=tech_stack, recon_context=recon_context,
             )
         else:
@@ -661,6 +664,7 @@ class Orchestrator:
             findings = self._run_scan_with_fallback(
                 targets, recon_context, budget,
                 scan_aggressiveness, auth_config, bug_bounty_mode,
+                dual_auth_config=dual_auth_config,
             )
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
@@ -689,6 +693,7 @@ class Orchestrator:
     def _run_scan_with_fallback(
         self, targets: list[str], recon_context,
         budget: dict, aggressiveness: str, auth_config: dict, bug_bounty_mode: bool = False,
+        dual_auth_config: dict | None = None,
     ) -> list[dict]:
         """
         Agent-first scan with deterministic fallback.
@@ -709,7 +714,8 @@ class Orchestrator:
         try:
             findings = self.run_scan_with_agent(
                 targets, recon_context, aggressiveness,
-                auth_config=auth_config, bug_bounty_mode=bug_bounty_mode, budget=budget,
+                auth_config=auth_config, dual_auth_config=dual_auth_config,
+                bug_bounty_mode=bug_bounty_mode, budget=budget,
             )
             from feature_flags import is_enabled as _ff_enabled
             agent_tried: set[str] = set()
@@ -725,6 +731,7 @@ class Orchestrator:
             tech_stack = recon_context.tech_stack if recon_context else None
             deterministic_findings = execute_scan_pipeline(
                 self, targets, budget, aggressiveness, auth_config,
+                dual_auth_config=dual_auth_config,
                 tech_stack=tech_stack,
                 skip_tools=agent_tried,
                 recon_context=recon_context,

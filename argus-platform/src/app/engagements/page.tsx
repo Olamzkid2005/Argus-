@@ -174,6 +174,7 @@ export default function EngagementsPage() {
 
   // Auth Wizard state
   const [authConfig, setAuthConfig] = useState<Record<string, unknown> | null>(null);
+  const [dualAuthConfig, setDualAuthConfig] = useState<Record<string, unknown> | null>(null);
   const [showAuthWizard, setShowAuthWizard] = useState(false);
 
   // Engagement Templates state
@@ -409,6 +410,7 @@ export default function EngagementsPage() {
           scanMode: scanMode,
           bugBounty: bugBounty,
           authConfig: authConfig,
+          dualAuthConfig: dualAuthConfig,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: validatedScope,
         }),
@@ -928,6 +930,12 @@ Examples:
                       if (cfg.scan_mode && typeof cfg.scan_mode === "string") {
                         setScanMode(cfg.scan_mode as "agent" | "swarm");
                       }
+                      // Restore auth config type hint from template
+                      if (cfg.auth_config_type && typeof cfg.auth_config_type === "string") {
+                        // Open Auth Wizard with the configured type pre-selected
+                        // The user will need to enter credentials (security: never stored in templates)
+                        setShowAuthWizard(true);
+                      }
                     }}
                     className="w-full px-3 py-2.5 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg text-xs font-mono text-on-surface dark:text-[#F0F0F5] outline-none focus:border-primary transition-all duration-200 appearance-none cursor-pointer"
                   >
@@ -1115,12 +1123,14 @@ Examples:
                       <div>
                         <div className="text-xs font-medium text-on-surface dark:text-[#F0F0F5]">
                           {authConfig
-                            ? `Auth configured — ${authConfig.type === "form" ? "form login" : authConfig.type === "bearer" ? "bearer token" : "session cookie"}`
+                            ? `Auth configured — ${authConfig.type === "form" ? "form login" : authConfig.type === "bearer" ? "bearer token" : "session cookie"}${dualAuthConfig ? " + dual account" : ""}`
                             : "No authentication configured"}
                         </div>
                         <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E]">
                           {authConfig
-                            ? "Scan will access authenticated areas and test for IDOR, privilege escalation, and BOLA"
+                            ? dualAuthConfig
+                              ? "Cross-account BOLA/BOPLA testing enabled — User A (owner) + User B (attacker)"
+                              : "Scan will access authenticated areas and test for IDOR, privilege escalation, and BOLA"
                             : "Most web apps have login pages. Authenticated scanning finds 3x more vulnerabilities."}
                         </div>
                       </div>
@@ -1161,11 +1171,17 @@ Examples:
                     <AuthWizard
                       targetUrl={target}
                       onComplete={(config) => {
-                        setAuthConfig(config as unknown as Record<string, unknown>);
+                        // Extract dualConfig if present, strip it from the main config
+                        const rawConfig = config as unknown as Record<string, unknown>;
+                        const dualCfg = rawConfig.dualConfig as Record<string, unknown> | undefined;
+                        const { dualConfig: _, ...mainConfig } = rawConfig;
+                        setAuthConfig(mainConfig);
+                        setDualAuthConfig(dualCfg || null);
                         setShowAuthWizard(false);
                       }}
                       onSkip={() => {
                         setAuthConfig(null);
+                        setDualAuthConfig(null);
                         setShowAuthWizard(false);
                       }}
                     />
