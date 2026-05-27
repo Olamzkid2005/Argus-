@@ -920,6 +920,7 @@ class Orchestrator:
             findings_map: dict[str, dict] = {}
             conn = None
             cursor = None
+            db = None
             try:
                 from database.connection import get_db
                 db = get_db()
