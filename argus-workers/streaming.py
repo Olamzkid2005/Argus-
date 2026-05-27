@@ -623,6 +623,16 @@ class StreamingFindingEmitter:
             )
 
 
+# In-memory dedup set for emit_finding_rt to prevent duplicate
+# findings from being emitted via SSE/WebSocket.
+_rt_emitted_fingerprints: set[str] = set()
+_rt_fingerprints_lock = threading.Lock()
+
+
+def _rt_fingerprint(finding_type: str, endpoint: str) -> str:
+    return f"{finding_type}|{endpoint}"
+
+
 def emit_finding_rt(
     engagement_id: str,
     finding: dict,
@@ -639,6 +649,9 @@ def emit_finding_rt(
       2. WebSocket (Redis pub/sub) — used by the findings list and monitoring pages
 
     This is intentionally non-fatal: if emission fails, the scan continues.
+
+    In-flight dedup: uses a module-level fingerprint set keyed by type|endpoint
+    so the same finding is never emitted more than once per process lifetime.
     """
     if not engagement_id:
         return
@@ -648,6 +661,14 @@ def emit_finding_rt(
     endpoint = finding.get("endpoint", "")
     confidence = finding.get("confidence", 0.5)
     finding_id = finding.get("_id", finding.get("id", ""))
+
+    # In-flight dedup: skip if we've already emitted this type+endpoint combo
+    fp = _rt_fingerprint(finding_type, endpoint)
+    with _rt_fingerprints_lock:
+        if fp in _rt_emitted_fingerprints:
+            logger.log(5, "Dedup emit_finding_rt: %s", fp)
+            return
+        _rt_emitted_fingerprints.add(fp)
 
     # 1. SSE emission (in-process stream manager)
     try:

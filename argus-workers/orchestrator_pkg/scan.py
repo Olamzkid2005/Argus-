@@ -197,8 +197,11 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
             for p in parsed:
                 normalized = ctx._normalize_finding(p, tool_name)
                 if normalized:
-                    emit_finding_rt(ctx.engagement_id, normalized, tool_name)
-                    all_findings.append(normalized)
+                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                    if fp not in _emitted_fingerprints:
+                        _emitted_fingerprints.add(fp)
+                        emit_finding_rt(ctx.engagement_id, normalized, tool_name)
+                        all_findings.append(normalized)
             success = True
         return tool_name, success, result.stdout if success else None
     except Exception as e:
@@ -296,6 +299,9 @@ def execute_scan_tools(
         
         Findings are emitted in real-time as nuclei streams them,
         giving analysts visibility into each finding as it's discovered.
+        
+        Dedup: fingerprints by type+endpoint to prevent duplicate emissions
+        when nuclei reports the same finding across multiple templates.
         """
         line = line.strip()
         if not line:
@@ -313,9 +319,13 @@ def execute_scan_tools(
             if validated:
                 normalized = ctx._normalize_finding(validated, "nuclei")
                 if normalized:
-                    # Emit in real-time as nuclei streams findings
-                    emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
-                    all_findings.append(normalized)
+                    # In-flight dedup: check fingerprint before emitting
+                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                    if fp not in _emitted_fingerprints:
+                        _emitted_fingerprints.add(fp)
+                        # Emit in real-time as nuclei streams findings
+                        emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
+                        all_findings.append(normalized)
         except Exception as e:
             logger.warning(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
 

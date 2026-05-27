@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useEngagementEvents } from "@/lib/use-engagement-events";
 import type { AgentDecisionEvent } from "@/lib/websocket-events";
+import AuthWizard from "@/components/ui-custom/AuthWizard";
 
 interface Engagement {
   id: string;
@@ -124,6 +125,8 @@ export default function EngagementDetailPage() {
     chain_exploit_script: Record<string, unknown> | null;
   }>>([]);
   const [attackPathsLoading, setAttackPathsLoading] = useState(true);
+  const [showAuthWizard, setShowAuthWizard] = useState(false);
+  const [updatingAuth, setUpdatingAuth] = useState(false);
 
   // Real-time events for agent reasoning feed
   const { events } = useEngagementEvents({
@@ -320,6 +323,33 @@ export default function EngagementDetailPage() {
       showToast("error", "Failed to save template");
     } finally {
       setSavingTemplate(false);
+    }
+  };
+
+  const handleUpdateAuth = async (config: Record<string, unknown> | null, dualConfig: Record<string, unknown> | null) => {
+    setUpdatingAuth(true);
+    try {
+      const res = await fetch(`/api/engagement/${engagementId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auth_config: config,
+          dual_auth_config: dualConfig,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEngagement(data.engagement);
+        showToast("success", "Auth configuration updated");
+        setShowAuthWizard(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast("error", err.error || "Failed to update auth config");
+      }
+    } catch {
+      showToast("error", "Failed to update auth config");
+    } finally {
+      setUpdatingAuth(false);
     }
   };
 
@@ -580,6 +610,26 @@ export default function EngagementDetailPage() {
                 <span className="text-xs text-on-surface mt-0.5 block capitalize">{engagement?.scan_aggressiveness || "-"}</span>
               </div>
               <div>
+                <span className="text-[10px] font-mono text-on-surface-variant block">Auth Config</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {Boolean((engagement?.auth_config as Record<string, string | undefined> | null)?.type) ? (
+                    <span className="text-[10px] font-mono bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded border border-green-500/20">
+                      {String((engagement?.auth_config as Record<string, string>)?.type)}
+                      {(engagement?.dual_auth_config as Record<string, string | undefined> | null)?.type ? " + dual" : ""}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-on-surface-variant/60">None</span>
+                  )}
+                  <button
+                    onClick={() => setShowAuthWizard(true)}
+                    disabled={updatingAuth}
+                    className="text-[9px] font-mono text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                  >
+                    {updatingAuth ? "Saving..." : "Edit"}
+                  </button>
+                </div>
+              </div>
+              <div>
                 <span className="text-[10px] font-mono text-on-surface-variant block">Created</span>
                 <span className="text-xs text-on-surface mt-0.5 block">
                   {engagement?.created_at ? new Date(engagement.created_at).toLocaleString() : "-"}
@@ -632,6 +682,30 @@ export default function EngagementDetailPage() {
             </div>
           </motion.div>
         </div>
+
+        {/* Auth Wizard — inline when active */}
+        {showAuthWizard && engagement && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="col-span-12 lg:col-span-4"
+          >
+            <div className="bg-surface dark:bg-surface-container-low rounded-xl border border-outline-variant dark:border-outline/30 p-5">
+              <AuthWizard
+                targetUrl={engagement.target_url}
+                onComplete={(config) => {
+                  const rawConfig = config as unknown as Record<string, unknown>;
+                  const dualCfg = rawConfig.dualConfig as Record<string, unknown> | undefined;
+                  const { dualConfig: _, ...mainConfig } = rawConfig;
+                  handleUpdateAuth(mainConfig, dualCfg || null);
+                }}
+                onSkip={() => {
+                  setShowAuthWizard(false);
+                }}
+              />
+            </div>
+          </motion.div>
+        )}
 
         {/* Right column — Findings + Timeline */}
         <div className="col-span-12 lg:col-span-8 space-y-4">

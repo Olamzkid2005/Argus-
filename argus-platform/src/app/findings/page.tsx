@@ -782,7 +782,7 @@ export default function FindingsPage() {
   const attackPathFindingIds = useMemo(() => {
     const ids = new Set<string>();
     for (const path of attackPaths) {
-      const nodes = path.path_nodes || [];
+      const nodes = path.path_nodes?.nodes || [];
       for (const node of nodes) {
         if (node.id) ids.add(node.id);
       }
