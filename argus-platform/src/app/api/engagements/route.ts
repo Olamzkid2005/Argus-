@@ -134,9 +134,14 @@ export async function GET(req: NextRequest) {
       client.release();
     }
   } catch (error) {
-    const err = error as Error;
-    log.error("Engagements API error:", err.message || String(err));
-    if (err.message === "Unauthorized") {
+    // H-v4-01: Normalize error safely — error may be a string or unknown type
+    const errMsg = typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    log.error("Engagements API error:", errMsg);
+    if (errMsg === "Unauthorized") {
       return createErrorResponse(
         "Unauthorized",
         ErrorCodes.UNAUTHORIZED,

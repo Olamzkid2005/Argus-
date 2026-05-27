@@ -184,11 +184,20 @@ def _is_reachable(target: str) -> bool:
         return False
 
 
-# In-memory dedup set to prevent emitting duplicate findings during streaming
-# Protected by _emitted_fingerprints_lock because _on_nuclei_line and
-# _run_scan_tool can run concurrently under ThreadPoolExecutor.
-_emitted_fingerprints: set[str] = set()
+# Per-engagement in-memory dedup to prevent emitting duplicate findings during
+# streaming across concurrent engagements (H-v4-05). Previously a single module-
+# level set was used, causing findings from one engagement to be silently
+# suppressed in another engagement scanning the same target.
+_emitted_fingerprints: dict[str, set[str]] = {}
 _emitted_fingerprints_lock = threading.Lock()
+
+
+def _get_fingerprint_set(engagement_id: str) -> set[str]:
+    """Get or create a per-engagement fingerprint dedup set."""
+    with _emitted_fingerprints_lock:
+        if engagement_id not in _emitted_fingerprints:
+            _emitted_fingerprints[engagement_id] = set()
+        return _emitted_fingerprints[engagement_id]
 
 _streaming_tools: dict[str, dict] = {
     "dalfox": {"flag": "--json", "json_lines": True},
@@ -218,10 +227,10 @@ def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
             normalized = ctx._normalize_finding(item, tool_name)
             if normalized:
                 fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool_name)}"
-                with _emitted_fingerprints_lock:
-                    if fp in _emitted_fingerprints:
-                        continue
-                    _emitted_fingerprints.add(fp)
+                fps = _get_fingerprint_set(ctx.engagement_id)
+                if fp in fps:
+                    continue
+                fps.add(fp)
                 emit_finding_rt(ctx.engagement_id, normalized, tool_name)
                 all_findings.append(normalized)
 
@@ -255,10 +264,10 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                     normalized = ctx._normalize_finding(p, tool_name)
                     if normalized:
                         fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool_name)}"
-                        with _emitted_fingerprints_lock:
-                            if fp in _emitted_fingerprints:
-                                continue
-                            _emitted_fingerprints.add(fp)
+                        fps = _get_fingerprint_set(ctx.engagement_id)
+                        if fp in fps:
+                            continue
+                        fps.add(fp)
                         emit_finding_rt(ctx.engagement_id, normalized, tool_name)
                         all_findings.append(normalized)
                 success = True
@@ -299,10 +308,11 @@ def execute_scan_tools(
 
     slog = ScanLogger("scan_pipeline", engagement_id=getattr(ctx, 'engagement_id', ''))
     slog.phase_header("EXECUTE SCAN TOOLS", targets=f"{len(targets)} target(s)", aggressiveness=aggressiveness)
-    # Clear per-scan dedup fingerprints to prevent unbounded memory growth
-    # across multiple execute_scan_tools invocations.
+    # Clear per-engagement dedup fingerprints to prevent unbounded memory growth
+    # across multiple execute_scan_tools invocations and cross-engagement pollution (H-v4-05).
+    engagement_id = getattr(ctx, 'engagement_id', '')
     with _emitted_fingerprints_lock:
-        _emitted_fingerprints.clear()
+        _emitted_fingerprints.pop(engagement_id, None)
     all_findings = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     _skip = set(skip_tools or [])
@@ -317,7 +327,7 @@ def execute_scan_tools(
     # This ensures the deterministic path enforces scope even when the agent
     # path is not active (previously scope was only checked in LLM agent path).
     engagement_id = getattr(ctx, 'engagement_id', '')
-    if engagement_id:
+    if engagement_id and True:
         try:
             from tools.scope_validator import validate_target_scope
             scoped_targets = []
@@ -384,10 +394,10 @@ def execute_scan_tools(
                 if normalized:
                     # In-flight dedup: check fingerprint before emitting
                     fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', 'nuclei')}"
-                    with _emitted_fingerprints_lock:
-                        if fp in _emitted_fingerprints:
-                            return
-                        _emitted_fingerprints.add(fp)
+                    fps = _get_fingerprint_set(ctx.engagement_id)
+                    if fp in fps:
+                        return
+                    fps.add(fp)
                     # Emit in real-time as nuclei streams findings
                     emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
                     all_findings.append(normalized)
@@ -417,10 +427,10 @@ def execute_scan_tools(
                 normalized = ctx._normalize_finding(finding, tool_name)
                 if normalized:
                     fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool_name)}"
-                    with _emitted_fingerprints_lock:
-                        if fp in _emitted_fingerprints:
-                            return True
-                        _emitted_fingerprints.add(fp)
+                    fps = _get_fingerprint_set(ctx.engagement_id)
+                    if fp in fps:
+                        return True
+                    fps.add(fp)
                     emit_finding_rt(ctx.engagement_id, normalized, tool_name)
                     all_findings.append(normalized)
             else:
@@ -656,10 +666,10 @@ def execute_scan_tools(
             normalized = ctx._normalize_finding(finding, tool)
             if normalized:
                 fingerprint = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool)}"
-                with _emitted_fingerprints_lock:
-                    if fingerprint in _emitted_fingerprints:
-                        return
-                    _emitted_fingerprints.add(fingerprint)
+                fps = _get_fingerprint_set(eng_id)
+                if fingerprint in fps:
+                    return
+                fps.add(fingerprint)
                 emit_finding_rt(eng_id, normalized, tool)
                 all_findings.append(normalized)
 

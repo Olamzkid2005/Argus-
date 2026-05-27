@@ -1,4 +1,4 @@
-import { Pool, PoolConfig } from "pg";
+import { Pool, PoolClient, PoolConfig } from "pg";
 import { log } from "@/lib/logger";
 
 /**
@@ -211,7 +211,7 @@ export async function query<T = unknown>(
  * Use this when you need transaction support
  */
 export async function withClient<T>(
-  callback: (client: Pool) => Promise<T>,
+  callback: (client: PoolClient) => Promise<T>,
   options?: { orgId?: string }
 ): Promise<T> {
   let client;
@@ -229,7 +229,7 @@ export async function withClient<T>(
         log.db.queryError("set_tenant_context", error);
       }
     }
-    return await callback(client as unknown as Pool);
+    return await callback(client);
   } finally {
     // Reset tenant context to prevent cross-org data leakage (C-v3-03)
     if (options?.orgId && process.env.PGBOUNCER_MODE !== "transaction") {
@@ -247,7 +247,7 @@ export async function withClient<T>(
  * Set tenant context for the current connection
  */
 export async function setTenantContext(
-  client: InstanceType<typeof Pool>,
+  client: PoolClient,
   orgId: string
 ): Promise<void> {
   if (process.env.PGBOUNCER_MODE === "transaction") return;
@@ -262,7 +262,7 @@ export async function setTenantContext(
  * Reset tenant context
  */
 export async function resetTenantContext(
-  client: InstanceType<typeof Pool>
+  client: PoolClient
 ): Promise<void> {
   if (process.env.PGBOUNCER_MODE === "transaction") return;
   try {
