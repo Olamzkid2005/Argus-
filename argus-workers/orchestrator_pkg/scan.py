@@ -17,7 +17,12 @@ from config.constants import (
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
-from streaming import emit_finding_rt, emit_tool_complete, emit_tool_start
+from streaming import (
+    clear_engagement_rt_fingerprints,
+    emit_finding_rt,
+    emit_tool_complete,
+    emit_tool_start,
+)
 from tools.web_scanner import WebScanner
 from utils.logging_utils import ScanLogger
 
@@ -212,7 +217,7 @@ def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
         if isinstance(item, dict):
             normalized = ctx._normalize_finding(item, tool_name)
             if normalized:
-                fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool_name)}"
                 with _emitted_fingerprints_lock:
                     if fp in _emitted_fingerprints:
                         continue
@@ -249,7 +254,7 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                 for p in parsed:
                     normalized = ctx._normalize_finding(p, tool_name)
                     if normalized:
-                        fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                        fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool_name)}"
                         with _emitted_fingerprints_lock:
                             if fp in _emitted_fingerprints:
                                 continue
@@ -294,6 +299,10 @@ def execute_scan_tools(
 
     slog = ScanLogger("scan_pipeline", engagement_id=getattr(ctx, 'engagement_id', ''))
     slog.phase_header("EXECUTE SCAN TOOLS", targets=f"{len(targets)} target(s)", aggressiveness=aggressiveness)
+    # Clear per-scan dedup fingerprints to prevent unbounded memory growth
+    # across multiple execute_scan_tools invocations.
+    with _emitted_fingerprints_lock:
+        _emitted_fingerprints.clear()
     all_findings = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     _skip = set(skip_tools or [])
@@ -374,7 +383,7 @@ def execute_scan_tools(
                 normalized = ctx._normalize_finding(validated, "nuclei")
                 if normalized:
                     # In-flight dedup: check fingerprint before emitting
-                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', 'nuclei')}"
                     with _emitted_fingerprints_lock:
                         if fp in _emitted_fingerprints:
                             return
@@ -407,7 +416,7 @@ def execute_scan_tools(
                     return True
                 normalized = ctx._normalize_finding(finding, tool_name)
                 if normalized:
-                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool_name)}"
                     with _emitted_fingerprints_lock:
                         if fp in _emitted_fingerprints:
                             return True
@@ -646,7 +655,7 @@ def execute_scan_tools(
         def _stream_finding(eng_id, finding, tool):
             normalized = ctx._normalize_finding(finding, tool)
             if normalized:
-                fingerprint = f"{normalized.get('type')}|{normalized.get('endpoint')}"
+                fingerprint = f"{normalized.get('type')}|{normalized.get('endpoint')}|{normalized.get('source_tool', tool)}"
                 with _emitted_fingerprints_lock:
                     if fingerprint in _emitted_fingerprints:
                         return
@@ -818,6 +827,11 @@ def execute_scan_tools(
                 logger.warning(f"WebSocketScanner failed for {target}: {e}")
 
         slog.target_complete(target, findings=len(all_findings))
+
+    # Clean up per-engagement RT fingerprints to prevent unbounded memory growth
+    eng_id = getattr(ctx, 'engagement_id', '')
+    if eng_id:
+        clear_engagement_rt_fingerprints(eng_id)
 
     slog.info(f"Scan pipeline complete: {len(all_findings)} total findings across {len(targets)} targets")
     return all_findings

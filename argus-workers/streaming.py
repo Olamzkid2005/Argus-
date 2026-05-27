@@ -673,6 +673,16 @@ def _rt_fingerprint(finding_type: str, endpoint: str, source_tool: str = "") -> 
     return f"{finding_type}|{endpoint}|{source_tool}"
 
 
+def clear_engagement_rt_fingerprints(engagement_id: str) -> None:
+    """Remove stored fingerprints for a completed engagement.
+
+    Prevents unbounded memory growth in _rt_emitted_fingerprints across
+    multiple scan engagements. Safe to call multiple times.
+    """
+    with _rt_fingerprints_lock:
+        _rt_emitted_fingerprints.pop(engagement_id, None)
+
+
 def emit_finding_rt(
     engagement_id: str,
     finding: dict,
