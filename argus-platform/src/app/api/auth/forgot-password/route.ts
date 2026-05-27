@@ -46,56 +46,52 @@ export async function POST(req: Request) {
       );
     }
 
+    // Generate a reset token regardless of whether user exists
+    // to prevent timing-based email enumeration (H-v3-07)
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = await bcrypt.hash(resetToken, 12);
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
     // Check if user exists
     const userResult = await pool.query(
       "SELECT id, name FROM users WHERE email = $1",
       [email.toLowerCase()]
     );
 
-    if (userResult.rows.length === 0) {
-      // Don't reveal if email exists for security
-      return NextResponse.json(
-        { message: "If an account exists, a reset email has been sent" },
-        { status: 200 }
+    const userExists = userResult.rows.length > 0;
+
+    if (userExists) {
+      // Rate limiting by email (only if user exists)
+      const emailAllowed = await checkRateLimit(email.toLowerCase(), MAX_REQUESTS_PER_EMAIL);
+      if (!emailAllowed) {
+        return NextResponse.json(
+          { message: "Too many requests. Please try again later." },
+          { status: 429 }
+        );
+      }
+
+      const user = userResult.rows[0];
+
+      // Send password reset email FIRST — only store token if delivery succeeds
+      const emailResult = await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+      if (!emailResult.success) {
+        console.error("Failed to send password reset email:", emailResult.error);
+        return NextResponse.json(
+          { message: "Unable to send reset email. Please try again later." },
+          { status: 500 }
+        );
+      }
+
+      // Store hashed token in database ONLY after email sent successfully
+      await pool.query(
+        `UPDATE users 
+         SET reset_token = $1, reset_token_expires_at = $2 
+         WHERE id = $3`,
+        [hashedToken, resetTokenExpiry, user.id]
       );
     }
 
-    // Rate limiting by email (only if user exists)
-    const emailAllowed = await checkRateLimit(email.toLowerCase(), MAX_REQUESTS_PER_EMAIL);
-    if (!emailAllowed) {
-      return NextResponse.json(
-        { message: "Too many requests. Please try again later." },
-        { status: 429 }
-      );
-    }
-
-    const user = userResult.rows[0];
-
-    // Generate cryptographically secure token
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
-
-    // Send password reset email FIRST — only store token if delivery succeeds
-    const emailResult = await sendPasswordResetEmail(email.toLowerCase(), resetToken);
-    if (!emailResult.success) {
-      console.error("Failed to send password reset email:", emailResult.error);
-      return NextResponse.json(
-        { message: "Unable to send reset email. Please try again later." },
-        { status: 500 }
-      );
-    }
-
-    // Hash token before storing (treat like password)
-    const hashedToken = await bcrypt.hash(resetToken, 12);
-
-    // Store hashed token in database ONLY after email sent successfully
-    await pool.query(
-      `UPDATE users 
-       SET reset_token = $1, reset_token_expires_at = $2 
-       WHERE id = $3`,
-      [hashedToken, resetTokenExpiry, user.id]
-    );
-
+    // Always return the same response to prevent email enumeration
     return NextResponse.json(
       { message: "If an account exists, a reset email has been sent" },
       { status: 200 }

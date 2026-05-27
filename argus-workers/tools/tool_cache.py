@@ -154,15 +154,39 @@ class ToolCache:
             try:
                 self._validate_download_url(download_url)
                 temp_dir = tempfile.mkdtemp()
+                dl_path = f"{temp_dir}/{tool_name}"
                 result = subprocess.run(  # noqa: S603 — safe: list form, URL is validated by _validate_download_url()
-                    ["curl", "-L", "-o", f"{temp_dir}/{tool_name}", download_url],  # noqa: S607
+                    ["curl", "-L", "-o", dl_path, download_url],  # noqa: S607
                     capture_output=True,
                     text=True,
                     timeout=300
                 )
                 if result.returncode == 0:
+                    # H-v3-16: Verify downloaded file integrity
+                    dl_path_obj = Path(dl_path)
+                    if not dl_path_obj.exists() or dl_path_obj.stat().st_size < 1024:
+                        slog.warn(f"Downloaded {tool_name} is too small or missing — possible corrupt download")
+                        logger.warning("Downloaded %s from %s is too small (%d bytes) — rejecting",
+                                       tool_name, download_url, dl_path_obj.stat().st_size if dl_path_obj.exists() else 0)
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        return False
+
+                    # Verify SHA256 checksum if a known hash is recorded
+                    expected_hash = TOOL_VERSIONS.get(tool_name + "_sha256")
+                    if expected_hash:
+                        actual_hash = hashlib.sha256()
+                        with open(dl_path, "rb") as f:
+                            for chunk in iter(lambda: f.read(65536), b""):
+                                actual_hash.update(chunk)
+                        if actual_hash.hexdigest() != expected_hash:
+                            slog.warn(f"SHA256 mismatch for {tool_name} — expected {expected_hash}, got {actual_hash.hexdigest()}")
+                            logger.error("SHA256 mismatch for %s downloaded from %s", tool_name, download_url)
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                            return False
+                        slog.info(f"SHA256 verification passed for {tool_name}")
+
                     tool_path = self.tools_dir / tool_name / tool_name
-                    shutil.move(f"{temp_dir}/{tool_name}", tool_path)
+                    shutil.move(dl_path, tool_path)
                     os.chmod(tool_path, 0o755)
                     slog.info(f"Cached {tool_name} from {download_url}")
                     logger.info(f"Cached {tool_name} from {download_url}")

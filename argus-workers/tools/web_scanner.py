@@ -46,6 +46,24 @@ from utils.logging_utils import ScanLogger
 logger = logging.getLogger(__name__)
 
 
+def _is_in_scope(url: str, target_url: str) -> bool:
+    """Check if a URL is within the scan scope using proper host matching.
+
+    Uses parsed hostname comparison rather than string prefix matching to
+    prevent scope escape via subdomain squatting (e.g., example.com.evil.com
+    matching example.com). H-v3-12.
+    """
+    try:
+        parsed_url = urlparse(url)
+        parsed_target = urlparse(target_url)
+        # Allow same host or subdomains of the target host
+        url_host = parsed_url.hostname or ""
+        target_host = parsed_target.hostname or ""
+        return url_host == target_host or url_host.endswith("." + target_host)
+    except Exception:
+        return False
+
+
 class WebScanner:
     """
     Comprehensive web application vulnerability scanner.
@@ -1131,7 +1149,10 @@ class WebScanner:
             )
             for link in links:
                 absolute = urljoin(url, link)
-                if absolute.startswith(self.target_url) and absolute not in crawled:
+                # H-v3-12: Use URL-parsed host matching, not string prefix,
+                # to prevent scope escape via subdomain squatting (e.g.
+                # https://example.com.evil.com matching https://example.com)
+                if absolute not in crawled and _is_in_scope(absolute, self.target_url):
                     to_crawl.append(absolute)
 
         # Store discovered parameters for use by other checks

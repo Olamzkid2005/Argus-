@@ -152,6 +152,9 @@ If NOT vulnerable:
             # Truncate body
             body_snippet = body[:max_response_chars]
 
+            # H-v3-15: Redact sensitive data from response body before sending to LLM
+            body_snippet = self._redact_for_llm(body_snippet)
+
             # Filter relevant headers
             header_str = "; ".join(
                 f"{k}: {v}" for k, v in headers.items()
@@ -225,6 +228,25 @@ If NOT vulnerable:
             "Use the post-scan tasks.llm_review task instead."
         )
         return None
+
+    @staticmethod
+    def _redact_for_llm(text: str) -> str:
+        """
+        Redact sensitive data before sending to LLM provider.
+
+        Strips potential secrets (tokens, passwords, keys, internal URLs)
+        from HTTP response snippets to prevent data exfiltration to third-party
+        LLM providers. H-v3-15.
+        """
+        # Redact common credential patterns
+        text = re.sub(r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', text)
+        # Redact bearer tokens
+        text = re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', text)
+        # Redact AWS keys
+        text = re.sub(r'(?i)(AKIA[0-9A-Z]{16})', '__AWS_KEY_REDACTED__', text)
+        # Redact internal IPs
+        text = re.sub(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', 'INTERNAL_IP_REDACTED', text)
+        return text
 
     def should_skip(self, finding: dict, response: Any) -> bool:
         """

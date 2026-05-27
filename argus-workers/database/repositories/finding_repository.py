@@ -6,6 +6,7 @@ import os
 import uuid
 
 import psycopg2
+from psycopg2 import errors as psycopg2_errors
 from psycopg2.extras import Json, RealDictCursor
 from psycopg2.sql import SQL, Identifier
 
@@ -159,7 +160,7 @@ class FindingRepository(BaseRepository):
                         fp_likelihood,
                     )
                 )
-            except psycopg2.errors.UniqueViolation:
+            except psycopg2_errors.UniqueViolation:
                 # ON CONFLICT clause requires the constraint to exist on the table.
                 # If it doesn't, PostgreSQL raises UniqueViolation at query-plan time.
                 # Fall back to SELECT-then-UPDATE-else-INSERT approach.
@@ -665,7 +666,7 @@ class FindingRepository(BaseRepository):
                         cursor.execute(SQL("RELEASE SAVEPOINT {}").format(Identifier(sp_name)))
                     except psycopg2.Error as sp_err:
                         logger.debug("Failed to release savepoint %s: %s", sp_name, sp_err)
-                except psycopg2.errors.UniqueViolation:
+                except psycopg2_errors.UniqueViolation:
                     # Rollback savepoint to clear aborted transaction state
                     try:
                         cursor.execute(SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name)))

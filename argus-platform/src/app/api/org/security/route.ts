@@ -68,6 +68,15 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const session = await requireAuth();
+
+    // H-v3-02: Only org admins can update security settings
+    if (session.user.role !== "admin") {
+      return NextResponse.json(
+        { error: "Only organization admins can update security settings" },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
 
     const { two_factor_required, ip_allowlist, session_timeout_minutes } = body;

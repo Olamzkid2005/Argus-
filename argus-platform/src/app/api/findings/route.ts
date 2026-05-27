@@ -264,20 +264,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Execute bulk action
+      // Execute bulk action with org-scoped queries to prevent TOCTOU
+      // H-v3-04: Use JOIN with engagements to re-verify org ownership atomically
       let result;
       switch (action) {
         case "verify":
           result = await client.query(
-            `UPDATE findings SET verified = true, updated_at = NOW() WHERE id = ANY($1) RETURNING id`,
-            [finding_ids],
+            `UPDATE findings f
+             SET verified = true, updated_at = NOW()
+             FROM engagements e
+             WHERE f.engagement_id = e.id
+               AND f.id = ANY($1)
+               AND e.org_id = $2
+             RETURNING f.id`,
+            [finding_ids, session.user.orgId],
           );
           break;
 
         case "delete":
           result = await client.query(
-            `DELETE FROM findings WHERE id = ANY($1) RETURNING id`,
-            [finding_ids],
+            `DELETE FROM findings f
+             USING engagements e
+             WHERE f.engagement_id = e.id
+               AND f.id = ANY($1)
+               AND e.org_id = $2
+             RETURNING f.id`,
+            [finding_ids, session.user.orgId],
           );
           break;
 
@@ -300,8 +312,14 @@ export async function POST(req: NextRequest) {
             );
           }
           result = await client.query(
-            `UPDATE findings SET severity = $2, updated_at = NOW() WHERE id = ANY($1) RETURNING id`,
-            [finding_ids, severity],
+            `UPDATE findings f
+             SET severity = $3, updated_at = NOW()
+             FROM engagements e
+             WHERE f.engagement_id = e.id
+               AND f.id = ANY($1)
+               AND e.org_id = $2
+             RETURNING f.id`,
+            [finding_ids, session.user.orgId, severity],
           );
           break;
 

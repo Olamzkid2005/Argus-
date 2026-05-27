@@ -16,26 +16,28 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const engagementId = searchParams.get("engagement_id");
 
-    // If a specific engagement is requested, redirect to the engagement-specific endpoint
+    // If a specific engagement is requested, fetch with org-scoped access check
     if (engagementId) {
       const latestResult = await pool.query(
-        `SELECT id, engagement_id, composite_score, framework_scores,
-                total_findings, trend, previous_score, computed_at
-         FROM compliance_posture_snapshots
-         WHERE engagement_id = $1
-         ORDER BY computed_at DESC
+        `SELECT cps.id, cps.engagement_id, cps.composite_score, cps.framework_scores,
+                cps.total_findings, cps.trend, cps.previous_score, cps.computed_at
+         FROM compliance_posture_snapshots cps
+         JOIN engagements e ON cps.engagement_id = e.id
+         WHERE cps.engagement_id = $1 AND e.org_id = $2
+         ORDER BY cps.computed_at DESC
          LIMIT 1`,
-        [engagementId],
+        [engagementId, orgId],
       );
 
       const historyResult = await pool.query(
-        `SELECT id, engagement_id, composite_score, framework_scores,
-                total_findings, trend, computed_at
-         FROM compliance_posture_snapshots
-         WHERE engagement_id = $1
-         ORDER BY computed_at DESC
+        `SELECT cps.id, cps.engagement_id, cps.composite_score, cps.framework_scores,
+                cps.total_findings, cps.trend, cps.computed_at
+         FROM compliance_posture_snapshots cps
+         JOIN engagements e ON cps.engagement_id = e.id
+         WHERE cps.engagement_id = $1 AND e.org_id = $2
+         ORDER BY cps.computed_at DESC
          LIMIT 30`,
-        [engagementId],
+        [engagementId, orgId],
       );
 
       return NextResponse.json({

@@ -72,6 +72,25 @@ export async function GET(
   }
 }
 
+/**
+ * Validate auth_config structure to prevent injection of arbitrary JSON.
+ * H-v3-05: Ensures stored auth config is a valid object with expected fields.
+ */
+function _validate_auth_config(config: unknown): void {
+  if (config === null || config === undefined || typeof config !== "object" || Array.isArray(config)) {
+    throw new Error("auth_config must be a valid JSON object");
+  }
+  const validKeys = ["username", "password", "token", "cookie", "loginUrl",
+    "api_key", "api_key_header", "authType", "targetUrl", "headers",
+    "form_fields", "extra_params", "timeout", "verify_ssl"];
+  for (const key of Object.keys(config as Record<string, unknown>)) {
+    if (!validKeys.includes(key)) {
+      // Allow unknown keys but log a warning
+      log.warn("auth_config contains unrecognized key:", { key });
+    }
+  }
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -91,10 +110,14 @@ export async function PATCH(
     let paramIdx = 1;
 
     if (auth_config !== undefined) {
+      // H-v3-05: Validate auth_config structure before storing
+      _validate_auth_config(auth_config);
       updates.push(`auth_config = $${paramIdx++}`);
       values.push(JSON.stringify(auth_config));
     }
     if (dual_auth_config !== undefined) {
+      // H-v3-05: Validate dual_auth_config structure before storing
+      _validate_auth_config(dual_auth_config);
       updates.push(`dual_auth_config = $${paramIdx++}`);
       values.push(JSON.stringify(dual_auth_config));
     }
