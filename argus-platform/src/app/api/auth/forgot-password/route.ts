@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -28,7 +28,10 @@ async function checkRateLimit(identifier: string, maxRequests: number): Promise<
 export async function POST(req: Request) {
   try {
     const { email } = await req.json();
-    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    // Cast to NextRequest to access .ip (TCP connection IP from platform)
+    // instead of using x-forwarded-for header which is trivially spoofable (H-v5-01)
+    const nextReq = req as NextRequest;
+    const ip = nextReq.ip || req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
 
     if (!email || typeof email !== "string") {
       return NextResponse.json(

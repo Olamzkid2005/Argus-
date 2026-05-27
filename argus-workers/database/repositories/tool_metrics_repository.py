@@ -80,61 +80,103 @@ class ToolMetricsRepository(BaseRepository):
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def get_performance_stats(self, days: int = 1) -> list[dict]:
+    def get_performance_stats(self, days: int = 1, org_id: str | None = None) -> list[dict]:
         """
         Get performance statistics for all tools within the specified period.
 
         Args:
             days: Number of days to look back
+            org_id: Optional org ID to scope results (prevents cross-org data
+                    leakage). H-v3-18.
 
         Returns:
             List of tool performance stat dictionaries
         """
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            cursor.execute(
-                """
-                SELECT
-                    tool_name,
-                    COUNT(*) AS total_executions,
-                    SUM(CASE WHEN success THEN 1 ELSE 0 END) AS success_count,
-                    AVG(duration_ms) AS avg_duration_ms,
-                    ROUND(100.0 * SUM(CASE WHEN success THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate
-                FROM tool_metrics
-                WHERE created_at >= NOW() - INTERVAL '%s days'
-                GROUP BY tool_name
-                ORDER BY tool_name
-                """,
-                (days,)
-            )
+            if org_id:
+                cursor.execute(
+                    """
+                    SELECT
+                        tm.tool_name,
+                        COUNT(*) AS total_executions,
+                        SUM(CASE WHEN tm.success THEN 1 ELSE 0 END) AS success_count,
+                        AVG(tm.duration_ms) AS avg_duration_ms,
+                        ROUND(100.0 * SUM(CASE WHEN tm.success THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate
+                    FROM tool_metrics tm
+                    JOIN engagements e ON tm.engagement_id = e.id
+                    WHERE tm.created_at >= NOW() - INTERVAL '%s days'
+                      AND e.org_id = %s
+                    GROUP BY tm.tool_name
+                    ORDER BY tm.tool_name
+                    """,
+                    (days, org_id)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        tool_name,
+                        COUNT(*) AS total_executions,
+                        SUM(CASE WHEN success THEN 1 ELSE 0 END) AS success_count,
+                        AVG(duration_ms) AS avg_duration_ms,
+                        ROUND(100.0 * SUM(CASE WHEN success THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate
+                    FROM tool_metrics
+                    WHERE created_at >= NOW() - INTERVAL '%s days'
+                    GROUP BY tool_name
+                    ORDER BY tool_name
+                    """,
+                    (days,)
+                )
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_tool_stats(self, tool_name: str, days: int = 1) -> dict | None:
+    def get_tool_stats(self, tool_name: str, days: int = 1, org_id: str | None = None) -> dict | None:
         """
         Get performance statistics for a specific tool.
 
         Args:
             tool_name: Name of the tool
             days: Number of days to look back
+            org_id: Optional org ID to scope results (prevents cross-org data
+                    leakage). H-v3-18.
 
         Returns:
             Tool performance stat dictionary, or None if no data
         """
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            cursor.execute(
-                """
-                SELECT
-                    tool_name,
-                    COUNT(*) AS total_executions,
-                    SUM(CASE WHEN success THEN 1 ELSE 0 END) AS success_count,
-                    AVG(duration_ms) AS avg_duration_ms,
-                    ROUND(100.0 * SUM(CASE WHEN success THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate
-                FROM tool_metrics
-                WHERE tool_name = %s AND created_at >= NOW() - INTERVAL '%s days'
-                GROUP BY tool_name
-                """,
-                (tool_name, days)
-            )
+            if org_id:
+                cursor.execute(
+                    """
+                    SELECT
+                        tm.tool_name,
+                        COUNT(*) AS total_executions,
+                        SUM(CASE WHEN tm.success THEN 1 ELSE 0 END) AS success_count,
+                        AVG(tm.duration_ms) AS avg_duration_ms,
+                        ROUND(100.0 * SUM(CASE WHEN tm.success THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate
+                    FROM tool_metrics tm
+                    JOIN engagements e ON tm.engagement_id = e.id
+                    WHERE tm.tool_name = %s
+                      AND tm.created_at >= NOW() - INTERVAL '%s days'
+                      AND e.org_id = %s
+                    GROUP BY tm.tool_name
+                    """,
+                    (tool_name, days, org_id)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        tool_name,
+                        COUNT(*) AS total_executions,
+                        SUM(CASE WHEN success THEN 1 ELSE 0 END) AS success_count,
+                        AVG(duration_ms) AS avg_duration_ms,
+                        ROUND(100.0 * SUM(CASE WHEN success THEN 1 ELSE 0 END) / COUNT(*), 2) AS success_rate
+                    FROM tool_metrics
+                    WHERE tool_name = %s AND created_at >= NOW() - INTERVAL '%s days'
+                    GROUP BY tool_name
+                    """,
+                    (tool_name, days)
+                )
 
             row = cursor.fetchone()
             return dict(row) if row else None

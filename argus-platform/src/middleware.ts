@@ -10,11 +10,17 @@ import { getToken } from "next-auth/jwt";
  */
 
 function getClientIP(request: NextRequest): string {
+  // Use request.ip first (TCP connection IP from platform — trustworthy).
+  // Only fall back to x-forwarded-for header as a secondary option.
+  // Never trust x-forwarded-for alone — it's trivially spoofable (H-v5-01).
+  if (request.ip) {
+    return request.ip;
+  }
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     return forwarded.split(",")[0].trim();
   }
-  return request.ip || "unknown";
+  return "unknown";
 }
 
 /**

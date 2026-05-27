@@ -10,6 +10,7 @@ API key resolution order (first found wins):
 """
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 
@@ -96,10 +97,12 @@ class LLMClient:
         self._redis_url = redis_url
 
         # Circuit breaker: after N consecutive failures, skip calls for cooldown
+        # threshold must be <= max_retries + 1 to actually prevent retries (H-v4-09)
         self._circuit_failures = 0
         self._circuit_open_until = 0.0
-        self._circuit_threshold = 3
+        self._circuit_threshold = 1  # Open after 1 failure — prevents wasted retries
         self._circuit_cooldown = 60.0
+        self._circuit_lock = threading.Lock()
 
     def _load_key_from_db(self) -> str | None:
         """
@@ -279,14 +282,15 @@ class LLMClient:
             raise LLMUnavailableError("LLM client not configured (no API key)")
 
         # Circuit breaker: skip if too many recent failures
-        if self._circuit_failures >= self._circuit_threshold:
-            if time.time() < self._circuit_open_until:
-                raise LLMUnavailableError(
-                    f"LLM circuit breaker open — skipping call for "
-                    f"{self._circuit_open_until - time.time():.0f}s "
-                    f"({self._circuit_failures} consecutive failures)"
-                )
-            self._circuit_failures = 0
+        with self._circuit_lock:
+            if self._circuit_failures >= self._circuit_threshold:
+                if time.time() < self._circuit_open_until:
+                    raise LLMUnavailableError(
+                        f"LLM circuit breaker open — skipping call for "
+                        f"{self._circuit_open_until - time.time():.0f}s "
+                        f"({self._circuit_failures} consecutive failures)"
+                    )
+                self._circuit_failures = 0
 
         # Rate limit: ensure we don't exceed 60 req/min per worker
         self._check_rate_limit()
@@ -351,21 +355,21 @@ class LLMClient:
                 raise
             except Exception as e:
                 last_error = e
-                self._circuit_failures += 1
-                if self._circuit_failures >= self._circuit_threshold:
-                    self._circuit_open_until = time.time() + self._circuit_cooldown
-                    logger.warning(
-                        "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
-                        self._circuit_failures, self._circuit_cooldown,
-                    )
+                with self._circuit_lock:
+                    self._circuit_failures += 1
+                    if self._circuit_failures >= self._circuit_threshold:
+                        self._circuit_open_until = time.time() + self._circuit_cooldown
+                        logger.warning(
+                            "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
+                            self._circuit_failures, self._circuit_cooldown,
+                        )
                 logger.warning(f"LLM chat attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
-                    # If circuit breaker is open, stop retrying — it won't recover during cooldown
                     if self._circuit_open_until and time.time() < self._circuit_open_until:
                         logger.warning("Circuit breaker still open — aborting retries")
                         break
                     import asyncio
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    await asyncio.sleep(2 ** attempt)
 
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 
@@ -396,14 +400,15 @@ class LLMClient:
             raise LLMUnavailableError("LLM client not configured (no API key)")
 
         # Circuit breaker: skip if too many recent failures
-        if self._circuit_failures >= self._circuit_threshold:
-            if time.time() < self._circuit_open_until:
-                raise LLMUnavailableError(
-                    f"LLM circuit breaker open — skipping call for "
-                    f"{self._circuit_open_until - time.time():.0f}s "
-                    f"({self._circuit_failures} consecutive failures)"
-                )
-            self._circuit_failures = 0
+        with self._circuit_lock:
+            if self._circuit_failures >= self._circuit_threshold:
+                if time.time() < self._circuit_open_until:
+                    raise LLMUnavailableError(
+                        f"LLM circuit breaker open — skipping call for "
+                        f"{self._circuit_open_until - time.time():.0f}s "
+                        f"({self._circuit_failures} consecutive failures)"
+                    )
+                self._circuit_failures = 0
 
         # Rate limit: ensure we don't exceed 60 req/min per worker
         self._check_rate_limit()
@@ -493,16 +498,16 @@ class LLMClient:
                 raise
             except Exception as e:
                 last_error = e
-                self._circuit_failures += 1
-                if self._circuit_failures >= self._circuit_threshold:
-                    self._circuit_open_until = time.time() + self._circuit_cooldown
-                    logger.warning(
-                        "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
-                        self._circuit_failures, self._circuit_cooldown,
-                    )
+                with self._circuit_lock:
+                    self._circuit_failures += 1
+                    if self._circuit_failures >= self._circuit_threshold:
+                        self._circuit_open_until = time.time() + self._circuit_cooldown
+                        logger.warning(
+                            "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
+                            self._circuit_failures, self._circuit_cooldown,
+                        )
                 logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries:
-                    # If circuit breaker is open, stop retrying — it won't recover during cooldown
                     if self._circuit_open_until and time.time() < self._circuit_open_until:
                         logger.warning("Circuit breaker still open — aborting retries")
                         break

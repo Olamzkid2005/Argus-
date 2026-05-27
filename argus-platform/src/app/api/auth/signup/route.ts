@@ -69,7 +69,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, passwordConfirm, orgName } = body;
 
-    const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+    // Use request.ip (TCP connection IP from platform) instead of
+    // x-forwarded-for header which is trivially spoofable (H-v5-01)
+    const ip = request.ip || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
 
     const ipAllowed = await checkRateLimit(ip, MAX_SIGNUPS_PER_IP);
     if (!ipAllowed) {

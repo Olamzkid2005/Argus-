@@ -950,19 +950,27 @@ def build_synthesis_prompt(
     attack_paths: list[dict],
     recon_summary: str,
 ) -> str:
-    """Build the prompt for findings synthesis."""
+    """Build the prompt for findings synthesis.
+
+    All attacker-controlled data (scored_findings, attack_paths,
+    recon_summary) is sanitized to prevent prompt injection from
+    compromised target servers. H-v3-17.
+    """
     findings_json = json.dumps(scored_findings[:50], indent=2, default=str)
     paths_json = json.dumps(attack_paths[:10], indent=2, default=str)
+    sanitized_findings = _sanitize_for_llm(findings_json)
+    sanitized_paths = _sanitize_for_llm(paths_json)
+    sanitized_recon = _sanitize_for_llm(recon_summary)
 
     return f"""
 === RECON SUMMARY ===
-{recon_summary}
+{sanitized_recon}
 
 === SCORED FINDINGS ({len(scored_findings)}) ===
-{findings_json}
+{sanitized_findings}
 
 === ATTACK PATHS ===
-{paths_json}
+{sanitized_paths}
 
 Analyze these findings and produce a structured synthesis.
 """  # noqa: S608
@@ -974,20 +982,30 @@ def build_report_prompt(
     engagement: dict,
     recon_summary: str,
 ) -> str:
-    """Build the prompt for report generation."""
+    """Build the prompt for report generation.
+
+    All attacker-controlled data is sanitized to prevent prompt injection
+    from compromised target servers. H-v3-17.
+    """
+    sanitized_target = _sanitize_for_llm(str(engagement.get("target_url", "N/A")))
+    sanitized_scan_type = _sanitize_for_llm(str(engagement.get("scan_type", "N/A")))
+    sanitized_recon = _sanitize_for_llm(recon_summary)
+    sanitized_synthesis = _sanitize_for_llm(json.dumps(synthesis, indent=2, default=str))
+    sanitized_findings = _sanitize_for_llm(json.dumps(scored_findings[:100], indent=2, default=str))
+
     return f"""
 === ENGAGEMENT ===
-Target: {engagement.get("target_url", "N/A")}
-Type: {engagement.get("scan_type", "N/A")}
+Target: {sanitized_target}
+Type: {sanitized_scan_type}
 
 === RECON SUMMARY ===
-{recon_summary}
+{sanitized_recon}
 
 === SYNTHESIS ===
-{json.dumps(synthesis, indent=2, default=str)}
+{sanitized_synthesis}
 
 === FINDINGS ({len(scored_findings)}) ===
-{json.dumps(scored_findings[:100], indent=2, default=str)}
+{sanitized_findings}
 
 Generate a professional penetration test report.
 """  # noqa: S608
