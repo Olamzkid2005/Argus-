@@ -64,6 +64,18 @@ CREATE TABLE findings_future PARTITION OF findings
     FOR VALUES FROM (MINVALUE) TO (MAXVALUE);
 
 -- Step 4: Copy data from old table (will take time for large datasets)
+-- ⚠️ IMPORTANT: Uncomment the INSERT below BEFORE running this migration in production.
+-- Without it, ALL existing finding data will be silently lost (H-12).
+-- Run this data migration check first:
+DO $$
+DECLARE
+    old_count BIGINT;
+BEGIN
+    SELECT COUNT(*) INTO old_count FROM findings_old;
+    IF old_count > 0 THEN
+        RAISE EXCEPTION 'HALT: findings_old has % rows but INSERT is commented out. Uncomment the INSERT in Step 4 before running this migration, or run: INSERT INTO findings SELECT * FROM findings_old;', old_count;
+    END IF;
+END $$;
 -- INSERT INTO findings SELECT * FROM findings_old;
 
 -- Step 5: Add indexes (will be created per partition automatically in PG16+)

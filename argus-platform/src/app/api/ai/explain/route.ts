@@ -25,12 +25,30 @@ interface ExplainRequest {
   model?: string;
 }
 
+/**
+ * Redact sensitive data from evidence before sending to third-party LLM provider.
+ * Prevents API keys, passwords, tokens, and other secrets from being transmitted
+ * to OpenRouter/OpenAI (H-11).
+ */
+function _redactEvidence(text: string): string {
+  // Redact common credential patterns
+  return text
+    .replace(/(api[_-]?key|apikey)\s*[:=]\s*["']?[^\s"'&,}]+/gi, '$1=__REDACTED__')
+    .replace(/(secret|secret_key)\s*[:=]\s*["']?[^\s"'&,}]+/gi, '$1=__REDACTED__')
+    .replace(/(bearer\s+)[a-z0-9._-]{20,}/gi, '$1__REDACTED__')
+    .replace(/(password|passwd|pwd)\s*[:=]\s*["']?[^\s"'&,}]+/gi, '$1=__REDACTED__')
+    .replace(/(token|auth_token|refresh_token)\s*[:=]\s*["']?[^\s"'&,}]+/gi, '$1=__REDACTED__')
+    .replace(/(authorization:\s*basic\s+)[a-z0-9+/=]{20,}/gi, '$1__REDACTED__');
+}
+
 function buildExplanationPrompt(finding: Finding): string {
-  const evidenceStr = finding.evidence
+  const rawEvidence = finding.evidence
     ? typeof finding.evidence === "string"
       ? finding.evidence
       : JSON.stringify(finding.evidence, null, 2)
     : "No evidence provided";
+  // Redact sensitive data before sending to third-party LLM (H-11)
+  const evidenceStr = _redactEvidence(rawEvidence);
 
   return `You are a security expert explaining a vulnerability to developers. Format your response using EXACTLY these markdown headers and structure:
 

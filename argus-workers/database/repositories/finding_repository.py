@@ -160,11 +160,13 @@ class FindingRepository(BaseRepository):
                         fp_likelihood,
                     )
                 )
-            except psycopg2_errors.UniqueViolation:
+            except (psycopg2_errors.UniqueViolation, psycopg2_errors.InvalidColumnReference):
                 # ON CONFLICT clause requires the constraint to exist on the table.
-                # If it doesn't, PostgreSQL raises UniqueViolation at query-plan time.
+                # PostgreSQL raises InvalidColumnReference (SQLSTATE 42P10) when the
+                # constraint is missing, and UniqueViolation (SQLSTATE 23505) when a
+                # concurrent insert triggered a real conflict (H-02).
                 # Fall back to SELECT-then-UPDATE-else-INSERT approach.
-                logger.warning("ON CONFLICT constraint not found — using SELECT-then-INSERT fallback")
+                logger.warning("ON CONFLICT not applicable for this constraint — using SELECT-then-INSERT fallback")
                 cursor.execute(
                     "SELECT id FROM findings WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s",
                     (engagement_id, endpoint, finding_type, source_tool),
@@ -666,7 +668,7 @@ class FindingRepository(BaseRepository):
                         cursor.execute(SQL("RELEASE SAVEPOINT {}").format(Identifier(sp_name)))
                     except psycopg2.Error as sp_err:
                         logger.debug("Failed to release savepoint %s: %s", sp_name, sp_err)
-                except psycopg2_errors.UniqueViolation:
+                except (psycopg2_errors.UniqueViolation, psycopg2_errors.InvalidColumnReference):
                     # Rollback savepoint to clear aborted transaction state
                     try:
                         cursor.execute(SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name)))

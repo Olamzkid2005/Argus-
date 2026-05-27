@@ -6,6 +6,7 @@ import { pushJob, checkIdempotency, setAPIIdempotencyResult, generateAPIIdempote
 import { pool } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { createRateLimit } from "@/lib/rate-limiter";
+import crypto from "crypto";
 
 // Max 10 engagement creations per hour per user
 const engagementRateLimit = createRateLimit({
@@ -184,6 +185,36 @@ export async function POST(req: NextRequest) {
         effectiveAuthConfig = authConfig;
       }
 
+      // Encrypt auth_config at rest using AES-256-GCM before storing (H-27)
+      // The encryption key comes from AUTH_CONFIG_ENCRYPTION_KEY env var.
+      // If no key is configured, auth_config is stored as plaintext (degraded mode).
+      const encryptJson = (data: unknown): string | null => {
+        if (!data) return null;
+        const encryptionKey = process.env.AUTH_CONFIG_ENCRYPTION_KEY;
+        if (!encryptionKey || encryptionKey.length < 32) {
+          log.warn("AUTH_CONFIG_ENCRYPTION_KEY not configured — storing auth_config in plaintext");
+          return JSON.stringify(data);
+        }
+        try {
+          // Derive a 32-byte key from the env var using SHA-256
+          const key = crypto.createHash("sha256").update(encryptionKey).digest();
+          const iv = crypto.randomBytes(16);
+          const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+          const plaintext = JSON.stringify(data);
+          let encrypted = cipher.update(plaintext, "utf8", "hex");
+          encrypted += cipher.final("hex");
+          const authTag = cipher.getAuthTag().toString("hex");
+          // Format: iv:authTag:ciphertext (all hex-encoded)
+          return `${iv.toString("hex")}:${authTag}:${encrypted}`;
+        } catch (encError) {
+          log.error("Failed to encrypt auth_config: %s", encError);
+          return JSON.stringify(data);
+        }
+      };
+
+      // Also validate dual auth config if provided (same logic as authConfig)
+
+
       // Validate dual auth config if provided
       let effectiveDualAuthConfig = null;
       if (dualAuthConfig) {
@@ -245,8 +276,8 @@ export async function POST(req: NextRequest) {
           "created",
           session.user.id,
           rateLimitConfig ? JSON.stringify(rateLimitConfig) : null,
-          effectiveAuthConfig ? JSON.stringify(effectiveAuthConfig) : null,
-          effectiveDualAuthConfig ? JSON.stringify(effectiveDualAuthConfig) : null,
+          encryptJson(effectiveAuthConfig),
+          encryptJson(effectiveDualAuthConfig),
           effectiveScanType,
           effectiveAggressiveness,
           effectiveAgentMode,
@@ -317,7 +348,7 @@ export async function POST(req: NextRequest) {
             scan_mode: scanMode || "agent",
             bug_bounty_mode: bugBounty === true,
             auth_config: effectiveAuthConfig,
-            dual_auth_config: effectiveDualAuthConfig,
+            dual_auth_config: effectiveDualAuthConfig ? encryptJson(effectiveDualAuthConfig) : null,
             priority_vuln_classes: priorityVulnClasses || [],
             trace_id: traceId,
             created_at: new Date().toISOString(),
