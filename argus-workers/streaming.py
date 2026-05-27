@@ -623,6 +623,62 @@ class StreamingFindingEmitter:
             )
 
 
+def emit_finding_rt(
+    engagement_id: str,
+    finding: dict,
+    tool_name: str,
+) -> None:
+    """Emit a finding in real-time via SSE and WebSocket as it's discovered.
+
+    This is called immediately after a finding is parsed and normalized,
+    before it's saved to the database. It gives analysts visibility into
+    findings as they're discovered rather than waiting for the batch save.
+
+    Dual-channel emission:
+      1. SSE (in-process stream manager) — used by the engagement detail page
+      2. WebSocket (Redis pub/sub) — used by the findings list and monitoring pages
+
+    This is intentionally non-fatal: if emission fails, the scan continues.
+    """
+    if not engagement_id:
+        return
+
+    finding_type = finding.get("type", "UNKNOWN")
+    severity = finding.get("severity", "INFO")
+    endpoint = finding.get("endpoint", "")
+    confidence = finding.get("confidence", 0.5)
+    finding_id = finding.get("_id", finding.get("id", ""))
+
+    # 1. SSE emission (in-process stream manager)
+    try:
+        emit_finding(
+            engagement_id=engagement_id,
+            finding_type=finding_type,
+            severity=severity,
+            endpoint=endpoint,
+            title=f"{finding_type} on {endpoint}",
+        )
+    except Exception as e:
+        logger.debug("SSE finding emit failed (non-fatal): %s", e)
+
+    # 2. WebSocket emission (Redis pub/sub)
+    try:
+        from websocket_events import get_websocket_publisher
+        ws = get_websocket_publisher()
+        ws.publish_finding(
+            engagement_id=engagement_id,
+            finding_id=finding_id,
+            finding_type=finding_type,
+            severity=severity,
+            confidence=confidence,
+            endpoint=endpoint,
+            source_tool=tool_name,
+            use_batch=False,
+        )
+    except Exception as e:
+        logger.debug("WS finding emit failed (non-fatal): %s", e)
+
+
 # Singleton
 _stream_manager: StreamManager | None = None
 _stream_lock = threading.Lock()

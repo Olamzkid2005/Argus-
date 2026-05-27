@@ -13,9 +13,8 @@ from typing import TYPE_CHECKING
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
 )
-from streaming import emit_finding, emit_tool_start
+from streaming import emit_finding_rt, emit_finding, emit_tool_start
 from utils.logging_utils import ScanLogger
-from websocket_events import get_websocket_publisher
 
 from .utils import get_wordlist_path
 
@@ -107,7 +106,7 @@ def execute_recon_tools(
             for p in parsed:
                 normalized = ctx._normalize_finding(p, "httpx")
                 if normalized:
-                    # _emit_finding_rt is defined later in this function but closures capture it
+                    # emit_finding_rt is imported from streaming
                     all_findings.append(normalized)
                     parsed_count += 1
         slog.tool_complete("httpx", success=True, findings=parsed_count)
@@ -145,36 +144,6 @@ def execute_recon_tools(
     naabu_timeout = (
         60 if agg == "default" else 90 if agg == "high" else 120
     )
-
-    def _emit_finding_rt(ctx, finding: dict, tool_name: str) -> None:
-        """Emit a finding in real-time during recon (SSE + WebSocket)."""
-        try:
-            engagement_id = ctx.engagement_id if hasattr(ctx, 'engagement_id') else ''
-            if not engagement_id:
-                return
-            emit_finding(
-                engagement_id=engagement_id,
-                finding_type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                title=f"{finding.get('type', 'UNKNOWN')} on {finding.get('endpoint', '')}",
-            )
-            try:
-                ws = get_websocket_publisher()
-                ws.publish_finding(
-                    engagement_id=engagement_id,
-                    finding_id=finding.get("_id", finding.get("id", "")),
-                    finding_type=finding.get("type", "UNKNOWN"),
-                    severity=finding.get("severity", "INFO"),
-                    confidence=finding.get("confidence", 0.5),
-                    endpoint=finding.get("endpoint", ""),
-                    source_tool=tool_name,
-                    use_batch=False,
-                )
-            except Exception:
-                pass
-        except Exception:
-            pass
 
     def _run_recon_tool(ctx, tool_name, args, timeout, all_findings, start_msg=None):
         try:

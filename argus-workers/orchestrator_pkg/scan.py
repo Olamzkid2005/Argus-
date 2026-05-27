@@ -16,10 +16,9 @@ from config.constants import (
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
-from streaming import emit_finding, emit_tool_complete, emit_tool_start
+from streaming import emit_finding_rt, emit_tool_complete, emit_tool_start
 from tools.web_scanner import WebScanner
 from utils.logging_utils import ScanLogger
-from websocket_events import get_websocket_publisher
 
 # Lazy import for RateLimitRepository to avoid circular dependencies
 _RATE_LIMIT_REPO = None
@@ -179,46 +178,6 @@ def _is_reachable(target: str) -> bool:
         return False
 
 
-def _emit_finding_rt(ctx, finding: dict, tool_name: str) -> None:
-    """Emit a finding in real-time via SSE and WebSocket as it's discovered.
-    
-    This is called immediately after a finding is parsed and normalized,
-    before it's saved to the database. It gives analysts visibility into
-    findings as they're discovered rather than waiting for the batch save.
-    """
-    try:
-        engagement_id = ctx.engagement_id if hasattr(ctx, 'engagement_id') else ''
-        if not engagement_id:
-            return
-        
-        # 1. SSE emission (in-process stream manager)
-        emit_finding(
-            engagement_id=engagement_id,
-            finding_type=finding.get("type", "UNKNOWN"),
-            severity=finding.get("severity", "INFO"),
-            endpoint=finding.get("endpoint", ""),
-            title=f"{finding.get('type', 'UNKNOWN')} on {finding.get('endpoint', '')}",
-        )
-        
-        # 2. WebSocket emission (Redis pub/sub)
-        try:
-            ws = get_websocket_publisher()
-            ws.publish_finding(
-                engagement_id=engagement_id,
-                finding_id=finding.get("_id", finding.get("id", "")),
-                finding_type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                confidence=finding.get("confidence", 0.5),
-                endpoint=finding.get("endpoint", ""),
-                source_tool=tool_name,
-                use_batch=False,
-            )
-        except Exception:
-            logger.debug("WS finding emit skipped (non-fatal)", exc_info=True)
-    except Exception:
-        logger.debug("RT finding emit failed (non-fatal)", exc_info=True)
-
-
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 
@@ -352,7 +311,7 @@ def execute_scan_tools(
                 normalized = ctx._normalize_finding(validated, "nuclei")
                 if normalized:
                     # Emit in real-time as nuclei streams findings
-                    _emit_finding_rt(ctx, normalized, "nuclei")
+                    emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
                     all_findings.append(normalized)
         except Exception as e:
             logger.warning(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
@@ -407,7 +366,7 @@ def execute_scan_tools(
                     }
                     normalized = ctx._normalize_finding(waf_finding, "wafw00f")
                     if normalized:
-                        _emit_finding_rt(ctx, normalized, "wafw00f")
+                        emit_finding_rt(ctx.engagement_id, normalized, "wafw00f")
                         all_findings.append(normalized)
                 slog.tool_complete("wafw00f", success=waf_result.success)
             except Exception as e:
@@ -594,7 +553,7 @@ def execute_scan_tools(
             for wf in web_findings:
                 normalized = ctx._normalize_finding(wf, "web_scanner")
                 if normalized:
-                    _emit_finding_rt(ctx, normalized, "web_scanner")
+                    emit_finding_rt(ctx.engagement_id, normalized, "web_scanner")
                     all_findings.append(normalized)
         except Exception as e:
             slog.tool_complete("web_scanner", success=False)
@@ -618,7 +577,7 @@ def execute_scan_tools(
                 for df in dual_findings:
                     normalized = ctx._normalize_finding(df, "dual_auth_scanner")
                     if normalized:
-                        _emit_finding_rt(ctx, normalized, "dual_auth_scanner")
+                        emit_finding_rt(ctx.engagement_id, normalized, "dual_auth_scanner")
                         all_findings.append(normalized)
                 emit_tool_complete(ctx.engagement_id, "dual_auth_scanner", True, 0,
                                     finding_count=len(dual_findings))
@@ -643,7 +602,7 @@ def execute_scan_tools(
             for af in ai_findings:
                 normalized = ctx._normalize_finding(af, "ai_vuln_scanner")
                 if normalized:
-                    _emit_finding_rt(ctx, normalized, "ai_vuln_scanner")
+                    emit_finding_rt(ctx.engagement_id, normalized, "ai_vuln_scanner")
                     all_findings.append(normalized)
             emit_tool_complete(ctx.engagement_id, "ai_vuln_scanner", True, 0,
                                 finding_count=len(ai_findings))
@@ -689,7 +648,7 @@ def execute_scan_tools(
                 for wf in ws_findings:
                     normalized = ctx._normalize_finding(wf, "websocket_scanner")
                     if normalized:
-                        _emit_finding_rt(ctx, normalized, "websocket_scanner")
+                        emit_finding_rt(ctx.engagement_id, normalized, "websocket_scanner")
                         all_findings.append(normalized)
                 emit_tool_complete(ctx.engagement_id, "websocket_scanner", True, 0,
                                    finding_count=len(ws_findings))
