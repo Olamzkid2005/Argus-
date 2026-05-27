@@ -36,6 +36,8 @@ export interface JobMessage {
   /** Must match engagements.scan_mode (agent | swarm) when set */
   scan_mode?: string;
   bug_bounty_mode?: boolean;
+  /** Authentication config for authenticated scanning */
+  auth_config?: Record<string, unknown> | null;
   trace_id: string;
   created_at: string;
   platform?: string;

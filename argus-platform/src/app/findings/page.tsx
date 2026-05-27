@@ -385,7 +385,7 @@ export default function FindingsPage() {
   } = useEngagementEvents({
     engagementId: uniqueEngagementId,
     enabled: streamingEnabled,
-    onEvent: useCallback((event) => {
+    onEvent: useCallback((event: { type: string; engagement_id: string; timestamp: string; data: unknown }) => {
       if (event.type === "finding_discovered") {
         const data = event.data as {
           finding_id?: string;

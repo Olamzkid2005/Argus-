@@ -35,6 +35,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import ScanModeHelp from "@/components/ui-custom/ScanModeHelp";
+import AuthWizard from "@/components/ui-custom/AuthWizard";
 import {
   BarChart,
   Bar,
@@ -171,6 +172,10 @@ export default function EngagementsPage() {
   const [nlError, setNlError] = useState("");
   const [nlIsFallback, setNlIsFallback] = useState(false);
 
+  // Auth Wizard state
+  const [authConfig, setAuthConfig] = useState<Record<string, unknown> | null>(null);
+  const [showAuthWizard, setShowAuthWizard] = useState(false);
+
   const { history, addToHistory, removeFromHistory, clearHistory } = useURLHistory();
 
   // Live engagements state
@@ -290,6 +295,7 @@ export default function EngagementsPage() {
           scanType: String(nlResult.scan_type || "url"),
           scanAggressiveness: String(nlResult.aggressiveness || "default"),
           agentMode: Boolean(nlResult.agent_mode),
+          authConfig: nlResult.auth_config || null,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: {},
           scanMode: "agent",
@@ -378,6 +384,7 @@ export default function EngagementsPage() {
           agentMode: agentMode,
           scanMode: scanMode,
           bugBounty: bugBounty,
+          authConfig: authConfig,
           authorization: "AUTHORIZED OPERATIONAL SCAN",
           authorizedScope: validatedScope,
         }),
@@ -1021,6 +1028,65 @@ Examples:
                   </button>
                 </div>
               </div>
+
+              {/* Auth Wizard Toggle */}
+              <div>
+                <label className="block text-[11px] font-bold text-on-surface-variant dark:text-[#8A8A9E] uppercase tracking-[0.2em] mb-2 font-body">
+                  Authenticated Scanning
+                </label>
+                <div className="flex items-center justify-between px-4 py-3 bg-surface-container dark:bg-[#1A1A24] border border-outline-variant dark:border-[#ffffff10] rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Shield size={18} className={authConfig ? "text-green-500" : "text-on-surface-variant/40"} />
+                    <div>
+                      <div className="text-xs font-medium text-on-surface dark:text-[#F0F0F5]">
+                        {authConfig ? "Auth configured" : "No authentication"}
+                      </div>
+                      <div className="text-[10px] text-on-surface-variant dark:text-[#8A8A9E]">
+                        {authConfig
+                          ? `Using ${authConfig.type === "form" ? "form login" : authConfig.type === "bearer" ? "bearer token" : "session cookie"} authentication`
+                          : "Configure credentials to scan authenticated areas"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {authConfig && (
+                      <button
+                        type="button"
+                        onClick={() => { setAuthConfig(null); setShowAuthWizard(false); }}
+                        className="text-[9px] text-error hover:underline font-body"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthWizard(!showAuthWizard)}
+                      className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
+                        showAuthWizard || authConfig ? "bg-primary" : "bg-surface-container-high dark:bg-[#2A2A35]"
+                      }`}
+                    >
+                      <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${
+                        showAuthWizard || authConfig ? "left-[22px]" : "left-0.5"
+                      }`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Auth Wizard Panel */}
+              {showAuthWizard && (
+                <AuthWizard
+                  targetUrl={target}
+                  onComplete={(config) => {
+                    setAuthConfig(config as unknown as Record<string, unknown>);
+                    setShowAuthWizard(false);
+                  }}
+                  onSkip={() => {
+                    setAuthConfig(null);
+                    setShowAuthWizard(false);
+                  }}
+                />
+              )}
 
               <button
                 type="submit"

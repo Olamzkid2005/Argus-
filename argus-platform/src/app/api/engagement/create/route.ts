@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       agentMode,
       scanMode,
       bugBounty,
+      authConfig,
     } = body;
 
     // Default authorization proof if not provided (NOT NULL column)
@@ -118,10 +119,50 @@ export async function POST(req: NextRequest) {
       const engagementId = uuidv4();
       const effectiveAggressiveness = scanAggressiveness || "default";
       const effectiveAgentMode = agentMode === true;
+      // Validate auth config if provided
+      let effectiveAuthConfig = null;
+      if (authConfig) {
+        const validTypes = ["form", "bearer", "cookie"];
+        if (!validTypes.includes(authConfig.type)) {
+          return createErrorResponse(
+            `authConfig.type must be one of: ${validTypes.join(", ")}`,
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        // Validate required fields per type
+        if (authConfig.type === "form" && (!authConfig.username || !authConfig.password)) {
+          return createErrorResponse(
+            "authConfig requires username and password for form-based auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        if (authConfig.type === "bearer" && !authConfig.token) {
+          return createErrorResponse(
+            "authConfig requires token for bearer auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        if (authConfig.type === "cookie" && !authConfig.cookie) {
+          return createErrorResponse(
+            "authConfig requires cookie string for cookie auth",
+            ErrorCodes.VALIDATION_ERROR,
+            undefined,
+            400,
+          );
+        }
+        effectiveAuthConfig = authConfig;
+      }
+
       const engagementResult = await client.query(
         `INSERT INTO engagements 
-         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+         (id, org_id, target_url, authorization_proof, authorized_scope, status, created_by, rate_limit_config, auth_config, scan_type, scan_aggressiveness, agent_mode, scan_mode, bug_bounty_mode, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
          RETURNING *`,
         [
           engagementId,
@@ -132,6 +173,7 @@ export async function POST(req: NextRequest) {
           "created",
           session.user.id,
           rateLimitConfig ? JSON.stringify(rateLimitConfig) : null,
+          effectiveAuthConfig ? JSON.stringify(effectiveAuthConfig) : null,
           effectiveScanType,
           effectiveAggressiveness,
           effectiveAgentMode,
@@ -199,6 +241,7 @@ export async function POST(req: NextRequest) {
             agent_mode: effectiveAgentMode,
             scan_mode: scanMode || "agent",
             bug_bounty_mode: bugBounty === true,
+            auth_config: effectiveAuthConfig,
             trace_id: traceId,
             created_at: new Date().toISOString(),
           });
