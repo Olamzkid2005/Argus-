@@ -331,7 +331,7 @@ export default function MonitoringPage() {
                     {posture.trend.length > 0 ? (
                       <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={posture.trend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+                          <AreaChart data={posture.trend} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                             <defs>
                               <linearGradient id="postureGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#6720FF" stopOpacity={0.3} />

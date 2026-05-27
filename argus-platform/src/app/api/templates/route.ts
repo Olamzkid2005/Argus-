@@ -1,4 +1,4 @@
-// Engagement Templates API — list & create
+// Engagement Templates API — list, create, update
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
@@ -77,11 +77,90 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ template: result.rows[0] }, { status: 201 });
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
+    return NextResponse.json(
+      { error: "Failed to create template" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  log.api('PUT', '/api/templates');
+  try {
+    const session = await requireAuth();
+    const body = await req.json();
+    const { id, name, description, config } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Template ID is required" }, { status: 400 });
+    }
+
+    const client = await pool.connect();
+    try {
+      // Build dynamic SET clause with only provided fields
+      const updates: string[] = [];
+      const params: unknown[] = [];
+      let paramIdx = 1;
+
+      if (name !== undefined) {
+        if (!name.toString().trim()) {
+          return NextResponse.json({ error: "Template name cannot be empty" }, { status: 400 });
+        }
+        updates.push(`name = $${paramIdx++}`);
+        params.push(name.toString().trim());
+      }
+      if (description !== undefined) {
+        updates.push(`description = $${paramIdx++}`);
+        params.push(description);
+      }
+      if (config !== undefined) {
+        if (typeof config !== "object") {
+          return NextResponse.json({ error: "Template config must be a valid object" }, { status: 400 });
+        }
+        updates.push(`config = $${paramIdx++}`);
+        params.push(JSON.stringify(config));
+      }
+
+      if (updates.length === 0) {
+        return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+      }
+
+      params.push(id, session.user.orgId);
+
+      const result = await client.query(
+        `UPDATE engagement_templates
+         SET ${updates.join(", ")}
+         WHERE id = $${paramIdx++} AND org_id = $${paramIdx}
+         RETURNING id, name, description, config, created_at, updated_at`,
+        params,
+      );
+
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: "Template not found" }, { status: 404 });
+      }
+
+      log.apiEnd('PUT', `/api/templates/${id}`, 200);
+      return NextResponse.json({ template: result.rows[0] });
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
         return NextResponse.json(
           { error: "A template with this name already exists in your organization" },
           { status: 409 },
         );
       }
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    log.error("Update template error:", error);
+    const err = error as Error;
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json({ error: "Failed to update template" }, { status: 500 });
+  }
+}
       throw err;
     } finally {
       client.release();

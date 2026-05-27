@@ -4,6 +4,11 @@ import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
 import { log } from "@/lib/logger";
 
+function tryParseJSON<T>(val: T): T | Record<string, unknown> {
+  if (typeof val !== "string") return val as T;
+  try { return JSON.parse(val); } catch { return val; }
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -28,12 +33,7 @@ export async function GET(
         attack_paths: result.rows.map((row) => ({
           ...row,
           chain_exploit_script: row.chain_exploit_script
-            ? (typeof row.chain_exploit_script === "string"
-                ? (() => {
-                    try { return JSON.parse(row.chain_exploit_script); }
-                    catch { return row.chain_exploit_script; }
-                  })()
-                : row.chain_exploit_script)
+            ? tryParseJSON(row.chain_exploit_script)
             : null,
         })),
       });
