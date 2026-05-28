@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS scheduled_engagements (
     target_url      VARCHAR(2048) NOT NULL,
     authorized_scope JSONB NOT NULL DEFAULT '{}',
     scan_type       VARCHAR(50) NOT NULL DEFAULT 'url',
-    aggressiveness  VARCHAR(20) NOT NULL DEFAULT 'default',
+    scan_aggressiveness  VARCHAR(20) NOT NULL DEFAULT 'default',  -- renamed from 'aggressiveness' for consistency with engagements table (M-v4-12)
     agent_mode      BOOLEAN NOT NULL DEFAULT TRUE,
     cron_expression VARCHAR(100) NOT NULL,  -- e.g. '0 2 * * 1' (Mon 2am)
     next_run_at     TIMESTAMP WITH TIME ZONE,
