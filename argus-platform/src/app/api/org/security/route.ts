@@ -97,6 +97,29 @@ export async function PUT(req: NextRequest) {
           { status: 400 },
         );
       }
+      // M-v3-07: Validate each entry in the IP allowlist
+      const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/;
+      const validCidr = (entry: string): boolean => {
+        const match = entry.match(ipv4Regex);
+        if (!match) return false;
+        for (let i = 1; i <= 4; i++) {
+          const octet = parseInt(match[i], 10);
+          if (octet < 0 || octet > 255) return false;
+        }
+        if (match[5]) {
+          const prefix = parseInt(match[6], 10);
+          if (prefix < 0 || prefix > 32) return false;
+        }
+        return true;
+      };
+      for (const entry of ip_allowlist) {
+        if (typeof entry !== "string" || !validCidr(entry)) {
+          return NextResponse.json(
+            { error: `Invalid IP or CIDR: "${entry}"` },
+            { status: 400 },
+          );
+        }
+      }
       updates.push(`ip_allowlist = $${paramIndex++}`);
       values.push(ip_allowlist);
     }

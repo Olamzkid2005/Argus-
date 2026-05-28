@@ -176,8 +176,12 @@ class ConnectionManager:
                         "SET statement_timeout = %s",
                         (self._statement_timeout_ms,)
                     )
-            except psycopg2.Error:
-                pass  # Non-fatal; query will still run, just without timeout
+            except psycopg2.Error as st_err:
+                # M-v4-02: Log warning when statement_timeout can't be set.
+                # Without this, the connection returns to the pool without
+                # query timeout, allowing runaway queries.
+                logger.warning("Failed to set statement_timeout on connection %s: %s",
+                               id(conn), st_err)
 
             with self._metrics_lock:
                 self._metrics["active_connections"] += 1

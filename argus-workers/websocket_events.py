@@ -72,9 +72,13 @@ class WebSocketEventPublisher:
 
     @property
     def redis(self) -> redis.Redis:
-        """Lazy Redis connection"""
+        """Lazy Redis connection with timeouts (M-v5-03)"""
         if self._redis is None:
-            self._redis = redis.from_url(self.redis_url)
+            self._redis = redis.from_url(
+                self.redis_url,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
         return self._redis
 
     def close(self):

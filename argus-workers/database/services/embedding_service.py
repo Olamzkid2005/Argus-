@@ -83,7 +83,11 @@ class EmbeddingService:
         If a non-200 (e.g. 402 Insufficient Credits) is received once,
         all subsequent calls skip the network round trip entirely.
         """
-        if getattr(EmbeddingService, '_embed_api_blocked', False):
+        # M-v4-17: Use cooldown-based blocking instead of permanent flag.
+        # A single transient API failure should not permanently disable embeddings.
+        last_fail = getattr(EmbeddingService, '_embed_last_fail_time', 0)
+        if last_fail and (time.time() - last_fail) < 60:
+            # Cooldown: retry after 60 seconds
             return None
         api_key = self._api_key()
         if not api_key:
@@ -102,7 +106,7 @@ class EmbeddingService:
                 data = resp.json()
                 return data["data"][0]["embedding"]
             # Non-200 response indicates credits exhausted / invalid key
-            EmbeddingService._embed_api_blocked = True
+            EmbeddingService._embed_last_fail_time = time.time()
         except Exception as e:
             logger.debug("Embedding API failed (non-fatal): %s", e)
         return None

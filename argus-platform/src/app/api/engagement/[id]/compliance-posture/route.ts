@@ -47,61 +47,11 @@ export async function GET(
       }
     }
 
-    // If no snapshot exists yet, compute a placeholder
+    // M-v3-09: Return null when no snapshot exists — a perfect 100 score is misleading
+    // when the engagement may have critical unverified findings.
+    // Frontend should show "Not yet assessed" instead.
     if (!latest) {
-      // Get total finding count to show context
-      const findingCountResult = await pool.query(
-        "SELECT COUNT(*) AS count FROM findings WHERE engagement_id = $1",
-        [engagementId],
-      );
-      const totalFindings = parseInt(
-        String(findingCountResult.rows[0]?.count ?? "0"),
-        10,
-      );
-
-      // Get engagement creation date
-      const engResult = await pool.query(
-        "SELECT created_at FROM engagements WHERE id = $1",
-        [engagementId],
-      );
-
-      latest = {
-        engagement_id: engagementId,
-        composite_score: 100.0,
-        framework_scores: {
-          owasp_top10: {
-            score: 100.0,
-            total_findings: 0,
-            critical_count: 0,
-            high_count: 0,
-            medium_count: 0,
-            finding_breakdown: {},
-          },
-          pci_dss: {
-            score: 100.0,
-            total_findings: 0,
-            critical_count: 0,
-            high_count: 0,
-            medium_count: 0,
-            finding_breakdown: {},
-          },
-          soc2: {
-            score: 100.0,
-            total_findings: 0,
-            critical_count: 0,
-            high_count: 0,
-            medium_count: 0,
-            finding_breakdown: {},
-          },
-        },
-        total_findings: totalFindings,
-        trend: "stable",
-        previous_score: null,
-        computed_at:
-          engResult.rows[0]?.created_at
-            ? new Date(engResult.rows[0].created_at).toISOString()
-            : new Date().toISOString(),
-      };
+      return NextResponse.json({ latest: null, history: [] });
     }
 
     // Fetch history if requested

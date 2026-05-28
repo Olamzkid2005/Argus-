@@ -32,9 +32,11 @@ jinja2==3.1.5
 # Logging and Monitoring
 structlog==24.4.0
 
-# Testing
-pytest==8.3.4
-pytest-asyncio==0.25.2
-pytest-celery==1.1.2
-pytest-cov==6.1.1
-playwright>=1.59.0
+# M-35: Test dependencies moved to requirements-dev.txt to avoid bloating
+# production images with ~400MB of browser binaries.
+# Install with: pip install -r requirements-dev.txt
+# pytest==8.3.4
+# pytest-asyncio==0.25.2
+# pytest-celery==1.1.2
+# pytest-cov==6.1.1
+# playwright>=1.59.0

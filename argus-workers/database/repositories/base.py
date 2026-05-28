@@ -249,7 +249,14 @@ class BaseRepository:
             raise
         finally:
             cursor.close()
-            if not self._external_conn:
+            if isinstance(self._external_conn, str):
+                # M-v4-01: String connections create fresh connections each time —
+                # must be explicitly closed to prevent connection leaks.
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            elif not self._external_conn:
                 self._release_connection(conn)
 
     def _to_dict(self, row: Any, cursor=None) -> dict | None:

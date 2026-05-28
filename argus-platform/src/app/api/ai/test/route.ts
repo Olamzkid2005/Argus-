@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 // M-v3-04: Use shared Redis singleton instead of per-request client
 import { redis } from "@/lib/redis";
+import { createRateLimit } from "@/lib/rate-limiter";
+
+// M-v4-16: Rate limit AI test calls to prevent API budget exhaustion
+const aiTestRateLimit = createRateLimit({ windowMs: 60000, maxRequests: 6 });
 
 interface TestRequest {
   apiKey?: string;
@@ -16,12 +20,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // M-v4-16: Rate limit to 6 requests per minute per user
+    const rateLimited = await aiTestRateLimit(request as NextRequest);
+    if (rateLimited) return rateLimited;
+
     const body = (await request.json()) as TestRequest;
     const providedApiKey =
       body.apiKey && !body.apiKey.includes("•") ? body.apiKey.trim() : "";
     const requestedModel = body.model?.trim();
 
-    redis = getRedisClient();
     const email = session.user.email;
 
     const savedApiKey = await redis.get(`settings:${email}:openrouter_api_key`);
