@@ -44,9 +44,9 @@ CREATE OR REPLACE FUNCTION find_similar_findings(
 )
 RETURNS TABLE (
     id UUID,
-    type VARCHAR(100),
-    severity VARCHAR(20),
-    endpoint VARCHAR(500),
+    type VARCHAR(255),     -- match schema.sql column width (was 100 — M-v4-15)
+    severity VARCHAR(50),  -- match schema.sql column width (was 20 — M-v4-15)
+    endpoint VARCHAR(2048),-- match schema.sql column width (was 500 — M-v4-15)
     similarity float,
     engagement_id UUID
 ) AS $$
