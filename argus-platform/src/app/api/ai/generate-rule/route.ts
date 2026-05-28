@@ -8,15 +8,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import Redis from "ioredis";
-
-function getRedisClient() {
-  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-  return new Redis(redisUrl, {
-    maxRetriesPerRequest: 1,
-    lazyConnect: true,
-  });
-}
+// M-v3-04: Use shared Redis singleton instead of per-request client
+import { redis } from "@/lib/redis";
 
 interface GenerateRuleRequest {
   description: string;
@@ -106,7 +99,7 @@ function extractYaml(content: string): string {
 
 // POST - Generate a rule from natural language
 export async function POST(request: NextRequest) {
-  let redis: Redis | null = null;
+  // M-v3-04: Uses shared redis singleton from @/lib/redis — no per-request client needed
 
   try {
     const session = await getServerSession(authOptions);
@@ -122,7 +115,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Description is required" }, { status: 400 });
     }
 
-    redis = getRedisClient();
     const email = session.user.email;
 
     const apiKey = await redis.get(`settings:${email}:openrouter_api_key`);
@@ -158,6 +150,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    if (redis) redis.disconnect();
+    // M-v3-04: No need to disconnect — using shared singleton
   }
 }

@@ -120,10 +120,13 @@ export async function PUT(request: NextRequest) {
     const response = { success: true };
 
     // Store result for idempotency (24h TTL)
+    // M-v3-05: Redact sensitive fields from body before using in idempotency key
+    // to prevent API keys from appearing in Redis key names.
+    const idempotencyBody = { ...body, openrouter_api_key: "REDACTED" };
     const cacheKey = idempotencyKey || generateAPIIdempotencyKey(
       userId,
       "/api/settings",
-      body
+      idempotencyBody
     );
     await setAPIIdempotencyResult(
       cacheKey,

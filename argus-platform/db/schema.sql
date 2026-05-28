@@ -485,6 +485,15 @@ CREATE INDEX idx_assets_asset_type ON assets(asset_type);
 CREATE INDEX idx_assets_risk_score ON assets(risk_score);
 CREATE INDEX idx_assets_lifecycle_status ON assets(lifecycle_status);
 
+-- M-v3-06: Missing indexes on core tables — all filter by engagement_id
+CREATE INDEX IF NOT EXISTS idx_checkpoints_engagement_id ON checkpoints(engagement_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_phase ON checkpoints(phase);
+CREATE INDEX IF NOT EXISTS idx_execution_failures_engagement_id ON execution_failures(engagement_id);
+CREATE INDEX IF NOT EXISTS idx_execution_failures_type ON execution_failures(failure_type);
+CREATE INDEX IF NOT EXISTS idx_raw_outputs_engagement_id ON raw_outputs(engagement_id);
+CREATE INDEX IF NOT EXISTS idx_raw_outputs_tool_name ON raw_outputs(tool_name);
+CREATE INDEX IF NOT EXISTS idx_scope_violations_engagement_id ON scope_violations(engagement_id);
+
 -- ============================================================================
 -- GRANTS (Adjust based on your user setup)
 -- ============================================================================

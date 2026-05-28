@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import Redis from "ioredis";
-
-function getRedisClient() {
-  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-  return new Redis(redisUrl, {
-    maxRetriesPerRequest: 1,
-    lazyConnect: true,
-  });
-}
+// M-v3-04: Use shared Redis singleton instead of per-request client
+import { redis } from "@/lib/redis";
 
 interface TestRequest {
   apiKey?: string;
@@ -17,8 +10,6 @@ interface TestRequest {
 }
 
 export async function POST(request: NextRequest) {
-  let redis: Redis | null = null;
-
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -107,6 +98,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    if (redis) redis.disconnect();
+    // M-v3-04: No need to disconnect — using shared singleton
   }
 }

@@ -20,19 +20,42 @@ LEFT JOIN organizations o ON e.org_id = o.id
 LEFT JOIN findings f ON e.id = f.engagement_id
 GROUP BY e.id, o.name;
 
--- Refresh on data change
+-- M-29: Refresh materialized view on a cooldown to prevent thousands of refreshes
+-- during high-throughput scans. Uses CONCURRENTLY to avoid blocking reads.
+-- Limit to one refresh per 60 seconds using a custom GUC variable.
 CREATE OR REPLACE FUNCTION refresh_engagement_summary() RETURNS TRIGGER AS $$
+DECLARE
+    last_refresh TIMESTAMP;
 BEGIN
-    REFRESH MATERIALIZED VIEW engagement_summary;
+    -- Get last refresh time from a custom GUC (session-local, reset on connection)
+    BEGIN
+        last_refresh := current_setting('app.last_mv_refresh')::TIMESTAMP;
+    EXCEPTION WHEN OTHERS THEN
+        last_refresh := NULL;
+    END;
+
+    IF last_refresh IS NULL OR NOW() - last_refresh > INTERVAL '60 seconds' THEN
+        BEGIN
+            PERFORM set_config('app.last_mv_refresh', NOW()::TEXT, false);
+            REFRESH MATERIALIZED VIEW CONCURRENTLY engagement_summary;
+        EXCEPTION WHEN OTHERS THEN
+            -- If CONCURRENTLY fails (e.g., no unique index), fall back to regular refresh
+            REFRESH MATERIALIZED VIEW engagement_summary;
+        END;
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger
+-- Create trigger (per-statement, not per-row, to reduce refresh frequency)
 DROP TRIGGER IF EXISTS refresh_summary_trigger ON findings;
 CREATE TRIGGER refresh_summary_trigger
 AFTER INSERT OR UPDATE OR DELETE ON findings
-FOR EACH ROW EXECUTE FUNCTION refresh_engagement_summary();
+FOR EACH STATEMENT EXECUTE FUNCTION refresh_engagement_summary();
+
+-- Add a unique index to support CONCURRENTLY refresh
+CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_summary_id ON engagement_summary(id);
 
 -- Add Redis caching helper functions
 CREATE OR REPLACE FUNCTION cache_get(key TEXT) RETURNS TEXT AS $$

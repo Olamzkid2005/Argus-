@@ -50,14 +50,12 @@ export async function POST(
         [engagementId],
       );
 
-      // Update Redis state if applicable
+      // Update Redis state if applicable (M-v3-04: use shared singleton)
       try {
-        const Redis = (await import("ioredis")).default;
-        const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+        const { redis } = await import("@/lib/redis");
         const stateKey = `state:engagement:${engagementId}`;
         await redis.set(stateKey, "failed");
         await redis.expire(stateKey, 300);
-        await redis.quit();
       } catch (redisErr) {
         console.warn("Failed to update Redis state:", redisErr);
       }
