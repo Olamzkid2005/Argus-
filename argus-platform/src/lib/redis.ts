@@ -28,7 +28,7 @@ function createRedisClient(): Redis {
   // Configure TLS if enabled via REDIS_TLS env var or rediss:// protocol
   if (enableTLS) {
     options.tls = {
-      rejectUnauthorized: process.env.NODE_ENV === "production",
+      rejectUnauthorized: process.env.NODE_ENV !== "development", // secure default: reject unauthorized in prod/staging; permissive only in dev
     };
   }
 

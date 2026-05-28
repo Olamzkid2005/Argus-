@@ -294,11 +294,8 @@ def execute_recon_tools(
 
         # Resolve org_id from ctx or scan_ctx
         _org_id = None
-        _db_conn = None
         if hasattr(ctx, "org_id"):
             _org_id = ctx.org_id
-        if hasattr(ctx, "db_connection_string"):
-            _db_conn = ctx.db_connection_string
         # Fallback: try getting org_id from orchestrator
         if not _org_id and hasattr(ctx, "_get_org_id"):
             with contextlib.suppress(Exception):
@@ -306,7 +303,7 @@ def execute_recon_tools(
 
         domain = urlparse(target).netloc
         if _org_id and domain:
-            profile_repo = TargetProfileRepository(_db_conn)
+            profile_repo = TargetProfileRepository()
             existing_profile = profile_repo.get_profile(_org_id, domain)
             if existing_profile:
                 recon_context.target_profile = existing_profile

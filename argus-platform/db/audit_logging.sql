@@ -33,7 +33,7 @@ BEGIN
     
     RETURN v_audit_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- Create audit logs for common actions
 CREATE OR REPLACE FUNCTION trigger_audit_log() RETURNS TRIGGER AS $$
@@ -71,7 +71,7 @@ BEGIN
     
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- Create triggers for key tables
 DROP TRIGGER IF EXISTS audit_engagements_trigger ON engagements;

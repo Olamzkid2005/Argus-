@@ -44,7 +44,7 @@ class FeedbackLearningLoop:
         from database.repositories.tool_accuracy_repository import (
             ToolAccuracyRepository,
         )
-        self._accuracy_repo = ToolAccuracyRepository(connection_string)
+        self._accuracy_repo = ToolAccuracyRepository()
 
     def on_feedback(self, feedback: FindingFeedback) -> dict | None:
         """Process analyst feedback — main entry point.

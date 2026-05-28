@@ -161,7 +161,7 @@ class IntelligenceEngine:
                 from database.repositories.tool_accuracy_repository import (
                     ToolAccuracyRepository,
                 )
-                repo = ToolAccuracyRepository(self.connection_string)
+                repo = ToolAccuracyRepository()
                 tool_fp_rates = repo.load_fp_rates(org_id)
                 slog.info(f"Loaded FP rates for {len(tool_fp_rates)} tools")
             except Exception as e:

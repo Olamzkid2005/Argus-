@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS activity_feed (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
     activity_type VARCHAR(100) NOT NULL,
     entity_type VARCHAR(50) NOT NULL,
     entity_id UUID NOT NULL,
@@ -11,6 +12,7 @@ CREATE TABLE IF NOT EXISTS activity_feed (
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_feed_org_id ON activity_feed(org_id);
+CREATE INDEX IF NOT EXISTS idx_activity_feed_engagement_id ON activity_feed(engagement_id);
 CREATE INDEX IF NOT EXISTS idx_activity_feed_created_at ON activity_feed(created_at);
 
 -- Scheduled reports for automated report delivery (used by reporting)

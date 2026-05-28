@@ -5,8 +5,9 @@ Thread-safe: each method acquires its own connection from the pool.
 Part of the Self-Calibrating Confidence feature (Steps 1-3).
 """
 
-import contextlib
 import logging
+
+from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,6 @@ class ToolAccuracyRepository:
     using a Bayesian prior: (fp_count + 0.5) / (total + 1).
     This prevents degenerate rates (0.0 or 1.0) when data is sparse.
     """
-
-    def __init__(self, connection_string: str | None = None):
-        self.connection_string = connection_string
 
     # ── Record a verdict ────────────────────────────────────────────
 
@@ -43,16 +41,12 @@ class ToolAccuracyRepository:
         Returns:
             True if the verdict was recorded successfully
         """
-        from database.connection import connect
-
         if not org_id or not source_tool:
             return False
 
-        conn = None
         try:
-            conn = connect(self.connection_string)
-            cursor = conn.cursor()
-            cursor.execute(
+            with db_cursor(commit=True) as cursor:
+                cursor.execute(
                 """
                 INSERT INTO tool_accuracy
                     (org_id, source_tool, total_verdicts,
@@ -84,18 +78,10 @@ class ToolAccuracyRepository:
                     is_true_positive,   # CASE: initial fp_rate
                 ),
             )
-            conn.commit()
             return True
         except Exception as e:
             logger.error("tool_accuracy record_verdict failed: %s", e)
-            if conn:
-                with contextlib.suppress(Exception):
-                    conn.rollback()
             return False
-        finally:
-            if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
 
     # ── Read FP rates ───────────────────────────────────────────────
 
@@ -114,24 +100,16 @@ class ToolAccuracyRepository:
         if not org_id:
             return {}
 
-        from database.connection import connect
-
-        conn = None
         try:
-            conn = connect(self.connection_string)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT source_tool, fp_rate FROM tool_accuracy WHERE org_id = %s",
-                (org_id,),
-            )
-            return {row[0]: float(row[1]) for row in cursor.fetchall()}
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT source_tool, fp_rate FROM tool_accuracy WHERE org_id = %s",
+                    (org_id,),
+                )
+                return {row[0]: float(row[1]) for row in cursor.fetchall()}
         except Exception as e:
             logger.warning("Could not load tool_accuracy: %s", e)
             return {}
-        finally:
-            if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
 
     def get_tool_fp_rate(self, org_id: str, source_tool: str) -> float | None:
         """Get fp_rate for a single tool. Returns None if no row exists.

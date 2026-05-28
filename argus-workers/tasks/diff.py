@@ -58,7 +58,7 @@ def run_scan_diff(
         engine = ScanDiffEngine(db_url)
 
         # Load target profile for fixed-finding fingerprints
-        profile_repo = TargetProfileRepository(db_url)
+        profile_repo = TargetProfileRepository()
         target_url = _get_engagement_target(new_engagement_id)
         domain = (
             TargetProfileRepository.extract_domain(target_url)

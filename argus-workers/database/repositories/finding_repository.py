@@ -370,16 +370,21 @@ class FindingRepository(BaseRepository):
         """
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
             # Try materialized view first for better performance
-            cursor.execute(
-                """
-                SELECT total_findings, critical_count, high_count, medium_count,
-                       low_count, info_count, avg_confidence
-                FROM mv_engagement_findings
-                WHERE engagement_id = %s
-                """,
-                (engagement_id,)
-            )
-            row = cursor.fetchone()
+            # M-v4-03: Catch UndefinedTable so fallback works when MV doesn't exist
+            try:
+                cursor.execute(
+                    """
+                    SELECT total_findings, critical_count, high_count, medium_count,
+                           low_count, info_count, avg_confidence
+                    FROM mv_engagement_findings
+                    WHERE engagement_id = %s
+                    """,
+                    (engagement_id,)
+                )
+                row = cursor.fetchone()
+            except psycopg2_errors.UndefinedTable:
+                logger.debug("Materialized view mv_engagement_findings does not exist — falling back to direct query")
+                row = None
 
             if row:
                 summary = {}

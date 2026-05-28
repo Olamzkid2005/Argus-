@@ -182,7 +182,7 @@ class MemoryRetriever:
             from database.repositories.target_profile_repository import (
                 TargetProfileRepository,
             )
-            repo = TargetProfileRepository(self.connection_string)
+            repo = TargetProfileRepository()
             profile = repo.get_by_engagement_id(engagement_id)
             if profile and hasattr(profile, "to_dict"):
                 return profile.to_dict()

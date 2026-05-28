@@ -5,11 +5,12 @@ Thread-safe: each method acquires its own connection from the pool.
 Pure-function reads: the profile is a snapshot, not a live cursor.
 """
 
-import contextlib
 import json
 import logging
 from datetime import UTC, datetime
 from urllib.parse import urlparse
+
+from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,6 @@ class TargetProfileRepository:
     Builds a persistent profile per target domain after each scan.
     Profiles are used by the LLM agent to select better tools on rescan.
     """
-
-    def __init__(self, connection_string: str | None = None):
-        self.connection_string = connection_string
 
     # ── Domain extraction ───────────────────────────────────────────
 
@@ -118,13 +116,9 @@ class TargetProfileRepository:
                     noisy_tools_list.append(tool)
 
         # Persist (upsert with JSONB merge)
-        conn = None
         try:
-            from database.connection import connect
-
-            conn = connect(self.connection_string)
-            cursor = conn.cursor()
-            cursor.execute(
+            with db_cursor(commit=True) as cursor:
+                cursor.execute(
                 """
                 INSERT INTO target_profiles (
                     org_id, target_domain,
@@ -212,8 +206,7 @@ class TargetProfileRepository:
                     json.dumps([engagement_id]),
                 ),
             )
-            conn.commit()
-
+            # Commit already happens via db_cursor(commit=True)
             # Fetch and return the full profile
             cursor.execute(
                 "SELECT * FROM target_profiles WHERE org_id = %s AND target_domain = %s",
@@ -225,14 +218,7 @@ class TargetProfileRepository:
 
         except Exception as e:
             logger.error("Failed to upsert target profile for %s: %s", domain, e)
-            if conn:
-                with contextlib.suppress(Exception):
-                    conn.rollback()
             return None
-        finally:
-            if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
 
     # ── Profile reading ─────────────────────────────────────────────
 
@@ -249,26 +235,18 @@ class TargetProfileRepository:
         if not org_id or not target_domain:
             return None
 
-        conn = None
         try:
-            from database.connection import connect
-
-            conn = connect(self.connection_string)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM target_profiles WHERE org_id = %s AND target_domain = %s",
-                (org_id, target_domain),
-            )
-            columns = [desc[0] for desc in cursor.description]
-            row = cursor.fetchone()
-            return dict(zip(columns, row, strict=False)) if row else None
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT * FROM target_profiles WHERE org_id = %s AND target_domain = %s",
+                    (org_id, target_domain),
+                )
+                columns = [desc[0] for desc in cursor.description]
+                row = cursor.fetchone()
+                return dict(zip(columns, row, strict=False)) if row else None
         except Exception as e:
             logger.warning("Could not load target profile: %s", e)
             return None
-        finally:
-            if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
 
     # ── LLM prompt section builder ──────────────────────────────────
 

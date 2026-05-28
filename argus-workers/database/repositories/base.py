@@ -71,33 +71,36 @@ def _get_table_columns(table_name: str) -> list[str]:
             return _schema_cache[table_name]
         # TTL expired — fall through to re-fetch
 
+    conn = None
+    cursor = None
     try:
         conn = get_db().get_connection()
         cursor = conn.cursor()
 
-        try:
-            # Query information_schema for column names
-            cursor.execute(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_name = %s
-                AND table_schema = 'public'
-            """,
-                (table_name,),
-            )
+        # Query information_schema for column names
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s
+            AND table_schema = 'public'
+        """,
+            (table_name,),
+        )
 
-            columns = [row[0] for row in cursor.fetchall()]
-            _schema_cache[table_name] = columns
-            _schema_cache_timestamps[table_name] = _time.time()
-            return columns
-        finally:
-            cursor.close()
-            get_db().release_connection(conn)
+        columns = [row[0] for row in cursor.fetchall()]
+        _schema_cache[table_name] = columns
+        _schema_cache_timestamps[table_name] = _time.time()
+        return columns
     except Exception as e:
         logging.getLogger(__name__).debug("Schema introspection failed for %s: %s — falling back to allowlist", table_name, e)
         # Fall back to allowlist if schema introspection fails
         return ALLOWED_COLUMNS.get(table_name, [])
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            get_db().release_connection(conn)
 
 
 def validate_columns(table_name: str, columns: list[str]) -> list[str]:

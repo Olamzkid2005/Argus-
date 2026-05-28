@@ -103,6 +103,7 @@ class LLMClient:
         self._circuit_threshold = 1  # Open after 1 failure — prevents wasted retries
         self._circuit_cooldown = 60.0
         self._circuit_lock = threading.Lock()
+        self._rate_lock = threading.Lock()
 
     def _load_key_from_db(self) -> str | None:
         """
@@ -244,13 +245,14 @@ class LLMClient:
                 logger.debug("Redis rate limiter unavailable — falling back to in-process: %s", e)
 
         # Fallback: in-process rate limiter
-        self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
-        if len(self._request_timestamps) >= self._rate_limit_max:
-            sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
-            if sleep_time > 0:
-                logger.warning("LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time)
-                time.sleep(sleep_time)
-        self._request_timestamps.append(now)
+        with self._rate_lock:
+            self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
+            if len(self._request_timestamps) >= self._rate_limit_max:
+                sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
+                if sleep_time > 0:
+                    logger.warning("LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time)
+                    time.sleep(sleep_time)
+            self._request_timestamps.append(now)
 
     async def chat(
         self,
