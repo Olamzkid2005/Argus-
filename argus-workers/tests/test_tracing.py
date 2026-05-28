@@ -5,7 +5,7 @@ Validates: Requirements 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2
 """
 import time
 import uuid
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 from tracing import (
     ExecutionContext,

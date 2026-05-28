@@ -10,10 +10,9 @@ from psycopg2 import errors as psycopg2_errors
 from psycopg2.extras import Json, RealDictCursor
 from psycopg2.sql import SQL, Identifier
 
-from database.repositories.base import BaseRepository
-
 # M-02: Cache invalidation for findings data
 from cache import WorkerCache
+from database.repositories.base import BaseRepository
 
 cache = WorkerCache()
 

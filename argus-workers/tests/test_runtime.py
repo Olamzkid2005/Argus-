@@ -333,7 +333,7 @@ class TestExecutionEngine:
             return (tool_name, args, kwargs)
 
         engine.add_middleware(test_middleware)
-        result = engine.execute("nuclei", args=["https://example.com"])
+        engine.execute("nuclei", args=["https://example.com"])
 
         assert len(middleware_called) == 1
         assert middleware_called[0][0] == "nuclei"
@@ -778,7 +778,7 @@ class TestShadowMode:
 
     def test_matching_results(self):
         """Test that matching results increment consecutive successes."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
         shadow_compare("test_phase", "eng-1", {"key": "value"}, lambda: {"key": "value"})
         stats = get_shadow_stats("test_phase")
         assert stats["consecutive_successes"] == 1
@@ -786,7 +786,7 @@ class TestShadowMode:
 
     def test_mismatching_results(self):
         """Test that mismatching results reset consecutive successes."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
         shadow_compare("test_phase", "eng-1", {"key": "new_value"}, lambda: {"key": "old_value"})
         stats = get_shadow_stats("test_phase")
         assert stats["consecutive_successes"] == 0
@@ -794,7 +794,7 @@ class TestShadowMode:
 
     def test_old_path_exception(self):
         """Test that old path exceptions are counted as mismatches."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
 
         def failing_old_path():
             raise RuntimeError("old path failed")
@@ -806,7 +806,7 @@ class TestShadowMode:
 
     def test_key_fields_comparison(self):
         """Test comparing only specific key fields."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
         new_result = {"risk": "high", "findings": ["xss"]}
         old_result = {"risk": "high", "findings": ["sqli"]}
         # Compare only 'risk' key — should match
@@ -816,7 +816,7 @@ class TestShadowMode:
 
     def test_consecutive_successes_accumulate(self):
         """Test that consecutive successes accumulate across calls."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
         for _ in range(5):
             shadow_compare("test_phase", "eng-1", {"key": "v"}, lambda: {"key": "v"})
         stats = get_shadow_stats("test_phase")
@@ -824,7 +824,7 @@ class TestShadowMode:
 
     def test_mismatch_resets_consecutive(self):
         """Test that a mismatch resets the consecutive counter."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
         for _ in range(3):
             shadow_compare("test_phase", "eng-1", {"key": "v"}, lambda: {"key": "v"})
         # Now a mismatch
@@ -835,7 +835,7 @@ class TestShadowMode:
 
     def test_get_shadow_stats_all_phases(self):
         """Test that get_shadow_stats without phase returns all."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
         shadow_compare("phase_a", "eng-1", {"k": "v"}, lambda: {"k": "v"})
         shadow_compare("phase_b", "eng-1", {"k": "v"}, lambda: {"k": "old"})
         all_stats = get_shadow_stats()
@@ -846,7 +846,11 @@ class TestShadowMode:
 
     def test_reset_shadow_stats(self):
         """Test that reset clears stats for a specific phase."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats, reset_shadow_stats
+        from runtime.shadow_mode import (
+            get_shadow_stats,
+            reset_shadow_stats,
+            shadow_compare,
+        )
         shadow_compare("test_phase", "eng-1", {"k": "v"}, lambda: {"k": "v"})
         reset_shadow_stats("test_phase")
         stats = get_shadow_stats("test_phase")
@@ -1078,7 +1082,7 @@ class TestOperationalGate:
         """Simulate N consecutive engagements where the new and old paths
         produce identical results. After N engagements, the consecutive
         successes counter must equal N, proving the gate is met."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
 
         for i in range(n_engagements):
             shadow_compare(
@@ -1097,7 +1101,7 @@ class TestOperationalGate:
         """Simulate N successful engagements, then a single mismatch.
         The consecutive counter must reset to 0 after the mismatch,
         simulating the 'gate not yet met' scenario."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
 
         for i in range(n_ok_before):
             shadow_compare(
@@ -1126,7 +1130,7 @@ class TestOperationalGate:
     def test_old_path_exception_breaks_gate(self):
         """If the old path raises during any engagement, it counts as a
         mismatch and resets the consecutive counter."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
 
         # 20 good runs
         for i in range(20):
@@ -1148,7 +1152,7 @@ class TestOperationalGate:
     def test_multi_phase_gate(self):
         """Simulate multiple phases each tracking their own gate threshold.
         Phase A passes 100, Phase B only 50 — only A should be past the gate."""
-        from runtime.shadow_mode import shadow_compare, get_shadow_stats
+        from runtime.shadow_mode import get_shadow_stats, shadow_compare
 
         # Phase A: 100 consecutive successes
         for i in range(100):

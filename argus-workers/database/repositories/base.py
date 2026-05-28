@@ -261,10 +261,8 @@ class BaseRepository:
             if isinstance(self._external_conn, str):
                 # M-v4-01: String connections create fresh connections each time —
                 # must be explicitly closed to prevent connection leaks.
-                try:
+                with suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
             elif not self._external_conn:
                 self._release_connection(conn)
 

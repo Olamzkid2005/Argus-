@@ -14,8 +14,8 @@ from urllib.parse import urlparse
 
 from config.constants import (
     ALLOWED_GIT_SCHEMES,
-    GIT_HOST_ALLOWLIST,
     DEFAULT_AGGRESSIVENESS,
+    GIT_HOST_ALLOWLIST,
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
@@ -44,7 +44,7 @@ def validate_repo_url(repo_url: str) -> str:
 
     # Block file:// URLs entirely (path traversal risk)
     if parsed.scheme == "file":
-        raise ValueError(f"Disallowed git URL scheme: file:// (SSRF risk)")
+        raise ValueError("Disallowed git URL scheme: file:// (SSRF risk)")
 
     # Check scheme is in allowlist
     if parsed.scheme and parsed.scheme not in ALLOWED_GIT_SCHEMES:

@@ -9,7 +9,7 @@ This package contains repository classes for database operations:
 - rate_limit_repository.py: Rate limit event persistence
 """
 
-from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from database.repositories.rate_limit_repository import RateLimitRepository
+from database.repositories.tool_metrics_repository import ToolMetricsRepository
 
 __all__ = ["ToolMetricsRepository", "RateLimitRepository"]

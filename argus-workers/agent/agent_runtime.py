@@ -20,8 +20,6 @@ Usage:
 import logging
 from typing import Any
 
-from feature_flags import is_enabled as _ff_enabled
-
 logger = logging.getLogger(__name__)
 
 

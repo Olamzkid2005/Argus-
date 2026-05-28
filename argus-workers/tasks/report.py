@@ -10,7 +10,6 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import psycopg2
 import psycopg2.sql as pysql
 from psycopg2.extras import RealDictCursor
 

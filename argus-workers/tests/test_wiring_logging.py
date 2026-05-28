@@ -6,7 +6,6 @@ capture log output and assert the expected messages appear.
 """
 
 import io
-import json
 import logging
 import os
 import uuid
@@ -129,7 +128,7 @@ class TestFindingVerifierLogging:
             )
 
         assert failed == 0
-        log = _capture_argus_logs.getvalue()
+        _capture_argus_logs.getvalue()
         # The feature flag check returns False, so no verification path
         # But the save itself logs via slog in Orchestrator.run_recon
         # Since we bypassed run_recon, there's no Scelogger output here
@@ -171,14 +170,15 @@ class TestFindingVerifierLogging:
         assert failed == 0
 
         # The find_verifier import path is valid
-        from tools.finding_verifier import VERIFIERS, verify_finding
+        from tools.finding_verifier import VERIFIERS
         assert len(VERIFIERS) >= 5
 
     def test_finding_verifier_direct_slog_output(self, _capture_argus_logs):
         """The finding_verifier module's ScanLogger produces output when
         verification runs."""
-        from tools.finding_verifier import verify_sqli
         import asyncio
+
+        from tools.finding_verifier import verify_sqli
 
         # This will try to make an HTTP call and fail, but the ScanLogger
         # should still log the attempt before the error
@@ -199,8 +199,9 @@ class TestFindingVerifierLogging:
 
     def test_finding_verifier_verify_xss_slog(self, _capture_argus_logs):
         """The verify_xss function produces ScanLogger output."""
-        from tools.finding_verifier import verify_xss
         import asyncio
+
+        from tools.finding_verifier import verify_xss
 
         result = asyncio.run(
             verify_xss(
@@ -218,8 +219,9 @@ class TestFindingVerifierLogging:
 
     def test_finding_verifier_open_redirect_slog(self, _capture_argus_logs):
         """The verify_open_redirect function produces ScanLogger output."""
-        from tools.finding_verifier import verify_open_redirect
         import asyncio
+
+        from tools.finding_verifier import verify_open_redirect
 
         result = asyncio.run(
             verify_open_redirect(

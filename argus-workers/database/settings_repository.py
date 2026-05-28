@@ -6,7 +6,7 @@ connections to prevent connection exhaustion (H-29).
 """
 import logging
 
-from database.connection import get_db, db_cursor
+from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
 

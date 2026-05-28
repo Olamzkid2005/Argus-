@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from attack_graph import AttackGraph, Edge, Node, Path, RelationshipType
+from attack_graph import AttackGraph, RelationshipType
 from attack_graph_db import AttackGraphRepository
 from models.finding import Severity, VulnerabilityFinding
 

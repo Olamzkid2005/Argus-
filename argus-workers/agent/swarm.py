@@ -14,13 +14,10 @@ import concurrent.futures
 import copy
 import logging
 import os
-import signal
-import subprocess
 import tempfile
 import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Any
 
 from streaming import (
@@ -591,8 +588,9 @@ class SwarmOrchestrator:
             # Kill any orphaned tool subprocesses that may have been spawned
             # by timed-out agents (process group signal to catch children).
             try:
-                import psutil
                 from contextlib import suppress
+
+                import psutil
                 current_process = psutil.Process()
                 for child in current_process.children(recursive=True):
                     with suppress(psutil.NoSuchProcess):

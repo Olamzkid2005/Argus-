@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
 )
-from streaming import emit_finding_rt, emit_finding, emit_tool_start
+from streaming import emit_finding_rt, emit_tool_start
 from utils.logging_utils import ScanLogger
 
 from .utils import get_wordlist_path
@@ -337,8 +337,9 @@ def _probe_login_pages(
     Returns:
         Tuple of (verified_auth_endpoints, has_login_form)
     """
-    import requests
     from urllib.parse import urljoin
+
+    import requests
 
     verified: list[str] = []
     has_login_form = False

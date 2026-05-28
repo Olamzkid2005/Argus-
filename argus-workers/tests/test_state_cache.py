@@ -3,11 +3,9 @@ Tests for runtime.state_cache — Redis fast-access cache for EngagementState.
 """
 
 import json
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from runtime.state_cache import RedisStateCache, get_state_cache, save_state, load_state
+from runtime.state_cache import RedisStateCache, get_state_cache, load_state, save_state
 
 
 class TestRedisStateCache:

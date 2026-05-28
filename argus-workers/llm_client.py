@@ -166,7 +166,7 @@ class LLMClient:
                         """,
                         (list(key_names),),
                     )
-                    for key, value in cursor.fetchall():
+                    for _key, value in cursor.fetchall():
                         if value and len(str(value)) > 10:
                             logger.info("Loaded API key from database settings (%s)", "redacted")
                             return value
@@ -263,6 +263,7 @@ class LLMClient:
         if self._redis_url:
             try:
                 import uuid
+
                 import redis as redis_module
 
                 r = redis_module.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)

@@ -37,6 +37,7 @@ def _get_rate_limit_repo():
     if _RATE_LIMIT_REPO is None:
         try:
             import os
+
             from database.repositories.rate_limit_repository import RateLimitRepository
             db_conn = os.getenv("DATABASE_URL")
             if db_conn:
@@ -136,7 +137,6 @@ def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
 def _is_reachable(target: str) -> bool:
     # Use urlparse for reliable hostname extraction (handles IPv6, userinfo, etc.)
     from urllib.parse import urlparse
-    import ipaddress
     try:
         parsed = urlparse(target)
         hostname = parsed.hostname or target
@@ -171,7 +171,7 @@ def _is_reachable(target: str) -> bool:
         socket.setdefaulttimeout(5)
         addrinfo = socket.getaddrinfo(hostname, None)
         # Validate resolved IPs to prevent DNS rebinding
-        for family, _typ, _proto, _cn, sockaddr in addrinfo:
+        for _family, _typ, _proto, _cn, sockaddr in addrinfo:
             resolved_ip = sockaddr[0]
             try:
                 addr = ipaddress.ip_address(resolved_ip)
@@ -411,10 +411,10 @@ def execute_scan_tools(
     # Hoisted callback for streaming nuclei output (defined once, not per-target)
     def _on_nuclei_line(line: str):
         """Callback for streaming nuclei output.
-        
+
         Findings are emitted in real-time as nuclei streams them,
         giving analysts visibility into each finding as it's discovered.
-        
+
         Dedup: fingerprints by type+endpoint to prevent duplicate emissions
         when nuclei reports the same finding across multiple templates.
         """
@@ -545,7 +545,8 @@ def execute_scan_tools(
         # Budget enforcement: limit scan tools per target if budget specifies a cap
         max_tools = int(budget.get("max_scan_tools", 0)) if isinstance(budget, dict) else 0
         _tool_count = 0
-        _budget_exceeded = lambda: max_tools > 0 and _tool_count >= max_tools
+        def _budget_exceeded():
+            return max_tools > 0 and _tool_count >= max_tools
 
         # Build and run nuclei command with streaming (real-time findings)
         if "nuclei" not in _skip:

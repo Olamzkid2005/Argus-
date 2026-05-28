@@ -7,8 +7,6 @@ that loads API keys from the user_settings table as fallback in LLMClient.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from database.settings_repository import SettingsRepository, get_user_api_keys
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -2,7 +2,8 @@
 Tests for Attack Graph Engine
 """
 import pytest
-from attack_graph import AttackGraph, Node, Path, RelationshipType, Edge
+
+from attack_graph import AttackGraph, Edge, Node, Path, RelationshipType
 from models.finding import Severity, VulnerabilityFinding
 
 

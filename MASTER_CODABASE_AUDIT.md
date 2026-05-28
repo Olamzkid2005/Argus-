@@ -3,7 +3,7 @@
 **Audit Date:** May 28, 2026  
 **Audit Type:** Deep, thorough, file-by-file (11 parallel subagents + direct reads of all critical files)  
 **Total Files Reviewed:** ~915 tracked files | **Total LOC:** ~170,000 (Python + TypeScript + SQL)  
-**Report Version:** 7.3 (Updated to reflect remediation status after 19 fix batches — 190 findings resolved across 19 batches)
+**Report Version:** 7.4 (Updated to reflect remediation status after 20 fix batches — 197 findings resolved across 20 batches)
 
 ## 🛠️ REMEDIATION STATUS
 
@@ -29,12 +29,13 @@
 | **Batch 17** | `8bf2922` | 10 fixes (L-19, L-v3-01, L-17, L-15, L-v5-02, M-v5-04, L-08, L-23, L-18, L-25) | May 28, 2026 | ✅ Pushed |
 | **Batch 18** | `6890e12` | 10 fixes (M-v4-05/07, L-v5-01, L-07, L-06, L-v3-07, L-26, L-27, L-v3-02/L-v4-08, L-24) | May 28, 2026 | ✅ Pushed |
 | **Batch 19** | `d569c57` | 10 fixes (M-v4-04, M-v3-12, L-12, L-10, L-01/02/03/11, M-04, L-v3-07) | May 28, 2026 | ✅ Pushed |
-| **Total** | — | **190 resolved** | — | ✅ |
+| **Batch 20** | `3857364`, `aa2a4f5`, `7f536ee`, `daf20fd`, `3c6fb17`, `4aca464`, `b575412` | 7 fixes (H-06, H-09, M-07, M-08, M-25, M-v5-01, M-v3-08) | May 28, 2026 | ✅ Pushed |
+| **Total** | — | **197 resolved** | — | ✅ |
 
-### Findings Remediated: 190 of 214 (89%)
+### Findings Remediated: 197 of 214 (92%)
 - **Critical (P0):** 18 of 18 ✅ (ALL RESOLVED)
-- **High (P1):** 68 of 70 ✅ (2 remaining: H-06 OAuth email verification, H-09 monolith refactor)
-- **Medium (P2):** 58 of 77 ✅ (19 remaining — mostly schema/complex issues)
+- **High (P1):** 70 of 70 ✅ (ALL RESOLVED)
+- **Medium (P2):** 63 of 77 ✅ (14 remaining — mostly schema/complex issues)
 - **Low (P3):** 46 of 49 ✅ (3 remaining — L-04/L-09/L-14 verified as already fixed in code)
 
 ---
@@ -117,29 +118,29 @@
 
 The Argus codebase demonstrates **remarkably strong foundations** for a 6-week-old solo project. It shows production-grade awareness of security concerns (parameterized queries, account lockout, 2FA, bcrypt with cost 12, rate limiting, audit logging, SSRF protection), modern architecture patterns (Celery task routing, SSE streaming, distributed tracing, dead letter queues), and comprehensive error handling.
 
-**The verdict: This is a B+ grade codebase with A-grade potential. After 15 fix batches (150 findings resolved across 15 batches), the security posture has been dramatically improved — ALL Critical findings are now closed. Substantial Medium/Low work remains.**
+**The verdict: This is a B+ grade codebase with A-grade potential. After 20 fix batches (197 findings resolved across 20 batches), the security posture has been dramatically improved — ALL High and Critical findings are now closed. Substantial Medium/Low work remains.**
 
 ### Quick Stats: Remediation Progress
-- **150 of 214 (70%) findings resolved** across 15 batches + verification
+- **197 of 214 (92%) findings resolved** across 20 batches
 - **18 of 18 Critical (P0)** findings fixed ✅ (ALL RESOLVED)
-- **68 of 70 High (P1)** findings fixed (2 remaining: H-06 OAuth email verification, H-09 monolith refactor)
-- **43 of 77 Medium (P2)** findings fixed (34 remaining)
-- **21 of 49 Low (P3)** fixes applied (28 remaining)
+- **70 of 70 High (P1)** findings fixed ✅ (ALL RESOLVED)
+- **63 of 77 Medium (P2)** findings fixed (14 remaining)
+- **46 of 49 Low (P3)** fixes applied (3 remaining — verified as already fixed in code)
 
 ### Resolved Issues Summary
 | Category | Key Fixes |
 |----------|-----------|
-| **Auth/Password** | C-08 (token in URL -> email body code), C-v3-04 (token stored after email send), H-07 (password min 8->12), H-13 (constant-time token comparison), H-18 (2FA flag cleared), H-16 (TOCTOU lockout -> atomic Redis Lua), H-17 (2FA rate limiting), H-05 (CSRF -> SameSite=Strict) |
+| **Auth/Password** | C-08 (token in URL -> email body code), C-v3-04 (token stored after email send), H-07 (password min 8->12), H-13 (constant-time token comparison), H-18 (2FA flag cleared), H-16 (TOCTOU lockout -> atomic Redis Lua), H-17 (2FA rate limiting), H-05 (CSRF -> SameSite=Strict), H-06 (OAuth email verification) |
 | **Data Leakage** | C-06 (AI explain org scoping), C-v3-03 (tenant context reset), H-28 (LLM key logging), H-30 (audit log redaction), H-26 (column name mismatch), H-v3-01 (compliance org scoping), H-v3-08 (findByStatus scoping), H-v3-18 (tool metrics/settings org scoping), H-v4-10 (db stats scoping), H-v4-11 (health/db query exposure) |
-| **Infrastructure** | C-02 (docker-compose.yml created), C-03 (standalone output), C-10 (Dockerfile multi-stage), H-22 (celery concurrency env var), H-v4-02 (Redis error handler), H-v4-06 (session Redis error handling) |
-| **Security** | C-04 (CSP strict-dynamic), C-09 (SSL separate session), C-v3-01 (orgId from JWT), C-v3-02 (pool rollback fix), C-v3-06 (webshell->benign), C-v3-07 (return False on emitter fail), H-v3-02 (admin role check), H-v3-03 (SSRF validation), H-11 (LLM evidence redaction), H-v3-15 (LLM detector redaction), H-v3-16 (tool cache integrity), H-v3-17/H-v4-07/H-v4-08 (prompt injection sanitization), H-v5-01 (IP rate limiting via request.ip) |
+| **Infrastructure** | C-02 (docker-compose.yml created), C-03 (standalone output), C-10 (Dockerfile multi-stage), H-22 (celery concurrency env var), H-v4-02 (Redis error handler), H-v4-06 (session Redis error handling), M-08 (subprocess dispatch -> direct Redis LPUSH) |
+| **Security** | C-04 (CSP strict-dynamic), C-09 (SSL separate session), C-v3-01 (orgId from JWT), C-v3-02 (pool rollback fix), C-v3-06 (webshell->benign), C-v3-07 (return False on emitter fail), H-v3-02 (admin role check), H-v3-03 (SSRF validation), H-11 (LLM evidence redaction), H-v3-15 (LLM detector redaction), H-v3-16 (tool cache integrity), H-v3-17/H-v4-07/H-v4-08 (prompt injection sanitization), H-v5-01 (IP rate limiting via request.ip), M-25 (WebScanner scope validation), M-v5-01 (cross-tenant API key scoped lookup) |
 | **Code Quality** | H-01 (SQL f-string -> Identifier), H-08 (CSS vars), H-25 (asyncpg -> cursor), H-23 (raw psycopg2 -> connection manager), H-04 (asyncio.run -> thread loop), H-29 (DB pattern standardization), H-v4-01 (catch block TDZ fix), H-v4-03 (type assertion fix), H-v4-05 (engagement-scoped dedup), H-v4-09 (circuit breaker fix) |
 | **Auth/TOCTOU** | H-02 (finding upsert TOCTOU), H-v3-04 (bulk operations TOCTOU), H-v3-06 (idempotency TOCTOU), H-v3-07 (forgot-password timing), H-12 (migration 029 data loss) |
 | **API Hardening** | H-v3-05 (engagement PATCH validation), H-v3-11 (webhook ownership), H-v3-14 (tool runner arg redaction), H-v3-20/H-17 (2FA rate limiting), M-09 (webhook rate limiting), M-32 (settings rate limiting) |
-| **Credential Exposure** | C-05 (TTL 24h->30d), C-07 (secret strengthened), C-v5-01, H-v5-02, M-v5-07 (env-only scripts), H-27 (auth_config AES-256-GCM encryption), H-v3-22 (DLQ redaction) |
+| **Credential Exposure** | C-05 (TTL 24h->30d), C-07 (secret strengthened), C-v5-01, H-v5-02, M-v5-07 (env-only scripts), H-27 (auth_config AES-256-GCM encryption), H-v3-22 (DLQ redaction), M-v3-08 (DLQ deep-scan redaction enhanced) |
 | **Connection/Pool** | H-v3-19 (RLS fail-closed), H-v3-21 (AIExplainability commit fix), H-v3-23 (report created_at fix), M-11 (Redis TLS), M-23 (in-memory rate limiter cleanup), M-03 (ToolAccuracy/TargetProfile pool), M-v3-03 (conn.cursor leak fix), M-v4-01 (string-conn leak), L-23 (connection pool exp backoff) |
 | **CI & Config** | L-04 (env.d.ts), L-09 (URL parse), L-13 (setup.sh default), L-14 (layout cleanup), L-16 (localStorage validation), L-20/L-21/L-28 (config drift), L-29 (.gitignore), M-35 (prod deps cleanup), M-36 (npm test script) |
-| **Code Cleanup** | M-05 (dead code: 2 TS shims + 3 Python modules removed), M-06 (3 duplicate SCA fns removed), M-v4-06 (sandbox cleanup via atexit), M-v3-02 (reports API error codes), L-02 (tracked __pycache__ removed from git), L-03 (git gc), L-08 (argus-workers README stale refs) |
+| **Code Cleanup** | M-05 (dead code: 2 TS shims + 3 Python modules removed), M-06 (3 duplicate SCA fns removed), M-v4-06 (sandbox cleanup via atexit), M-v3-02 (reports API error codes), L-02 (tracked __pycache__ removed from git), L-03 (git gc), L-08 (argus-workers README stale refs), H-09 (EngagementsPage 1,622-line monolith → 4 components + useEngagements hook), M-07 (dual state machine consolidation) |
 | **Thread Safety** | M-v4-09 (llm_client rate lock), H-v4-09 (circuit breaker lock), H-v4-05 (engagement-scoped dedup), L-22 (schema cache threading.Lock) |
 | **Database/Schema** | M-29 (MV periodic refresh), M-30 (audit SECURITY INVOKER), M-31 (activity_feed engagement_id), M-v3-06 (indexes on 4 tables), M-v3-07 (IP allowlist validation), C-v3-05 (migration 029 redesign), M-v4-03 (MV UndefinedTable fallback), L-25 (compliance_snapshots UNIQUE), L-26 (tool_metrics index), L-27 (webhooks GIN index), M-v3-12 (PGVector hash-bassed fallback) |
 | **Rate Limiting** | M-v3-04 (Redis per-request -> singleton), M-v4-16 (AI test endpoint), M-v4-17 (embedding API cooldown), M-v5-03 (WS Redis timeouts), M-v4-20 (email report endpoint) |
@@ -151,7 +152,7 @@ The Argus codebase demonstrates **remarkably strong foundations** for a 6-week-o
 1. **Solo bus factor** — 1 developer, 0 reviews, single branch (unchanged)
 2. **Unenforced testing** — 102 test files, but CI still has gaps (E2E never runs, no service containers)
 3. **Accumulating tech debt** — 1,458 TODO/FIXME/HACK markers, 47 large files
-4. **Still-open findings** — ~24 of 214 remain, now mostly complex architectural issues (H-06 OAuth, H-09 monolith, M-07 dual state machine, M-08 subprocess dispatch) and schema-level changes (M-26/M-27 partition migration)
+4. **Still-open findings** — ~17 of 214 remain, now mostly schema-level issues (M-26/M-27 partition migration, M-v4-11 through M-v4-15 schema drift) plus M-v5-05 (auth_manager silent exceptions)
 
 ---
 
@@ -160,14 +161,14 @@ The Argus codebase demonstrates **remarkably strong foundations** for a 6-week-o
 | Dimension | Score | Key Strength | Key Weakness |
 |-----------|:-----:|--------------|--------------|
 | **Frontend Architecture** | **B+** | Excellent real-time SSE/WebSocket, strong auth/rate-limiting, CSRF protection added | All client-side (no RSC), prop-drilling monoliths |
-| **Backend Architecture** | **A-** | Well-structured Celery tasks, robust error boundaries, H-03 consolidated to single authoritative handler | Dual state machines (EngagementStateMachine vs EngagementState) |
-| **Security Posture** | **A-** | **All 70 High fixes applied** (SSRF validated via DNS resolution + cloud metadata blocklist, finding verifier hardened, PoC redaction regex improved, 2FA digit-only validation) | Unfixed: OAuth email verification (H-06), monolith refactor (H-09) |
+| **Backend Architecture** | **A** | Well-structured Celery tasks, robust error boundaries, H-03 consolidated, M-07 state machine consolidation, M-08 direct Redis dispatch | Subprocess dispatch replaced with Redis LPUSH |
+| **Security Posture** | **A** | **All 70 High fixes applied** (SSRF validated via DNS resolution + cloud metadata blocklist, finding verifier hardened, PoC redaction regex improved, 2FA digit-only validation, OAuth email verification, cross-tenant API key scoping, WebScanner scope validation) | All High findings closed |
 | **Data Layer** | **A** | Auth creds encrypted (AES-256-GCM), audit log redacted, connection pool/tenant isolation fixed, RLS fail-closed, all connection patterns standardized, Migration 029 redesigned, indexes added, compliance_snapshots UNIQUE, webhooks GIN index | No migration framework, partition migration still has issues (M-26/M-27) |
 | **Testing** | **D+** | 102 test files, ~720 tests, Playwright E2E, verify.sh expanded to 36 indexes | Coverage unenforced, 0 tests for 9+ repository classes, CI still has gaps |
 | **Docs & Config** | **B+** | docker-compose, Dockerfile, BUG_REPORT.md, env.d.ts created, deployment/README.md added, verify.sh expanded, .gitignore cleaned, pre-commit instructions | .env.example drift |
 | **Code Quality** | **A-** | SQL injection fixed, CSS vars fixed, asyncpg crash fixed, catch blocks fixed, TDZ errors fixed, type assertions fixed, tracked __pycache__ removed, git gc | 1,458 markers remain, 47 large files |
 | **Git Hygiene** | **B+** | Linear history, no merge mess, improving messages, git gc, pycache untracked, clean updates | Single branch, bus factor 1 |
-| **OVERALL** | **A** | **190 findings fixed across 19 batches** (18 Critical, 68 High, 58 Medium, 46 Low) | ~24 findings remain, mostly complex architectural/schema issues; ready for v1.0 with known limitations |
+| **OVERALL** | **A** | **197 findings fixed across 20 batches** (18 Critical, 70 High, 63 Medium, 46 Low) | ~17 findings remain, mostly schema issues; ready for v1.0 with known limitations |
 
 ---
 
@@ -513,27 +514,24 @@ Changed the session cookie from `SameSite=Lax` to `SameSite=Strict` in `auth.ts`
 
 ---
 
-### H-06: OAuth Account Takeover — No Email Verification on Signup ⚠️ NOT YET FIXED
+### H-06: OAuth Account Takeover — No Email Verification on Signup ✅ FIXED (Batch 20)
 
 | Field | Value |
 |-------|-------|
-| **File** | `argus-platform/src/lib/auth.ts` (lines 268-333), `signup/route.ts:150` |
+| **File** | `argus-platform/src/lib/auth.ts`, `signup/route.ts`, `verify-email/route.ts`, `resend-verification/route.ts` |
 | **CWE** | CWE-287, CWE-305 |
 | **OWASP** | A07:2021 — Identification and Authentication Failures |
 | **Impact** | **High** |
-| **Status** | ⚠️ Requires email verification flow — not yet implemented |
+| **Fix Commit** | `3857364` |
 
-OAuth signup (Google/GitHub) auto-creates organizations and user accounts without email verification. Credentials signup also creates immediately active accounts — passwords are accepted immediately.
+Implemented full email verification flow:
+1. **Signup**: Accounts created with `email_verified = false`; verification email sent on signup
+2. **Verification endpoint**: `POST /api/auth/verify-email` with token-based email confirmation
+3. **Resend endpoint**: `POST /api/auth/resend-verification` for requesting new verification emails
+4. **OAuth accounts**: OAuth logins also gate on `email_verified` status; prompt for verification if unverified
+5. **Gating**: Sensitive operations (password reset, 2FA setup) require `email_verified = true`
 
-**Impact:**
-- Silently creates user accounts in the system
-- No recovery mechanism for legitimate users
-- Compromised OAuth session = immediate Argus access
-
-**Fix:**
-1. Send verification email after signup; mark accounts `email_verified = false`
-2. Gate sensitive operations behind email verification
-3. For OAuth: merge accounts by email instead of creating duplicates
+Migration 045 adds `email_verified`, `email_verification_token`, `email_verification_expires`, and `email_verification_sent_at` columns.
 
 ---
 
@@ -565,25 +563,23 @@ Changed all CSS variable lookups from `--color-primary`/`--color-background`/etc
 
 ---
 
-### H-09: EngagementsPage Is a 1,622-Line Monolith
+### H-09: EngagementsPage Is a 1,622-Line Monolith ✅ FIXED (Batch 20)
 
 | Field | Value |
 |-------|-------|
-| **File** | `argus-platform/src/app/engagements/page.tsx` |
-| **Lines** | 1,622 |
+| **Files** | `argus-platform/src/app/engagements/page.tsx`, `src/components/ui-custom/EngagementList.tsx`, `src/components/ui-custom/EngagementForm.tsx`, `src/components/ui-custom/NaturalLanguageConfig.tsx`, `src/hooks/useEngagements.ts` |
+| **Lines** | 1,622 → ~240 (page.tsx) |
 | **Impact** | **High** |
+| **Fix Commit** | `aa2a4f5` |
 
-This single component contains:
-- 30+ state variables
-- 10+ handler functions
-- Natural language configuration parsing
-- Engagement list rendering
-- Engagement creation form
-- Rate limit configuration
+The monolith has been split into 4 components + 1 custom hook:
+1. **`EngagementList.tsx`** (321 lines) — List rendering with filtering, sorting, pagination
+2. **`EngagementForm.tsx`** (523 lines) — Engagement creation/edit form with validation
+3. **`NaturalLanguageConfig.tsx`** (156 lines) — Natural language configuration parser UI
+4. **`useEngagements.ts`** (583 lines) — Extracted state management with 30+ state variables, 10+ handlers
+5. **`page.tsx`** (~240 lines) — Thin composition shell that wires components together
 
-The component is essentially an entire page of logic in one file. This makes it impossible to unit test, hard to reason about, and fragile to modify.
-
-**Fix:** Split into `EngagementList`, `EngagementForm`, `NaturalLanguageConfig`, `RateLimitConfig` components. Extract engagement state into a custom hook or context.
+The extraction enables unit testing of each component independently and simplifies reasoning about the engagement management flow.
 
 ---
 
@@ -1777,20 +1773,22 @@ Spread across `argus-workers/`. Several have been improved:
 
 Removed the 3 dead duplicate implementations from `tasks/repo_scan.py`. The `orchestrator_pkg/repo_scan.py` versions remain as the canonical implementations used by all callers and tests.
 
-### M-07: Dual State Machine & Dual Event Publishing
+### M-07: Dual State Machine & Dual Event Publishing ✅ FIXED (Batch 20)
 
 | System A | System B | Status |
 |----------|----------|--------|
-| `state_machine.py` (EngagementStateMachine) | `runtime/engagement_state.py` (EngagementState) | Feature-flagged (`ENGAGEMENT_STATE=False`), new impl never runs |
-| `streaming.py` (StreamManager + SSE) | `websocket_events.py` (Redis pub/sub) | Both active, events published through both |
+| `state_machine.py` (EngagementStateMachine) | `runtime/engagement_state.py` (EngagementState) | ✅ **Consolidated** — Feature flag removed; single `state_machine.py` is the authoritative engine |
+| `streaming.py` (StreamManager + SSE) | `websocket_events.py` (Redis pub/sub) | ✅ **Consolidated** — Unified event publishing through `streaming.py`; `websocket_events.py` delegate pattern removed |
 
-### M-08: `pushJob()` Spawns Python Subprocess Per Job Dispatch
+### M-08: `pushJob()` Spawns Python Subprocess Per Job Dispatch ✅ FIXED (Batch 20)
 
-| File | Issue |
-|------|-------|
-| `argus-platform/src/lib/redis.ts:184-248` | Every Celery job dispatch spawns a Python process via `child_process.spawn('python', ...)`. Process creation (~50-200ms) + Python interpreter startup (~100-300ms) = ~300ms overhead per job. |
+| Field | Value |
+|-------|-------|
+| **File** | `argus-platform/src/lib/redis.ts` |
+| **Impact** | **Medium** |
+| **Fix Commit** | `daf20fd` |
 
-**Fix:** Replace with direct Redis LPUSH to the Celery broker queue using an ioredis transaction.
+Replaced Python subprocess spawning (`child_process.spawn('python', ...)`) with direct Redis LPUSH to the Celery broker queue using `ioredis` multi/exec transaction. Eliminates ~300ms overhead per job dispatch (process creation + Python interpreter startup). Job serialization now happens entirely in Node.js using the same Celery message format.
 
 ### M-09: Webhook Endpoint Missing Rate Limiting ✅ FIXED (Batch 9)
 
@@ -1906,13 +1904,15 @@ Fixed the `rejectUnauthorized` condition: changed from `NODE_ENV === "production
 |------|-----|
 | `argus-platform/src/lib/redis.ts:184` | Threshold lowered from 3500s to 500s — only restarts jobs whose TTL has almost expired (< 500s remaining out of 3600s total). Verified in code. |
 
-### M-25: Web Scanner Sends Dangerous Payloads Without Scope Validation ⚠️ REMAINING
+### M-25: Web Scanner Sends Dangerous Payloads Without Scope Validation ✅ FIXED (Batch 20)
 
-| File | Issue |
-|------|-------|
-| `argus-workers/tools/web_scanner.py:96-161` | Mass assignment payloads (`{"role":"admin"}`), default credential tests, and host header injection are defined but never verified against `authorized_scope`. |
+| Field | Value |
+|-------|-------|
+| **File** | `argus-workers/tools/web_scanner.py` |
+| **Impact** | **Medium** |
+| **Fix Commit** | `3c6fb17` |
 
-**Fix:** Integrate `scope_validator.validate_target_scope()` into `WebScanner.scan()` entry point before sending potentially destructive payloads.
+Integrated `scope_validator.validate_target_scope()` into `WebScanner.scan()` entry point. Before sending potentially destructive payloads (mass assignment, default credential tests, host header injection), the scanner now verifies the target URL against the engagement's `authorized_scope`. Destructive payloads are skipped with a logged warning when the target falls outside scope.
 
 ### M-26: Partition Migration Loses FOREIGN KEY Constraint on execution_logs
 
@@ -2109,16 +2109,15 @@ Added CIDR notation parsing and IP format validation for each entry in the IP al
 
 ---
 
-### M-v3-08: Secrets Stored in Plaintext in Dead Letter Queue Redis ⚠️ Partially Fixed
+### M-v3-08: Secrets Stored in Plaintext in Dead Letter Queue Redis ✅ FIXED (Batch 20)
 
 | Field | Value |
 |-------|-------|
-| **File** | `argus-workers/dead_letter_queue.py:87-106` |
+| **File** | `argus-workers/dead_letter_queue.py` |
 | **Impact** | **Medium** |
+| **Fix Commit** | `b575412` |
 
-DLQ already has `_redact_sensitive_fields()` method applied in `enqueue()` (H-v3-22). Redacts known sensitive keys. However, some nested or dynamically-named kwargs may still bypass the redaction.
-
-**Remaining:** Add recursive deep-scan redaction and auto-expiry for DLQ entries stored beyond 7 days.
+Enhanced `_redact_sensitive_fields()` with recursive deep-scan that traverses nested dicts and lists, plus pattern-based matching for dynamically-named keys containing sensitive substrings (`key`, `secret`, `token`, `password`, `credential`, `auth`). Added auto-expiry (7-day TTL) for all DLQ entries via Redis `EXPIRE`. Previously applied `_redact_sensitive_fields()` (H-v3-22) only covered top-level known keys.
 
 ---
 
@@ -2518,35 +2517,16 @@ DELETE only removes from `scheduled_engagements`. The POST handler can insert in
 
 ---
 
-### M-v5-01: Cross-Tenant API Key Leakage via LLM Client Redis SCAN
+### M-v5-01: Cross-Tenant API Key Leakage via LLM Client Redis SCAN ✅ FIXED (Batch 20)
 
 | Field | Value |
 |-------|-------|
-| **File** | `argus-workers/llm_client.py` (lines 158-177) |
+| **File** | `argus-workers/llm_client.py` |
 | **CWE** | CWE-200 (Information Exposure) |
 | **Severity** | **Medium** |
+| **Fix Commit** | `4aca464` |
 
-`LLMClient._load_key_from_redis()` uses Redis `SCAN` to iterate **ALL** keys matching `settings:*:openrouter_api_key` across every user and returns the **first** match found (determined by Redis hash slot ordering):
-
-```python
-cursor = 0
-while True:
-    cursor, keys = r.scan(cursor=cursor, match="settings:*:openrouter_api_key", count=20)
-    for key in keys:
-        value = r.get(key)
-        if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
-            api_key = value.decode() if isinstance(value, bytes) else value
-            return api_key  # Returns first key found — any user's key!
-```
-
-**Scenario:** When a Celery worker picks up a task for User B (who hasn't configured an API key), the SCAN returns User A's key. User B's scan is billed to User A's OpenRouter quota. The same issue exists in `_load_key_from_db()` at line 119.
-
-**Impact:**
-- **Billing leakage**: API costs charged to the wrong user
-- **Cross-tenant data exposure**: LLM provider logs show User A's API key used by User B's scans
-- **Masked configuration gaps**: Users without configured keys get accidental working scans
-
-**Fix:** Scope the key lookup to the current user's email/identifier (available in task context). Query `settings:{user_email}:openrouter_api_key` with the specific user's email instead of a global SCAN.
+Replaced the global Redis `SCAN` pattern with a user-scoped exact key lookup. `LLMClient` now receives a `user_email` parameter (propagated from task context), and the key lookup queries `settings:{user_email}:openrouter_api_key` directly instead of scanning all keys across all users. The same scoped approach is applied to `_load_key_from_db()` which now filters by user email. This eliminates cross-tenant billing leakage, data exposure, and accidental key sharing.
 
 ---
 
@@ -3001,13 +2981,13 @@ Parallel: SSE streaming for real-time findings, WebSocket events for state chang
 
 | Category | Status | Notes |
 |----------|:------:|-------|
-| A01: Broken Access Control | ⚠️ **Mostly Fixed** | ~~No edge-level middleware auth (C-01)~~ ✅, ~~no CSRF (H-05)~~ ✅ SameSite=Strict, ~~AI explain no cross-org ACL (C-06)~~ ✅. Remaining: OAuth email verification (H-06) |
+| A01: Broken Access Control | ✅ **All Fixed** | ~~No edge-level middleware auth (C-01)~~ ✅, ~~no CSRF (H-05)~~ ✅ SameSite=Strict, ~~AI explain no cross-org ACL (C-06)~~ ✅, ~~OAuth email verification (H-06)~~ ✅ |
 | A02: Cryptographic Failures | ⚠️ **Mostly Fixed** | ~~Password reset token in URL (C-08)~~ ✅, ~~2FA fallback accepts any code (H-14)~~ ✅, ~~SMTP no TLS (H-20)~~ ✅, ~~hardcoded JWT secret (C-07)~~ ✅, ~~auth creds plaintext (H-27)~~ ✅ AES-256-GCM |
 | A03: Injection | ⚠️ **Adequate** | ~~SQL f-string risk (H-01)~~ ✅, ~~sandbox bypass in nuclei update (H-24)~~ ✅, ~~CSP weakness (C-04)~~ ✅ strict-dynamic, ~~CSV injection (M-16)~~ ✅ |
 | A04: Insecure Design | ✅ **Good** | ~~LLM leak (H-11)~~ ✅ redaction applied, ~~reset token brute-force (H-13)~~ ✅, ~~admin migrate bypass comment (H-21)~~ ✅, ~~per-request Redis (H-19)~~ ✅ singleton, ~~web scanner SSL (C-09)~~ ✅ separate session, ~~Reports API silent error (M-v3-02)~~ ✅ |
 | A05: Security Misconfiguration | ✅ **Good** | ~~CSP unsafe-inline (C-04)~~ ✅ strict-dynamic, ~~Docker broken (C-10)~~ ✅ multi-stage, ~~.env.example passwords (L-21)~~ ✅, ~~4 competing DB patterns (H-29)~~ ✅ standardized, ~~Redis TLS (M-11)~~ ✅ fixed |
 | A06: Vulnerable Components | ⚠️ | Up-to-date deps, **but no dep auditing in CI (M-37/H-33), Trivy exit-code:0** |
-| A07: Auth Failures | ⚠️ **Mostly Fixed** | ~~Weak password min (H-07)~~ ✅, no email verification (H-06) ⚠️, ~~2FA no rate limit (H-17)~~ ✅, ~~JWT flag never cleared (H-18)~~ ✅, ~~account lockout TOCTOU (H-16)~~ ✅ atomic Redis, ~~checkAccountLockout fails open (M-22)~~ ✅ fail-closed |
+| A07: Auth Failures | ✅ **All Fixed** | ~~Weak password min (H-07)~~ ✅, ~~no email verification (H-06)~~ ✅, ~~2FA no rate limit (H-17)~~ ✅, ~~JWT flag never cleared (H-18)~~ ✅, ~~account lockout TOCTOU (H-16)~~ ✅ atomic Redis, ~~checkAccountLockout fails open (M-22)~~ ✅ fail-closed |
 | A08: Data Integrity Failures | ✅ **Good** | Idempotency keys fixed (H-v3-06), ~~auth creds plaintext (H-27)~~ ✅ AES-256-GCM, TOCTOU races fixed (H-02, H-v3-04) |
 | A09: Logging & Monitoring | ✅ **Good** | Structured audit logging, ~~audit trigger captures sensitive data (H-30)~~ ✅ redacted, ~~auth routes use console.error (L-20)~~ ✅, ~~API key patterns logged (H-28)~~ ✅ |
 | A10: SSRF | ✅ **Improved** | ~~IPv4-only (M-01)~~ ✅ cloud metadata hostnames added, ~~web scanner SSL (C-09)~~ ✅, centralized SSRF validation (H-v3-03) via shared url-validation.ts |
@@ -3289,7 +3269,9 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 
 ---
 
-## 15. TOP 20 IMMEDIATE ACTIONS
+## 15. IMMEDIATE ACTIONS (Historical — 197/214 Resolved)
+
+> **Note:** This section captures the action items as they were identified during each audit round (v1 through v5). Items originally marked as Critical/High that remain outstanding have been fixed in subsequent batches. **All 70 High and 18 Critical findings are now closed.** See the remediation status table at the top for the current state. The ~17 remaining findings are listed in Section 18.
 
 | # | Action | Effort | Impact | Area |
 |:-:|--------|:------:|:------:|:----:|
@@ -3377,7 +3359,7 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 | 67 | Remove hardcoded DB password from `reset-password.js` — read from env (C-v5-01) | 15m | **Critical** | Security |
 | 68 | Scrub hardcoded proxy credentials from `auth-test.js`, `create-engagements.js` (H-v5-02) | 10m | **High** | Security |
 | 69 | Fix IP rate limiting — use `request.ip` instead of `x-forwarded-for` header (H-v5-01) | 30m | **High** | Security |
-| 70 | Scope LLMClient Redis key lookup to current user's email (M-v5-01) | 30m | **Medium** | Backend |
+| 70 | Scope LLMClient Redis key lookup to current user's email (M-v5-01) | 30m | **Medium** | Backend | ✅ Done in Batch 20 |
 | 71 | Add AbortController timeout to AI explain fetch calls (M-v5-02) | 15m | **Medium** | API |
 | 72 | Add socket timeouts to WebSocketEventPublisher Redis connection (M-v5-03) | 5m | **Medium** | Backend |
 | 73 | Add temp file cleanup for all 8+ temp file locations (M-v5-04) | 30m | **Medium** | Backend |
@@ -3389,8 +3371,9 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 
 ---
 
-### Month 1: Critical Security Hardening (19 Batches Complete — 190/214 Fixed) 🎯
+### Month 1: Critical Security Hardening (20 Batches Complete — 197/214 Fixed) 🎯
 - [x] Fix all 18 Critical (P0) findings — ALL RESOLVED ✅
+- [x] Fix all 70 High (P1) findings — ALL RESOLVED ✅
 - [x] Redesign migration 029 with proper FK handling and pg_partman (C-v3-05) ✅ (Batch 12)
 - [x] Fix base.py string-connection leak — add conn.close() (M-v4-01) ✅ (Batch 14)
 - [x] Fix materialized view fallback dead code path (M-v4-03) ✅ (Batch 15)
@@ -3410,7 +3393,14 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 - [x] Add connection pool exponential backoff (L-23) ✅ (Batch 17)
 - [x] Fix structured logging in audit.ts/email.ts (L-19/L-v3-01) ✅ (Batch 17)
 - [x] Add requires2FA to type definitions (L-v3-02) ✅ (Batch 18)
-- [ ] ~24 remaining findings (mostly schema/complex architectural) — see Section 18
+- [x] H-06: OAuth email verification flow ✅ (Batch 20)
+- [x] H-09: EngagementsPage monolith → 4 components + hook ✅ (Batch 20)
+- [x] M-07: Dual state machine consolidation ✅ (Batch 20)
+- [x] M-08: Subprocess dispatch → direct Redis LPUSH ✅ (Batch 20)
+- [x] M-25: WebScanner scope validation ✅ (Batch 20)
+- [x] M-v5-01: Cross-tenant API key scoping ✅ (Batch 20)
+- [x] M-v3-08: DLQ deep-scan redaction + auto-expiry ✅ (Batch 20)
+- [ ] ~17 remaining findings (mostly schema-level) — see Section 18
 
 ### Month 3: CI/CD & Production Readiness
 - [ ] Fix H-10: Enforce test coverage in CI (50% frontend, 70% backend)
@@ -3503,21 +3493,21 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 
 | Field | Value |
 |-------|-------|
-| **Report generated** | May 28, 2026 (updated v7.3) |
+| **Report generated** | May 28, 2026 (updated v7.4) |
 | **Audit method** | 7 parallel subagents (explore agents across all modules) + direct file reads of every finding |
 | **Files directly read** | 400+ critical files across all modules |
-| **Git revision** | `d569c57` (HEAD after 19 fix batches — 190 findings resolved) |
+| **Git revision** | `b575412` (HEAD after 20 fix batches — 197 findings resolved) |
 | **Branch** | `master` |
 | **Total findings** | **214 (18 Critical, 70 High, 77 Medium, 49 Low)** |
-| **Fixed (Batches 1-19)** | **190 (18 Critical, 68 High, 58 Medium, 46 Low)** |
-| **Remaining** | **~24 (0 Critical, 2 High, 19 Medium, 3 Low)** |
+| **Fixed (Batches 1-20)** | **197 (18 Critical, 70 High, 63 Medium, 46 Low)** |
+| **Remaining** | **~17 (0 Critical, 0 High, 14 Medium, 3 Low)** |
 | **Original findings (v1.0)** | 45 (5 Critical, 12 High, 15 Medium, 13 Low) |
 | **New findings in v2.0** | 64 (5 Critical, 21 High, 22 Medium, 16 Low) *[corrected from 90 — data entry error]* |
 | **New findings in v3.0** | **51 (7 Critical, 24 High, 12 Medium, 8 Low)** |
 | **New findings in v4.0** | **42 (0 Critical, 11 High, 21 Medium, 10 Low)** |
 | **New findings in v5.0** | **12 (1 Critical, 2 High, 7 Medium, 2 Low)** |
 | **Cumulative total** | **214 (18 Critical, 70 High, 77 Medium, 49 Low)** |
-| **Next review recommended** | June 28, 2026 (or after remaining ~24 findings addressed) |
+| **Next review recommended** | June 28, 2026 (or after remaining ~17 findings addressed) |
 | **Post-audit fix batches (Batches 16-19)** | **40 additional findings fixed** — covering SSRF hardening (M-v4-04/05/08), cost cap fix (M-v4-18), WebSocket size limits (L-v5-01), finding slice warnings (M-v4-19), email rate limiting (M-v4-20), PoC redaction (M-v4-07), PGVector embedding fallback (M-v3-12), temp file cleanup (M-v5-04), thread safety (L-22), connection pool backoff (L-23), schema indexes (L-25/26/27), type safety (L-v3-02), structured logging (L-19/L-v3-01), git hygiene (L-02/03), deployment docs (L-06/07), verify.sh expansion (L-12), and 15+ additional code quality/database fixes. |
 | **Key areas discovered in v3.0** | Connection pool poisoning & tenant isolation gaps (C-v3-02, C-v3-03), password flow vulnerabilities (C-v3-04, H-v3-07), API auth/authorization gaps (C-v3-01, H-v3-01 through H-v3-05), migration 029 catastrophic data loss (C-v3-05) ✅, live webshell deployment (C-v3-06), streaming event loss (C-v3-07), SSRF vectors (H-v3-03, H-v3-24), data leakage to LLM providers (H-v3-15, H-v3-17), credential exposure in DLQ/H-v3-22 |
 | **Key areas discovered in v4.0** | Engagements route catch-block crash (H-v4-01), Redis error handler gap (H-v4-02), db.ts type assertion mismatch (H-v4-03), WebScanner auth session not propagated to 29/32 checks (H-v4-04), module-level dedup suppresses cross-engagement findings (H-v4-05), session.ts silent Redis failures (H-v4-06), agent/LLM prompt injection vectors (H-v4-07, H-v4-08), broken circuit breaker (H-v4-09), cross-tenant DB info leak (H-v4-10, H-v4-11), 6 schema inconsistencies (M-v4-10 through M-v4-15), BaseRepository connection leak (M-v4-01), statement_timeout silent skip (M-v4-02), dead fallback code (M-v4-03), SSRF in API scanner + verifier (M-v4-04, M-v4-05), no temp cleanup (M-v4-06), PoC regex bypass (M-v4-07), missing cloud metadata blocklist (M-v4-08), thread-unsafe rate limiter (M-v4-09), AI test / email report no rate limiting (M-v4-16, M-v4-20), global embed block flag (M-v4-17), cost cap overshoot (M-v4-18), findings slice exclusion (M-v4-19), 10 low-severity findings |
@@ -3525,37 +3515,30 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 | **Post-audit fix batches (Batches 5-11)** | **80 findings fixed** — including the majority of remaining High-severity audit findings (TOCTOU races, SSRF, prompt injection, encryption, auth fixes) plus extensive Medium/Low fixes. |
 | **Batches 12-15 + Verification** | **35 additional findings fixed** — all remaining Critical (C-v3-05) and 2 remaining High (H-03, H-32 partially). Key areas: migration 029 redesigned with FK/index safety (C-v3-05), 4-layer error handling consolidated (H-03), connection pool standardization (M-03), DB indexes and schema fixes (M-v3-06, M-31, M-29), Redis TLS fix (M-11), connection leak fixes (M-v3-03, M-v4-01, M-v4-02), thread-safe rate limiter (M-v4-09), sandbox cleanup (M-v4-06), dead code removal (M-05, M-06), env naming drift (M-15), audit trigger hardening (M-30), various API hardening fixes (M-v3-02/04/05/07/09, M-v4-16/17, M-v5-03), endpoint rate limiting (M-v4-16), embedding API cooldown (M-v4-17). |
 | **Batches 16-19** | **40 additional findings fixed** — SSRF hardening via DNS resolution + finding verifier validation (M-v4-04/05/08), cost cap fix (M-v4-18), WebSocket size limits (L-v5-01), finding slice warnings (M-v4-19), email rate limiting (M-v4-20), PoC redaction regex overhaul (M-v4-07), PGVector embedding fallback (M-v3-12), temp file cleanup across 7 locations (M-v5-04), schema cache thread safety (L-22), connection pool backoff (L-23), schema indexes (L-25/26/27, webhooks GIN), structured logging in audit/email (L-19/L-v3-01), requires2FA type definitions (L-v3-02), 2FA digit-only validation (L-v5-02), git hygiene (L-02/03), deployment documentation (L-06/07), verify.sh expansion (L-12), 034 migration rename (M-v4-10), scheduled report fixes (M-v3-11/M-v4-21), analytics placeholder annotation (L-15), settings page error handling (L-17), Redis auto-reconnect (L-18), nginx config fix (L-07), and 7+ additional code quality/low fixes. |
+| **Batch 20** | **7 final findings fixed** — H-06 (OAuth email verification), H-09 (EngagementsPage monolith refactor → 4 components + useEngagements hook), M-07 (dual state machine consolidation), M-08 (subprocess dispatch → direct Redis LPUSH), M-25 (WebScanner scope validation), M-v5-01 (cross-tenant API key scoping), M-v3-08 (DLQ deep-scan redaction + auto-expiry). |
 
 ---
 
-## 18. REMAINING FINDINGS (~24) — Post-Batch 19
+## 18. REMAINING FINDINGS (~17) — Post-Batch 20
 
-After 19 fix batches, **190 of 214 findings (89%) are resolved**. The remaining ~24 findings fall into these categories:
+After 20 fix batches, **197 of 214 findings (92%) are resolved**. The remaining ~17 findings fall into these categories:
 
-### High (2 remaining — complex architectural)
+### High (0 remaining — ALL RESOLVED ✅)
 
-| ID | Finding | Complexity | Notes |
-|:--:|---------|:----------:|-------|
-| **H-06** | OAuth Account Takeover — No Email Verification on Signup | **High** | Requires implementing email verification flow, marking accounts `email_verified = false`, gating sensitive operations. Affects auth.ts, signup route, and OAuth callback. |
-| **H-09** | EngagementsPage 1,622-Line Monolith | **High** | Refactor into EngagementList, EngagementForm, NaturalLanguageConfig, RateLimitConfig. Extract state into custom hook. |
+All 70 High-severity findings have been resolved across 20 fix batches.
 
-### Medium (19 remaining — mostly schema/complex)
+### Medium (14 remaining — mostly schema)
 
 | ID | Finding | Area | Why Complex |
 |:--:|---------|:----:|------------|
-| **M-07** | Dual State Machine & Dual Event Publishing | Architecture | Feature-flagged migration — old EngagementStateMachine vs new runtime/EngagementState. Both concurrently publishing events. |
-| **M-08** | `pushJob()` Spawns Python Subprocess Per Job | Performance | Requires replacing subprocess with direct Redis LPUSH to Celery broker queue. |
-| **M-25** | Web Scanner Dangerous Payloads Without Scope Validation | Security | Requires integrating with scope_validator.py before sending destructive payloads. |
 | **M-26** | Partition Migration Loses FOREIGN KEY on execution_logs | Schema | Requires updating 029_table_partitioning.sql to preserve FK constraints. |
 | **M-27** | Partition Migration Creates Limited Partitions (Expires Q1 2026) | Schema | Requires automated partition management (pg_partman) or 2-year pre-creation. |
-| **M-v3-08** | Secrets Stored in Plaintext in DLQ Redis | Security | Redaction logic exists but some task kwargs may still contain secrets. |
 | **M-v4-11** | Duplicate Unique Constraints on Findings Table | Schema | Two identical UNIQUE constraints — one in schema.sql, one in migration 015. |
 | **M-v4-12** | Column Name Inconsistency — `scan_aggressiveness` vs `aggressiveness` | Schema | Different column names in engagements vs scheduled_engagements tables. |
 | **M-v4-13** | `migration.py` Creates `decision_snapshots` With Incompatible Schema | Schema | Runtime migration DDL conflicts with schema.sql version of same table. |
 | **M-v4-14** | `migration.py` Uses TEXT Primary Keys Without Default Generation | Schema | TEXT PKs instead of UUID — requires type coercion on JOINs. |
 | **M-v4-15** | `find_similar_findings` Return Type Mismatch — Silent Truncation | Schema | RETURN TABLE declares narrower VARCHAR types than actual columns. |
-| **M-v5-01** | Cross-Tenant API Key Leakage via LLM Client Redis SCAN | Security | Requires user context propagation to scope key lookups per-tenant. |
-| **M-v5-05** | Silent `except Exception` Cluster in `auth_manager.py` Browser Auth | Reability | 5 consecutive `except Exception: continue/pass` blocks in form auth flow. |
+| **M-v5-05** | Silent `except Exception` Cluster in `auth_manager.py` Browser Auth | Reliability | 5 consecutive `except Exception: continue/pass` blocks in form auth flow. |
 
 ### Low (3 remaining — verified as already fixed in code)
 
@@ -3567,12 +3550,10 @@ After 19 fix batches, **190 of 214 findings (89%) are resolved**. The remaining 
 
 ### Recommendations for Next Remediation Phase
 
-1. **H-06 (OAuth Email Verification)**: Highest security impact remaining. Implement `email_verified` column, verification email sending, and gate sensitive operations.
-2. **H-09 (Monolith Refactor)**: Highest maintainability impact. Split into 4+ components with extracted hooks.
-3. **M-08 (Subprocess Dispatch)**: Highest performance impact. Replace `spawn()` with direct Redis LPUSH + ioredis.
-4. **Schema items (M-26, M-27, M-v4-11 through M-v4-15)**: Batch into a single "schema cleanup" PR when a migration framework is chosen.
-5. **M-v5-01 (Cross-tenant API Key)**: Requires architectural change to propagate user context through the Celery task pipeline.
+1. **Schema items (M-26, M-27, M-v4-11 through M-v4-15)**: Batch into a single "schema cleanup" PR when a migration framework is chosen. These are all low-risk, well-understood schema inconsistencies.
+2. **M-v5-05 (auth_manager silent exceptions)**: Low effort (~30min) — add `logger.log(5, ...)` to the 5 catch-all blocks in the browser auth flow.
+3. **Low findings (L-04/09/14)**: Already verified as fixed in code — just need the audit doc text to reflect this.
 
 ---
 
-*End of Master Codebase Audit Report — Version 7.3 (190/214 findings resolved across 19 batches)*
+*End of Master Codebase Audit Report — Version 7.4 (197/214 findings resolved across 20 batches)*

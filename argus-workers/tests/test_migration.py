@@ -4,17 +4,15 @@ feature-flag + timestamp gate.
 """
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 class TestMigrateEngagement:
     """Tests for migrate_engagement() gate logic."""
 
-    NOW = datetime(2026, 5, 24, 12, 0, 0, tzinfo=timezone.utc)
-    ROLLOUT_TS = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+    NOW = datetime(2026, 5, 24, 12, 0, 0, tzinfo=UTC)
+    ROLLOUT_TS = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
     OLD_ENG = NOW - timedelta(days=60)  # before rollout
     NEW_ENG = NOW - timedelta(days=5)   # after rollout
 
@@ -125,7 +123,7 @@ class TestMigrateEngagement:
         from runtime.migration import migrate_engagement
 
         # exactly at rollout
-        boundary_dt = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+        boundary_dt = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
         with self._patch_has_snapshot(False), \
              patch("feature_flags.is_enabled", return_value=True):
             result = migrate_engagement("eng-boundary", created_at=boundary_dt)
@@ -169,9 +167,9 @@ class TestBatchMigration:
         """Batch correctly classifies old vs new engagements."""
         from runtime.migration import batch_migrate_pending_engagements
 
-        NOW = datetime(2026, 5, 24, 12, 0, 0, tzinfo=timezone.utc)
-        old_ts = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
-        new_ts = datetime(2026, 5, 20, 0, 0, 0, tzinfo=timezone.utc)
+        datetime(2026, 5, 24, 12, 0, 0, tzinfo=UTC)
+        old_ts = datetime(2026, 3, 1, 0, 0, 0, tzinfo=UTC)
+        new_ts = datetime(2026, 5, 20, 0, 0, 0, tzinfo=UTC)
 
         mock_rows = [
             ("eng-old-1", old_ts),

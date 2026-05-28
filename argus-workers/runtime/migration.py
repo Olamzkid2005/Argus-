@@ -20,7 +20,7 @@ Rollout timestamp is configured via:
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def _get_rollout_timestamp() -> datetime | None:
         try:
             dt = datetime.fromisoformat(raw)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt
         except ValueError:
             logger.warning("Invalid ARGUS_FF_ROLLOUT_TIMESTAMP=%r — ignoring", raw)
@@ -151,7 +151,7 @@ def _get_engagement_created_at(engagement_id: str) -> datetime | None:
             if row:
                 dt = row[0]
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 return dt
         return None
     except Exception as e:
@@ -234,7 +234,7 @@ def migrate_engagement(
 
     # Step 4: Normalize created_at to UTC-aware for comparison
     if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
     if not force:
         rollout_ts = _get_rollout_timestamp()
         if rollout_ts is not None and created_at < rollout_ts:
@@ -319,7 +319,7 @@ def batch_migrate_pending_engagements(
     for row in rows:
         eid, created_at = row
         if created_at and created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+            created_at = created_at.replace(tzinfo=UTC)
         result = migrate_engagement(eid, created_at=created_at, force=force)
         results.append(result)
 

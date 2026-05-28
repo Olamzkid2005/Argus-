@@ -6,19 +6,22 @@ Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2, 31.2, 31.3
 """
 
 import atexit
-import contextlib
 import json
 import logging
 import os
 import time
 
+from compliance_posture_scorer import CompliancePostureScorer
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
     HARD_TIMEOUT_SECONDS,
     LLM_AGENT_MODEL,
 )
 from database.repositories.engagement_repository import EngagementRepository
-from database.repositories.finding_repository import FindingCapExceededError, FindingRepository
+from database.repositories.finding_repository import (
+    FindingCapExceededError,
+    FindingRepository,
+)
 from database.repositories.rate_limit_repository import RateLimitRepository
 from llm_client import LLMClient
 from mcp_server import get_mcp_server
@@ -26,7 +29,6 @@ from models.recon_context import ReconContext
 from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
-from compliance_posture_scorer import CompliancePostureScorer
 from streaming import (
     StreamingFindingEmitter,
     emit_thinking,
@@ -378,7 +380,7 @@ class Orchestrator:
             return 0
 
         from database.services.embedding_service import EmbeddingService
-        emb_svc = EmbeddingService(self.engagement_id)
+        EmbeddingService(self.engagement_id)
 
         # Phase 1: Pre-process all findings (enrich metadata, classify, etc.)
         # without touching the database.
@@ -543,10 +545,10 @@ class Orchestrator:
         Returns:
             True if saved successfully
         """
-        import json
+
+        from psycopg2.sql import SQL, Identifier
 
         from database.connection import db_cursor
-        from psycopg2.sql import Identifier, SQL
 
         try:
             with db_cursor() as cursor:
@@ -675,10 +677,7 @@ class Orchestrator:
                     if norm:
                         all_findings.append(norm)
 
-        if per_target_tools:
-            union_set = set.union(*per_target_tools)
-        else:
-            union_set = set()
+        union_set = set.union(*per_target_tools) if per_target_tools else set()
         from feature_flags import is_enabled as _ff_enabled
         if _ff_enabled("ENGAGEMENT_STATE", default=False) and hasattr(self, "state"):
             self.state.record_tried_tools(union_set)
@@ -930,8 +929,8 @@ class Orchestrator:
         evaluation = engine.evaluate(snapshot, org_id=org_id)
 
         # ── Shared per-engagement cost tracker ──
-        from tasks.utils import LlmCostTracker
         from config.constants import LLM_MAX_COST_PER_ENGAGEMENT
+        from tasks.utils import LlmCostTracker
         engagement_cost_tracker = LlmCostTracker(
             engagement_id=self.engagement_id,
             max_cost=LLM_MAX_COST_PER_ENGAGEMENT,

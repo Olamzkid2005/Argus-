@@ -334,9 +334,9 @@ class PGVectorRepository:
                     "SELECT f.id, f.type, f.severity, f.endpoint, f.engagement_id, 0.5 AS similarity "
                     "FROM findings f "
                     "WHERE f.engagement_id != %s "
-                    "AND f.evidence::text ILIKE ANY(ARRAY[{}]) "
+                    f"AND f.evidence::text ILIKE ANY(ARRAY[{placeholders}]) "
                     "LIMIT %s"
-                ).format(placeholders)
+                )
 
                 cursor.execute(
                     query,
