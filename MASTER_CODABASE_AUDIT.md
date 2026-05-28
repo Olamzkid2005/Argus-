@@ -18,12 +18,13 @@
 | **Batch 7** | `d2468f2` | 10 high fixes (H-16/17, H-v3-06/19/21/22, H-v4-10/11, M-11) | May 27, 2026 | ✅ Pushed |
 | **Batch 8** | `0c81fea`, `be93143` | 8 high fixes (H-v4-05/07/08, H-v3-08/17/18, H-v4-09, H-v5-01) | May 27, 2026 | ✅ Pushed |
 | **Batch 9** | `f866d73`, `f6b5f72`, `ce4afeb` | 20 fixes (H-02/04/05/11/12/27/29, M-09/16/18/21/22/23/28/32, L-04/09/13/14/16/20/21/28/29) | May 28, 2026 | ✅ Pushed |
-| **Total** | — | **101 resolved** | — | ✅ |
+| **Batch 10** | `e929102` | 8 fixes (H-10/31/33, M-01/02/12/20/24) | May 28, 2026 | ✅ Pushed |
+| **Total** | — | **109 resolved** | — | ✅ |
 
-### Findings Remediated: 101 of 214 (47%)
+### Findings Remediated: 109 of 214 (51%)
 - **Critical (P0):** 17 of 18 ✅ (C-v3-05 remains — migration 029 redesign)
-- **High (P1):** 63 of 70 ✅ (7 remaining: H-03, H-06, H-09, H-10, H-31, H-32, H-33)
-- **Medium (P2):** 12 of 77 ✅ (65 remaining)
+- **High (P1):** 66 of 70 ✅ (4 remaining: H-03, H-06, H-09, H-32)
+- **Medium (P2):** 17 of 77 ✅ (60 remaining)
 - **Low (P3):** 9 of 49 ✅ (40 remaining)
 
 ---
@@ -3688,11 +3689,11 @@ All work is committed directly to `master`. No branching, no PRs, no code review
 | **Report generated** | May 28, 2026 (updated v7.0) |
 | **Audit method** | 7 parallel subagents (explore agents across all modules) + direct file reads of every finding |
 | **Files directly read** | 400+ critical files across all modules |
-| **Git revision** | `ce4afeb` (HEAD after 9 fix batches — 101 findings resolved) |
+| **Git revision** | `e929102` (HEAD after 10 fix batches — 109 findings resolved) |
 | **Branch** | `master` |
 | **Total findings** | **214 (18 Critical, 70 High, 77 Medium, 49 Low)** |
-| **Fixed (Batches 1-9)** | **101 (17 Critical, 63 High, 12 Medium, 9 Low)** |
-| **Remaining** | **113 (1 Critical, 7 High, 65 Medium, 40 Low)** |
+| **Fixed (Batches 1-10)** | **109 (17 Critical, 66 High, 17 Medium, 9 Low)** |
+| **Remaining** | **105 (1 Critical, 4 High, 60 Medium, 40 Low)** |
 | **Original findings (v1.0)** | 45 (5 Critical, 12 High, 15 Medium, 13 Low) |
 | **New findings in v2.0** | 64 (5 Critical, 21 High, 22 Medium, 16 Low) *[corrected from 90 — data entry error]* |
 | **New findings in v3.0** | **51 (7 Critical, 24 High, 12 Medium, 8 Low)** |

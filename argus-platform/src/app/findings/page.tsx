@@ -666,16 +666,24 @@ export default function FindingsPage() {
     if (selectedFindings.size === 0) return;
     setIsBulkVerifying(true);
     try {
-      const promises = Array.from(selectedFindings).map((id) =>
-        fetch(`/api/findings/${id}/verify`, { method: "POST" })
-      );
-      const results = await Promise.all(promises);
-      const successCount = results.filter((r) => r.ok).length;
-      showToast("success", `Verified ${successCount} findings`);
-      // Update local state
-      setFindings((prev) =>
-        prev.map((f) => (selectedFindings.has(f.id) ? { ...f, verified: true } : f))
-      );
+      // M-17: Batch all finding IDs into a single API call instead of N individual requests
+      const response = await fetch("/api/findings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify",
+          finding_ids: Array.from(selectedFindings),
+        }),
+      });
+      if (response.ok) {
+        showToast("success", `Verified ${selectedFindings.size} findings`);
+        setFindings((prev) =>
+          prev.map((f) => (selectedFindings.has(f.id) ? { ...f, verified: true } : f))
+        );
+      } else {
+        const err = await response.json();
+        showToast("error", err.error || "Failed to verify findings");
+      }
       setSelectedFindings(new Set());
     } catch (err) {
       showToast("error", "Failed to verify findings");
@@ -689,18 +697,26 @@ export default function FindingsPage() {
     if (!confirm(`Delete ${selectedFindings.size} selected findings?`)) return;
     setIsBulkDeleting(true);
     try {
-      const promises = Array.from(selectedFindings).map((id) =>
-        fetch(`/api/findings/${id}`, { method: "DELETE" })
-      );
-      const results = await Promise.all(promises);
-      const successCount = results.filter((r) => r.ok).length;
-      showToast("success", `Deleted ${successCount} findings`);
-      // Update local state
-      setFindings((prev) => prev.filter((f) => !selectedFindings.has(f.id)));
-      setSelectedFindings(new Set());
-      if (selectedFindingId && selectedFindings.has(selectedFindingId)) {
-        setSelectedFindingId(null);
+      // M-17: Batch all finding IDs into a single API call instead of N individual requests
+      const response = await fetch("/api/findings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          finding_ids: Array.from(selectedFindings),
+        }),
+      });
+      if (response.ok) {
+        showToast("success", `Deleted ${selectedFindings.size} findings`);
+        setFindings((prev) => prev.filter((f) => !selectedFindings.has(f.id)));
+        if (selectedFindingId && selectedFindings.has(selectedFindingId)) {
+          setSelectedFindingId(null);
+        }
+      } else {
+        const err = await response.json();
+        showToast("error", err.error || "Failed to delete findings");
       }
+      setSelectedFindings(new Set());
     } catch (err) {
       showToast("error", "Failed to delete findings");
     } finally {

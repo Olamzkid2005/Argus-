@@ -332,7 +332,10 @@ class AuthManager:
                             filled_username = True
                             logger.debug("Browser auth: filled username field '%s'", selector)
                             break
-                        except Exception:
+                        except Exception as exc:
+                            # M-04: Log unexpected errors (e.g. page navigation crashes, detached elements)
+                            # Expected TimeoutErrors are normal — multiple selectors are tried.
+                            logger.log(5, "Browser auth: username field '%s' failed: %s", selector, exc)
                             continue
                     if not filled_username:
                         logger.debug("Browser auth: could not find username field with common selectors")
@@ -344,7 +347,8 @@ class AuthManager:
                             filled_password = True
                             logger.debug("Browser auth: filled password field '%s'", selector)
                             break
-                        except Exception:
+                        except Exception as exc:
+                            logger.log(5, "Browser auth: password field '%s' failed: %s", selector, exc)
                             continue
                     if not filled_password:
                         logger.debug("Browser auth: could not find password field with common selectors")
@@ -357,7 +361,8 @@ class AuthManager:
                         try:
                             page.fill(f'[name="{field_name}"]', str(field_value), timeout=5000)
                             logger.debug("Browser auth: filled custom field '%s'", field_name)
-                        except Exception:
+                        except Exception as exc:
+                            logger.log(5, "Browser auth: custom field '%s' failed: %s", field_name, exc)
                             continue
 
                 # Submit form via button click or Enter key
@@ -377,7 +382,8 @@ class AuthManager:
                         submitted = True
                         logger.debug("Browser auth: clicked submit '%s'", selector)
                         break
-                    except Exception:
+                    except Exception as exc:
+                        logger.log(5, "Browser auth: submit '%s' failed: %s", selector, exc)
                         continue
 
                 if not submitted:
@@ -385,7 +391,8 @@ class AuthManager:
                     try:
                         page.press('[name="password"]', "Enter", timeout=5000)
                         submitted = True
-                    except Exception:
+                    except Exception as exc:
+                        logger.log(5, "Browser auth: Enter key fallback failed: %s", exc)
                         pass
 
                 if not submitted:

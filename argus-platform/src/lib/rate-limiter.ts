@@ -48,15 +48,14 @@ export function createRateLimit(config: RateLimitConfig = defaultConfig) {
     try {
       const redis = getRedisClient();
 
-      // Redis-backed sliding window using INCR + EXPIRE
+      // Redis-backed sliding window using atomic SET NX EX (M-19)
       // Key format: ratelimit:{ip}:{window_start}
       const windowKey = `${key}:${windowStart}`;
-      const count = await redis.incr(windowKey);
-
-      if (count === 1) {
-        // First request in this window — set TTL to slightly more than window
-        await redis.pexpire(windowKey, config.windowMs + 1000);
-      }
+      // M-19: Use SET NX EX for atomic initialization to prevent the race condition
+      // where INCR creates the key but EXPIRE hasn't been called yet, allowing a
+      // concurrent request to also see count === 1 and skip the EXPIRE.
+      const setResult = await redis.set(windowKey, 1, "PX", config.windowMs + 1000, "NX");
+      const count = setResult === "OK" ? 1 : await redis.incr(windowKey);
 
       // Get remaining TTL for Retry-After header
       const ttl = await redis.pttl(windowKey);

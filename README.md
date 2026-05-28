@@ -39,8 +39,8 @@ Argus-/
 ├── docs/                   # Documentation
 │   ├── setup-progress.md  # Setup progress tracker
 │   ├── database-setup.md  # Database setup guide
-│   ├── IMPROVEMENTS.md    # Comprehensive improvement recommendations
-│   └── PENTEST-AGENTS-INTEGRATION.md  # Pentest agents integration guide
+│   ├── FINAL-ARCHITECTURE.md  # Complete system architecture
+│   └── MASTER_CODABASE_AUDIT.md  # Full codebase audit report
 │
 └── FINAL-ARCHITECTURE.md   # Complete architecture specification
 ```
@@ -644,8 +644,8 @@ rm -rf logs/*
 
 - [Setup Progress](docs/setup-progress.md) - Current implementation status
 - [Database Setup](docs/database-setup.md) - Database installation guide
-- [Improvement Recommendations](docs/IMPROVEMENTS.md) - Comprehensive improvement roadmap
-- [Pentest Agents Integration](docs/PENTEST-AGENTS-INTEGRATION.md) - Pentest agents integration guide
+- [Comprehensive Audit](MASTER_CODABASE_AUDIT.md) - Full codebase audit report (214 findings, 109 resolved)
+- [Architecture Deep Dive](FINAL-ARCHITECTURE.md) - Complete system architecture
 - [Architecture](FINAL-ARCHITECTURE.md) - Complete system architecture
 
 ## Architecture Improvements
