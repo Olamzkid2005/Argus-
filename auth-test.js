@@ -1,9 +1,15 @@
 const { chromium } = require('playwright');
 
-// Read credentials from environment (H-v5-02)
-const BASE_URL = process.env.ARGUS_URL || 'http://localhost:3000';
-const TEST_EMAIL = process.env.TEST_EMAIL || 'admin@argus.local';
-const TEST_PASSWORD = process.env.TEST_PASSWORD || 'password';
+// Read credentials from environment only — no fallback defaults (H-v5-02)
+const BASE_URL = process.env.ARGUS_URL;
+const TEST_EMAIL = process.env.TEST_EMAIL;
+const TEST_PASSWORD = process.env.TEST_PASSWORD;
+
+if (!BASE_URL || !TEST_EMAIL || !TEST_PASSWORD) {
+  console.error('ERROR: ARGUS_URL, TEST_EMAIL, and TEST_PASSWORD environment variables are required.');
+  console.error('Usage: ARGUS_URL=http://localhost:3000 TEST_EMAIL=admin@example.com TEST_PASSWORD=secure_password node auth-test.js');
+  process.exit(1);
+}
 
 async function run() {
   const browser = await chromium.launch({ headless: true });

@@ -15,6 +15,19 @@ export async function GET(req: NextRequest) {
 
     try {
       if (engagementId) {
+        // H-v3-01: Verify the engagement belongs to the user's org before
+        // returning compliance data — prevents cross-tenant data leakage.
+        const engagementCheck = await client.query(
+          `SELECT id FROM engagements WHERE id = $1 AND org_id = $2`,
+          [engagementId, session.user.orgId],
+        );
+        if (engagementCheck.rows.length === 0) {
+          return NextResponse.json(
+            { error: "Engagement not found or access denied" },
+            { status: 404 },
+          );
+        }
+
         // Per-engagement posture: latest snapshot + history
         const latestResult = await client.query(
           `SELECT id, engagement_id, composite_score, framework_scores,
