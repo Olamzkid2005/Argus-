@@ -15,8 +15,8 @@ import logging
 import time
 from typing import Any
 
-from state_machine import EngagementStateMachine
 from loop_budget_manager import LoopBudgetManager
+from state_machine import EngagementStateMachine
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,7 @@ class EngagementState:
         """
         if self.state_machine:
             return self.state_machine.chain_transition(states, trace_id)
-        for new_state, reason in states:
+        for new_state, _reason in states:
             self.current_phase = new_state
         self._bump_version()
         return self.current_phase

@@ -57,6 +57,7 @@ print("2. RateLimitRepository.create_event() Logging")
 print("-" * 70)
 
 from unittest.mock import MagicMock
+
 mock_repo = MagicMock()
 mock_repo.create_event.return_value = {
     "id": 1, "domain": "example.test", "event_type": "tool_rate_limited",
@@ -94,8 +95,8 @@ print("4. FindingVerifier Module ScanLogger Output")
 print("-" * 70)
 
 async def run_verifiers():
-    from tools.finding_verifier import verify_sqli, verify_xss, verify_open_redirect
-    
+    from tools.finding_verifier import verify_open_redirect, verify_sqli, verify_xss
+
     print("   Calling verify_sqli (will fail on HTTP, but ScanLogger runs first)...")
     sqli_result = await verify_sqli(
         "https://nonexistent.example/",
@@ -105,7 +106,7 @@ async def run_verifiers():
     print(f"   Result: verified={sqli_result['verified']}, confidence={sqli_result['confidence']}")
     print(f"   Reason: {sqli_result['reason']}")
     print()
-    
+
     print("   Calling verify_xss (will fail on HTTP, but ScanLogger runs first)...")
     xss_result = await verify_xss(
         "https://nonexistent.example/",
@@ -114,7 +115,7 @@ async def run_verifiers():
     )
     print(f"   Result: verified={xss_result['verified']}, confidence={xss_result['confidence']}")
     print()
-    
+
     print("   Calling verify_open_redirect (will fail on HTTP, but ScanLogger runs first)...")
     redirect_result = await verify_open_redirect(
         "https://nonexistent.example/",

@@ -1,11 +1,9 @@
 """
 Compliance posture scoring tasks for on-demand and scheduled re-scoring.
 """
-import json
 import logging
 
 from celery import shared_task
-from celery_app import app
 
 logger = logging.getLogger(__name__)
 

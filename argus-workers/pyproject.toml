@@ -35,6 +35,20 @@ select = [
 ignore = [
     "E501",  # Line too long (handled by formatter)
     "ARG001", # Unused function arguments (common in callbacks)
+    "ARG002", # Unused method arguments (common in test mocks)
+    "E402",  # Module-level import not at top (common in type-checking blocks)
+    "B023",  # Loop variable binding in function def (false positives with closures)
+    "B007",  # Loop control variable not used (common in tuple unpacking)
+    "B017",  # Assert blind exception in tests (intentional in test contexts)
+    "B904",  # raise ... from err (legacy pattern, not a bug)
+    "N806",  # Variable in function should be lowercase (allowed in tests)
+    "N817",  # Exception name without Error suffix (legacy naming)
+    "N818",  # Exception name without Error suffix (legacy naming)
+    "SIM105", # Use contextlib.suppress (false positive in complex paths)
+    "SIM108", # Use ternary operator (style preference)
+    "SIM114", # Combine if branches (readability preference)
+    "C405",  # Use set literal (false positive for type-checking patterns)
+    "SIM117", # Combine `with` statements (nested with for clarity)
 ]
 
 [tool.ruff.lint.pydocstyle]

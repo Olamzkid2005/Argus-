@@ -17,7 +17,6 @@ import uuid
 from datetime import UTC, datetime
 
 from celery_app import app
-from database.connection import connect
 from distributed_lock import DistributedLock, LockContext
 from orchestrator import Orchestrator
 from state_machine import EngagementStateMachine
@@ -179,7 +178,10 @@ def run_repo_scan(
                 # Don't transition to "scanning" here — scan.py handles that transition
                 # and reads the actual DB state before transitioning
                 # Auto-push web scan job
-                from tasks.utils import fetch_engagement_scan_options, get_engagement_state
+                from tasks.utils import (
+                    fetch_engagement_scan_options,
+                    get_engagement_state,
+                )
 
                 opts = fetch_engagement_scan_options(engagement_id)
                 app.send_task(

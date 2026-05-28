@@ -10,7 +10,6 @@ The retriever is called by the agent loop before prompt building to inject
 relevant context from all three tiers.
 """
 
-import json
 import logging
 from typing import Any
 

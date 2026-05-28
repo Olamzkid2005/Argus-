@@ -10,6 +10,7 @@ import os
 import re
 import time as _time
 from collections import defaultdict
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -384,7 +385,7 @@ class IntelligenceEngine:
             Tuple of (snapshot_dict, graph_instance)
         """
         from attack_graph import AttackGraph
-        from models.finding import VulnerabilityFinding, Severity
+        from models.finding import Severity, VulnerabilityFinding
 
         engagement_id = context.get("engagement_id", "") or ""
         if not engagement_id:
@@ -1048,7 +1049,7 @@ class IntelligenceEngine:
             "confidence": round(confidence, 3),
             "true_positive_score": round(avg_score, 3),
             "factors": reasons,
-            "factor_scores": {reason: round(score, 3) for reason, score in zip(reasons, scores)},
+            "factor_scores": {reason: round(score, 3) for reason, score in zip(reasons, scores, strict=False)},
         }
 
     def get_threat_summary(self, findings: list[dict]) -> dict:
@@ -1126,9 +1127,7 @@ class IntelligenceEngine:
 
         effective_high = high_count + high_epss_count
 
-        if critical_count >= 3:
-            return "critical"
-        elif critical_count >= 1 and effective_high >= 2:
+        if critical_count >= 3 or critical_count >= 1 and effective_high >= 2:
             return "critical"
         elif critical_count >= 1:
             return "high"

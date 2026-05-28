@@ -460,7 +460,6 @@ class AuthManager:
     @staticmethod
     def _try_extract_browser_session(page) -> requests.Session:
         """Extract cookies and localStorage tokens from a Playwright page into a requests.Session."""
-        import contextlib as _cl
         session = requests.Session()
 
         # Extract cookies from browser context

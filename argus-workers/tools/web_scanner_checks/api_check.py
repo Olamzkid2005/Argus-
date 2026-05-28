@@ -6,6 +6,8 @@ import logging
 import re
 from urllib.parse import urljoin
 
+import requests
+
 from config.constants import (
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,

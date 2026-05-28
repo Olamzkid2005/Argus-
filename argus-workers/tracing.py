@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from database.connection import get_db
 from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)

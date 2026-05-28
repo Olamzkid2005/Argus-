@@ -28,7 +28,8 @@ import hashlib
 import json
 import logging
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,7 @@ def _normalize_for_comparison(obj: Any) -> str:
     Handles dicts, lists, and primitive types. Sorts keys for stability.
     """
     try:
-        if isinstance(obj, dict):
-            return json.dumps(obj, sort_keys=True, default=str)
-        elif isinstance(obj, list):
+        if isinstance(obj, (dict, list)):
             return json.dumps(obj, sort_keys=True, default=str)
         elif hasattr(obj, "to_dict"):
             return json.dumps(obj.to_dict(), sort_keys=True, default=str)

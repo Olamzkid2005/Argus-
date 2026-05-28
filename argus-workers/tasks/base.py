@@ -25,6 +25,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+from dead_letter_queue import get_dlq
+
 # Celery's SoftTimeLimitExceeded is raised when a task exceeds its soft time limit.
 # We catch it here to transition the engagement to 'failed' with a clear message,
 # rather than leaving it stuck in an intermediate state.
@@ -67,7 +69,6 @@ def _transition_to_failed_on_timeout(
     if _lock_acquired:
         try:
             from tasks.utils import get_engagement_state as _ges
-            from database.connection import get_db as _get_db
             current = sm.current_state if _state_assigned else _ges(engagement_id, os.getenv("DATABASE_URL"))
             if current not in ("complete", "failed"):
                 if _state_assigned:
@@ -126,9 +127,7 @@ def task_context(
             ctx.state.transition("scanning", "...")
     """
     from distributed_lock import DistributedLock, LockAcquisitionError, LockContext
-    from feature_flags import is_enabled as _ff_enabled
     from orchestrator import Orchestrator
-    from runtime import EngagementState, shadow_compare
     from state_machine import EngagementStateMachine
     from tasks.utils import get_engagement_state
     from tracing import TracingManager

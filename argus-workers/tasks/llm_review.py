@@ -345,7 +345,7 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
         return None
 
     try:
-        from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
         import requests
 

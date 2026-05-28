@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 RECON_CONTEXT_KEY = "recon_context:{engagement_id}"
 from config.constants import HARD_TIMEOUT_SECONDS
+
 RECON_CONTEXT_TTL = HARD_TIMEOUT_SECONDS  # Match hard timeout so context doesn't expire before scan completes
 LLM_COST_KEY = "llm_cost:{engagement_id}"
 

@@ -21,8 +21,8 @@ Usage:
 """
 
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -133,8 +133,14 @@ class SafeEventEmitter:
         try:
             from streaming import (
                 emit_agent_decision as _emit_agent_decision,
+            )
+            from streaming import (
                 emit_thinking as _emit_thinking,
+            )
+            from streaming import (
                 emit_tool_complete as _emit_tool_complete,
+            )
+            from streaming import (
                 emit_tool_start as _emit_tool_start,
             )
             from websocket_events import get_websocket_publisher
@@ -217,7 +223,7 @@ def transactional_event_context(engagement_id: str) -> Iterator[SafeEventEmitter
             # DB commit happens (e.g., cursor __exit__)
             # emitter.flush() called automatically on context exit
     """
-    from streaming import set_transactional_emitter, clear_transactional_emitter
+    from streaming import clear_transactional_emitter, set_transactional_emitter
 
     emitter = SafeEventEmitter(engagement_id)
     set_transactional_emitter(emitter)

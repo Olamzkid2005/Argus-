@@ -111,7 +111,7 @@ class APISecurityScanner:
         import socket as _socket
         try:
             addrinfo = _socket.getaddrinfo(hostname, None)
-            for family, _typ, _proto, _cn, sockaddr in addrinfo:
+            for _family, _typ, _proto, _cn, sockaddr in addrinfo:
                 resolved_ip = sockaddr[0]
                 try:
                     addr = ipaddress.ip_address(resolved_ip)

@@ -611,7 +611,7 @@ class StreamingFindingEmitter:
                 - source_tool: Tool that discovered the finding
                 - confidence: Confidence score 0.0-1.0
         """
-        finding_id = finding.get("_saved_id") or finding.get("id") or ""
+        finding.get("_saved_id") or finding.get("id") or ""
         finding_type = finding.get("type", "UNKNOWN")
         severity = finding.get("severity", "INFO")
         endpoint = finding.get("endpoint", "")
@@ -678,8 +678,8 @@ def emit_finding_rt(
     severity = finding.get("severity", "INFO")
     endpoint = finding.get("endpoint", "")
     source_tool = finding.get("source_tool", tool_name)
-    confidence = finding.get("confidence", 0.5)
-    finding_id = finding.get("_id", finding.get("id", ""))
+    finding.get("confidence", 0.5)
+    finding.get("_id", finding.get("id", ""))
 
     # In-flight dedup: skip if we've already emitted this type+endpoint+tool combo
     fp = _rt_fingerprint(finding_type, endpoint, source_tool)

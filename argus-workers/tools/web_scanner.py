@@ -27,6 +27,7 @@ import re
 import socket
 import threading
 import time
+import uuid
 from urllib.parse import urljoin, urlparse
 
 # Allowed URL schemes for scan targets — blocks dangerous protocols like
@@ -35,8 +36,6 @@ _ALLOWED_SCAN_SCHEMES = frozenset({"http", "https"})
 
 import requests
 import urllib3
-
-from tools.scope_validator import validate_target_scope  # M-25: scope validation
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
 from config.constants import (
@@ -46,6 +45,7 @@ from config.constants import (
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,
 )
+from tools.scope_validator import validate_target_scope  # M-25: scope validation
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
 from utils.logging_utils import ScanLogger
 

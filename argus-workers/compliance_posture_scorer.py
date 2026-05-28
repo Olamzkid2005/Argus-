@@ -14,10 +14,8 @@ Scores are computed per-framework and as a composite across all frameworks.
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 
 from compliance_reporting import ComplianceMapper
 

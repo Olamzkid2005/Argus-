@@ -89,7 +89,7 @@ class EngagementStateMachine:
 
     def _resolve_state_if_needed(self):
         """Lazily resolve state from DB if it was None on construction.
-        
+
         Called at the start of transition() and chain_transition() so
         the FOR UPDATE lock is already held, preventing TOCTOU races.
         """
@@ -129,7 +129,7 @@ class EngagementStateMachine:
 
     def _release_connection(self, conn):
         """Release connection back to pool or close raw connections.
-        
+
         Never releases an external connection — the caller owns its lifecycle.
         """
         if conn and not self._external_conn:
@@ -509,7 +509,7 @@ class EngagementStateMachine:
                 conn.rollback()
             logger.error("chain_transition failed for engagement %s: %s", self.engagement_id, e)
             raise
-        except ValueError as e:
+        except ValueError:
             if conn:
                 conn.rollback()
             raise

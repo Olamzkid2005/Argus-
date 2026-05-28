@@ -5,12 +5,13 @@ Persists and loads AttackGraph instances to/from the `attack_paths` table.
 Follows the same connection patterns as other repositories in database/repositories/.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-import time
 import uuid
-from typing import Any
 
+from attack_graph import AttackGraph
 from database.connection import connect, get_db
 
 logger = logging.getLogger(__name__)
@@ -51,9 +52,9 @@ class AttackGraphRepository:
                 try:
                     conn.close()
                 except Exception:
-                    logger.debug("Failed to close connection for %s", engagement_id, exc_info=True)
+                    logger.debug("Failed to close connection", exc_info=True)
 
-    def save_paths(self, engagement_id: str, graph: "AttackGraph") -> int:
+    def save_paths(self, engagement_id: str, graph: AttackGraph) -> int:
         """
         Persist all attack paths from the graph to the database.
 
@@ -201,7 +202,7 @@ class AttackGraphRepository:
             if conn:
                 self._release_connection(conn)
 
-    def load_graph(self, engagement_id: str) -> "AttackGraph | None":
+    def load_graph(self, engagement_id: str) -> AttackGraph | None:
         """
         Reconstruct an AttackGraph from persisted attack_paths rows.
 
@@ -214,7 +215,7 @@ class AttackGraphRepository:
         Returns:
             AttackGraph instance with restored nodes/edges, or None if no paths exist
         """
-        from attack_graph import AttackGraph, Edge, Node, Path as AttackPath
+        from attack_graph import AttackGraph, Edge, Node
 
         conn = None
         cursor = None
