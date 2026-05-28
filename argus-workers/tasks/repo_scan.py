@@ -281,6 +281,7 @@ def get_blame_for_finding(repo_path, finding):
                 "-L",
                 f"{line_number},{line_number}",
                 "--porcelain",
+                "--",
                 file_path,
             ],
             cwd=repo_path,
