@@ -3,7 +3,7 @@ MemoryRetriever — 3-tier memory retrieval for agent prompts.
 
 Architecture:
 - Short-term: EngagementState.observations (replaces ReActAgent.history)
-- Medium-term: decision_snapshots table (compressed reasoning summaries)
+- Medium-term: agent_decision_log table (compressed reasoning summaries)
 - Long-term: target_profiles table (historical findings and patterns)
 
 The retriever is called by the agent loop before prompt building to inject
@@ -151,7 +151,7 @@ class MemoryRetriever:
                 cursor.execute(
                     """
                     SELECT selected_tool, arguments, reasoning_hash, state_version, created_at
-                    FROM decision_snapshots
+                    FROM agent_decision_log
                     WHERE engagement_id = %s
                     ORDER BY created_at DESC
                     LIMIT 5

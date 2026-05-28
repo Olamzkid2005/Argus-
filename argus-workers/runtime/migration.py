@@ -69,11 +69,14 @@ class MigrateResult:
 
 # ── Table DDL ──
 
+# M-v4-13/M-v4-14: Renamed from 'decision_snapshots' to avoid collision with
+# schema.sql which defines a different table with the same name.
+# Uses UUID PKs with defaults instead of bare TEXT PKs.
 _DECISION_SNAPSHOTS_DDL = """
-CREATE TABLE IF NOT EXISTS decision_snapshots (
-    id              TEXT PRIMARY KEY,
-    engagement_id   TEXT NOT NULL,
-    action_id       TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS agent_decision_log (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id   UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+    action_id       UUID NOT NULL,
     observation_hash TEXT NOT NULL,
     reasoning_hash  TEXT NOT NULL,
     selected_tool   TEXT NOT NULL,
@@ -84,23 +87,25 @@ CREATE TABLE IF NOT EXISTS decision_snapshots (
     execution_success BOOLEAN,
     execution_error TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_decision_snapshots_engagement
-    ON decision_snapshots (engagement_id);
-CREATE INDEX IF NOT EXISTS idx_decision_snapshots_action
-    ON decision_snapshots (action_id);
+CREATE INDEX IF NOT EXISTS idx_agent_decision_log_engagement
+    ON agent_decision_log (engagement_id);
+CREATE INDEX IF NOT EXISTS idx_agent_decision_log_action
+    ON agent_decision_log (action_id);
 """
 
+# M-v4-13/M-v4-14: Renamed from 'engagement_state_snapshots' to avoid collision.
+# Uses UUID PK with default generation.
 _ENGAGEMENT_STATE_SNAPSHOTS_DDL = """
-CREATE TABLE IF NOT EXISTS engagement_state_snapshots (
-    id              TEXT PRIMARY KEY,
-    engagement_id   TEXT NOT NULL UNIQUE,
+CREATE TABLE IF NOT EXISTS agent_state_log (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id   UUID NOT NULL UNIQUE REFERENCES engagements(id) ON DELETE CASCADE,
     state_version   INTEGER NOT NULL DEFAULT 0,
     snapshot_data   JSONB NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_engagement_state_snapshots_eid
-    ON engagement_state_snapshots (engagement_id);
+CREATE INDEX IF NOT EXISTS idx_agent_state_log_eid
+    ON agent_state_log (engagement_id);
 """
 
 
@@ -161,7 +166,7 @@ def _engagement_has_state_snapshot(engagement_id: str) -> bool:
 
         with db_cursor() as cursor:
             cursor.execute(
-                "SELECT 1 FROM engagement_state_snapshots WHERE engagement_id = %s",
+                "SELECT 1 FROM agent_state_log WHERE engagement_id = %s",
                 (engagement_id,),
             )
             return cursor.fetchone() is not None
@@ -347,7 +352,7 @@ def get_migration_status() -> dict[str, Any]:
             # Check if tables exist
             cursor.execute(
                 "SELECT EXISTS (SELECT FROM information_schema.tables "
-                "WHERE table_name = 'engagement_state_snapshots')"
+                "WHERE table_name = 'agent_state_log')"
             )
             tables_ok = cursor.fetchone()[0]
 
@@ -356,7 +361,7 @@ def get_migration_status() -> dict[str, Any]:
                 engagement_count = cursor.fetchone()[0]
 
                 cursor.execute(
-                    "SELECT COUNT(*) FROM engagement_state_snapshots"
+                    "SELECT COUNT(*) FROM agent_state_log"
                 )
                 migrated_count = cursor.fetchone()[0]
     except Exception as e:

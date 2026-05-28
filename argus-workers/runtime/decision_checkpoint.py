@@ -97,7 +97,7 @@ class DecisionCheckpointRepository:
             with db_cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO decision_snapshots
+                    INSERT INTO agent_decision_log
                         (id, engagement_id, action_id, observation_hash,
                          reasoning_hash, selected_tool, arguments,
                          tool_cost_usd, state_version, created_at)
@@ -134,7 +134,7 @@ class DecisionCheckpointRepository:
                            observation_hash, reasoning_hash, selected_tool,
                            arguments, tool_cost_usd, state_version,
                            created_at, execution_success, execution_error
-                    FROM decision_snapshots
+                    FROM agent_decision_log
                     WHERE action_id = %s
                     ORDER BY created_at DESC
                     LIMIT 1
@@ -167,7 +167,7 @@ class DecisionCheckpointRepository:
                            observation_hash, reasoning_hash, selected_tool,
                            arguments, tool_cost_usd, state_version,
                            created_at, execution_success, execution_error
-                    FROM decision_snapshots
+                    FROM agent_decision_log
                     WHERE engagement_id = %s
                     ORDER BY created_at DESC
                     LIMIT %s
@@ -197,7 +197,7 @@ class DecisionCheckpointRepository:
             with db_cursor() as cursor:
                 cursor.execute(
                     """
-                    UPDATE decision_snapshots
+                    UPDATE agent_decision_log
                     SET execution_success = %s, execution_error = %s
                     WHERE checkpoint_id = %s
                     """,
