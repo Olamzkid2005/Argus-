@@ -2,6 +2,9 @@
 
 # Argus Pentest Platform - Database Setup Script
 # This script sets up the PostgreSQL database with all required tables and extensions
+# L-v3-07: Always use environment variables for credentials — never hardcode passwords.
+# When running this script interactively, ensure your shell history is not logged
+# (use `set +o history` or prefix with a space if HISTCONTROL=ignorespace).
 
 set -e  # Exit on error
 

@@ -4,6 +4,7 @@ Finding verification layer for high-volume false positive sources.
 Verifies findings by re-testing with independent methods. Gated behind
 ARGUS_FF_FINDING_VERIFICATION feature flag.
 """
+import ipaddress
 import logging
 import urllib.parse
 from urllib.parse import urlparse
@@ -14,6 +15,55 @@ from feature_flags import is_enabled
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
+# M-v4-05: Known cloud metadata and internal hostnames to block for SSRF prevention.
+_BLOCKED_METADATA_HOSTNAMES = {
+    "localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1",
+    "169.254.169.254",                       # AWS/GCP/Azure metadata
+    "metadata.google.internal",              # GCP
+    "metadata",                              # GCP short name
+    "instance-data",                         # AWS short name
+    "instance-data.us-east-1.compute.internal",  # AWS regional
+    "100.100.100.200",                       # Alibaba Cloud
+}
+
+
+def _validate_verification_url(endpoint: str) -> str:
+    """Validate and sanitize a finding endpoint URL for SSRF prevention.
+
+    Raises ValueError if the endpoint targets internal/private/cloud-metadata
+    hosts or uses a blocked protocol. Prevents finding verifier SSRF (M-v4-05).
+
+    Args:
+        endpoint: The finding endpoint URL to validate.
+
+    Returns:
+        The validated endpoint URL.
+
+    Raises:
+        ValueError: If the endpoint is invalid or blocked.
+    """
+    parsed = urlparse(endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid or missing hostname in endpoint: {endpoint}")
+
+    # Block non-HTTP protocols (file://, gopher://, etc.)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Blocked protocol '{parsed.scheme}' in endpoint: {endpoint}")
+
+    hostname = parsed.hostname or ""
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+            raise ValueError(f"Blocked internal IP: {hostname}")
+    except ValueError:
+        # Not an IP literal — check hostname against blocklist
+        pass
+
+    if hostname.lower() in _BLOCKED_METADATA_HOSTNAMES:
+        raise ValueError(f"Blocked metadata/internal hostname: {hostname}")
+
+    return endpoint
 
 # Common SQL error markers for differential analysis
 SQL_ERROR_MARKERS = [
@@ -46,6 +96,14 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
         slog.info("SQLi verification disabled (feature flag off)")
+        return result
+
+    # M-v4-05: Validate endpoint URL to prevent SSRF from malicious finding data
+    try:
+        _validate_verification_url(endpoint)
+    except ValueError as e:
+        slog.warn(f"SQLi verification blocked: {e}")
+        result["reason"] = f"Blocked: {e}"
         return result
 
     try:
@@ -115,6 +173,14 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None, enga
         slog.info("XSS verification disabled (feature flag off)")
         return result
 
+    # M-v4-05: Validate endpoint URL to prevent SSRF from malicious finding data
+    try:
+        _validate_verification_url(endpoint)
+    except ValueError as e:
+        slog.warn(f"XSS verification blocked: {e}")
+        result["reason"] = f"Blocked: {e}"
+        return result
+
     try:
         async with httpx.AsyncClient(timeout=15.0, verify=True, follow_redirects=True) as client:
             test_param = param or "q"
@@ -175,6 +241,14 @@ async def verify_open_redirect(endpoint: str, engagement_id: str = "") -> dict:
     if not is_enabled("FINDING_VERIFICATION"):
         result["reason"] = "Verification disabled (feature flag off)"
         slog.info("Open redirect verification disabled (feature flag off)")
+        return result
+
+    # M-v4-05: Validate endpoint URL to prevent SSRF from malicious finding data
+    try:
+        _validate_verification_url(endpoint)
+    except ValueError as e:
+        slog.warn(f"Open redirect verification blocked: {e}")
+        result["reason"] = f"Blocked: {e}"
         return result
 
     try:

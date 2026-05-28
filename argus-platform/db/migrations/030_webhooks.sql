@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS webhooks (
 
 CREATE INDEX IF NOT EXISTS idx_webhooks_org_id ON webhooks(org_id);
 CREATE INDEX IF NOT EXISTS idx_webhooks_engagement_id ON webhooks(engagement_id);
+-- L-27: GIN index for event-type filtering (events column is a text array)
+CREATE INDEX IF NOT EXISTS idx_webhooks_events ON webhooks USING GIN (events);
 
 CREATE TRIGGER update_webhooks_updated_at BEFORE UPDATE ON webhooks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

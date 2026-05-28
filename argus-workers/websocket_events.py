@@ -57,6 +57,10 @@ class WebSocketEventPublisher:
     # Redis configuration
     EVENTS_TTL = 300  # 5 minutes
     MAX_EVENTS = 100
+    # L-v5-01: Maximum individual event size in bytes (100KB). Events exceeding
+    # this limit will be truncated to prevent browser WebSocket crashes (typical
+    # browser limit is 1-2MB) and Redis memory pressure.
+    MAX_EVENT_SIZE_BYTES = 102400  # 100KB
 
     # Batching configuration
     BATCH_SIZE = 10
@@ -156,15 +160,38 @@ class WebSocketEventPublisher:
         if not self._should_publish(event, min_severity):
             return
 
+        # L-v5-01: Check event size before publishing to prevent browser
+        # WebSocket crashes and Redis memory pressure. Truncate oversized
+        # data fields if the event exceeds the limit.
+        event_json = json.dumps(event)
+        if len(event_json) > self.MAX_EVENT_SIZE_BYTES:
+            logger.warning(
+                "Event %s for engagement %s exceeds size limit (%d > %d bytes) — truncating",
+                event.get("type", "unknown"), engagement_id,
+                len(event_json), self.MAX_EVENT_SIZE_BYTES,
+            )
+            # Truncate data dict values to fit within limit
+            data = event.get("data", {})
+            if isinstance(data, dict):
+                for key in list(data.keys()):
+                    if isinstance(data[key], str) and len(data[key]) > 1000:
+                        data[key] = data[key][:1000] + "...[truncated]"
+                event["data"] = data
+            event_json = json.dumps(event)
+            # If still too large, remove data entirely
+            if len(event_json) > self.MAX_EVENT_SIZE_BYTES:
+                event.pop("data", None)
+                event_json = json.dumps(event)
+
         # Store in Redis list for polling
         events_key = self._get_events_key(engagement_id)
-        self.redis.lpush(events_key, json.dumps(event))
+        self.redis.lpush(events_key, event_json)
         self.redis.ltrim(events_key, 0, self.MAX_EVENTS - 1)
         self.redis.expire(events_key, self.EVENTS_TTL)
 
-        # Publish to channel for active subscribers
+        # Publish to channel for active subscribers (use serialized event_json)
         channel = self._get_channel(engagement_id)
-        self.redis.publish(channel, json.dumps(event))
+        self.redis.publish(channel, event_json)
 
     def _add_to_batch(self, event: dict[str, Any]) -> None:
         engagement_id = event.get("engagement_id")

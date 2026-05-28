@@ -308,6 +308,8 @@ CREATE INDEX idx_execution_spans_created_at ON execution_spans(created_at);
 -- Tool metrics indexes
 CREATE INDEX idx_tool_metrics_tool_name ON tool_metrics(tool_name);
 CREATE INDEX idx_tool_metrics_created_at ON tool_metrics(created_at);
+-- L-26: Support per-engagement tool performance queries (most common query pattern)
+CREATE INDEX idx_tool_metrics_engagement ON tool_metrics(engagement_id, created_at);
 
 -- Job states indexes
 CREATE INDEX idx_job_states_engagement_id ON job_states(engagement_id);

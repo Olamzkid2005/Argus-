@@ -7,7 +7,9 @@ declare module "next-auth" {
       email: string;
       orgId: string;
       role: string;
+      requires2FAVerification?: boolean;
     };
+    requires2FA?: boolean;
   }
 
   interface User {
@@ -15,6 +17,7 @@ declare module "next-auth" {
     email: string;
     orgId: string;
     role: string;
+    requires2FA?: boolean;
   }
 }
 
@@ -23,5 +26,6 @@ declare module "next-auth/jwt" {
     id: string;
     orgId: string;
     role: string;
+    requires2FA?: boolean;
   }
 }

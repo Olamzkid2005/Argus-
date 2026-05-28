@@ -172,11 +172,24 @@ class PoCGenerator:
         elif not isinstance(evidence, dict):
             evidence = {"raw": str(evidence)[:500]}
 
-        # Redact sensitive data from evidence before sending to LLM provider
+        # Redact sensitive data from evidence before sending to LLM provider.
+        # M-v4-07: Enhanced regex covers Unicode whitespace, JSON-escaped values,
+        # backslash-escaped quotes, and Base64-encoded tokens. Also catches
+        # shorter tokens (min 8 chars) and X-API-Key / Bearer patterns.
         import re as _redact_re
         def _redact(t: str) -> str:
-            t = _redact_re.sub(r'(?i)(api[_-]?key|secret|token|password|auth)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', t[:400])
-            return _redact_re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', t)
+            # Redact key=value or key:value patterns (supports Unicode whitespace and JSON escaping)
+            t = _redact_re.sub(
+                r'(?i)(api[_-]?key|secret|token|password|auth|credential|private_key|access_key|session_id)'
+                r'(?:\s*[:=]\s*|["\']?\s*:\s*["\']?)'
+                r'["\']?[^\s"\'&]+["\']?',
+                r'\1=__REDACTED__', t[:800],
+            )
+            # Redact bearer tokens (Base64 and short tokens, min 8 chars)
+            t = _redact_re.sub(r'(?i)(bearer\s+|token\s+)[a-z0-9+/_.=-]{8,}', r'\1__REDACTED__', t)
+            # Redact standalone JWT-like patterns (three dot-separated Base64 segments)
+            t = _redact_re.sub(r'(?i)[a-z0-9+/_-]{20,}\.[a-z0-9+/_-]{4,}\.[a-z0-9+/_-]{4,}', '__REDACTED_JWT__', t)
+            return t
         user_prompt = json.dumps({
             "finding_type": vuln_type,
             "endpoint": finding.get("endpoint", ""),
