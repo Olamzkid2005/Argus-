@@ -1,11 +1,9 @@
 import Redis from "ioredis";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
-import { spawn } from "child_process";
-import path from "path";
-import fs from "fs";
 
 import type { JobMessage } from "./job-types";
+import { TASK_NAME_MAP } from "./job-types";
 
 // Redis client for job queue (singleton via globalThis to survive hot reloads)
 const globalForRedis = globalThis as unknown as { __redis?: Redis };
@@ -139,10 +137,62 @@ export async function checkIdempotency(
 }
 
 /**
- * Push a job to the Celery task queue by dispatching through Python script
- * 
- * This properly dispatches tasks to Celery rather than manually pushing to Redis lists
- * which bypasses Celery's broker mechanism.
+ * Queue name mapping — mirrors Celery task_routes in celery_app.py.
+ */
+function queueForJobType(jobType: string): string {
+  if (jobType.startsWith("tasks.recon")) return "recon";
+  if (jobType.startsWith("tasks.scan")) return "scan";
+  if (jobType.startsWith("tasks.analyze") || jobType.startsWith("tasks.posture")) return "analyze";
+  if (jobType.startsWith("tasks.report")) return "report";
+  if (jobType.startsWith("tasks.repo_scan")) return "repo_scan";
+  return "celery"; // default queue
+}
+
+/**
+ * Build positional arguments matching build_task_args() in job_schema.py.
+ */
+function buildCeleryArgs(job: JobMessage): unknown[] {
+  const { type, engagement_id, target, budget, trace_id } = job;
+  const agent_mode = job.agent_mode ?? true;
+  const repo_url = job.repo_url || target;
+
+  switch (type) {
+    case "recon":
+      return [engagement_id, target, budget, trace_id, agent_mode, job.scan_mode ?? null, job.aggressiveness ?? null, job.bug_bounty_mode ?? null];
+    case "scan":
+      return [engagement_id, [target], budget, trace_id, agent_mode, job.scan_mode ?? null, job.aggressiveness ?? null, job.bug_bounty_mode ?? null];
+    case "analyze":
+      return [engagement_id, budget, trace_id];
+    case "report":
+      return [engagement_id, trace_id, budget ?? {}];
+    case "repo_scan":
+      return [engagement_id, repo_url, budget, trace_id];
+    case "compliance_report":
+      return [engagement_id, job.standard ?? null];
+    case "full_report":
+      return [engagement_id, job.report_id ?? ""];
+    case "asset_discovery":
+      return [engagement_id, target, trace_id, job.org_id ?? null];
+    case "asset_risk_scoring":
+      return [engagement_id];
+    case "bugbounty_report":
+      return [engagement_id, job.platform ?? "hackerone", job.output_path ?? "", trace_id];
+    case "posture_recompute":
+      return [engagement_id, job.org_id ?? null];
+    default:
+      throw new Error(`Unknown job type: ${type}`);
+  }
+}
+
+/**
+ * Push a job to the Celery task queue via direct Redis LPUSH.
+ *
+ * Replaces the previous approach of spawning a Python subprocess per job
+ * (dispatch_task.py), which added ~300ms overhead per dispatch from process
+ * creation + Python interpreter startup.
+ *
+ * Uses Celery v5.x Redis message format with JSON serialization.
+ * A persistent task ID is returned for tracking.
  */
 export async function pushJob(job: JobMessage): Promise<string> {
   const traceId = job.trace_id || uuidv4();
@@ -189,80 +239,56 @@ export async function pushJob(job: JobMessage): Promise<string> {
     return traceId;
   }
 
-  // Execute the Python dispatch script
-  return new Promise((resolve, reject) => {
-    // Fixed path - go up from argus-platform to root
-    const workersRoot = path.join(process.cwd(), "..");
-    const dispatchScript = path.join(workersRoot, "argus-workers", "dispatch_task.py");
-    
-    // Try venv python first, fall back to system python
-    let pythonPath = path.join(workersRoot, "argus-workers", "venv", "bin", "python");
-    if (!fs.existsSync(pythonPath)) {
-      pythonPath = "python3";
-    }
+  // ── Direct Redis LPUSH to Celery broker queue ──
+  // This replaces the Python subprocess dispatch (M-08).
+  // Celery v5.x Redis message format (JSON serializer, v2 message):
 
-    // Build the job payload matching dispatch_task.py expectations
-    const jobPayload: Record<string, unknown> = {
-      type: job.type,
-      engagement_id: job.engagement_id,
-      target: job.target,
-      repo_url: job.repo_url,
-      standard: job.standard,
-      budget: job.budget,
-      trace_id: traceId,
-      platform: (job as any).platform,
-      output_path: (job as any).output_path,
-      aggressiveness: job.aggressiveness,
-      agent_mode: job.agent_mode,
-      scan_mode: job.scan_mode,
-      bug_bounty_mode: job.bug_bounty_mode,
-    };
+  const taskName = TASK_NAME_MAP[job.type];
+  if (!taskName) {
+    throw new Error(`Unknown job type: ${job.type}`);
+  }
 
-    const child = spawn(pythonPath, [dispatchScript], {
-      cwd: workersRoot,
-      env: {
-        ...process.env,
-        PYTHONPATH: workersRoot,
+  const taskId = uuidv4();
+  const queueName = queueForJobType(taskName);
+
+  // Build positional args matching Celery task signature
+  const args = buildCeleryArgs(job);
+
+  // Celery body format: [args, kwargs, embed]
+  // where embed = {callbacks, errbacks, chain, chord} or null
+  const bodyJson = JSON.stringify([args, {}, null]);
+  const bodyBase64 = Buffer.from(bodyJson).toString("base64");
+
+  // v2 message format (Celery 5.x)
+  const message = JSON.stringify({
+    body: bodyBase64,
+    "content-encoding": "utf-8",
+    "content-type": "application/json",
+    headers: {
+      task: taskName,
+      id: taskId,
+      root_id: taskId,
+      parent_id: null,
+      group: null,
+      retries: 0,
+      timelimit: [null, null],
+    },
+    properties: {
+      correlation_id: taskId,
+      delivery_mode: 2,
+      delivery_info: {
+        priority: 0,
+        routing_key: queueName,
       },
-      // M-v3-01: Timeout to prevent hanging subprocesses from leaking
-      timeout: 30000,  // 30 second timeout
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    const timeoutId = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error("dispatch_task.py timed out after 30s"));
-    }, 30000);
-
-    child.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timeoutId);
-      if (code !== 0) {
-        console.error("dispatch_task.py error:", stderr);
-        reject(new Error(`dispatch_task.py exited with code ${code}: ${stderr}`));
-        return;
-      }
-
-      try {
-        const result = JSON.parse(stdout.trim());
-        resolve(result.task_id);
-      } catch (e) {
-        reject(new Error(`Failed to parse dispatch result: ${stdout}`));
-      }
-    });
-
-    child.stdin.write(JSON.stringify(jobPayload));
-    child.stdin.end();
+      priority: 0,
+      body_encoding: "base64",
+    },
   });
+
+  // LPUSH to the queue list — Celery workers BRPOP from the right
+  await redis.lpush(queueName, message);
+
+  return taskId;
 }
 
 /**
@@ -373,40 +399,26 @@ export async function pollJobStatus(
 }
 
 /**
- * Cancel a running job
+ * Cancel a running job via Redis.
+ *
+ * Marks the job as cancelled in the progress tracker. The Celery task
+ * checks this key via its abort mechanism. Direct Celery revoke via
+ * broadcast is not available without Python subprocess, but the progress
+ * tracker key is what the frontend checks and what tasks monitor.
+ *
+ * Replaces previous Python subprocess approach (M-08).
  */
 export async function cancelJob(jobId: string): Promise<boolean> {
   try {
-    const workersRoot = path.join(process.cwd(), "..");
-    const pythonPath = path.join(
-      workersRoot,
-      "argus-workers",
-      "venv",
-      "bin",
-      "python"
+    await redis.setex(
+      `task:progress:${jobId}`,
+      3600,
+      JSON.stringify({
+        status: "cancelled",
+        updated_at: new Date().toISOString(),
+      })
     );
-
-    const child = spawn(
-      pythonPath,
-      ["-m", "celery", "-A", "celery_app", "control", "revoke", jobId, "--terminate"],
-      { cwd: workersRoot }
-    );
-
-    return new Promise((resolve) => {
-      child.on("close", (code) => {
-        // Also mark as cancelled in progress tracker
-        redis.setex(
-          `task:progress:${jobId}`,
-          3600,
-          JSON.stringify({
-            status: "cancelled",
-            updated_at: new Date().toISOString(),
-          })
-        );
-
-        resolve(code === 0);
-      });
-    });
+    return true;
   } catch {
     return false;
   }
