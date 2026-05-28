@@ -70,7 +70,16 @@ function SignInForm() {
       });
 
       if (result?.error) {
-        setError("Invalid credentials");
+        // H-06: Handle email not verified error specifically
+        if (result.error.startsWith("EMAIL_NOT_VERIFIED:")) {
+          const message = result.error.replace("EMAIL_NOT_VERIFIED:", "");
+          setError(message);
+        } else if (result.error.startsWith("ACCOUNT_LOCKED:")) {
+          const message = result.error.replace("ACCOUNT_LOCKED:", "");
+          setError(message);
+        } else {
+          setError("Invalid credentials");
+        }
       } else {
         const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
         router.push(callbackUrl);

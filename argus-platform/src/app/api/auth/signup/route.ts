@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "@/lib/db";
 import { redis } from "@/lib/redis";
 import { log } from "@/lib/logger";
 // M-12: Use Zod schema instead of inline validation
 import { signupSchema } from "@/lib/validation/consolidated";
+import { sendVerificationEmail } from "@/lib/email";
 
 const RATE_LIMIT_WINDOW = 3600; // 1 hour
 const MAX_SIGNUPS_PER_EMAIL = 5; // 5 attempts per hour per email
@@ -97,9 +99,49 @@ export async function POST(request: NextRequest) {
 
       await client.query("COMMIT");
 
+      // H-06: Generate verification token and send email
+      // Follow C-v3-04 pattern: send email FIRST, store token only on success
+      const verifyToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(verifyToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const emailResult = await sendVerificationEmail(
+        email.toLowerCase().trim(),
+        verifyToken,
+      );
+
+      if (!emailResult.success) {
+        // Email failed to send — rollback the user creation
+        await client.query(
+          "DELETE FROM users WHERE id = $1",
+          [userId],
+        );
+        await client.query(
+          "DELETE FROM organizations WHERE id = $1",
+          [orgId],
+        );
+        log.error("Signup failed: verification email not sent", {
+          email: email.toLowerCase().trim(),
+          error: emailResult.error,
+        });
+        return NextResponse.json(
+          { error: "Failed to send verification email. Please try again." },
+          { status: 500 },
+        );
+      }
+
+      // Store token hash only after successful email delivery
+      await client.query(
+        `UPDATE users
+         SET email_verification_token = $1,
+             email_verification_token_expires = $2
+         WHERE id = $3`,
+        [tokenHash, expiresAt, userId],
+      );
+
       return NextResponse.json(
         {
-          message: "Account created successfully",
+          message: "Account created successfully. Please check your email for the verification code.",
           user: { id: userId, email: email.toLowerCase().trim() },
         },
         { status: 201 },

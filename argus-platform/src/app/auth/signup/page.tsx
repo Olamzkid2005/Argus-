@@ -3,7 +3,7 @@
 import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Loader2, ArrowRight, UserCheck, Eye, EyeOff, Check, X } from "lucide-react";
+import { ShieldCheck, Loader2, ArrowRight, UserCheck, Eye, EyeOff, Check, X, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signIn } from "next-auth/react";
 import { log } from "@/lib/logger";
@@ -258,9 +258,11 @@ export default function SignUp() {
       }
 
       setSuccess(true);
+      // H-06: User is redirected to verify page instead of signin
+      // They need to verify email before they can log in
       setTimeout(() => {
-        router.push("/auth/signin?registered=true");
-      }, 2000);
+        router.push(`/auth/verify?email=${encodeURIComponent(email.toLowerCase().trim())}`);
+      }, 5000);
     } catch {
       setErrors({ general: "Network error. Please try again." });
     } finally {
@@ -277,15 +279,23 @@ export default function SignUp() {
           transition={{ duration: 0.5 }}
           className="p-12 border border-gray-200 bg-white rounded-2xl shadow-xl text-center max-w-sm"
         >
-          <div className="w-14 h-14 mx-auto mb-6 rounded-2xl bg-[#6720FF] flex items-center justify-center">
-            <UserCheck size={28} className="text-white" />
+          <div className="w-14 h-14 mx-auto mb-6 rounded-2xl bg-purple-100 flex items-center justify-center">
+            <Mail size={28} className="text-[#6720FF]" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 tracking-tight mb-3">
-            Account created
+            Verify your email
           </h2>
-          <p className="text-sm text-gray-500">
-            Redirecting to sign in...
+          <p className="text-sm text-gray-500 mb-6">
+            We sent a verification code to <strong className="text-gray-700">{email}</strong>.
+            Check your inbox (and spam folder) and enter the code to activate your account.
           </p>
+          <Link
+            href="/auth/verify"
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-[#6720FF] text-white text-sm font-semibold hover:bg-[#5a1be6] transition-all duration-200 shadow-sm"
+          >
+            Enter Verification Code
+            <ArrowRight size={16} />
+          </Link>
         </motion.div>
       </div>
     );

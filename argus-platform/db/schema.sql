@@ -27,6 +27,9 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255),
     role VARCHAR(50) NOT NULL DEFAULT 'user', -- admin, user, viewer
+    email_verified BOOLEAN NOT NULL DEFAULT false, -- H-06: Email verification status
+    email_verification_token VARCHAR(64), -- H-06: Token for email verification
+    email_verification_token_expires TIMESTAMP WITH TIME ZONE, -- H-06: Token expiry
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP WITH TIME ZONE
@@ -324,6 +327,14 @@ CREATE INDEX idx_engagement_events_created_at ON engagement_events(created_at);
 -- Scanner activities indexes
 CREATE INDEX idx_scanner_activities_engagement_id ON scanner_activities(engagement_id);
 CREATE INDEX idx_scanner_activities_created_at ON scanner_activities(created_at);
+
+-- H-06: Email verification indexes
+CREATE INDEX IF NOT EXISTS idx_users_email_verification_token
+    ON users(email_verification_token)
+    WHERE email_verification_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_email_verified
+    ON users(email_verified)
+    WHERE email_verified = false;
 
 -- ============================================================================
 -- FUNCTIONS AND TRIGGERS

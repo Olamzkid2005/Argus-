@@ -265,7 +265,7 @@ export const authOptions: NextAuthOptions = {
 
           // Query user from database (now include new security columns)
           const result = await pool.query(
-            `SELECT id, email, password_hash, org_id, role, two_factor_enabled, totp_secret 
+            `SELECT id, email, password_hash, org_id, role, two_factor_enabled, totp_secret, email_verified 
              FROM users WHERE email = $1`,
             [credentials.email.toLowerCase()],
           );
@@ -277,6 +277,14 @@ export const authOptions: NextAuthOptions = {
           }
 
           const user = result.rows[0];
+
+          // H-06: Check if email is verified — unverified users cannot sign in
+          if (!user.email_verified) {
+            throw new Error(
+              "EMAIL_NOT_VERIFIED:Please verify your email before signing in. " +
+              "Check your inbox for the verification code, or request a new one."
+            );
+          }
 
           // Verify password
           const isValid = await bcrypt.compare(
@@ -393,20 +401,54 @@ export const authOptions: NextAuthOptions = {
               [orgId, orgName],
             );
 
-            // Create user as admin of their new org
+            // Create user as admin of their new org — email_verified = false (H-06)
             const userId = uuidv4();
             await client.query(
-              `INSERT INTO users (id, org_id, email, name, role)
-               VALUES ($1, $2, $3, $4, $5)`,
-              [userId, orgId, email.toLowerCase(), user.name ?? null, "admin"],
+              `INSERT INTO users (id, org_id, email, name, role, email_verified)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [userId, orgId, email.toLowerCase(), user.name ?? null, "admin", false],
             );
 
             await client.query("COMMIT");
+
+            // H-06: Send verification email for OAuth signups
+            // Use dynamic import to avoid top-level side effects
+            const crypto = await import("crypto");
+            const { sendVerificationEmail } = await import("@/lib/email");
+
+            const verifyToken = crypto.default.randomBytes(32).toString("hex");
+            const tokenHash = crypto.default.createHash("sha256").update(verifyToken).digest("hex");
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+            const emailResult = await sendVerificationEmail(
+              email.toLowerCase(),
+              verifyToken,
+            );
+
+            if (emailResult.success) {
+              // Store token hash only after successful email delivery
+              await pool.query(
+                `UPDATE users
+                 SET email_verification_token = $1,
+                     email_verification_token_expires = $2
+                 WHERE id = $3`,
+                [tokenHash, expiresAt, userId],
+              );
+            } else {
+              log.authError("Failed to send verification email to OAuth user", {
+                email: email.toLowerCase(),
+                error: emailResult.error,
+              });
+            }
 
             // Attach new user info to session
             user.id = userId;
             user.orgId = orgId;
             user.role = "admin";
+
+            // NOTE: OAuth users can still sign in immediately but should verify
+            // their email for sensitive operations. The verification email is
+            // sent as a best-effort measure (H-06).
             return true;
           } catch (txError) {
             await client.query("ROLLBACK");
