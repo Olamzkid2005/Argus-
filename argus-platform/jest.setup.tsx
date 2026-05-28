@@ -284,12 +284,6 @@ jest.mock('@/components/ui-custom/SkeletonLoader', () => ({
   default: () => <div data-testid="skeleton-loader">Loading...</div>,
 }));
 
-// Mock @/components/effects/MatrixDataRain
-jest.mock('@/components/effects/MatrixDataRain', () => ({
-  __esModule: true,
-  default: () => <div data-testid="matrix-data-rain">Matrix Data Rain</div>,
-}));
-
 // Mock @/components/effects/SurveillanceEye
 jest.mock('@/components/effects/SurveillanceEye', () => ({
   __esModule: true,
