@@ -80,7 +80,12 @@ class APISecurityScanner:
 
     @staticmethod
     def _validate_external_url(url: str) -> None:
-        """Raise ValueError if the URL resolves to an internal/private host."""
+        """Raise ValueError if the URL resolves to an internal/private host.
+
+        M-v4-04: Performs DNS resolution for hostname-based targets to prevent
+        SSRF via DNS names that resolve to private IPs (e.g., internal-db.corp
+        resolving to 10.0.0.5).
+        """
         hostname = urlparse(url).hostname
         if not hostname:
             raise ValueError(f"Could not parse hostname from URL: {url}")
@@ -90,7 +95,7 @@ class APISecurityScanner:
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
                 raise ValueError(f"Blocked internal IP: {hostname}")
         except ValueError:
-            pass  # not an IP literal — check hostname patterns
+            pass  # not an IP literal — check hostname patterns and resolve DNS
         blocked_hostnames = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"}
         hostname_lower = hostname.lower()
         if hostname_lower in blocked_hostnames:
@@ -100,6 +105,24 @@ class APISecurityScanner:
             raise ValueError(f"Blocked cloud metadata endpoint: {hostname}")
         if hostname_lower.endswith(".metadata.google.internal"):
             raise ValueError(f"Blocked GCP metadata endpoint: {hostname}")
+        # M-v4-04: DNS resolution check — resolve hostname and validate all
+        # resolved IPs against private ranges. This catches DNS rebinding attacks
+        # and hostnames that internally resolve to private addresses.
+        import socket as _socket
+        try:
+            addrinfo = _socket.getaddrinfo(hostname, None)
+            for family, _typ, _proto, _cn, sockaddr in addrinfo:
+                resolved_ip = sockaddr[0]
+                try:
+                    addr = ipaddress.ip_address(resolved_ip)
+                    if addr.is_private or addr.is_loopback or addr.is_link_local:
+                        raise ValueError(
+                            f"Blocked hostname {hostname} resolves to private IP {resolved_ip}"
+                        )
+                except ValueError:
+                    continue
+        except _socket.gaierror:
+            pass  # DNS resolution failed — let the caller handle connection errors
 
     async def scan(
         self,

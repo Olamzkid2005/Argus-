@@ -667,6 +667,24 @@ The codebase has undergone significant architectural deepening to improve testab
 - **Parser extraction**: 27 inline parser classes extracted from `parsers/parser.py` (1700→186 lines) into `parsers/parsers/*.py` with auto-discovery. Adding a new parser = creating a single file.
 - **WebScanner**: 12 check module stubs created in `web_scanner_checks/` with auto-discovery, ready for gradual migration from the 2115-line monolith.
 
+## Development Setup
+
+### Pre-commit Hooks
+
+This project uses pre-commit hooks for code quality. Install with:
+
+```bash
+# Python hooks (ruff linting + formatting)
+cd argus-workers
+pip install pre-commit && pre-commit install
+cd ..
+
+# Frontend: run lint manually before commits (no auto-hook yet)
+cd argus-platform
+npm run lint
+npx tsc --noEmit
+```
+
 ## Contributing
 
 This is currently a development project. Contribution guidelines will be added once the core platform is stable.
