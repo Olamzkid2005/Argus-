@@ -12,23 +12,21 @@ import pytest
 from database.settings_repository import SettingsRepository, get_user_api_keys
 
 # ═══════════════════════════════════════════════════════════════════════════
-# SettingsRepository unit tests (mocked DB connection)
+# SettingsRepository unit tests (mocked DB cursor)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 class TestSettingsRepositoryGetUserSetting:
     """Tests for SettingsRepository.get_user_setting()."""
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_setting_executes_correct_query(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_setting_executes_correct_query(self, mock_db_cursor):
         """Verifies the correct SELECT query is executed with user_email and key."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = ("sk-openrouter-key123",)
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.get_user_setting("admin@example.com", "openrouter_api_key")
 
         assert result == "sk-openrouter-key123"
@@ -37,62 +35,56 @@ class TestSettingsRepositoryGetUserSetting:
             ("admin@example.com", "openrouter_api_key"),
         )
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_setting_returns_none_when_not_found(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_setting_returns_none_when_not_found(self, mock_db_cursor):
         """No row found returns None, not an exception."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = None
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.get_user_setting("nonexistent@example.com", "openai_api_key")
 
         assert result is None
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_setting_handles_db_error_gracefully(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_setting_handles_db_error_gracefully(self, mock_db_cursor):
         """DB errors return None instead of raising."""
-        mock_connect.side_effect = Exception("Connection refused")
+        mock_db_cursor.side_effect = Exception("Connection refused")
 
-        repo = SettingsRepository("postgresql://invalid/test")
+        repo = SettingsRepository()
         result = repo.get_user_setting("admin@example.com", "api_key")
 
         assert result is None
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_setting_reuses_connection_string(self, mock_connect):
-        """Connection string from constructor is passed to connect()."""
-        mock_conn = MagicMock()
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_setting_calls_db_cursor(self, mock_db_cursor):
+        """get_user_setting uses the db_cursor context manager from connection module."""
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = None
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://custom:pass@db:5432/argus")
+        repo = SettingsRepository()
         repo.get_user_setting("user@test.com", "llm_api_key")
 
-        mock_connect.assert_called_once_with("postgresql://custom:pass@db:5432/argus")
+        mock_db_cursor.assert_called_once()
 
 
 class TestSettingsRepositoryGetUserSettings:
     """Tests for SettingsRepository.get_user_settings()."""
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_settings_returns_dict_of_all_settings(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_settings_returns_dict_of_all_settings(self, mock_db_cursor):
         """All rows are returned as a dict of key -> value."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [
             ("openai_api_key", "sk-openai-xxx"),
             ("openrouter_api_key", "sk-or-v1-yyy"),
             ("llm_api_key", "sk-llm-zzz"),
         ]
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.get_user_settings("admin@example.com")
 
         assert result == {
@@ -101,44 +93,40 @@ class TestSettingsRepositoryGetUserSettings:
             "llm_api_key": "sk-llm-zzz",
         }
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_settings_filters_none_values(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_settings_filters_none_values(self, mock_db_cursor):
         """Rows with None values are excluded from the result dict."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [
             ("openai_api_key", "sk-valid-key"),
             ("empty_key", None),
         ]
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.get_user_settings("admin@example.com")
 
         assert "empty_key" not in result
         assert result["openai_api_key"] == "sk-valid-key"
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_settings_empty_returns_empty_dict(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_settings_empty_returns_empty_dict(self, mock_db_cursor):
         """No settings returns empty dict, not None."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = []
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.get_user_settings("newuser@example.com")
 
         assert result == {}
 
-    @patch("database.settings_repository.connect")
-    def test_get_user_settings_db_error_returns_empty_dict(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_settings_db_error_returns_empty_dict(self, mock_db_cursor):
         """DB errors are caught and empty dict returned."""
-        mock_connect.side_effect = Exception("Timeout")
+        mock_db_cursor.side_effect = Exception("Timeout")
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.get_user_settings("admin@example.com")
 
         assert result == {}
@@ -147,15 +135,13 @@ class TestSettingsRepositoryGetUserSettings:
 class TestSettingsRepositorySetUserSetting:
     """Tests for SettingsRepository.set_user_setting()."""
 
-    @patch("database.settings_repository.connect")
-    def test_set_user_setting_uses_upsert(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_set_user_setting_uses_upsert(self, mock_db_cursor):
         """set_user_setting uses INSERT ... ON CONFLICT DO UPDATE."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.set_user_setting("admin@example.com", "openrouter_api_key", "sk-or-v1-new")
 
         assert result is True
@@ -163,18 +149,15 @@ class TestSettingsRepositorySetUserSetting:
         assert "INSERT INTO user_settings" in sql
         assert "ON CONFLICT" in sql
         assert "DO UPDATE" in sql
-        mock_conn.commit.assert_called_once()
 
-    @patch("database.settings_repository.connect")
-    def test_set_user_setting_handles_error_gracefully(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_set_user_setting_handles_error_gracefully(self, mock_db_cursor):
         """DB errors return False."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.execute.side_effect = Exception("Unique violation")
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.set_user_setting("admin@example.com", "openai_api_key", "sk-xxx")
 
         assert result is False
@@ -183,15 +166,13 @@ class TestSettingsRepositorySetUserSetting:
 class TestSettingsRepositoryDeleteUserSetting:
     """Tests for SettingsRepository.delete_user_setting()."""
 
-    @patch("database.settings_repository.connect")
-    def test_delete_user_setting_executes_delete(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_delete_user_setting_executes_delete(self, mock_db_cursor):
         """delete_user_setting runs a DELETE query with correct params."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.delete_user_setting("admin@example.com", "openai_api_key")
 
         assert result is True
@@ -199,18 +180,15 @@ class TestSettingsRepositoryDeleteUserSetting:
             "DELETE FROM user_settings WHERE user_email = %s AND key = %s",
             ("admin@example.com", "openai_api_key"),
         )
-        mock_conn.commit.assert_called_once()
 
-    @patch("database.settings_repository.connect")
-    def test_delete_user_setting_error_returns_false(self, mock_connect):
+    @patch("database.settings_repository.db_cursor")
+    def test_delete_user_setting_error_returns_false(self, mock_db_cursor):
         """DB errors return False."""
-        mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.execute.side_effect = Exception("Delete failed")
-        mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
-        repo = SettingsRepository("postgresql://localhost/test")
+        repo = SettingsRepository()
         result = repo.delete_user_setting("admin@example.com", "some_key")
 
         assert result is False

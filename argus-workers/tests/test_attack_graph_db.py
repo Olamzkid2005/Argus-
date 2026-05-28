@@ -46,9 +46,12 @@ class TestAttackGraphRepository:
         with patch.object(self.repo, '_get_connection', return_value=mock_conn):
             saved = self.repo.save_paths("eng-123", self.graph)
 
-        # Verify DELETE
-        delete_call = mock_cursor.execute.call_args_list[0]
-        assert "DELETE FROM attack_paths" in delete_call[0][0]
+        # Verify DELETE — occurs after the SELECT for chain_exploit_script preservation
+        delete_calls = [
+            call for call in mock_cursor.execute.call_args_list
+            if "DELETE FROM attack_paths" in call[0][0]
+        ]
+        assert len(delete_calls) >= 1, "Expected at least one DELETE FROM attack_paths call"
 
         # Verify INSERT calls
         insert_calls = [

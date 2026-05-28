@@ -10,6 +10,14 @@ jobs:
   frontend:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: argus-platform
@@ -32,14 +40,40 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Unit tests
-        run: npm test -- --passWithNoTests --ci --coverage --coverageReporters=text-summary
+        run: npm test -- --ci --coverage --coverageThreshold='{"global":{"lines":50}}'
 
       - name: Build
         run: npm run build
 
+      - name: Dependency audit
+        run: npm audit --audit-level=high || true
+        continue-on-error: true
+
   backend:
     name: Backend (Python Workers)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://test:test@postgres:5432/test
+      REDIS_URL: redis://redis:6379
     defaults:
       run:
         working-directory: argus-workers
@@ -56,13 +90,64 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff pytest pytest-cov
+          pip install ruff pytest pytest-cov pip-audit
 
       - name: Lint with ruff
         run: ruff check . --exit-non-zero-on-fix
 
+      - name: Dependency audit
+        run: pip-audit || true
+        continue-on-error: true
+
       - name: Run tests
-        run: pytest tests/ --tb=short -q --cov=. --cov-report=term-missing
+        run: pytest tests/ --tb=short -q --cov=. --cov-report=term-missing --cov-fail-under=70
+
+  e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: argus-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: argus-platform/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npx playwright test --reporter=html
+        env:
+          DATABASE_URL: postgresql://test:test@postgres:5432/test
+          REDIS_URL: redis://redis:6379
+        continue-on-error: true
 
   security:
     name: Security Scan
@@ -78,9 +163,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'

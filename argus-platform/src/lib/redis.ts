@@ -181,7 +181,7 @@ export async function pushJob(job: JobMessage): Promise<string> {
     1,
     key,
     "3600",
-    "3500",
+    "500",  // M-24: Lower threshold to 500s (was 3500s) — only restart jobs whose TTL has almost expired (remaining < 500s)
   ) as number;
 
   if (result === 0) {
@@ -224,10 +224,17 @@ export async function pushJob(job: JobMessage): Promise<string> {
         ...process.env,
         PYTHONPATH: workersRoot,
       },
+      // M-v3-01: Timeout to prevent hanging subprocesses from leaking
+      timeout: 30000,  // 30 second timeout
     });
 
     let stdout = "";
     let stderr = "";
+
+    const timeoutId = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("dispatch_task.py timed out after 30s"));
+    }, 30000);
 
     child.stdout.on("data", (data) => {
       stdout += data.toString();
@@ -238,6 +245,7 @@ export async function pushJob(job: JobMessage): Promise<string> {
     });
 
     child.on("close", (code) => {
+      clearTimeout(timeoutId);
       if (code !== 0) {
         console.error("dispatch_task.py error:", stderr);
         reject(new Error(`dispatch_task.py exited with code ${code}: ${stderr}`));

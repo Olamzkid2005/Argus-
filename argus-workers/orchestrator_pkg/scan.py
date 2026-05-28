@@ -146,9 +146,18 @@ def _is_reachable(target: str) -> bool:
     try:
         ip = ipaddress.ip_address(hostname)
         # Block private / link-local / loopback IPs to prevent internal network scanning
+        # Includes IPv4 private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+        # IPv6 unique local (fc00::/7), IPv6 link-local (fe80::/10), loopback, etc.
+        # M-01: ipaddress.is_private also covers IPv6 unique-local on Python 3.9+,
+        # and is_link_local covers fe80::/10. Check ipv4_mapped addresses too.
         if ip.is_private or ip.is_loopback or ip.is_link_local:
             logger.warning(f'Target {target} resolves to private IP {ip} — skipping')
             return False
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            mapped = ipaddress.ip_address(ip.ipv4_mapped)
+            if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
+                logger.warning(f'Target {target} resolves to IPv4-mapped private IP {ip} — skipping')
+                return False
         return True
     except ValueError:
         pass

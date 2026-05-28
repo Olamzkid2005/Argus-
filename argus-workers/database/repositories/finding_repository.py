@@ -12,6 +12,11 @@ from psycopg2.sql import SQL, Identifier
 
 from database.repositories.base import BaseRepository
 
+# M-02: Cache invalidation for findings data
+from cache import WorkerCache
+
+cache = WorkerCache()
+
 logger = logging.getLogger(__name__)
 
 MAX_FINDINGS_PER_ENGAGEMENT = int(os.getenv("MAX_FINDINGS_PER_ENGAGEMENT", "50000"))
@@ -231,6 +236,11 @@ class FindingRepository(BaseRepository):
                 except Exception as fb_err:
                     logger.error("Fallback query failed: %s", fb_err)
                     return None
+            # M-02: Invalidate findings cache after mutation
+            try:
+                cache.invalidate_table("findings")
+            except Exception:
+                pass  # Cache invalidation is best-effort
             return finding_id
 
     def upsert_secret_finding(

@@ -64,16 +64,19 @@ export async function POST(req: Request) {
 
     const userExists = userResult.rows.length > 0;
 
-    if (userExists) {
-      // Rate limiting by email (only if user exists)
-      const emailAllowed = await checkRateLimit(email.toLowerCase(), MAX_REQUESTS_PER_EMAIL);
-      if (!emailAllowed) {
-        return NextResponse.json(
-          { message: "Too many requests. Please try again later." },
-          { status: 429 }
-        );
-      }
+    // M-20: Always apply email rate limiting regardless of user existence to
+    // prevent timing-based email enumeration. For non-existing users, we use a
+    // synthetic key so the rate limit check takes the same duration.
+    const rateLimitKey = userExists ? email.toLowerCase() : `nonexistent:${email.toLowerCase()}`;
+    const emailAllowed = await checkRateLimit(rateLimitKey, MAX_REQUESTS_PER_EMAIL);
+    if (!emailAllowed) {
+      return NextResponse.json(
+        { message: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
 
+    if (userExists) {
       const user = userResult.rows[0];
 
       // Send password reset email FIRST — only store token if delivery succeeds
@@ -93,6 +96,11 @@ export async function POST(req: Request) {
          WHERE id = $3`,
         [hashedToken, resetTokenExpiry, user.id]
       );
+    } else {
+      // M-20: Simulate the same operations for non-existing users to prevent
+      // timing-based enumeration. The bcrypt hash and token generation already
+      // ran above, and we add a small artificial delay to match email send time.
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     // Always return the same response to prevent email enumeration

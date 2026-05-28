@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from "uuid";
 import { pool } from "@/lib/db";
 import { redis } from "@/lib/redis";
 import { log } from "@/lib/logger";
+// M-12: Use Zod schema instead of inline validation
+import { signupSchema } from "@/lib/validation/consolidated";
 
 const RATE_LIMIT_WINDOW = 3600; // 1 hour
 const MAX_SIGNUPS_PER_EMAIL = 5; // 5 attempts per hour per email
@@ -17,52 +19,7 @@ async function checkRateLimit(identifier: string, maxRequests: number): Promise<
   return current <= maxRequests;
 }
 
-// Validation functions
-function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-function isValidPassword(password: string): {
-  valid: boolean;
-  message?: string;
-} {
-  if (password.length < 12) {
-    return {
-      valid: false,
-      message: "Password must be at least 12 characters long",
-    };
-  }
-  if (password.length > 128) {
-    return {
-      valid: false,
-      message: "Password must be at most 128 characters long",
-    };
-  }
-  if (!/[A-Z]/.test(password)) {
-    return {
-      valid: false,
-      message: "Password must contain at least one uppercase letter",
-    };
-  }
-  if (!/[a-z]/.test(password)) {
-    return {
-      valid: false,
-      message: "Password must contain at least one lowercase letter",
-    };
-  }
-  if (!/[0-9]/.test(password)) {
-    return {
-      valid: false,
-      message: "Password must contain at least one number",
-    };
-  }
-  return { valid: true };
-}
-
-function isValidOrgName(name: string): boolean {
-  return name.trim().length >= 2 && name.trim().length <= 255;
-}
+// M-12: Validation now handled by signupSchema (Zod) — inline functions removed
 
 export async function POST(request: NextRequest) {
   try {
@@ -81,43 +38,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate required fields
-    if (!email || !password || !passwordConfirm || !orgName) {
+    // M-12: Use Zod schema for validation instead of inline checks
+    const validation = signupSchema.safeParse({ email, password, passwordConfirm, orgName });
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
       return NextResponse.json(
-        { error: "All fields are required" },
-        { status: 400 },
-      );
-    }
-
-    // Validate email format
-    if (!isValidEmail(email)) {
-      return NextResponse.json(
-        { error: "Invalid email format" },
-        { status: 400 },
-      );
-    }
-
-    // Validate password
-    const passwordValidation = isValidPassword(password);
-    if (!passwordValidation.valid) {
-      return NextResponse.json(
-        { error: passwordValidation.message },
-        { status: 400 },
-      );
-    }
-
-    // Validate password confirmation
-    if (password !== passwordConfirm) {
-      return NextResponse.json(
-        { error: "Passwords do not match" },
-        { status: 400 },
-      );
-    }
-
-    // Validate organization name
-    if (!isValidOrgName(orgName)) {
-      return NextResponse.json(
-        { error: "Organization name must be between 2 and 255 characters" },
+        { error: firstError?.message || "Invalid input" },
         { status: 400 },
       );
     }
