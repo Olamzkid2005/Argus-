@@ -87,7 +87,25 @@ class Orchestrator:
         self.llm_payload_generator = None
         try:
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-            self.llm_client = LLMClient(redis_url=redis_url)
+
+            # M-v5-01: Resolve user_email from engagement_id for tenant-scoped API key lookup
+            user_email = None
+            try:
+                from database.connection import db_cursor
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        """SELECT u.email FROM engagements e
+                           JOIN users u ON e.created_by = u.id
+                           WHERE e.id = %s""",
+                        (engagement_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        user_email = row[0]
+            except Exception:
+                logger.debug("Could not resolve user_email for engagement %s", engagement_id)
+
+            self.llm_client = LLMClient(redis_url=redis_url, user_email=user_email)
             if self.llm_client.is_available():
                 from config.constants import LLM_PAYLOAD_GENERATION_MODEL
                 from llm_client import load_llm_setting

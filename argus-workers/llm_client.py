@@ -46,6 +46,7 @@ class LLMClient:
         api_url: str | None = None,
         max_retries: int = 2,
         redis_url: str | None = None,
+        user_email: str | None = None,
     ):
         """
         Initialize LLM client.
@@ -54,7 +55,8 @@ class LLMClient:
         1. Explicit api_key parameter
         2. OPENAI_API_KEY environment variable
         3. LLM_API_KEY environment variable
-        4. Redis key settings:*:openrouter_api_key (from UI Settings page)
+        4. Database user_settings (scoped to user_email if provided)
+        5. Redis key settings:{user_email}:openrouter_api_key (from UI Settings page)
 
         Args:
             provider: "openai" or "generic". Auto-detects from env if None.
@@ -63,12 +65,17 @@ class LLMClient:
             api_url: Base URL for generic provider. Defaults to env LLM_API_URL.
             max_retries: Max retry attempts on failure (default 2).
             redis_url: Redis URL for loading key from UI Settings (defaults to REDIS_URL env).
+            user_email: User email for tenant-scoped API key lookup (M-v5-01).
+                        When set, keys are scoped to this user only, preventing
+                        cross-tenant billing leakage.
         """
         self.provider = provider or os.getenv("LLM_PROVIDER", "openai")
         self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
         self.max_retries = max_retries
+        self._user_email = user_email
 
         # Resolve API key: explicit > env var > DB (user_settings) > Redis (UI Settings)
+        # DB and Redis lookups are scoped to user_email when available (M-v5-01).
         self.api_key = (
             api_key
             or os.getenv("OPENAI_API_KEY")
@@ -107,11 +114,11 @@ class LLMClient:
 
     def _load_key_from_db(self) -> str | None:
         """
-        Load API key from the user_settings database table as fallback.
+        Load API key from the user_settings database table.
 
-        Scans all users' settings for known API key names.
-        This provides an alternative to Redis-based key storage for users
-        who configure settings via the database directly.
+        When user_email is set (M-v5-01), the lookup is scoped to that user only,
+        preventing cross-tenant billing leakage. When user_email is not set,
+        falls back to unscoped lookup with a warning.
 
         Returns:
             API key string if found, None otherwise.
@@ -120,22 +127,49 @@ class LLMClient:
             from database.connection import db_cursor
 
             key_names = ("openrouter_api_key", "openai_api_key", "llm_api_key")
-            with db_cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT DISTINCT ON (key) key, value
-                    FROM user_settings
-                    WHERE key = ANY(%s)
-                      AND value IS NOT NULL
-                      AND value != ''
-                    ORDER BY key, updated_at DESC
-                    """,
-                    (list(key_names),),
+
+            if self._user_email:
+                # Tenant-scoped lookup (M-v5-01): only return this user's key
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT key, value
+                        FROM user_settings
+                        WHERE user_email = %s
+                          AND key = ANY(%s)
+                          AND value IS NOT NULL
+                          AND value != ''
+                        ORDER BY updated_at DESC
+                        LIMIT 1
+                        """,
+                        (self._user_email, list(key_names)),
+                    )
+                    row = cursor.fetchone()
+                    if row and row[1] and len(str(row[1])) > 10:
+                        logger.info("Loaded API key from database for user %s (redacted)", self._user_email)
+                        return row[1]
+            else:
+                # Unscoped fallback — cross-tenant risk (M-v5-01)
+                logger.warning(
+                    "No user_email set for LLMClient — loading API key from any tenant. "
+                    "Set user_email to prevent cross-tenant key leakage."
                 )
-                for key, value in cursor.fetchall():
-                    if value and len(str(value)) > 10:
-                        logger.info("Loaded API key from database settings (%s)", "redacted")
-                        return value
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT DISTINCT ON (key) key, value
+                        FROM user_settings
+                        WHERE key = ANY(%s)
+                          AND value IS NOT NULL
+                          AND value != ''
+                        ORDER BY key, updated_at DESC
+                        """,
+                        (list(key_names),),
+                    )
+                    for key, value in cursor.fetchall():
+                        if value and len(str(value)) > 10:
+                            logger.info("Loaded API key from database settings (%s)", "redacted")
+                            return value
             return None
         except Exception as e:
             logger.debug("Could not load API key from database settings: %s", e)
@@ -145,9 +179,9 @@ class LLMClient:
         """
         Load API key from Redis, where the UI Settings page stores it.
 
-        Looks up keys matching settings:*:openrouter_api_key pattern.
-        This allows users to configure the API key once via the UI
-        and have it picked up by the worker processes automatically.
+        When user_email is set (M-v5-01), looks up the exact key for that user:
+        settings:{user_email}:openrouter_api_key. When not set, falls back to
+        scanning all settings:*:openrouter_api_key keys (cross-tenant risk).
 
         Args:
             redis_url: Redis URL. Defaults to REDIS_URL env var.
@@ -164,18 +198,31 @@ class LLMClient:
 
             r = redis_module.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
 
-            # Scan for any settings key matching the pattern
-            cursor = 0
-            while True:
-                cursor, keys = r.scan(cursor=cursor, match="settings:*:openrouter_api_key", count=20)
-                for key in keys:
-                    value = r.get(key)
-                    if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
-                        api_key = value.decode() if isinstance(value, bytes) else value
-                        logger.info("Loaded API key from Redis (key redacted)")
-                        return api_key
-                if cursor == 0:
-                    break
+            if self._user_email:
+                # Tenant-scoped lookup (M-v5-01): exact key for this user
+                key = f"settings:{self._user_email}:openrouter_api_key"
+                value = r.get(key)
+                if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
+                    api_key = value.decode() if isinstance(value, bytes) else value
+                    logger.info("Loaded API key from Redis for user %s (redacted)", self._user_email)
+                    return api_key
+            else:
+                # Unscoped fallback — cross-tenant risk (M-v5-01)
+                logger.warning(
+                    "No user_email set for LLMClient — scanning all Redis keys for API key. "
+                    "Set user_email to prevent cross-tenant key leakage."
+                )
+                cursor = 0
+                while True:
+                    cursor, keys = r.scan(cursor=cursor, match="settings:*:openrouter_api_key", count=20)
+                    for key in keys:
+                        value = r.get(key)
+                        if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
+                            api_key = value.decode() if isinstance(value, bytes) else value
+                            logger.info("Loaded API key from Redis (key redacted)")
+                            return api_key
+                    if cursor == 0:
+                        break
 
             logger.debug("No API key found in Redis settings")
             return None
