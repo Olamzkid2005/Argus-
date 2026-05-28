@@ -1031,8 +1031,14 @@ export default function SettingsPage() {
                         });
                         if (res.ok) {
                           setScheduledScans((prev) => prev.filter((x) => x.id !== s.id));
+                        } else {
+                          const errData = await res.json().catch(() => ({}));
+                          showToast("error", errData.error || "Failed to delete schedule");
                         }
-                      } catch {}
+                      } catch (err) {
+                        log.error("Failed to delete scheduled scan:", err);
+                        showToast("error", "Network error — could not delete schedule");
+                      }
                     }}
                     className="p-2 text-on-surface-variant hover:text-error transition-colors"
                   >

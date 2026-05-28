@@ -58,9 +58,11 @@ export async function POST(req: NextRequest) {
       if (action === "verify") {
         const { code } = await req.json();
 
-        if (!code || code.length !== 6) {
+        // L-v5-02: Validate code is exactly 6 digits before attempting verification.
+        // Prevents non-numeric codes (spaces, letters) from reaching verifyTOTP().
+        if (!code || !/^\d{6}$/.test(code)) {
           return NextResponse.json(
-            { error: "Invalid verification code - must be 6 digits" },
+            { error: "Invalid verification code - must be 6 digits (0-9)" },
             { status: 400 },
           );
         }

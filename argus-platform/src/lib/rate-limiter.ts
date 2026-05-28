@@ -26,6 +26,12 @@ function getRedisClient(): Redis {
     redisClient.on("error", (err) => {
       console.error("Rate limiter Redis error:", err);
     });
+    // L-18: Reset the singleton on close so the next getRedisClient() call recreates it.
+    // Without this, a transient Redis failure permanently degrades rate limiting to
+    // the in-memory fallback until process restart.
+    redisClient.on("close", () => {
+      redisClient = null;
+    });
   }
   return redisClient;
 }

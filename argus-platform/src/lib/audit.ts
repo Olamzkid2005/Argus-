@@ -4,6 +4,7 @@
  * Logs important actions to the execution_logs table for tracking and compliance
  */
 import { pool } from "@/lib/db";
+import { log } from "@/lib/logger";
 
 export type AuditAction =
   | "user_login"
@@ -77,12 +78,12 @@ export async function logAudit(entry: AuditLogEntry) {
         );
         return;
       } catch (fallbackError) {
-        console.error("Failed to write audit log (fallback):", fallbackError);
+        log.error("Failed to write audit log (fallback):", fallbackError);
         return;
       }
     }
 
-    console.error("Failed to write audit log:", error);
+    log.error("Failed to write audit log:", error);
   }
 }
 

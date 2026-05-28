@@ -152,8 +152,12 @@ class ConnectionManager:
         wait_start = time.time()
         pool_instance = self._ensure_pool()
         try:
-            # Use a wait-loop with timeout to avoid stalling worker processes
+            # Use a wait-loop with timeout to avoid stalling worker processes.
+            # L-23: Use exponential backoff (10ms → 100ms) on retry to reduce
+            # CPU waste under high contention while keeping latency low when
+            # connections become available quickly.
             deadline = wait_start + timeout if timeout > 0 else None
+            _retry_count = 0
             while True:
                 try:
                     conn = pool_instance.getconn()
@@ -164,7 +168,8 @@ class ConnectionManager:
                             f"Timed out waiting for database connection "
                             f"after {timeout}s (pool max={self._max_connections})"
                         ) from None
-                    time.sleep(0.1)
+                    _retry_count += 1
+                    time.sleep(min(0.01 * _retry_count, 0.1))
                     continue
             wait_time = (time.time() - wait_start) * 1000
 

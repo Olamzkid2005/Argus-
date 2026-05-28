@@ -328,6 +328,7 @@ export default function AnalyticsPage() {
           },
           {
             label: "System Uptime",
+            // L-15: TODO — replace hardcoded placeholder with real API data
             value: 99.9,
             suffix: "%",
             icon: Server,
@@ -336,6 +337,7 @@ export default function AnalyticsPage() {
           },
           {
             label: "Active Analysts",
+            // L-15: TODO — replace hardcoded placeholder with real API data
             value: 12,
             suffix: "",
             icon: Users,

@@ -122,14 +122,11 @@ pytest tests/
 ### Code Style
 
 ```bash
-# Format code
-black .
+# Format and lint code
+ruff check --fix .
 
-# Lint code
-flake8 .
-
-# Type checking
-mypy .
+# Type checking (optional — project uses runtime duck typing)
+# mypy .
 ```
 
 ## Database Access

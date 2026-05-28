@@ -216,6 +216,13 @@ class IDORAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_DEFAULT,
                 )
                 all_findings.extend(arjun_findings)
+                # M-v5-04: Clean up temp file if not using sandbox (sandbox cleaned by atexit)
+                if not sandbox:
+                    try:
+                        if os.path.exists(arjun_out):
+                            os.remove(arjun_out)
+                    except Exception:
+                        logger.debug("Failed to clean up temp file: %s", arjun_out)
             except Exception as e:
                 logger.warning("[IDOR] arjun failed for %s: %s", target, e)
 
@@ -382,6 +389,13 @@ class APIAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_DEFAULT,
                 )
                 all_findings.extend(arjun_findings)
+                # M-v5-04: Clean up temp file if not using sandbox
+                if not sandbox:
+                    try:
+                        if os.path.exists(arjun_out):
+                            os.remove(arjun_out)
+                    except Exception:
+                        logger.debug("Failed to clean up temp file: %s", arjun_out)
             except Exception as e:
                 logger.warning("[API] arjun failed for %s: %s", target, e)
 
@@ -442,6 +456,13 @@ class APIAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(sqlmap_findings)
+                # M-v5-04: Clean up temp file if not using sandbox
+                if not sandbox:
+                    try:
+                        if os.path.exists(sqlmap_out):
+                            os.remove(sqlmap_out)
+                    except Exception:
+                        logger.debug("Failed to clean up temp file: %s", sqlmap_out)
             except Exception as e:
                 logger.warning("[API] sqlmap failed for %s: %s", target, e)
 

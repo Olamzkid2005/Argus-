@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { log } from '@/lib/logger';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -42,10 +43,10 @@ export async function sendPasswordResetEmail(to: string, resetToken: string) {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log('Password reset email sent:', info.messageId);
+    log.info("Password reset email sent:", info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Failed to send password reset email:', error);
+    log.error("Failed to send password reset email:", error);
     return { success: false, error: (error as Error).message };
   }
 }
@@ -74,7 +75,7 @@ export async function sendVerificationEmail(to: string, verifyToken: string) {
     const info = await transporter.sendMail(mailOptions);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Failed to send verification email:', error);
+    log.error("Failed to send verification email:", error);
     return { success: false, error: (error as Error).message };
   }
 }

@@ -11,7 +11,11 @@ CREATE TABLE IF NOT EXISTS compliance_posture_snapshots (
     trend VARCHAR(20) NOT NULL DEFAULT 'stable',  -- improving, declining, stable
     previous_score DECIMAL(5, 1),  -- Score from the snapshot before this one
     computed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT valid_trend CHECK (trend IN ('improving', 'declining', 'stable'))
+    CONSTRAINT valid_trend CHECK (trend IN ('improving', 'declining', 'stable')),
+    -- L-25: Prevent duplicate snapshots for same engagement at same timestamp.
+    -- Multiple rows with identical (engagement_id, computed_at) produce
+    -- non-deterministic query results when ordering by computed_at DESC.
+    UNIQUE (engagement_id, computed_at)
 );
 
 CREATE INDEX idx_cps_engagement_id ON compliance_posture_snapshots(engagement_id);
