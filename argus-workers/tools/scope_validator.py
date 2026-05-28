@@ -173,7 +173,7 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
         try:
             with db_cursor() as cursor:
                 cursor.execute(
-                    "SELECT scope FROM engagements WHERE id = %s",
+                    "SELECT authorized_scope FROM engagements WHERE id = %s",
                     (engagement_id,),
                 )
                 row = cursor.fetchone()

@@ -701,7 +701,7 @@ class Orchestrator:
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         recon_context = job.get("recon_context") or load_recon_context(self.engagement_id)
         auth_config = job.get("auth_config", {})
-        dual_auth_config = job.get("dual_auth_config") or None  # None = skip DualAuthScanner
+        dual_auth_config = job.get("dual_auth_config")  # None = not provided; {} = explicitly empty
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
         # Respect user-configured scan mode and agent mode.
@@ -818,7 +818,7 @@ class Orchestrator:
                 self.engagement_id, agent_err,
             )
             # Full deterministic fallback via DeterministicRuntime
-            from runtime import DeterministicRuntime, shadow_compare
+            from runtime import DeterministicRuntime
             dr = DeterministicRuntime(
                 self,
                 execution_engine=self._execution_engine if hasattr(self, "_execution_engine") else None,
@@ -829,15 +829,9 @@ class Orchestrator:
                 auth_config=auth_config, tech_stack=tech_stack,
                 skip_tools=None, recon_context=recon_context,
             )
-            shadow_compare(
-                "deterministic_scan", self.engagement_id,
-                new_result=result,
-                old_path_fn=lambda: execute_scan_pipeline(
-                    self, targets, budget, aggressiveness, auth_config,
-                    tech_stack=tech_stack, recon_context=recon_context,
-                ),
-                key_fields=None,
-            )
+            # No shadow_compare here — the agent already failed, so there is
+            # no meaningful "old" result to compare against. Running the
+            # pipeline a second time for comparison would waste resources.
             slog.tool_complete("deterministic_fallback", success=True, findings=len(result))
             return result
 
@@ -937,12 +931,20 @@ class Orchestrator:
         )
 
         synthesis = {}
+        llm_svc = None
+        recon_ctx = None
+        scored = []
         if self.llm_client and self.llm_client.is_available():
             try:
                 from llm_service import LLMService
-                from llm_synthesizer import LLMSynthesizer
                 llm_svc = LLMService(self.llm_client, cost_tracker=engagement_cost_tracker)
                 recon_ctx = load_recon_context(self.engagement_id)
+            except Exception as e:
+                logger.warning(f"LLM service init failed (non-fatal): {e}")
+
+        if llm_svc:
+            try:
+                from llm_synthesizer import LLMSynthesizer
                 synthesizer = LLMSynthesizer(llm_svc)
                 synthesis = synthesizer.synthesize(
                     scored_findings=evaluation.get("scored_findings", []),
@@ -955,18 +957,11 @@ class Orchestrator:
                 logger.warning(f"LLM synthesis failed (non-fatal): {e}")
 
         # ── PoC Generation for HIGH/CRITICAL findings ──
-        # Define shared vars before try so developer fix section always has them in scope
-        llm_svc = None
-        scored = []
         try:
             from poc_generator import PoCGenerator
 
             poc_gen = PoCGenerator(llm_client=self.llm_client)
             scored = evaluation.get("scored_findings", [])
-
-            if self.llm_client and self.llm_client.is_available():
-                from llm_service import LLMService
-                llm_svc = LLMService(llm_client=self.llm_client, cost_tracker=engagement_cost_tracker)
 
             if engagement_cost_tracker and llm_svc:
                 from concurrent.futures import ThreadPoolExecutor
@@ -1085,9 +1080,8 @@ class Orchestrator:
                     ThreadPoolExecutor,
                 )
 
-                # Get tech stack from recon context
+                # Get tech stack from recon context (already loaded above)
                 tech_stack: list[str] = []
-                recon_ctx = load_recon_context(self.engagement_id)
                 if recon_ctx:
                     tech_stack = (
                         recon_ctx.tech_stack

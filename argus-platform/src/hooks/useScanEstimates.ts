@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 
 export interface ScanEstimateConfig {
   targetType?: "web" | "api" | "network" | "default";
-  aggressiveness?: "low" | "medium" | "high";
+  aggressiveness?: "default" | "high" | "extreme";
 }
 
 export interface PhaseEstimate {
@@ -41,9 +41,9 @@ const TARGET_MULTIPLIERS: Record<string, number> = {
 };
 
 const AGGRESSIVENESS_MULTIPLIERS: Record<string, number> = {
-  low: 0.8,
-  medium: 1.0,
+  default: 1.0,
   high: 1.3,
+  extreme: 2.5,
 };
 
 const STATE_ORDER = ["created", "recon", "scanning", "analyzing", "reporting", "complete"];
@@ -97,7 +97,7 @@ export function useScanEstimates(
     return () => clearInterval(timer);
   }, []);
 
-  const { targetType = "default", aggressiveness = "medium" } = config;
+  const { targetType = "default", aggressiveness = "default" } = config;
 
   const phaseEstimates = useMemo(() => {
     const targetMult = TARGET_MULTIPLIERS[targetType] ?? 1.0;

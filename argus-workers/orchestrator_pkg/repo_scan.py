@@ -534,6 +534,12 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                     key_id = f"config_secret:{rel}"
                     if key_id in seen_wt:
                         continue
+                    # Skip files larger than 100KB to prevent memory pressure
+                    try:
+                        if os.path.getsize(fpath) > 100_000:
+                            continue
+                    except OSError:
+                        continue
                     seen_wt.add(key_id)
                     try:
                         with open(fpath, errors="ignore") as fh:

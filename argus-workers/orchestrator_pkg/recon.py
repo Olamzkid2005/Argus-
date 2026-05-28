@@ -338,8 +338,11 @@ def _probe_login_pages(
         Tuple of (verified_auth_endpoints, has_login_form)
     """
     from urllib.parse import urljoin
+    import warnings
 
     import requests
+    import urllib3
+    warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 
     verified: list[str] = []
     has_login_form = False
@@ -347,7 +350,7 @@ def _probe_login_pages(
     for path in auth_endpoints:
         url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))
         try:
-            resp = requests.get(url, timeout=timeout, allow_redirects=True, headers={
+            resp = requests.get(url, timeout=timeout, allow_redirects=True, verify=False, headers={
                 "User-Agent": "Mozilla/5.0 (compatible; ArgusRecon/1.0)",
                 "Accept": "text/html,application/xhtml+xml",
             })

@@ -418,6 +418,21 @@ class ScanDiffEngine:
 
             conn = connect(self.db_url)
             cursor = conn.cursor()
+            # Lock rows before updating to prevent concurrent diff tasks
+            # from racing on the same findings (matches single-row mark_fixed).
+            cursor.execute(
+                """
+                SELECT id FROM findings
+                WHERE id = ANY(%s) AND status != 'fixed'
+                FOR UPDATE
+                """,
+                (finding_ids,),
+            )
+            # Only update rows that were actually locked (still not fixed)
+            locked_ids = [row[0] for row in cursor.fetchall()]
+            if not locked_ids:
+                conn.rollback()
+                return 0
             cursor.execute(
                 """
                 UPDATE findings
@@ -426,7 +441,7 @@ class ScanDiffEngine:
                     closed_in_engagement_id = %s
                 WHERE id = ANY(%s) AND status != 'fixed'
                 """,
-                (closed_in_engagement_id, finding_ids),
+                (closed_in_engagement_id, locked_ids),
             )
             conn.commit()
             return cursor.rowcount

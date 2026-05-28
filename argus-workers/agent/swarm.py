@@ -585,8 +585,11 @@ class SwarmOrchestrator:
                     )
                     future.cancel()
 
-            # Kill any orphaned tool subprocesses that may have been spawned
-            # by timed-out agents (process group signal to catch children).
+            # Kill orphaned tool subprocesses spawned by timed-out agents.
+            # Only kill processes matching known scan tool names to avoid
+            # killing subprocesses from concurrent tasks in the same worker.
+            _KNOWN_TOOL_PROCS = {"nuclei", "sqlmap", "dalfox", "nikto", "nmap",
+                                 "arjun", "jwt_tool", "ffuf", "commix", "testssl"}
             try:
                 from contextlib import suppress
 
@@ -594,7 +597,13 @@ class SwarmOrchestrator:
                 current_process = psutil.Process()
                 for child in current_process.children(recursive=True):
                     with suppress(psutil.NoSuchProcess):
-                        child.kill()
+                        try:
+                            child_name = child.name().lower()
+                            if any(tool in child_name for tool in _KNOWN_TOOL_PROCS):
+                                logger.info("Swarm cleanup: killing orphaned %s (pid=%d)", child_name, child.pid)
+                                child.kill()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
             except ImportError:
                 logger.warning(
                     "psutil not installed — cannot kill orphaned tool subprocesses. "

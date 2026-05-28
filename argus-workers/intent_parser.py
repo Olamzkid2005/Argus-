@@ -88,7 +88,7 @@ def sanitize_input(text: str) -> str:
     # Normalize leetspeak characters to detect obfuscated injection attempts
     leet_map = str.maketrans({
         '0': 'o', '1': 'l', '3': 'e', '4': 'a', '5': 's',
-        '6': 'g', '7': 't', '8': 'b', '9': 'g', '@': 'a',
+        '6': 'g', '7': 't', '8': 'b', '@': 'a',
         '$': 's',
     })
     normalized = sanitized.lower().translate(leet_map)

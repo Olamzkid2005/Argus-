@@ -196,14 +196,15 @@ def _spawn_engagement(
             ),
         )
 
-        # Initialize loop budget
+        # Initialize loop budget from aggressiveness setting
+        budget = _build_budget_from_aggressiveness(aggressiveness or "default")
         cursor.execute(
             """
             INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
                                        current_cycles, current_depth, created_at)
-            VALUES (%s, %s, 5, 3, 0, 0, NOW())
+            VALUES (%s, %s, %s, %s, 0, 0, NOW())
             """,
-            (str(uuid.uuid4()), engagement_id),
+            (str(uuid.uuid4()), engagement_id, budget["max_cycles"], budget["max_depth"]),
         )
 
         # Record initial state

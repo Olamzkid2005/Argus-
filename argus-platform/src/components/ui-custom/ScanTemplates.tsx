@@ -31,6 +31,13 @@ export const SCAN_TEMPLATES: ScanTemplate[] = [
     settings: { aggressiveness: "high", tools: ["all"], timeout: 1800 },
   },
   {
+    id: "deep",
+    name: "Deep Audit",
+    description: "Exhaustive scan with brute force and deep analysis",
+    icon: "💣",
+    settings: { aggressiveness: "extreme", tools: ["all"], timeout: 3600 },
+  },
+  {
     id: "compliance",
     name: "Compliance Check",
     description: "OWASP Top 10, PCI-DSS, HIPAA",
@@ -69,7 +76,7 @@ export function ScanTemplates({
           Quick Templates
         </span>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {SCAN_TEMPLATES.map((template) => {
           const isSelected = selectedTemplate === template.id;
           return (

@@ -168,8 +168,7 @@ def _is_reachable(target: str) -> bool:
         logger.warning(f'Target {target} is link-local — skipping')
         return False
     try:
-        socket.setdefaulttimeout(5)
-        addrinfo = socket.getaddrinfo(hostname, None)
+        addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         # Validate resolved IPs to prevent DNS rebinding
         for _family, _typ, _proto, _cn, sockaddr in addrinfo:
             resolved_ip = sockaddr[0]
@@ -889,6 +888,9 @@ def execute_scan_tools(
     eng_id = getattr(ctx, 'engagement_id', '')
     if eng_id:
         clear_engagement_rt_fingerprints(eng_id)
+        # Also clean up the in-memory dedup set to prevent leaks on crash
+        with _emitted_fingerprints_lock:
+            _emitted_fingerprints.pop(eng_id, None)
 
     # M-v5-04: Clean up temporary tool output files to prevent disk exhaustion.
     # These files are created by tools like arjun, sqlmap, commix, testssl when
