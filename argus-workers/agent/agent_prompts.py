@@ -956,6 +956,15 @@ def build_synthesis_prompt(
     recon_summary) is sanitized to prevent prompt injection from
     compromised target servers. H-v3-17.
     """
+    # M-v4-19: Log a warning when findings exceed the slice limit so operators
+    # know that real vulnerabilities may be invisible to LLM analysis.
+    _total_findings = len(scored_findings)
+    if _total_findings > 50:
+        logger.warning(
+            "Synthesis prompt truncated to 50 of %d findings — vulnerabilities beyond the "
+            "slice limit are invisible to LLM analysis",
+            _total_findings,
+        )
     findings_json = json.dumps(scored_findings[:50], indent=2, default=str)
     paths_json = json.dumps(attack_paths[:10], indent=2, default=str)
     sanitized_findings = _sanitize_for_llm(findings_json)
@@ -987,6 +996,14 @@ def build_report_prompt(
     All attacker-controlled data is sanitized to prevent prompt injection
     from compromised target servers. H-v3-17.
     """
+    # M-v4-19: Log a warning when findings exceed the report slice limit.
+    _total_report_findings = len(scored_findings)
+    if _total_report_findings > 100:
+        logger.warning(
+            "Report prompt truncated to 100 of %d findings — vulnerabilities beyond the "
+            "slice limit are invisible to LLM report generation",
+            _total_report_findings,
+        )
     sanitized_target = _sanitize_for_llm(str(engagement.get("target_url", "N/A")))
     sanitized_scan_type = _sanitize_for_llm(str(engagement.get("scan_type", "N/A")))
     sanitized_recon = _sanitize_for_llm(recon_summary)

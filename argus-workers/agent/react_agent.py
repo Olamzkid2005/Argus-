@@ -543,7 +543,17 @@ class ReActAgent:
                                 )
                                 return False
                         except ValueError:
-                            if hostname.lower() in {"localhost", "169.254.169.254"}:
+                            # M-v4-08: Block known cloud metadata hostnames to prevent SSRF.
+                            # Covers AWS, GCP, Azure, and Alibaba metadata endpoints.
+                            _blocked_metadata_hostnames = {
+                                "localhost", "169.254.169.254",
+                                "metadata.google.internal",          # GCP
+                                "metadata",                          # GCP short name
+                                "instance-data",                     # AWS short name
+                                "instance-data.us-east-1.compute.internal",  # AWS regional
+                                "100.100.100.200",                   # Alibaba Cloud
+                            }
+                            if hostname.lower() in _blocked_metadata_hostnames:
                                 logger.warning(
                                     "Blocked internal hostname '%s' (param=%s) for tool '%s'",
                                     hostname, param_name, action.tool,

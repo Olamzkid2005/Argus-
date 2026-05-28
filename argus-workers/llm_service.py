@@ -26,7 +26,13 @@ logger = logging.getLogger(__name__)
 
 
 class CostTracker:
-    """Tracks cumulative LLM cost per engagement."""
+    """Tracks cumulative LLM cost per engagement.
+
+    M-v4-18: exceeded() accepts an optional estimate parameter to check
+    whether the cost cap would be exceeded *before* adding the cost.
+    This prevents the first call that pushes over the cap from being
+    processed in full (the overshoot pattern).
+    """
 
     def __init__(self, max_cost_usd: float = 0.25):
         self.total = 0.0
@@ -35,8 +41,18 @@ class CostTracker:
     def add(self, cost: float):
         self.total += cost
 
-    def exceeded(self) -> bool:
-        return self.total > self.max_cost
+    def exceeded(self, estimated_cost: float = 0.0) -> bool:
+        """Check if total cost has exceeded the cap, optionally including
+        an estimated upcoming cost to prevent overshoot (M-v4-18).
+
+        Args:
+            estimated_cost: If provided, checks whether total + estimated_cost
+                           would exceed the cap, preventing the first overshoot.
+
+        Returns:
+            True if the cap is exceeded (or would be exceeded).
+        """
+        return (self.total + estimated_cost) > self.max_cost
 
 
 @dataclass
@@ -107,13 +123,14 @@ class LLMService:
 
             response_text = raw.text if isinstance(raw, LLMResponse) else str(raw)
             cost = raw.cost_usd if isinstance(raw, LLMResponse) else 0.0
-            self._cost_tracker.add(cost)
 
-            if self._cost_tracker.exceeded():
+            if self._cost_tracker.exceeded(cost):
                 logger.warning(
-                    f"Cost cap reached (${self._cost_tracker.total:.4f}), using fallback"
+                    f"Cost cap would be exceeded (${self._cost_tracker.total:.4f} + {cost:.4f}), using fallback"
                 )
                 return self._fallback("Cost cap exceeded")
+
+            self._cost_tracker.add(cost)
 
             try:
                 parsed = json.loads(response_text)

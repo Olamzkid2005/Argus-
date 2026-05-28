@@ -354,6 +354,8 @@ def execute_scan_tools(
     with _emitted_fingerprints_lock:
         _emitted_fingerprints.pop(engagement_id, None)
     all_findings = []
+    # M-v5-04: Track temp output files for cleanup to prevent disk exhaustion.
+    _temp_outputs: list[str] = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
     _skip = set(skip_tools or [])
 
@@ -504,6 +506,7 @@ def execute_scan_tools(
                     import os
                     import tempfile
                     arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_{_target_slug}.json")
+                    _temp_outputs.append(arjun_out)
                 arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
                 arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
                 _run_scan_tool(ctx, "arjun",
@@ -593,6 +596,7 @@ def execute_scan_tools(
                 import os
                 import tempfile
                 sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_{_target_slug}.json")
+                _temp_outputs.append(sqlmap_out)
             sqlmap_cmd = ["-u", target, "--output-format=json", "--json-output", sqlmap_out]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
@@ -620,6 +624,7 @@ def execute_scan_tools(
                 import os
                 import tempfile
                 commix_out = os.path.join(tempfile.gettempdir(), f"commix_{_target_slug}.json")
+                _temp_outputs.append(commix_out)
             scan_jobs.append(("commix",
                 ["--url", target, "--batch", "--json-output", commix_out],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
@@ -636,6 +641,7 @@ def execute_scan_tools(
                 import os
                 import tempfile
                 testssl_out = os.path.join(tempfile.gettempdir(), f"testssl_{_target_slug}.json")
+                _temp_outputs.append(testssl_out)
             scan_jobs.append(("testssl",
                 ["--jsonfile", testssl_out, target],
                 TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
@@ -882,6 +888,19 @@ def execute_scan_tools(
     eng_id = getattr(ctx, 'engagement_id', '')
     if eng_id:
         clear_engagement_rt_fingerprints(eng_id)
+
+    # M-v5-04: Clean up temporary tool output files to prevent disk exhaustion.
+    # These files are created by tools like arjun, sqlmap, commix, testssl when
+    # no sandbox directory is available. Files in the sandbox are cleaned up by
+    # the Orchestrator's atexit handler (M-v4-06).
+    import os as _os
+    for _tmp_path in _temp_outputs:
+        try:
+            if _os.path.exists(_tmp_path):
+                _os.remove(_tmp_path)
+                logger.debug("Cleaned up temp file: %s", _tmp_path)
+        except Exception:
+            logger.debug("Failed to clean up temp file: %s", _tmp_path)
 
     slog.info(f"Scan pipeline complete: {len(all_findings)} total findings across {len(targets)} targets")
     return all_findings

@@ -77,6 +77,22 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Name, frequency, and email_recipients are required" }, { status: 400 });
       }
 
+      // M-v3-11: Verify each engagement_id exists and belongs to the user's org.
+      if (engagement_ids && Array.isArray(engagement_ids) && engagement_ids.length > 0) {
+        for (const eid of engagement_ids) {
+          const engCheck = await pool.query(
+            "SELECT id FROM engagements WHERE id = $1 AND org_id = $2",
+            [eid, session.user.orgId],
+          );
+          if (engCheck.rows.length === 0) {
+            return NextResponse.json(
+              { error: `Engagement ${eid} not found or not part of your organization` },
+              { status: 400 },
+            );
+          }
+        }
+      }
+
       const now = new Date();
       let nextRun = new Date(now);
       switch (frequency) {
@@ -122,11 +138,22 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Schedule ID is required" }, { status: 400 });
     }
 
-    // Delete from scheduled_engagements with org isolation
-    await pool.query(
+    // M-v4-21: Delete from both tables to prevent orphan records.
+    // The POST handler can insert into either scheduled_engagements or
+    // scheduled_reports depending on the payload shape.
+    const engResult = await pool.query(
       `DELETE FROM scheduled_engagements WHERE id = $1 AND org_id = $2`,
       [id, session.user.orgId],
     );
+    const reportResult = await pool.query(
+      `DELETE FROM scheduled_reports WHERE id = $1 AND org_id = $2`,
+      [id, session.user.orgId],
+    );
+
+    if (engResult.rowCount === 0 && reportResult.rowCount === 0) {
+      log.apiEnd("DELETE", "/api/reports/scheduled", 404, { id });
+      return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    }
 
     log.apiEnd("DELETE", "/api/reports/scheduled", 200, { id });
     return NextResponse.json({ success: true });

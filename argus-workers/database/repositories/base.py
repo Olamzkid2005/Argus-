@@ -6,6 +6,7 @@ Supports passing an external connection for transaction support.
 """
 
 import logging
+import threading
 import time
 from contextlib import contextmanager, suppress
 from typing import Any
@@ -47,8 +48,11 @@ ALLOWED_COLUMNS = {
 }
 
 # Cache for schema columns with TTL (300s) — auto-renews after migrations
+# L-22: Use threading.Lock to protect the module-level schema cache from
+# concurrent access by multiple threads introspecting different tables.
 _schema_cache: dict[str, list[str]] = {}
 _schema_cache_timestamps: dict[str, float] = {}
+_schema_cache_lock = threading.Lock()
 _SCHEMA_CACHE_TTL = 300.0  # 5 minutes
 
 
@@ -64,12 +68,13 @@ def _get_table_columns(table_name: str) -> list[str]:
         List of column names
     """
     import time as _time
-    if table_name in _schema_cache:
-        # Check TTL to pick up schema changes from migrations
-        cached_at = _schema_cache_timestamps.get(table_name, 0)
-        if _time.time() - cached_at < _SCHEMA_CACHE_TTL:
-            return _schema_cache[table_name]
-        # TTL expired — fall through to re-fetch
+    with _schema_cache_lock:
+        if table_name in _schema_cache:
+            # Check TTL to pick up schema changes from migrations
+            cached_at = _schema_cache_timestamps.get(table_name, 0)
+            if _time.time() - cached_at < _SCHEMA_CACHE_TTL:
+                return _schema_cache[table_name]
+            # TTL expired — fall through to re-fetch
 
     conn = None
     cursor = None
@@ -89,8 +94,9 @@ def _get_table_columns(table_name: str) -> list[str]:
         )
 
         columns = [row[0] for row in cursor.fetchall()]
-        _schema_cache[table_name] = columns
-        _schema_cache_timestamps[table_name] = _time.time()
+        with _schema_cache_lock:
+            _schema_cache[table_name] = columns
+            _schema_cache_timestamps[table_name] = _time.time()
         return columns
     except Exception as e:
         logging.getLogger(__name__).debug("Schema introspection failed for %s: %s — falling back to allowlist", table_name, e)

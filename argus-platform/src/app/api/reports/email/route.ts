@@ -2,10 +2,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
 import { pool } from "@/lib/db";
+import { redis } from "@/lib/redis";
+import { log } from "@/lib/logger";
+
+// M-v4-20: Rate limiting — 5 email reports per hour per user to prevent abuse.
+const EMAIL_RATE_LIMIT_WINDOW = 3600; // 1 hour
+const MAX_EMAIL_REPORTS = 5;
+
+async function checkEmailRateLimit(userId: string): Promise<boolean> {
+  const key = `ratelimit:email_report:${userId}`;
+  const setResult = await redis.set(key, 1, "EX", EMAIL_RATE_LIMIT_WINDOW, "NX");
+  const current = setResult === "OK" ? 1 : await redis.incr(key);
+  return current <= MAX_EMAIL_REPORTS;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
+
+    // Rate limit check before any processing
+    const allowed = await checkEmailRateLimit(session.user.id);
+    if (!allowed) {
+      log.warn("Email report rate limit exceeded for user %s", session.user.id);
+      return NextResponse.json(
+        { error: "Too many email requests. Please try again later." },
+        { status: 429 },
+      );
+    }
     const body = await req.json();
     const { report_id, engagement_id, recipient_override } = body;
 

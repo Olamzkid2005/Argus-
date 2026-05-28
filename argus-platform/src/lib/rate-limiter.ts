@@ -132,6 +132,7 @@ function fallbackRateLimit(
   if (!record || now > record.resetTime) {
     record = { count: 0, resetTime: now + config.windowMs };
     startCleanupIfNeeded(); // M-23: Start periodic cleanup when first entry is created
+  }
 
   record.count++;
   memoryLimits.set(key, record);

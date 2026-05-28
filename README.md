@@ -644,9 +644,8 @@ rm -rf logs/*
 
 - [Setup Progress](docs/setup-progress.md) - Current implementation status
 - [Database Setup](docs/database-setup.md) - Database installation guide
-- [Comprehensive Audit](MASTER_CODABASE_AUDIT.md) - Full codebase audit report (214 findings, 109 resolved)
-- [Architecture Deep Dive](FINAL-ARCHITECTURE.md) - Complete system architecture
-- [Architecture](FINAL-ARCHITECTURE.md) - Complete system architecture
+- [Comprehensive Audit](MASTER_CODABASE_AUDIT.md) - Full codebase audit report (214 findings, 150 resolved)
+- [Architecture Deep Dive](docs/FINAL-ARCHITECTURE.md) - Complete system architecture
 
 ## Architecture Improvements
 
