@@ -248,11 +248,14 @@ class BaseTask(app.Task):
             if potential_id and '-' in potential_id and len(potential_id) == 36:
                 engagement_id = potential_id
         if engagement_id:
-            # Skip if the task's except handler already transitioned to failed
-            # (task_context in base.py sets this flag to prevent double-transition).
+            # H-03: State transitions are handled by task_context() — the single
+            # authoritative handler. We only log and let task_context() manage
+            # the _failed_transition_done flag.
             if getattr(self, '_failed_transition_done', False):
-                logger.debug("Failure transition already handled for engagement %s — skipping on_failure", engagement_id)
+                logger.debug("Failure transition already handled for engagement %s by task_context", engagement_id)
             else:
+                # If task_context was NOT used (e.g., on_failure from SIGKILL/timeout
+                # where the task body never ran), attempt a safe transition.
                 try:
                     from database.connection import db_cursor
                     with db_cursor() as cursor:

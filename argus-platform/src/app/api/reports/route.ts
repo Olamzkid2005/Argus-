@@ -35,6 +35,10 @@ export async function GET(req: NextRequest) {
     }
   } catch (error) {
     console.error("Reports API error:", error);
-    return NextResponse.json({ reports: [] });
+    // M-v3-02: Return 500 with error message instead of silent 200 with empty array
+    return NextResponse.json(
+      { error: "Failed to fetch reports", reports: [] },
+      { status: 500 }
+    );
   }
 }

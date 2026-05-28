@@ -260,17 +260,21 @@ def task_error_boundary(
     phase_name: str,
     db_conn_string: str | None = None,
 ):
-    """Standardized error boundary for Celery tasks.
+    """Standardized error boundary for Celery tasks — SECONDARY handler.
 
-    Wraps task execution with:
+    H-03: This is a secondary error boundary. It handles:
     1. Error classification via ErrorCode / classify_error_with_code
     2. Structured logging of the classified error
     3. Dead-letter queue integration for non-retryable failures
-    4. Engagement state transition to "failed" on unrecoverable errors
+
+    IMPORTANT: This boundary does NOT transition engagement state to 'failed'.
+    State transitions are the sole responsibility of task_context() — the
+    single authoritative error handler. If task_context() is not wrapping
+    this call, ensure the caller handles state transitions separately.
 
     Args:
         task: The Celery task instance (self from bind=True tasks).
-        engagement_id: Engagement ID for state transitions.
+        engagement_id: Engagement ID (for logging/DLQ context).
         phase_name: Human-readable phase name for error messages.
         db_conn_string: Database connection string. Auto-resolves if not provided.
 
@@ -288,12 +292,42 @@ def task_error_boundary(
     except SoftTimeLimitExceeded:
         slog.error("Soft time limit exceeded in %s", phase_name)
         logger.warning(
-            "Soft time limit exceeded in %s for engagement %s — transitioning to failed",
+            "Soft time limit exceeded in %s for engagement %s — "
+            "state transition handled by task_context if present",
             phase_name, engagement_id,
         )
-        # If an outer task_context already handled this, skip.
-        if getattr(task, '_failed_transition_done', False):
+        raise
+    except Exception as e:
+        # Check by name too (see task_context for why)
+        if _is_soft_timeout(e):
+            slog.error("Soft time limit exceeded (name-matched) in %s", phase_name)
             raise
+
+        from error_classifier import classify_error_with_code
+        classification = classify_error_with_code(e)
+
+        slog.error(
+            "%s failed: %s [%s]",
+            phase_name, e, classification.error_code.name if classification else "UNKNOWN",
+        )
+
+        # Send to DLQ when non-retryable
+        if classification and not classification.should_retry:
+            try:
+                dlq = get_dlq()
+                dlq.enqueue(
+                    task_id="unknown",
+                    task_name=phase_name,
+                    args=[engagement_id],
+                    kwargs={},
+                    error_message=str(e),
+                    error_class=type(e).__name__,
+                    retry_count=0,
+                    engagement_id=engagement_id,
+                )
+            except Exception as dlq_error:
+                logger.error("Failed to enqueue DLQ message: %s", dlq_error)
+        raise
         try:
             from database.connection import db_cursor
             with db_cursor() as cursor:

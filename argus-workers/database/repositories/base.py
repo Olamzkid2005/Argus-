@@ -214,7 +214,7 @@ class BaseRepository:
             get_db().release_connection(conn)
 
     @contextmanager
-    def db_operation(self, commit: bool = False, cursor_factory=None):
+    def db_operation(self, commit: bool = True, cursor_factory=None):
         """Context manager for DB connection + cursor lifecycle.
 
         Handles connection acquisition, cursor creation, and cleanup
