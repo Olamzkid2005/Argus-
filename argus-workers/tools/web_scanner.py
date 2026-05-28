@@ -35,6 +35,8 @@ _ALLOWED_SCAN_SCHEMES = frozenset({"http", "https"})
 
 import requests
 import urllib3
+
+from tools.scope_validator import validate_target_scope  # M-25: scope validation
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
 from config.constants import (
@@ -333,6 +335,17 @@ class WebScanner:
                 f"Disallowed URL scheme '{parsed.scheme}' in target {target_url}. "
                 f"Only http:// and https:// targets are permitted (H-v3-24 SSRF prevention)."
             )
+
+        # M-25: Scope validation — reject targets outside authorized scope before
+        # sending any potentially destructive payloads (mass assignment, credential
+        # testing, host header injection). Loads scope from DB if not provided.
+        if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
+            logger.warning(
+                "Target %s is outside authorized scope for engagement %s — scan aborted (M-25)",
+                target_url, self.engagement_id,
+            )
+            self.findings = []
+            return self.findings
 
         self.findings = []
         self.target_url = target_url.rstrip("/")
