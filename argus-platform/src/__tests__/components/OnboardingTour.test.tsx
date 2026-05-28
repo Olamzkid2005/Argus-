@@ -173,7 +173,7 @@ describe("OnboardingTour - Skip functionality", () => {
     expect(mockRemoveItem).toHaveBeenCalledWith(STORAGE_KEY);
   });
 
-  it("responds to the custom restart event by showing the overview grid", async () => {
+  it("responds to the custom restart event by showing the tour", async () => {
     mockGetItem.mockImplementation((key: string) => {
       if (key === STORAGE_KEY) return "true";
       return null;
@@ -184,14 +184,12 @@ describe("OnboardingTour - Skip functionality", () => {
     });
 
     act(() => {
-      window.dispatchEvent(new CustomEvent("argus:restart-onboarding"));
+      window.dispatchEvent(new CustomEvent("argus:restart-tour"));
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("onboarding-tour")).toBeInTheDocument();
     });
-    // Restart shows the "All Steps Overview" grid with "Complete Tour" heading
-    expect(screen.getByText("Complete Tour")).toBeInTheDocument();
-    expect(screen.getByText("Start Interactive Tour")).toBeInTheDocument();
+    expect(screen.getByTestId("step-counter")).toHaveTextContent("1 of 15");
   });
 });

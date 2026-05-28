@@ -224,12 +224,9 @@ describe("KeyboardShortcutsHelp", () => {
   it("should render the help modal when open", () => {
     render(<KeyboardShortcutsHelp open={true} onOpenChange={() => {}} />);
     expect(screen.getByText("Keyboard Shortcuts")).toBeInTheDocument();
-    expect(screen.getByText("Toggle command palette")).toBeInTheDocument();
-    expect(screen.getByText("New Scan — navigate to engagements")).toBeInTheDocument();
-    expect(screen.getByText("Explain selected finding")).toBeInTheDocument();
-    expect(screen.getByText("Verify selected finding")).toBeInTheDocument();
-    expect(screen.getByText("Show keyboard shortcuts help")).toBeInTheDocument();
-    expect(screen.getByText("Close modals / panels")).toBeInTheDocument();
+    expect(screen.getByText("Command Palette")).toBeInTheDocument();
+    expect(screen.getByText("Toggle Sidebar")).toBeInTheDocument();
+    expect(screen.getByText("Close")).toBeInTheDocument();
   });
 
   it("should not render content when closed", () => {

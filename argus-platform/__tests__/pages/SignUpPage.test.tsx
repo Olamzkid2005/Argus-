@@ -11,7 +11,6 @@ jest.mock("next-auth/react", () => ({
   signIn: jest.fn(),
 }));
 
-jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
 
 global.fetch = jest.fn();
 
@@ -94,7 +93,7 @@ describe("SignUp Page", () => {
     fireEvent.submit(form);
 
     await waitFor(() => {
-      expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
+      expect(screen.getAllByText("Passwords do not match").length).toBeGreaterThan(0);
     });
   });
 });

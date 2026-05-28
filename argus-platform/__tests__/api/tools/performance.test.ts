@@ -57,7 +57,7 @@ describe("GET /api/tools/performance", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("INTERVAL"),
-        [7],
+        ["org-123", 7],
       );
     });
 
@@ -71,7 +71,7 @@ describe("GET /api/tools/performance", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("INTERVAL"),
-        [30],
+        ["org-123", 30],
       );
     });
 
@@ -107,7 +107,7 @@ describe("GET /api/tools/performance", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("tool_name = $1"),
-        ["nuclei", 7],
+        ["nuclei", "org-123", 7],
       );
     });
   });

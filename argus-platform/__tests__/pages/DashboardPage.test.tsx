@@ -25,7 +25,6 @@ jest.mock("@/lib/use-scanner-activities", () => ({
   useScannerActivities: () => ({ activities: [] }),
 }));
 
-jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
 jest.mock("@/components/effects/SurveillanceEye", () => () => <div data-testid="surveillance-eye" />);
 jest.mock("@/components/ui-custom/ScannerActivityPanel", () => ({
   __esModule: true,

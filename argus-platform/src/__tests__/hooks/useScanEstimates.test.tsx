@@ -66,7 +66,7 @@ describe("useScanEstimates", () => {
     );
 
     expect(result.current.remainingMs).toBe(0);
-    expect(result.current.remainingFormatted).toBe("0s");
+    expect(result.current.remainingFormatted).toBe("—");
   });
 
   it("calculates phase progress correctly", () => {

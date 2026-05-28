@@ -14,7 +14,6 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/auth/signin",
 }));
 
-jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
 
 import SignInPage from "@/app/auth/signin/page";
 

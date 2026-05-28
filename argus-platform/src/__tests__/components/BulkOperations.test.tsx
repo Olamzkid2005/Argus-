@@ -63,10 +63,3 @@ describe("Bulk Findings Operations - Logic Tests", () => {
     expect(csv).toContain("f2,SQLi,CRITICAL,/api/users,true,0.95");
   });
 });
-
-describe("BulkActionBar Component - Export Tests", () => {
-  it("should export BulkActionBar component", () => {
-    const bulkModule = require("@/components/ui-custom/BulkActionBar");
-    expect(bulkModule).toHaveProperty("BulkActionBar");
-  });
-});

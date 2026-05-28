@@ -68,7 +68,7 @@ describe("useThemeColors", () => {
     };
 
     render(<TestComponent />);
-    expect(colors.primary).toBe("#000000");
-    expect(colors.background).toBe("#000000");
+    expect(colors.primary).toBe("#6720FF");
+    expect(colors.background).toBe("#ffffff");
   });
 });

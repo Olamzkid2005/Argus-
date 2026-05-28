@@ -128,7 +128,7 @@ class LLMClient:
 
             key_names = ("openrouter_api_key", "openai_api_key", "llm_api_key")
 
-            if self._user_email:
+            if getattr(self, '_user_email', None):
                 # Tenant-scoped lookup (M-v5-01): only return this user's key
                 with db_cursor() as cursor:
                     cursor.execute(
@@ -198,7 +198,7 @@ class LLMClient:
 
             r = redis_module.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
 
-            if self._user_email:
+            if getattr(self, '_user_email', None):
                 # Tenant-scoped lookup (M-v5-01): exact key for this user
                 key = f"settings:{self._user_email}:openrouter_api_key"
                 value = r.get(key)

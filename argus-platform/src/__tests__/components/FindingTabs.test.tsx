@@ -30,7 +30,6 @@ jest.mock('@/components/ui-custom/MarkdownRenderer', () => ({ MarkdownRenderer: 
 jest.mock('@/components/animations/ScrollReveal', () => ({ ScrollReveal: 'div' }));
 jest.mock('@/components/animations/StaggerContainer', () => ({ StaggerContainer: 'div', StaggerItem: 'div' }));
 jest.mock('@/components/security/SecurityRating', () => 'div');
-jest.mock('@/components/ui-custom/BulkActionBar', () => 'div');
 jest.mock('lucide-react', () => ({
   Search: 'div', Filter: 'div', ChevronDown: 'div', Bug: 'div', AlertTriangle: 'div',
   Shield: 'div', Copy: 'div', Check: 'div', Loader2: 'div', Trash2: 'div',

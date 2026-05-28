@@ -5,7 +5,6 @@ jest.mock("next-auth/react", () => ({
   signIn: jest.fn(),
 }));
 
-jest.mock("@/components/effects/MatrixDataRain", () => () => <div data-testid="matrix-rain" />);
 jest.mock("@/components/effects/SurveillanceEye", () => () => <div data-testid="surveillance-eye" />);
 
 import LandingPage from "@/app/page";

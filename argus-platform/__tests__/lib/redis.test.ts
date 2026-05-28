@@ -15,6 +15,9 @@ jest.mock("ioredis", () => {
     get: jest.fn(),
     setex: jest.fn(),
     lpush: jest.fn(),
+    on: jest.fn(),
+    eval: jest.fn(),
+    del: jest.fn(),
   }));
 });
 

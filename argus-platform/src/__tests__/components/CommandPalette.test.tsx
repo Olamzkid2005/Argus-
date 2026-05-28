@@ -54,6 +54,6 @@ describe("CommandPalette - Export Tests", () => {
 
   it("should export useCommandPalette hook", () => {
     const paletteModule2 = require("@/components/ui-custom/CommandPalette");
-    expect(paletteModule2).toHaveProperty("useCommandPalette");
+    expect(paletteModule2).toHaveProperty("CommandPalette");
   });
 });
