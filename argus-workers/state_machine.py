@@ -65,9 +65,8 @@ class EngagementStateMachine:
         self._db_conn_string = db_connection_string
         self._external_conn = connection
         self.current_state = None  # Will be set properly after None-handling below
-        # Optional websocket publisher — when set, every transition() also emits
-        # a frontend event so the orchestrator doesn't need duplicate publish calls.
-        self._ws_publisher = None
+        # WebSocket publisher removed (M-07 consolidation).
+        # All events go through SSE via StreamManager.
 
         # Handle None — defer resolution to first transition() call
         # where it will be queried under the FOR UPDATE lock, avoiding
@@ -183,17 +182,8 @@ class EngagementStateMachine:
         # Update current state
         self.current_state = new_state
 
-        # Notify frontend via websocket publisher if configured.
-        if self._ws_publisher:
-            try:
-                self._ws_publisher.publish_state_transition(
-                    engagement_id=self.engagement_id,
-                    from_state=old_state,
-                    to_state=new_state,
-                    reason=reason or f"Transition to {new_state}",
-                )
-            except (ConnectionError, OSError, ValueError) as e:
-                logger.debug("Failed to publish state transition for %s: %s", self.engagement_id, e)
+        # WebSocket state transition publishing removed (M-07 consolidation).
+        # All events go through SSE via StreamManager.
 
     def _persist_state_and_budget(self, from_state: str, to_state: str, reason: str, trace_id: str | None = None):
         """
@@ -509,21 +499,8 @@ class EngagementStateMachine:
 
             conn.commit()
 
-            # Publish websocket events for every intermediate state so the
-            # frontend sees each step (e.g. scanning → analyzing → reporting).
-            if self._ws_publisher:
-                try:
-                    ws_current = db_current
-                    for new_state, reason in states:
-                        self._ws_publisher.publish_state_transition(
-                            engagement_id=self.engagement_id,
-                            from_state=ws_current,
-                            to_state=new_state,
-                            reason=reason,
-                        )
-                        ws_current = new_state
-                except (ConnectionError, OSError, ValueError) as e:
-                    logger.debug("Failed to publish chain transition for %s: %s", self.engagement_id, e)
+            # WebSocket chain transition publishing removed (M-07 consolidation).
+            # All events go through SSE via StreamManager.
 
             self.current_state = final_state
             return final_state

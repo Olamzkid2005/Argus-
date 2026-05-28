@@ -171,25 +171,13 @@ def task_context(
                     db_connection_string=db_conn_string,
                     current_state=current_state or get_engagement_state(engagement_id, db_conn_string),
                 )
-                from websocket_events import get_websocket_publisher
-                sm._ws_publisher = get_websocket_publisher()
+                # WebSocket publisher removed (M-07 consolidation).
+                # All events go through SSE via StreamManager.
 
-                # Phase 1: Wrap state machine in canonical EngagementState
-                # when feature flag is enabled.
-                if _ff_enabled("ENGAGEMENT_STATE", default=False):
-                    state = EngagementState(engagement_id, state_machine=sm)
-                    # Shadow-compare: new EngagementState vs raw state machine
-                    shadow_compare(
-                        "engagement_state", engagement_id,
-                        new_result=state.to_dict(),
-                        old_path_fn=lambda sm=sm: {
-                            "current_state": sm.current_state,
-                            "engagement_id": sm.engagement_id,
-                        },
-                        key_fields=["current_state", "engagement_id"],
-                    )
-                else:
-                    state = sm
+                # Note: EngagementState feature flag removed (M-07).
+                # It was feature-flagged off (default=False) and never enabled.
+                # EngagementStateMachine is the only active state machine.
+                state = sm
                 _state_assigned = True
                 ctx.state = state
 

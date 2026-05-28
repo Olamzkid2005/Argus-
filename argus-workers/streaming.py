@@ -570,38 +570,28 @@ def emit_posture_update(
             "total_findings": total_findings,
         },
     ))
-    try:
-        from websocket_events import get_websocket_publisher
-        ws = get_websocket_publisher()
-        ws.publish_posture_update(
-            engagement_id=engagement_id,
-            composite_score=composite_score,
-            framework_scores=framework_scores,
-            trend=trend,
-            total_findings=total_findings,
-        )
-    except Exception as e:
-        logger.debug("WS posture update emit failed (non-fatal): %s", e)
+    # Note: WebSocket publishing removed (M-07 consolidation).
 
 
 # ── StreamingFindingEmitter: unified finding stream ──
 
 class StreamingFindingEmitter:
     """
-    Unified emitter that publishes finding events to both SSE and Redis WebSocket channels.
+    Unified emitter that publishes finding events via SSE (in-process stream manager).
 
     Every normalized finding that gets persisted to the database also gets emitted
     as a real-time event so analysts can start triaging critical findings while the
     scan is still running.
 
-    Uses lazy initialization for both stream manager and WS publisher to avoid
-    import-time side effects.
+    Uses lazy initialization for stream manager to avoid import-time side effects.
+
+    All events go through SSE only (M-07 consolidation). The frontend consumes
+    events via the SSE endpoint at /api/stream/[id].
     """
 
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
         self._stream = None
-        self._ws_publisher = None
 
     @property
     def stream(self):
@@ -609,15 +599,8 @@ class StreamingFindingEmitter:
             self._stream = get_stream_manager()
         return self._stream
 
-    @property
-    def ws_publisher(self):
-        if self._ws_publisher is None:
-            from websocket_events import get_websocket_publisher
-            self._ws_publisher = get_websocket_publisher()
-        return self._ws_publisher
-
     def emit_finding(self, finding: dict) -> None:
-        """Emit a finding event through both SSE and WebSocket channels.
+        """Emit a finding event via SSE.
 
         Args:
             finding: Finding dict containing at minimum:
@@ -632,29 +615,13 @@ class StreamingFindingEmitter:
         finding_type = finding.get("type", "UNKNOWN")
         severity = finding.get("severity", "INFO")
         endpoint = finding.get("endpoint", "")
-        source_tool = finding.get("source_tool", "unknown")
-        confidence = finding.get("confidence", 0.5)
         title = f"{finding_type} on {endpoint}"
 
-        # 1. SSE event via emit_finding (in-process stream manager)
+        # SSE event via emit_finding (in-process stream manager)
         emit_finding(self.engagement_id, finding_type, severity, endpoint, title)
 
-        # 2. WebSocket event via WebSocketEventPublisher (Redis pub/sub)
-        try:
-            self.ws_publisher.publish_finding(
-                engagement_id=self.engagement_id,
-                finding_id=finding_id,
-                finding_type=finding_type,
-                severity=severity,
-                confidence=confidence,
-                endpoint=endpoint,
-                source_tool=source_tool,
-                use_batch=False,
-            )
-        except Exception as e:
-            logger.debug(
-                "Failed to publish WebSocket finding event (non-fatal): %s", e,
-            )
+        # Note: WebSocket publishing removed (M-07 consolidation).
+        # All events go through SSE only.
 
 
 # In-memory dedup for emit_finding_rt to prevent duplicate findings
@@ -735,22 +702,8 @@ def emit_finding_rt(
     except Exception as e:
         logger.debug("SSE finding emit failed (non-fatal): %s", e)
 
-    # 2. WebSocket emission (Redis pub/sub)
-    try:
-        from websocket_events import get_websocket_publisher
-        ws = get_websocket_publisher()
-        ws.publish_finding(
-            engagement_id=engagement_id,
-            finding_id=finding_id,
-            finding_type=finding_type,
-            severity=severity,
-            confidence=confidence,
-            endpoint=endpoint,
-            source_tool=tool_name,
-            use_batch=False,
-        )
-    except Exception as e:
-        logger.debug("WS finding emit failed (non-fatal): %s", e)
+    # WebSocket emission removed (M-07 consolidation).
+    # All events go through SSE only.
 
 
 # Singleton
