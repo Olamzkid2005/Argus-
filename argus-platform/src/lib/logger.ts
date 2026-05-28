@@ -256,13 +256,38 @@ const browserLog = {
 // ============================================================
 // Generic fallback
 // ============================================================
-const genericLog = {
-  error: (source: string, error: unknown) =>
-    logMsg('error', 'Error', `${source}:`, error),
-  warn: (source: string, message: string) =>
-    logMsg('warn', 'Warn', `${source}: ${message}`),
-  info: (source: string, message: string) =>
-    logMsg('info', 'Info', `${source}: ${message}`),
+/** Overloads: if called with 1 arg, treat it as the full message (source omitted). */
+interface GenericLog {
+  error(source: string, error: unknown): void;
+  error(message: string): void;
+  warn(source: string, message: string): void;
+  warn(message: string): void;
+  info(source: string, message: string): void;
+  info(message: string): void;
+}
+
+const genericLog: GenericLog = {
+  error: (source: string, error?: unknown) => {
+    if (error === undefined) {
+      logMsg('error', 'Error', source);
+    } else {
+      logMsg('error', 'Error', `${source}:`, error);
+    }
+  },
+  warn: (source: string, message?: string) => {
+    if (message === undefined) {
+      logMsg('warn', 'Warn', source);
+    } else {
+      logMsg('warn', 'Warn', `${source}: ${message}`);
+    }
+  },
+  info: (source: string, message?: string) => {
+    if (message === undefined) {
+      logMsg('info', 'Info', source);
+    } else {
+      logMsg('info', 'Info', `${source}: ${message}`);
+    }
+  },
 };
 
 export const log = {

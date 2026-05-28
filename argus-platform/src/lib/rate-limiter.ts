@@ -106,7 +106,7 @@ function startCleanupIfNeeded() {
   if (cleanupTimer) return;
   cleanupTimer = setInterval(() => {
     const now = Date.now();
-    for (const [key, record] of memoryLimits) {
+    for (const [key, record] of Array.from(memoryLimits)) {
       if (now > record.resetTime) {
         memoryLimits.delete(key);
       }

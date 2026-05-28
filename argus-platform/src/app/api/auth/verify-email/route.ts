@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
         [user.id],
       );
 
-      log.info("Email verified successfully", { userId: user.id, email: user.email });
+      log.info("Email verified successfully for", user.email);
 
       return NextResponse.json({
         success: true,

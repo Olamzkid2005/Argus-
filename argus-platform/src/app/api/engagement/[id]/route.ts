@@ -86,7 +86,7 @@ function _validate_auth_config(config: unknown): void {
   for (const key of Object.keys(config as Record<string, unknown>)) {
     if (!validKeys.includes(key)) {
       // Allow unknown keys but log a warning
-      log.warn("auth_config contains unrecognized key:", { key });
+      log.warn("auth_config contains unrecognized key:", key);
     }
   }
 }

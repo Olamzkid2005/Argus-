@@ -144,6 +144,20 @@ export default function MonitoringPage() {
   // WebSocket listener for compliance alerts — triggers immediate posture refresh
   const wsRef = useRef<ReturnType<typeof createWebSocketConnection> | null>(null);
 
+  const fetchPosture = useCallback(async () => {
+    try {
+      const response = await fetch("/api/compliance/posture");
+      if (response.ok) {
+        const data = await response.json();
+        setPosture(data);
+      }
+    } catch {
+      // Non-critical
+    } finally {
+      setPostureLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Listen for compliance alert events to trigger immediate refresh
     wsRef.current = createWebSocketConnection({
@@ -165,7 +179,7 @@ export default function MonitoringPage() {
     });
 
     return () => {
-      wsRef.current?.stop();
+      wsRef.current?.disconnect();
     };
   }, [fetchPosture]);
 
@@ -208,20 +222,6 @@ export default function MonitoringPage() {
       setError(err instanceof Error ? err.message : "Failed to load monitoring data");
     } finally {
       setLoading(false);
-    }
-  }, []);
-
-  const fetchPosture = useCallback(async () => {
-    try {
-      const response = await fetch("/api/compliance/posture");
-      if (response.ok) {
-        const data = await response.json();
-        setPosture(data);
-      }
-    } catch {
-      // Non-critical
-    } finally {
-      setPostureLoading(false);
     }
   }, []);
 
@@ -487,8 +487,8 @@ export default function MonitoringPage() {
                                 borderRadius: "8px",
                                 fontSize: "11px",
                               }}
-                              labelFormatter={(v: string) => new Date(v).toLocaleDateString()}
-                              formatter={(value: number) => [`${value}`, "Score"]}
+                              labelFormatter={((v: string) => new Date(v).toLocaleDateString()) as any}
+                              formatter={((value: number) => [`${value}`, "Score"]) as any}
                             />
                             <Area
                               type="monotone"

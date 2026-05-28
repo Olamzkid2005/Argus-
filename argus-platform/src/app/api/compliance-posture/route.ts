@@ -99,7 +99,7 @@ export async function GET(req: Request) {
     // Compute average
     let totalScore = 0;
     for (const eng of engagements) {
-      totalScore += Number(eng.composite_score || 0);
+      totalScore += Number((eng as Record<string, unknown>).composite_score || 0);
     }
     const averageCompositeScore =
       engagements.length > 0

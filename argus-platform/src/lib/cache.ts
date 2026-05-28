@@ -23,7 +23,7 @@ function evictMemoryCacheIfNeeded(): void {
   // LRU: delete oldest entries (insertion order in Map)
   const excess = memoryCache.size - MEMORY_CACHE_MAX_SIZE;
   let deleted = 0;
-  for (const key of memoryCache.keys()) {
+  for (const key of Array.from(memoryCache.keys())) {
     memoryCache.delete(key);
     deleted++;
     if (deleted >= excess) break;

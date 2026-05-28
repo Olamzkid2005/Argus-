@@ -41,7 +41,7 @@ export async function GET(
   }
   const engConnections = activeSseConnections.get(engagementId)!;
   if (engConnections.size >= MAX_CONNECTIONS_PER_ENGAGEMENT) {
-    log.warn("SSE connection limit reached for engagement", { engagementId, count: engConnections.size });
+    log.warn("SSE connection limit reached for engagement", JSON.stringify({ engagementId, count: engConnections.size }));
     return NextResponse.json(
       { error: "Too many SSE connections for this engagement" },
       { status: 429 },
@@ -56,7 +56,7 @@ export async function GET(
     }
   }
   if (ipCount >= MAX_CONNECTIONS_PER_IP) {
-    log.warn("SSE connection limit reached for IP", { clientIp, count: ipCount });
+    log.warn("SSE connection limit reached for IP", JSON.stringify({ clientIp, count: ipCount }));
     return NextResponse.json(
       { error: "Too many SSE connections from this IP" },
       { status: 429 },

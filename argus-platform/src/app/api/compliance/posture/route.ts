@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
       }));
       let avgScore = 100.0;
       if (engagements.length > 0) {
-        const total = engagements.reduce((sum, r) => sum + parseFloat(r.composite_score || 100), 0);
+        const total = engagements.reduce((sum, r) => sum + parseFloat((r as Record<string, unknown>).composite_score as string || "100"), 0);
         avgScore = Math.round((total / engagements.length) * 10) / 10;
       }
 

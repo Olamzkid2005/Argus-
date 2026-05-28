@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    log.info("Verification email resent", { email: normalizedEmail });
+    log.info("Verification email resent for", normalizedEmail);
 
     return NextResponse.json({
       message: "If the account exists and is unverified, a new code has been sent.",

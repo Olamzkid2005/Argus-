@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // M-12: Use Zod schema for validation instead of inline checks
     const validation = signupSchema.safeParse({ email, password, passwordConfirm, orgName });
     if (!validation.success) {
-      const firstError = validation.error.errors[0];
+      const firstError = validation.error.issues[0];
       return NextResponse.json(
         { error: firstError?.message || "Invalid input" },
         { status: 400 },

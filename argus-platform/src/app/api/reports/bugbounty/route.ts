@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
           type: "bugbounty_report",
           engagement_id,
           target: engagement.target_url,
+          budget: { max_cycles: 1, max_depth: 1 },
           platform: platform.toLowerCase(),
           output_path: outputPath,
           trace_id: crypto.randomUUID(),

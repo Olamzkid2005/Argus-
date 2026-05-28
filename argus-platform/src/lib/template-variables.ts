@@ -8,7 +8,7 @@
 export function extractTemplateVariables(pattern: string): string[] {
   const matches = pattern.match(/\{(\w+)\}/g);
   if (!matches) return [];
-  return [...new Set(matches.map(m => m.slice(1, -1)))];
+  return Array.from(new Set(matches.map(m => m.slice(1, -1))));
 }
 
 export function applyTemplateVariables(
