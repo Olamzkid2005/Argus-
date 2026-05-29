@@ -2339,7 +2339,6 @@ class WebScanner:
         ]
 
         found_sources = [s for s in dom_sources if s in body]
-        found_sinks = [s for s in dom_sources if s in body_lower]
         found_sink_actual = [s for s in dom_sinks if s in body]
 
         # Need both a source AND a sink for a real DOM XSS risk
@@ -2610,7 +2609,12 @@ class WebScanner:
         for waf_name, signatures in waf_signatures.items():
             for sig_type, sig_value in signatures:
                 sig_value_lower = str(sig_value).lower()
-                if sig_type == "header" and sig_value_lower in headers_str or sig_type == "body" and sig_value_lower in body_str or sig_type == "status" and waf_response.status_code == sig_value:
+                matched = (
+                    (sig_type == "header" and sig_value_lower in headers_str)
+                    or (sig_type == "body" and sig_value_lower in body_str)
+                    or (sig_type == "status" and waf_response.status_code == sig_value)
+                )
+                if matched:
                     detected_wafs.add(waf_name)
 
         if detected_wafs:
