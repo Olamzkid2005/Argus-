@@ -1094,7 +1094,7 @@ class WebScanner:
         for path in auth_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
 
-                    # Check if endpoint exists
+            # Check if endpoint exists
             resp = self._safe_request("GET", url)
             if resp and resp.status_code in (200, 302):
                 # Test default credentials
