@@ -79,21 +79,25 @@ def run_scan_diff(
             f["id"] for f in diff_result.get(engine.CAT_FIXED, [])
             if f.get("id")
         ]
-        if fixed_ids:
+        # L-09: Use atomic batch_mark_fixed_with_fps to mark findings fixed
+        # and update the profile's fingerprint list in a single transaction.
+        # This prevents the race condition where batch_mark_fixed succeeds
+        # but the fingerprint update fails (or vice versa).
+        fixed_findings = diff_result.get(engine.CAT_FIXED, [])
+        if fixed_ids and domain:
+            updated = engine.batch_mark_fixed_with_fps(
+                fixed_ids, fixed_findings, new_engagement_id, org_id, domain,
+            )
+            logger.info(
+                "Batch-marked %d findings as fixed (with fps) for engagement %s",
+                updated, new_engagement_id,
+            )
+        elif fixed_ids:
+            # No domain — can't update profile, just mark fixed
             updated = engine.batch_mark_fixed(fixed_ids, new_engagement_id)
             logger.info(
                 "Batch-marked %d findings as fixed for engagement %s",
                 updated, new_engagement_id,
-            )
-
-        # Update fixed fingerprints for regression tracking
-        fixed_findings = diff_result.get(engine.CAT_FIXED, [])
-        if fixed_findings:
-            _update_fixed_fingerprints(
-                profile_repo,
-                org_id,
-                domain,
-                fixed_findings,
             )
 
         # Store diff in profile

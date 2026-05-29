@@ -477,7 +477,106 @@ class ScanDiffEngine:
                 with contextlib.suppress(Exception):
                     conn.close()
 
-    def store_diff_in_profile(
+    def batch_mark_fixed_with_fps(
+        self,
+        finding_ids: list[str],
+        findings: list[dict],
+        closed_in_engagement_id: str,
+        org_id: str,
+        domain: str,
+    ) -> int:
+        """
+        Atomically mark findings as fixed AND update fixed fingerprints.
+
+        L-09: Combines batch_mark_fixed and fingerprint update in a single
+        transaction to prevent inconsistency where findings are marked fixed
+        but the profile's fingerprint list isn't updated (or vice versa).
+
+        Args:
+            finding_ids: List of finding UUIDs to mark fixed
+            findings: Finding dicts for computing fingerprints
+            closed_in_engagement_id: Engagement where findings were confirmed fixed
+            org_id: Organization ID for profile update
+            domain: Target domain for profile update
+
+        Returns:
+            Number of findings updated
+        """
+        if not finding_ids:
+            return 0
+
+        # Compute fingerprints for the findings being fixed
+        fps = list(set(self._fingerprint(f) for f in findings if f.get("id") in finding_ids))
+        if not fps:
+            fps = []
+
+        conn = None
+        try:
+            from database.connection import connect
+
+            conn = connect(self.db_url)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM findings
+                WHERE id = ANY(%s) AND status != 'fixed'
+                FOR UPDATE
+                """,
+                (finding_ids,),
+            )
+            locked_ids = [row[0] for row in cursor.fetchall()]
+            if not locked_ids:
+                conn.rollback()
+                return 0
+            cursor.execute(
+                """
+                UPDATE findings
+                SET status = 'fixed',
+                    closed_at = NOW(),
+                    closed_in_engagement_id = %s
+                WHERE id = ANY(%s) AND status != 'fixed'
+                """,
+                (closed_in_engagement_id, locked_ids),
+            )
+            updated = cursor.rowcount
+
+            # L-09: Update fixed fingerprints in the same transaction
+            if fps and domain:
+                cursor.execute(
+                    """
+                    UPDATE target_profiles
+                    SET fixed_finding_fingerprints = (
+                        SELECT jsonb_agg(elem ORDER BY elem)
+                        FROM (
+                            SELECT DISTINCT elem
+                            FROM jsonb_array_elements(
+                                COALESCE(fixed_finding_fingerprints, '[]'::jsonb) || %s::jsonb
+                            ) AS elem
+                            ORDER BY elem DESC
+                            LIMIT 1000
+                        ) deduped
+                    ),
+                    updated_at = NOW()
+                    WHERE org_id = %s AND target_domain = %s
+                    """,
+                    (json.dumps(fps), org_id, domain),
+                )
+
+            conn.commit()
+            return updated
+        except Exception as e:
+            logger.error(
+                "Failed to batch-mark %d findings as fixed with fps: %s",
+                len(finding_ids), e,
+            )
+            if conn:
+                with contextlib.suppress(Exception):
+                    conn.rollback()
+            return 0
+        finally:
+            if conn:
+                with contextlib.suppress(Exception):
+                    conn.close()
         self, org_id: str, domain: str, diff: dict
     ) -> bool:
         """Store the diff summary in the target profile.
