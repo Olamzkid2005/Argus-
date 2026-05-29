@@ -38,8 +38,12 @@ class DualAuthScanner:
         "invoices": r'/(?:api/)?invoices?/(\d+)',
     }
 
-    # HTTP methods to test for each discovered resource
-    TEST_METHODS = ["GET", "PUT", "DELETE"]
+    # HTTP methods to test for each discovered resource.
+    # DELETE is excluded (L-08): sending DELETE against User A's resources
+    # from User B's session actually destroys data if BOLA is present.
+    # Cross-account DELETE testing requires explicit opt-in and a
+    # non-production environment.
+    TEST_METHODS = ["GET", "PUT"]
 
     # Sensitive fields blocklist (BOPLA) — shared with WebScanner via import
     # See: tools.web_scanner.WebScanner.SENSITIVE_RESPONSE_FIELDS
@@ -331,31 +335,14 @@ class DualAuthScanner:
                         continue
 
                     # Check if User B successfully accessed User A's resource
-                    if resp.status_code in (200, 201, 204):
+                    if resp.status_code in (200, 201):
                         response_text = resp.text.lower()
-                        # 204 on DELETE = successfully deleted — confirmed BOLA
-                        is_delete_success = resp.status_code == 204 and method == "DELETE"
                         is_access_denied = any(
                             indicator in response_text
                             for indicator in self.ACCESS_DENIED_INDICATORS
                         )
 
-                        if is_delete_success:
-                            findings.append({
-                                "type": "CONFIRMED_BOLA",
-                                "severity": "CRITICAL",
-                                "endpoint": url,
-                                "evidence": {
-                                    "resource_type": resource_type,
-                                    "resource_id": resource_id,
-                                    "method": method,
-                                    "response_status": resp.status_code,
-                                    "message": f"User B successfully DELETED User A's {resource_type} resource (204 No Content)",
-                                },
-                                "confidence": 0.95,
-                            })
-                            break
-                        elif not is_access_denied and len(resp.text) > 50:
+                        if not is_access_denied and len(resp.text) > 50:
                             # Confirmed BOLA — User B can see/use User A's resource
                             findings.append({
                                 "type": "CONFIRMED_BOLA",
