@@ -263,3 +263,26 @@ The following potential issues were investigated and confirmed to NOT be genuine
 
 ### Overall Assessment
 No new Critical or High severity issues found. The codebase demonstrates strong security posture with multi-layer defenses.
+
+---
+
+## Rescan #2: Frontend/API Schema Verification
+
+**Rescan Date:** 2026-05-28
+**Rescan Scope:** Frontend API routes, OpenAPI spec, validation schemas, contract tests
+
+### Findings
+
+| # | Severity | Finding | Status |
+|---|----------|---------|--------|
+| 1 | **High** | OpenAPI spec (`route.ts:145`) declares aggressiveness as `["low", "medium", "high"]` — backend uses `["default", "high", "extreme"]` | Fixed |
+| 2 | **High** | Zod validation schema (`consolidated.ts:30`) rejects valid backend aggressiveness values | Fixed |
+| 3 | **Medium** | Contract test (`engagement-api.test.ts:22`) uses wrong aggressiveness enum `['default', 'low', 'medium', 'high']` | Fixed |
+
+### Root Cause
+The frontend and API schema were written with a different naming convention than the backend. The backend uses `default`/`high`/`extreme` (matching the scanning tool aggressiveness levels), while the frontend used `low`/`medium`/`high` (a more conventional naming). This mismatch means:
+- API clients sending `aggressiveness: "default"` would pass validation but clients sending `aggressiveness: "low"` would fail on the backend
+- The OpenAPI documentation would mislead API consumers
+
+### Fix Commit
+`28b8fd6` — fix(scan): align aggressiveness enum across OpenAPI, validation, and tests
