@@ -1528,19 +1528,19 @@ class WebScanner:
 
                 # Also verify it's NOT error or part of another word
                 if has_evaluation and "error" not in test_resp.text.lower() and "undefined" not in test_resp.text.lower():
-                        self._add_finding(
-                            finding_type="SSTI",
-                            severity="CRITICAL",
-                            endpoint=test_url,
-                            evidence={
-                                "parameter": param,
-                                "payload": payload,
-                                "result": "49 (7*7 evaluated)",
-                                "verified": True,
-                            },
-                            confidence=0.9,
-                        )
-                        break
+                    self._add_finding(
+                        finding_type="SSTI",
+                        severity="CRITICAL",
+                        endpoint=test_url,
+                        evidence={
+                            "parameter": param,
+                            "payload": payload,
+                            "result": "49 (7*7 evaluated)",
+                            "verified": True,
+                        },
+                        confidence=0.9,
+                    )
+                    break
 
     def check_lfi(self):
         """Check for Local File Inclusion."""
