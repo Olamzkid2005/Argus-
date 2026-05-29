@@ -110,6 +110,18 @@ class LegacyAPISecurityScanner:
         slog = ScanLogger("api_scanner", engagement_id=getattr(self, 'engagement_id', ''))
         slog.phase_header("API SCAN", f"target={target_url}, type={api_type}")
 
+        # L-17: Validate target URL before scanning — prevent scanning
+        # private IPs, localhost, and metadata endpoints.
+        from urllib.parse import urlparse as _urlparse
+        from tools.scope_validator import validate_target_scope
+        parsed = _urlparse(target_url)
+        if parsed.scheme not in ("http", "https"):
+            slog.warn(f"Rejected scan with scheme '{parsed.scheme}': {target_url}")
+            return []
+        if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
+            slog.warn(f"Target {target_url} is outside authorized scope — scan aborted")
+            return []
+
         self.findings = []
         self.target_url = target_url.rstrip("/")
         self.auth_config = auth_config or {}
@@ -467,9 +479,18 @@ class LegacyAPISecurityScanner:
             )
             return
 
-        test_url = urljoin(self.target_url, "/api/health")
+        # L-14: Test POST to auth-related endpoints, not GET to /api/health.
+        # Rate limiting is typically enforced on login/auth/payment endpoints.
+        auth_paths = ["/api/login", "/api/auth/login", "/api/token"]
+        test_url = self.target_url
+        for path in auth_paths:
+            candidate = urljoin(self.target_url, path)
+            resp = self._safe_request("GET", candidate)
+            if resp and resp.status_code not in (404, 405):
+                test_url = candidate
+                break
 
-        for config in self.RATE_TEST_CONFIGS[:2]:  # Skip DDoS in standard scan
+        for config in self.RATE_TEST_CONFIGS[:2]:
             requests_count = config["requests"]
             config["concurrency"]
 
@@ -477,12 +498,14 @@ class LegacyAPISecurityScanner:
             rate_limited_count = 0
             start_time = time.time()
 
-            for _i in range(min(requests_count, 20)):  # Cap at 20 for safety
-                resp = self._safe_request("GET", test_url)
+            # L-15: Use the configured request count, not a hard cap of 20.
+            for _i in range(requests_count):
+                resp = self._safe_request("POST", test_url,
+                    json={"username": "test", "password": "test"})
                 if resp:
                     if resp.status_code == 429:
                         rate_limited_count += 1
-                    elif resp.status_code == 200:
+                    elif resp.status_code in (200, 201, 401, 403):
                         success_count += 1
 
             duration = time.time() - start_time
