@@ -577,6 +577,8 @@ class ScanDiffEngine:
             if conn:
                 with contextlib.suppress(Exception):
                     conn.close()
+
+    def store_diff_in_profile(
         self, org_id: str, domain: str, diff: dict
     ) -> bool:
         """Store the diff summary in the target profile.
