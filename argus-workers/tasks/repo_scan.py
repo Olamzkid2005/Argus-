@@ -84,6 +84,8 @@ def run_repo_scan(
     budget: dict,
     trace_id: str = None,
     custom_rules_path: str = None,
+    auth_config: dict | None = None,
+    dual_auth_config: dict | None = None,
 ):
     """
     Execute repository scanning phase for an engagement
@@ -94,6 +96,8 @@ def run_repo_scan(
         budget: Budget configuration
         trace_id: Optional trace_id for distributed tracing (generated if not provided)
         custom_rules_path: Optional path to additional Semgrep/custom rules
+        auth_config: Authentication config for authenticated scanning
+        dual_auth_config: Second auth config for dual-account BOLA testing
     """
     from tasks.base import task_context
     from utils.logging_utils import ScanLogger
@@ -105,6 +109,10 @@ def run_repo_scan(
         "budget": budget,
         "custom_rules_path": custom_rules_path,
     }
+    if auth_config is not None:
+        job_extra["auth_config"] = auth_config
+    if dual_auth_config is not None:
+        job_extra["dual_auth_config"] = dual_auth_config
 
     with task_context(self, engagement_id, "repo_scan",
                       job_extra=job_extra,
@@ -150,7 +158,15 @@ def run_repo_scan(
         # Auto-push web scan job
         from tasks.utils import fetch_engagement_scan_options
         opts = fetch_engagement_scan_options(engagement_id)
+
+        # Transition state BEFORE dispatch to prevent orphaned tasks
+        ctx.state.transition("scanning", "Repo scan complete — dispatching web scan")
         try:
+            scan_kwargs = {}
+            if ctx.job.get("auth_config"):
+                scan_kwargs["auth_config"] = ctx.job["auth_config"]
+            if ctx.job.get("dual_auth_config"):
+                scan_kwargs["dual_auth_config"] = ctx.job["dual_auth_config"]
             app.send_task(
                 "tasks.scan.run_scan",
                 args=[
@@ -163,6 +179,8 @@ def run_repo_scan(
                     opts["aggressiveness"],
                     opts["bug_bounty_mode"],
                 ],
+                kwargs=scan_kwargs if scan_kwargs else None,
+            )
             )
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement %s: %s", engagement_id, e)

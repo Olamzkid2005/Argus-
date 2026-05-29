@@ -1,6 +1,7 @@
 // Rate limiting configuration API route
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/session";
+import { requireEngagementAccess } from "@/lib/authorization";
 import { pool } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
@@ -15,6 +16,9 @@ export async function GET(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Verify user has access to this engagement
+    await requireEngagementAccess(session, engagementId);
 
     const client = await pool.connect();
 
@@ -63,6 +67,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Verify user has access to this engagement
+    await requireEngagementAccess(session, engagementId);
 
     // Validate config
     const {

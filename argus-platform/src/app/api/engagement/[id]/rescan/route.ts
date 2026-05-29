@@ -178,8 +178,12 @@ export async function POST(
         });
       }
     } catch (jobError) {
-      // Rollback if job push fails
+      // Rollback if job push fails — clean up all related records
+      await client.query("BEGIN");
+      await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [newEngagementId]);
+      await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [newEngagementId]);
       await client.query("DELETE FROM engagements WHERE id = $1", [newEngagementId]);
+      await client.query("COMMIT");
       throw new Error(
         `Job dispatch failed: ${jobError instanceof Error ? jobError.message : "unknown error"}`,
       );
