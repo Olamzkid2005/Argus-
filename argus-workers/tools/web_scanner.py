@@ -483,6 +483,7 @@ class WebScanner:
                     self.session = self._auth_manager.ensure_session(
                         self.session, self.target_url
                     )
+                    req_session = self.session  # Use refreshed session for this request
 
             # Token-bucket rate limiting with thread-safe lock
             with self._rate_lock:
