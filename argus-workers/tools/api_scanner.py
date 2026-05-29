@@ -200,7 +200,7 @@ class LegacyAPISecurityScanner:
                 "endpoint": endpoint,
                 "evidence": evidence,
                 "confidence": confidence,
-                "tool": "api_scanner",
+                "source_tool": "api_scanner",
             }
         )
 

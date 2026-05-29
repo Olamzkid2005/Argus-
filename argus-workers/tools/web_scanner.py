@@ -2108,7 +2108,14 @@ class WebScanner:
             )
 
     def check_http_request_smuggling(self):
-        """Check for HTTP request smuggling (CL.TE and TE.CL)."""
+        """Check for HTTP request smuggling (CL.TE and TE.CL).
+
+        L-29: Only 502 Bad Gateway is a reliable indicator of actual
+        request smuggling (desync). A 400 Bad Request is the expected
+        response for conflicting headers — most servers reject malformed
+        requests gracefully. We still flag 500/504 at lower confidence
+        but exclude 400 to reduce false positives.
+        """
         # CL.TE Test
         cl_te_headers = {"Content-Length": "6", "Transfer-Encoding": "chunked"}
         resp = self._safe_request(
@@ -2116,18 +2123,31 @@ class WebScanner:
             headers=cl_te_headers,
             data="0\r\n\r\n"
         )
-        if resp and resp.status_code in (400, 500, 502, 504):
-            self._add_finding(
-                finding_type="HTTP_REQUEST_SMUGGLING_CL_TE",
-                severity="HIGH",
-                endpoint=self.target_url,
-                evidence={
-                    "technique": "CL.TE",
-                    "status_code": resp.status_code,
-                    "message": "Potential CL.TE desync detected",
-                },
-                confidence=0.6,
-            )
+        if resp:
+            if resp.status_code == 502:
+                self._add_finding(
+                    finding_type="HTTP_REQUEST_SMUGGLING_CL_TE",
+                    severity="HIGH",
+                    endpoint=self.target_url,
+                    evidence={
+                        "technique": "CL.TE",
+                        "status_code": resp.status_code,
+                        "message": "Likely CL.TE desync — 502 Bad Gateway with conflicting headers",
+                    },
+                    confidence=0.85,
+                )
+            elif resp.status_code in (500, 504):
+                self._add_finding(
+                    finding_type="HTTP_REQUEST_SMUGGLING_CL_TE",
+                    severity="MEDIUM",
+                    endpoint=self.target_url,
+                    evidence={
+                        "technique": "CL.TE",
+                        "status_code": resp.status_code,
+                        "message": "Possible CL.TE desunc (inconclusive — 500/504 can have other causes)",
+                    },
+                    confidence=0.4,
+                )
 
         # TE.CL Test
         te_cl_headers = {"Transfer-Encoding": "chunked", "Content-Length": "6"}
@@ -2136,18 +2156,31 @@ class WebScanner:
             headers=te_cl_headers,
             data="0\r\n\r\n"
         )
-        if resp and resp.status_code in (400, 500, 502, 504):
-            self._add_finding(
-                finding_type="HTTP_REQUEST_SMUGGLING_TE_CL",
-                severity="HIGH",
-                endpoint=self.target_url,
-                evidence={
-                    "technique": "TE.CL",
-                    "status_code": resp.status_code,
-                    "message": "Potential TE.CL desync detected",
-                },
-                confidence=0.6,
-            )
+        if resp:
+            if resp.status_code == 502:
+                self._add_finding(
+                    finding_type="HTTP_REQUEST_SMUGGLING_TE_CL",
+                    severity="HIGH",
+                    endpoint=self.target_url,
+                    evidence={
+                        "technique": "TE.CL",
+                        "status_code": resp.status_code,
+                        "message": "Likely TE.CL desync — 502 Bad Gateway with conflicting headers",
+                    },
+                    confidence=0.85,
+                )
+            elif resp.status_code in (500, 504):
+                self._add_finding(
+                    finding_type="HTTP_REQUEST_SMUGGLING_TE_CL",
+                    severity="MEDIUM",
+                    endpoint=self.target_url,
+                    evidence={
+                        "technique": "TE.CL",
+                        "status_code": resp.status_code,
+                        "message": "Possible TE.CL desync (inconclusive — 500/504 can have other causes)",
+                    },
+                    confidence=0.4,
+                )
 
     def check_dom_xss(self):
         """Check for DOM-based XSS."""

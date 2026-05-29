@@ -12,7 +12,7 @@ from celery_app import app
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="tasks.security.run_self_scan")
+@app.task(bind=True, name="tasks.security.run_self_scan", soft_time_limit=300, time_limit=360)
 def run_self_scan(self):
     """
     Run a basic security self-assessment of the Argus platform.
