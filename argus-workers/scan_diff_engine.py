@@ -57,7 +57,7 @@ class ScanDiffEngine:
         finding_type = finding.get("type", "UNKNOWN")
         endpoint = ScanDiffEngine._normalize_endpoint(finding.get("endpoint", ""))
         key = f"{finding_type}:{endpoint}"
-        return hashlib.sha256(key.encode()).hexdigest()[:16]
+        return hashlib.sha256(key.encode()).hexdigest()[:24]
 
     # Backward-compatible alias
     _fallback_fingerprint = fallback_fingerprint
@@ -111,7 +111,7 @@ class ScanDiffEngine:
         else:
             key = f"{finding_type}:{endpoint}"
 
-        return hashlib.sha256(key.encode()).hexdigest()[:16]
+        return hashlib.sha256(key.encode()).hexdigest()[:24]
 
     # Backward-compatible alias
     _fingerprint = fingerprint
@@ -505,8 +505,16 @@ class ScanDiffEngine:
         if not finding_ids:
             return 0
 
-        # Compute fingerprints for the findings being fixed
-        fps = list(set(self._fingerprint(f) for f in findings if f.get("id") in finding_ids))
+        # Compute fingerprints for the findings being fixed.
+        # R-06: Store BOTH primary and fallback fingerprints so regression
+        # detection works regardless of whether the returning finding has
+        # the same payload or a different one.
+        fps = set()
+        for f in findings:
+            if f.get("id") in finding_ids:
+                fps.add(self._fingerprint(f))
+                fps.add(self._fallback_fingerprint(f))
+        fps = list(fps)
         if not fps:
             fps = []
 

@@ -25,6 +25,8 @@ RETRY_BACKOFF_BASE = 2               # Exponential backoff base
 DEFAULT_AGGRESSIVENESS = "default"   # Default scan aggressiveness
 MAX_PAGES_TO_CRAWL = 10              # Max pages for parameter discovery
 MAX_PARAMETERS_TO_FUZZ = 20          # Max params to fuzz
+WEB_SCANNER_CHECK_TIMEOUT = int(os.getenv("ARGUS_WEB_SCANNER_CHECK_TIMEOUT", "600"))  # 10 min for all checks batch
+SCOPE_VALIDATION_TIMEOUT = int(os.getenv("ARGUS_SCOPE_VALIDATION_TIMEOUT", "5"))     # 5s for scope DB lookup
 
 # Git clone SSRF prevention
 ALLOWED_GIT_SCHEMES = ("https", "http", "ssh")

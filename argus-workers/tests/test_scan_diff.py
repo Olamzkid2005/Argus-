@@ -41,10 +41,10 @@ class TestFingerprinting:
         })
         assert f1 == f2
 
-    def test_consistency_16_chars(self):
+    def test_consistency_24_chars(self):
         fp = ScanDiffEngine._fingerprint({
             "type": "XSS",
             "endpoint": "http://ex.com/search",
         })
-        assert len(fp) == 16
+        assert len(fp) == 24
         assert isinstance(fp, str)

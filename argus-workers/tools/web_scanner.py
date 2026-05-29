@@ -44,6 +44,7 @@ from config.constants import (
     MAX_PARAMETERS_TO_FUZZ,
     RATE_LIMIT_DELAY_MS,
     SSL_TIMEOUT,
+    WEB_SCANNER_CHECK_TIMEOUT,
 )
 from tools.scope_validator import validate_target_scope  # M-25: scope validation
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
@@ -429,7 +430,7 @@ class WebScanner:
         with ThreadPoolExecutor(max_workers=6) as pool:
             futures = {pool.submit(check): check.__name__ for check in checks}
             try:
-                for future in as_completed(futures, timeout=300):
+                for future in as_completed(futures, timeout=WEB_SCANNER_CHECK_TIMEOUT):
                     try:
                         future.result(timeout=10)
                     except Exception as e:
@@ -1304,6 +1305,48 @@ class WebScanner:
 
         logger.info(f"Parameter fuzzing complete: {tested} tests performed")
 
+        # R-08: POST body fuzzing — test form parameters via POST with JSON body.
+        # Many injection points only exist in POST bodies, not URL query params.
+        form_params = self.discovered_parameters.get("form_parameters", [])
+        if form_params:
+            post_params = form_params[:MAX_PARAMETERS_TO_FUZZ]
+            for param in post_params:
+                for fuzz_type, payload in fuzz_payloads[:4]:  # Test core payloads only
+                    post_body = {param: payload}
+                    resp = self._safe_request("POST", self.target_url,
+                        json=post_body,
+                        headers={"Content-Type": "application/json"})
+                    tested += 1
+                    if not resp:
+                        continue
+                    if resp.status_code == 500:
+                        self._add_finding(
+                            finding_type="POST_FUZZ_500",
+                            severity="MEDIUM",
+                            endpoint=self.target_url,
+                            evidence={
+                                "parameter": param,
+                                "payload_type": fuzz_type,
+                                "payload": payload,
+                                "status_code": 500,
+                                "message": f"POST body payload caused server error ({fuzz_type})",
+                            },
+                            confidence=0.55,
+                        )
+                    elif payload in resp.text:
+                        self._add_finding(
+                            finding_type="POST_PARAMETER_REFLECTION",
+                            severity="LOW",
+                            endpoint=self.target_url,
+                            evidence={
+                                "parameter": param,
+                                "payload_type": fuzz_type,
+                                "payload": payload,
+                                "message": "POST body payload reflected in response",
+                            },
+                            confidence=0.6,
+                        )
+
     def check_mass_assignment(self):
         """Check for mass assignment vulnerabilities."""
         api_paths = ["/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts"]
@@ -1418,6 +1461,36 @@ class WebScanner:
                         confidence=confidence,
                     )
                     break
+
+        # R-01: POST body XSS — test form parameters via POST with JSON body.
+        form_params = self.discovered_parameters.get("form_parameters", []) if self.discovered_parameters else []
+        if form_params:
+            for param in set(form_params[:5]):
+                if param.lower() in ignore_params:
+                    continue
+                for payload in self.XSS_PAYLOADS[:3]:
+                    post_body = {param: payload}
+                    test_resp = self._safe_request("POST", self.target_url,
+                        json=post_body,
+                        headers={"Content-Type": "application/json"})
+                    if not test_resp:
+                        continue
+                    if payload in test_resp.text:
+                        is_script_ctx = "<script>" in test_resp.text.lower()
+                        self._add_finding(
+                            finding_type="POST_REFLECTED_XSS",
+                            severity="HIGH" if is_script_ctx else "MEDIUM",
+                            endpoint=self.target_url,
+                            evidence={
+                                "parameter": param,
+                                "payload": payload,
+                                "reflected": True,
+                                "method": "POST",
+                                "verified": is_script_ctx,
+                            },
+                            confidence=0.8 if is_script_ctx else 0.6,
+                        )
+                        break
 
     def check_ssti(self):
         """Check for Server-Side Template Injection with improved validation."""
@@ -1536,9 +1609,25 @@ class WebScanner:
             if not resp or resp.status_code not in (200, 400, 405):
                 continue
 
-            # Send introspection query (fixed syntax from user's example)
+            # R-07: Use full introspection query that captures types, fields,
+            # and their nested type information — the previous query was too
+            # minimal and returned partial data from servers that expose
+            # detailed schemas.
             introspection_query = {
-                "query": "{__schema{kind,fields{name}}}"
+                "query": """{
+                    __schema {
+                        queryType { name }
+                        mutationType { name }
+                        types {
+                            kind
+                            name
+                            fields {
+                                name
+                                type { name kind }
+                            }
+                        }
+                    }
+                }"""
             }
             resp = self._safe_request(
                 "POST", url,
@@ -2182,45 +2271,132 @@ class WebScanner:
                     confidence=0.4,
                 )
 
+        # R-10: TE.TE variant — both headers present with obfuscated
+        # Transfer-Encoding. Some backends only parse one header and
+        # ignore the other, creating a desync opportunity.
+        te_te_headers = {
+            "Transfer-Encoding": "chunked",
+            "Transfer-encoding": "cow",
+        }
+        resp = self._safe_request(
+            "POST", self.target_url,
+            headers=te_te_headers,
+            data="0\r\n\r\n"
+        )
+        if resp:
+            if resp.status_code == 502:
+                self._add_finding(
+                    finding_type="HTTP_REQUEST_SMUGGLING_TE_TE",
+                    severity="HIGH",
+                    endpoint=self.target_url,
+                    evidence={
+                        "technique": "TE.TE",
+                        "status_code": resp.status_code,
+                        "message": "Likely TE.TE desync — 502 with obfuscated Transfer-Encoding",
+                    },
+                    confidence=0.8,
+                )
+            elif resp.status_code in (500, 504):
+                self._add_finding(
+                    finding_type="HTTP_REQUEST_SMUGGLING_TE_TE",
+                    severity="MEDIUM",
+                    endpoint=self.target_url,
+                    evidence={
+                        "technique": "TE.TE",
+                        "status_code": resp.status_code,
+                        "message": "Possible TE.TE desync (inconclusive)",
+                    },
+                    confidence=0.35,
+                )
+
     def check_dom_xss(self):
-        """Check for DOM-based XSS."""
+        """Check for DOM-based XSS with source/sink taint heuristic.
+
+        R-09: Instead of just checking for sink presence and payload
+        reflection, this now identifies DOM sources (where attacker data
+        enters the page) and checks if they flow to dangerous sinks.
+        """
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
 
-        # Check for DOM sinks
-        dom_sinks = ["document.write", "innerHTML", "eval(", "setTimeout(", "setInterval("]
-        if not any(sink in resp.text for sink in dom_sinks):
-            return
+        body = resp.text
+        body_lower = body.lower()
 
-        # Test payloads
+        # DOM sources — where attacker-controlled data enters the page
+        dom_sources = [
+            "document.location", "location.href", "location.search",
+            "location.hash", "window.name", "document.referrer",
+            "document.URL", "document.documentURI",
+            "location.origin", "location.pathname",
+        ]
+        # DOM sinks — where data is rendered/executed unsafely
+        dom_sinks = [
+            "document.write", "innerHTML", "outerHTML",
+            "eval(", "setTimeout(", "setInterval(",
+            "document.createElement", ".src =", ".href =",
+            "$.html(", "$.append(",
+        ]
+
+        found_sources = [s for s in dom_sources if s in body]
+        found_sinks = [s for s in dom_sources if s in body_lower]
+        found_sink_actual = [s for s in dom_sinks if s in body]
+
+        # Need both a source AND a sink for a real DOM XSS risk
+        if not found_sources or not found_sink_actual:
+            # Also check for reflection-based DOM XSS (source in URL, sink in JS)
+            if not any(s in body for s in ["location", "hash", "search"]):
+                return
+
+        # Test payloads targeting the specific source→sink path
         llm_payloads = []
         if self.llm_payload_generator and self.llm_payload_generator.is_available():
             llm_payloads = self.llm_payload_generator.generate_sync(
                 vuln_class="DOM_XSS",
                 param_name="q",
-                response_snippet=self._redact_for_llm(resp.text) if resp else "",
+                response_snippet=self._redact_for_llm(body) if resp else "",
                 framework_hints=self._tech_hints(resp),
             )
 
-        dom_payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>"] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+        dom_payloads = [
+            "<img src=x onerror=alert(1)>",
+            "<script>alert(1)</script>",
+            "'-alert(1)-'",
+            "\"><img src=x onerror=alert(1)>",
+        ] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+
         for payload in dom_payloads:
             test_url = f"{self.target_url}?q={payload}"
             test_resp = self._safe_request("GET", test_url)
-            if test_resp and payload in test_resp.text:
-                self._add_finding(
-                    finding_type="DOM_XSS",
-                    severity="HIGH",
-                    endpoint=test_url,
-                    evidence={
-                        "payload": payload,
-                        "reflected": True,
-                        "dom_sinks_present": True,
-                        "message": "Payload reflected without encoding, DOM sinks detected",
-                    },
-                    confidence=0.7,
-                )
-                break
+            if not test_resp or payload not in test_resp.text:
+                continue
+
+            # Verify a sink exists in the page with the payload nearby
+            test_body = test_resp.text
+            has_sink_near_payload = False
+            for sink in dom_sinks:
+                if sink in test_body:
+                    has_sink_near_payload = True
+                    break
+
+            self._add_finding(
+                finding_type="DOM_XSS",
+                severity="HIGH" if has_sink_near_payload else "MEDIUM",
+                endpoint=test_url,
+                evidence={
+                    "payload": payload,
+                    "reflected": True,
+                    "dom_sources_found": found_sources[:5],
+                    "dom_sinks_found": found_sink_actual[:5],
+                    "sink_near_payload": has_sink_near_payload,
+                    "message": (
+                        f"Payload reflected; DOM sources ({', '.join(found_sources[:3])}) "
+                        f"and sinks ({', '.join(found_sink_actual[:3])}) both present"
+                    ),
+                },
+                confidence=0.8 if has_sink_near_payload else 0.6,
+            )
+            break
 
     def check_openapi_discovery(self):
         """Check for exposed OpenAPI/Swagger specifications."""

@@ -374,34 +374,39 @@ class APISecurityScanner:
                     continue
                 for headers in self.AUTH_HEADER_VARIANTS:
                     full_url = urljoin(base_url, endpoint)
-                    try:
-                        resp = await client.get(
-                            full_url, headers=headers or {}
-                        )
-                    except httpx.RequestError:
-                        continue
+                    # R-02: Test GET, POST, and PUT — different methods may
+                    # have different auth enforcement on the same endpoint.
+                    for method in ("GET", "POST", "PUT"):
+                        try:
+                            kwargs: dict[str, Any] = {"headers": headers or {}}
+                            if method in ("POST", "PUT"):
+                                kwargs["json"] = {}
+                            resp = await client.request(method, full_url, **kwargs)
+                        except httpx.RequestError:
+                            continue
 
-                    if resp.status_code == 200:
-                        label = (
-                            "no auth headers"
-                            if headers is None
-                            else f"auth variant: {headers}"
-                        )
-                        findings.append({
-                            "type": "API_AUTH_BYPASS",
-                            "severity": "CRITICAL",
-                            "confidence": 0.5,
-                            "endpoint": full_url,
-                            "evidence": {
-                                "auth_headers_used": headers,
-                                "response_status": resp.status_code,
-                                "response_size": len(resp.text),
-                                "detail": (
-                                    f"Endpoint returned 200 with {label}"
-                                ),
-                            },
-                            "source_tool": "api_security_scanner",
-                        })
+                        if resp.status_code == 200:
+                            label = (
+                                "no auth headers"
+                                if headers is None
+                                else f"auth variant: {headers}"
+                            )
+                            findings.append({
+                                "type": "API_AUTH_BYPASS",
+                                "severity": "CRITICAL",
+                                "confidence": 0.5,
+                                "endpoint": full_url,
+                                "evidence": {
+                                    "auth_headers_used": headers,
+                                    "method": method,
+                                    "response_status": resp.status_code,
+                                    "response_size": len(resp.text),
+                                    "detail": (
+                                        f"{method} returned 200 with {label}"
+                                    ),
+                                },
+                                "source_tool": "api_security_scanner",
+                            })
 
         return findings
 

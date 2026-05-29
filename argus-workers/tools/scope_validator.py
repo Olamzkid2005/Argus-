@@ -158,6 +158,10 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
     malformed scope JSON, network timeout), the target is considered
     OUT of scope. Only when no scope is configured do we allow-all.
 
+    R-03: DB lookup is wrapped in a thread with a configurable timeout
+    (SCOPE_VALIDATION_TIMEOUT) to prevent scope validation from blocking
+    the scan pipeline if the DB is slow or unreachable.
+
     Args:
         target: Target URL or hostname
         engagement_id: Engagement UUID
@@ -166,19 +170,33 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
     Returns:
         True if target is in scope, False if not or on validation error
     """
+    from config.constants import SCOPE_VALIDATION_TIMEOUT
     from database.connection import db_cursor
 
-    # Load scope from DB if not provided
+    # Load scope from DB if not provided (with timeout)
     if authorized_scope is None:
         try:
-            with db_cursor() as cursor:
-                cursor.execute(
-                    "SELECT authorized_scope FROM engagements WHERE id = %s",
-                    (engagement_id,),
-                )
-                row = cursor.fetchone()
-                if row and row[0]:
-                    authorized_scope = row[0]
+            import concurrent.futures as _futures
+
+            def _load_scope():
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT authorized_scope FROM engagements WHERE id = %s",
+                        (engagement_id,),
+                    )
+                    row = cursor.fetchone()
+                    return row[0] if row else None
+
+            with _futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_load_scope)
+                authorized_scope = future.result(timeout=SCOPE_VALIDATION_TIMEOUT)
+        except _futures.TimeoutError:
+            logger.warning(
+                "Scope validation: DB lookup timed out after %ss for %s — "
+                "defaulting to deny (L-20 fail-closed)",
+                SCOPE_VALIDATION_TIMEOUT, engagement_id,
+            )
+            return False
         except Exception as e:
             logger.warning(
                 "Scope validation: DB unavailable for %s — defaulting to deny: %s",
