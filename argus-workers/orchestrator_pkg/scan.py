@@ -230,6 +230,16 @@ def _run_async(coro) -> any:
 _emitted_fingerprints: dict[str, set[str]] = {}
 _emitted_fingerprints_lock = threading.Lock()
 
+# L-19: Register atexit cleanup to prevent memory leaks if the worker
+# process crashes mid-scan without reaching the cleanup code.
+import atexit as _atexit
+
+def _cleanup_emitted_fingerprints():
+    with _emitted_fingerprints_lock:
+        _emitted_fingerprints.clear()
+
+_atexit.register(_cleanup_emitted_fingerprints)
+
 
 def _get_fingerprint_set(engagement_id: str) -> set[str]:
     """Get or create a per-engagement fingerprint dedup set."""
@@ -558,7 +568,9 @@ def execute_scan_tools(
             return max_tools > 0 and _tool_count >= max_tools
 
         # Build and run nuclei command with streaming (real-time findings)
-        if "nuclei" not in _skip:
+        # L-18: Nuclei counts toward the budget like all other tools.
+        if "nuclei" not in _skip and not _budget_exceeded():
+            _tool_count += 1
             nuclei_cmd = ["-u", target, "-jsonl", "-silent"]
             if templates_exist:
                 nuclei_cmd.extend(["-t", str(nuclei_templates)])
