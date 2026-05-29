@@ -6,15 +6,15 @@ from unittest.mock import Mock, patch
 import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from tools.api_scanner import APISecurityScanner
+from tools.api_scanner import LegacyAPISecurityScanner
 
 
 class TestAPISecurityScanner:
-    """Test APISecurityScanner"""
+    """Test LegacyAPISecurityScanner"""
 
     @pytest.fixture
     def scanner(self):
-        return APISecurityScanner()
+        return LegacyAPISecurityScanner()
 
     def test_scan_missing_security_headers(self, scanner):
         mock_response = Mock()

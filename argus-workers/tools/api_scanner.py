@@ -21,7 +21,7 @@ from utils.logging_utils import ScanLogger
 logger = logging.getLogger(__name__)
 
 
-class APISecurityScanner:
+class LegacyAPISecurityScanner:
     """
     Comprehensive API security scanner.
     Supports REST, GraphQL, and generic HTTP API testing.
@@ -503,3 +503,8 @@ class APISecurityScanner:
             elif rate_limited_count > 0:
                 # Rate limiting is present, stop testing
                 break
+
+
+# L-07: Backward-compatible alias — prefer LegacyAPISecurityScanner or the
+# async APISecurityScanner in api_security_scanner.py for new code.
+APISecurityScanner = LegacyAPISecurityScanner

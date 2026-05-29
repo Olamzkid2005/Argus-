@@ -386,7 +386,17 @@ def execute_scan_tools(
                 )
             targets = scoped_targets
         except Exception as e:
-            logger.warning("Scope validation skipped (error): %s — scanning all targets", e)
+            # L-06: Fail-closed — when scope validation is broken, do NOT
+            # scan all targets. An error here likely means the scope DB is
+            # unreachable or the validator is misconfigured, and scanning
+            # without scope enforcement is a security risk.
+            logger.error(
+                "Scope validation FAILED (error): %s — aborting scan "
+                "to prevent out-of-scope requests (L-06 fail-closed)",
+                e,
+            )
+            slog.warn(f"Scope validation error — scan aborted: {e}")
+            targets = []
     if not targets:
         slog.warn("All targets filtered by scope — nothing to scan")
         return all_findings
