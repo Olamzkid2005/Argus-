@@ -828,16 +828,17 @@ def execute_scan_tools(
             slog.tool_complete("ai_vuln_scanner", success=True, findings=len(ai_findings))
             # Findings already emitted inline via _stream_finding callback
             # Collect any remaining that weren't streamed (backward compat)
+            # L-05: Use fingerprint set for consistent dedup with other tools
             for af in ai_findings:
                 normalized = ctx._normalize_finding(af, "ai_vuln_scanner")
                 if normalized:
-                    dedup_key = (normalized.get("type"), normalized.get("endpoint"))
-                    if not any(
-                        f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
-                        for f in all_findings
-                    ):
-                        emit_finding_rt(ctx.engagement_id, normalized, "ai_vuln_scanner")
-                        all_findings.append(normalized)
+                    fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|ai_vuln_scanner"
+                    fps = _get_fingerprint_set(ctx.engagement_id)
+                    if fp in fps:
+                        continue
+                    fps.add(fp)
+                    emit_finding_rt(ctx.engagement_id, normalized, "ai_vuln_scanner")
+                    all_findings.append(normalized)
             emit_tool_complete(ctx.engagement_id, "ai_vuln_scanner", True, 0,
                                 finding_count=len(ai_findings))
             if ai_findings:
@@ -879,9 +880,15 @@ def execute_scan_tools(
                     slog.info(f"No WebSocket URLs discovered for {target}")
 
                 slog.tool_complete("websocket_scanner", success=True, findings=len(ws_findings))
+                # L-04: Use fingerprint set for consistent dedup with other tools
                 for wf in ws_findings:
                     normalized = ctx._normalize_finding(wf, "websocket_scanner")
                     if normalized:
+                        fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|websocket_scanner"
+                        fps = _get_fingerprint_set(ctx.engagement_id)
+                        if fp in fps:
+                            continue
+                        fps.add(fp)
                         emit_finding_rt(ctx.engagement_id, normalized, "websocket_scanner")
                         all_findings.append(normalized)
                 emit_tool_complete(ctx.engagement_id, "websocket_scanner", True, 0,
