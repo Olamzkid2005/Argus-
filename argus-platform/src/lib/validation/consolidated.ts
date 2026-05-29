@@ -27,7 +27,7 @@ export const engagementSchema = z.object({
   }),
   authorization: z.string().min(1, "Authorization is required"),
   scope: z.string().optional(),
-  aggressiveness: z.enum(["low", "medium", "high"]).optional(),
+  aggressiveness: z.enum(["default", "high", "extreme"]).optional(),
 });
 
 export type EngagementInput = z.infer<typeof engagementSchema>;

@@ -20,7 +20,7 @@ describe('Engagement API Contracts', () => {
     });
 
     it('should accept valid aggressiveness levels', () => {
-      const validLevels = ['default', 'low', 'medium', 'high'];
+      const validLevels = ['default', 'high', 'extreme'];
       validLevels.forEach((level) => {
         expect(validLevels).toContain(level);
       });

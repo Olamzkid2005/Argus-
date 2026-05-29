@@ -142,7 +142,7 @@ Pass it in the Cookie header.
                   scanType: { type: "string", enum: ["url", "repo"] },
                   authorization: { type: "string" },
                   scope: { type: "string" },
-                  aggressiveness: { type: "string", enum: ["low", "medium", "high"] },
+                  aggressiveness: { type: "string", enum: ["default", "high", "extreme"] },
                 },
               },
             },
