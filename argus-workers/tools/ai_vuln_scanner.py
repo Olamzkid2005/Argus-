@@ -361,9 +361,14 @@ class AIVulnScanner:
             if is_refusal:
                 continue
 
-            # Check for injection success indicators
+            # Check for injection success indicators.
+            # We do NOT filter out indicators that appear in the payload itself —
+            # the refusal filter above already handles the case where the AI
+            # mentions the indicator while refusing (e.g. "I cannot reveal
+            # database information"). If the indicator appears and the response
+            # is NOT a refusal, the AI likely complied with the injection.
             for indicator in INJECTION_SUCCESS_INDICATORS:
-                if indicator in response_text and indicator not in payload.lower():
+                if indicator in response_text:
                     evasion_key = f"{payload[:30]}:{indicator}"
                     if evasion_key in seen_evasions:
                         continue
