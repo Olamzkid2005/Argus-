@@ -70,6 +70,25 @@ e2dd2f5 fix(scan): L-01 — remove self-defeating indicator filter in AI vuln sc
 
 ---
 
+## R-Series: Remaining Issues (Second Pass)
+
+All 10 previously "design trade-off" issues have been resolved:
+
+| Bug ID | Description | Commit |
+|--------|-------------|--------|
+| R-01 (L-13) | XSS testing now includes POST body injection via form params | `9874e76` |
+| R-02 (L-16) | API auth bypass now tests GET, POST, PUT methods | `9874e76` |
+| R-03 (L-20) | Scope validation DB lookup wrapped in thread with configurable timeout | `9874e76` |
+| R-04 (L-21) | WebScanner check batch timeout extracted to WEB_SCANNER_CHECK_TIMEOUT config | `9874e76` |
+| R-05 (L-22) | Fingerprints extended from 16 to 24 hex chars (96-bit collision resistance) | `9874e76` |
+| R-06 (L-23) | batch_mark_fixed_with_fps stores both primary+fallback fingerprints | `9874e76` |
+| R-07 (L-27) | GraphQL introspection query now captures full type/field schema info | `9874e76` |
+| R-08 (L-30) | parameter_fuzzing now tests POST body injection via form params | `9874e76` |
+| R-09 (L-26) | DOM XSS check now identifies DOM sources and verifies sink proximity | `9874e76` |
+| R-10 (L-25) | HTTP smuggling check now includes TE.TE obfuscated header variant | `9874e76` |
+
+---
+
 ## Verification
 
 - All Python files pass syntax validation (ast.parse)
@@ -77,3 +96,7 @@ e2dd2f5 fix(scan): L-01 — remove self-defeating indicator filter in AI vuln sc
 - All fixes follow existing code patterns
 - Backward-compatible alias added for renamed class (L-07)
 - No new bugs introduced by fixes (verified via targeted grep rescan)
+
+## Final Status
+
+**30/30 issues resolved.** Codebase achieves clean scanning status.
