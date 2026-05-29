@@ -154,6 +154,9 @@ def _update_fixed_fingerprints(
 ) -> None:
     """Append fingerprints of newly fixed findings to the target profile.
 
+    Deduplicates the list and caps it at 1000 entries to prevent
+    unbounded JSONB column growth (L-03 fix).
+
     Args:
         profile_repo: TargetProfileRepository instance
         org_id: Organization ID
@@ -169,18 +172,32 @@ def _update_fixed_fingerprints(
     if not fps:
         return
 
+    # Deduplicate new fingerprints before storing
+    fps = list(set(fps))
+
     conn = None
     try:
         from database.connection import connect
 
         conn = connect(os.getenv("DATABASE_URL"))
         cursor = conn.cursor()
+        # Merge new fingerprints with existing, deduplicate, and cap at 1000
+        # to prevent unbounded JSONB growth (L-03).
         cursor.execute(
             """
             UPDATE target_profiles
-            SET fixed_finding_fingerprints =
-                COALESCE(fixed_finding_fingerprints, '[]'::jsonb) || %s::jsonb,
-                updated_at = NOW()
+            SET fixed_finding_fingerprints = (
+                SELECT jsonb_agg(elem ORDER BY elem)
+                FROM (
+                    SELECT DISTINCT elem
+                    FROM jsonb_array_elements(
+                        COALESCE(fixed_finding_fingerprints, '[]'::jsonb) || %s::jsonb
+                    ) AS elem
+                    ORDER BY elem DESC
+                    LIMIT 1000
+                ) deduped
+            ),
+            updated_at = NOW()
             WHERE org_id = %s AND target_domain = %s
             """,
             (json.dumps(fps), org_id, domain),

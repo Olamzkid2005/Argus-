@@ -249,13 +249,31 @@ class ScanDiffEngine:
         for fp, f in prev.items():
             prev_fallback[self._fallback_fingerprint(f)].append(fp)
 
+        # Build fallback fingerprints for fixed findings (L-02 fix).
+        # This catches regressions where a fixed finding returns with a
+        # different payload — the primary FP won't match, but the fallback
+        # FP (type + endpoint only) will.
+        fixed_fallback_fps: set[str] = set()
+        for fp in fixed_fps:
+            if fp in prev:
+                fixed_fallback_fps.add(self._fallback_fingerprint(prev[fp]))
+            elif fp in curr:
+                fixed_fallback_fps.add(self._fallback_fingerprint(curr[fp]))
+
         # New: in current but not previous
         for fp in curr_fps - prev_fps:
             if fp in fixed_fps:
                 result[self.CAT_REGRESSED].append(curr[fp])
                 continue
 
+            # L-02: Also check fallback fingerprint against fixed findings.
+            # If a finding was fixed with a different payload (different primary
+            # FP) but same type+endpoint, it's a regression.
             fb_fp = self._fallback_fingerprint(curr[fp])
+            if fb_fp in fixed_fallback_fps:
+                result[self.CAT_REGRESSED].append(curr[fp])
+                continue
+
             if fb_fp not in prev_fallback:
                 result[self.CAT_NEW].append(curr[fp])
                 continue
