@@ -758,6 +758,28 @@ class WebScanner:
                 confidence=0.9,
             )
 
+        # L-12: Test null origin — exploitable via sandboxed iframes
+        null_resp = self._safe_request(
+            "GET", self.target_url,
+            headers={"Origin": "null"}
+        )
+        if null_resp:
+            null_acao = null_resp.headers.get("Access-Control-Allow-Origin", "")
+            if null_acao == "null":
+                null_acac = null_resp.headers.get("Access-Control-Allow-Credentials", "")
+                sev = "CRITICAL" if str(null_acac).lower() == "true" else "HIGH"
+                self._add_finding(
+                    finding_type="NULL_ORIGIN_CORS",
+                    severity=sev,
+                    endpoint=self.target_url,
+                    evidence={
+                        "Access-Control-Allow-Origin": null_acao,
+                        "Access-Control-Allow-Credentials": null_acac,
+                        "message": "Server accepts null origin — exploitable via sandboxed iframes",
+                    },
+                    confidence=0.85,
+                )
+
     def check_sensitive_files(self):
         """Check for exposed sensitive files with improved validation."""
         # File signatures to validate actual content
@@ -968,19 +990,22 @@ class WebScanner:
 
         for method in methods:
             resp = self._safe_request(method, self.target_url)
-            # TRACE method specifically is dangerous
-            if resp and resp.status_code not in (405, 404, 403, 501) and method == "TRACE":
-                    self._add_finding(
-                        finding_type="HTTP_VERB_TAMPERING",
-                        severity="MEDIUM",
-                        endpoint=self.target_url,
-                        evidence={
-                            "method": method,
-                            "status_code": resp.status_code,
-                            "message": f"Server accepts {method} method",
-                        },
-                        confidence=0.8,
-                    )
+            # L-11: Report all accepted dangerous methods, not just TRACE.
+            # TRACE enables XST (cross-site tracing). DELETE/PUT/PATCH
+            # acceptance on non-API endpoints may indicate misconfiguration.
+            if resp and resp.status_code not in (405, 404, 403, 501):
+                severity = "HIGH" if method == "TRACE" else "MEDIUM"
+                self._add_finding(
+                    finding_type="HTTP_VERB_TAMPERING",
+                    severity=severity,
+                    endpoint=self.target_url,
+                    evidence={
+                        "method": method,
+                        "status_code": resp.status_code,
+                        "message": f"Server accepts {method} method",
+                    },
+                    confidence=0.8,
+                )
 
     def check_debug_endpoints(self):
         """Check for exposed debug/admin endpoints with improved validation."""
@@ -1093,7 +1118,6 @@ class WebScanner:
                                     },
                                     confidence=0.7,
                                 )
-                break
 
     def parameter_discovery(self):
         """
