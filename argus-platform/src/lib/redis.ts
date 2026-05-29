@@ -166,7 +166,7 @@ function buildCeleryArgs(job: JobMessage): unknown[] {
     case "report":
       return [engagement_id, trace_id, budget ?? {}];
     case "repo_scan":
-      return [engagement_id, repo_url, budget, trace_id];
+      return [engagement_id, repo_url, budget, trace_id, null, job.auth_config ?? null, job.dual_auth_config ?? null];
     case "compliance_report":
       return [engagement_id, job.standard ?? null, trace_id];
     case "full_report":

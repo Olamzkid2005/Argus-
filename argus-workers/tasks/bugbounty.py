@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 @app.task(
     bind=True,
     name="tasks.bugbounty.generate_bugbounty_report",
+    soft_time_limit=1800,
+    time_limit=2400,
     max_retries=2,
     acks_late=True,
     track_started=True,

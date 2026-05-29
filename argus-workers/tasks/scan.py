@@ -116,7 +116,7 @@ def run_scan(
         return result
 
 
-@app.task(bind=True, name="tasks.scan.deep_scan")
+@app.task(bind=True, name="tasks.scan.deep_scan", soft_time_limit=2400, time_limit=3600)
 def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None, auth_config: dict | None = None):
     """
     Execute deep scanning on specific targets
@@ -171,7 +171,7 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
         return result
 
 
-@app.task(bind=True, name="tasks.scan.auth_focused_scan")
+@app.task(bind=True, name="tasks.scan.auth_focused_scan", soft_time_limit=2400, time_limit=3600)
 def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, trace_id: str = None, auth_config: dict | None = None):
     """
     Execute authentication-focused scanning

@@ -56,9 +56,17 @@ def build_task_args(
             kwargs.get("scan_mode"),
             kwargs.get("aggressiveness"),
             kwargs.get("bug_bounty_mode"),
+            kwargs.get("auth_config"),
+            kwargs.get("dual_auth_config"),
         ],
         # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None)
-        "scan": [engagement_id, [target], budget, trace_id, agent_mode, kwargs.get("scan_mode"), kwargs.get("aggressiveness"), kwargs.get("bug_bounty_mode")],
+        "scan": [
+            engagement_id, [target], budget, trace_id, agent_mode,
+            kwargs.get("scan_mode"), kwargs.get("aggressiveness"),
+            kwargs.get("bug_bounty_mode"),
+            kwargs.get("auth_config"),
+            kwargs.get("dual_auth_config"),
+        ],
         # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None)
         "analyze": [engagement_id, budget, trace_id],
         # tasks.report.generate_report(self, engagement_id, trace_id=None, budget=None)

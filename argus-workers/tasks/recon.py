@@ -130,7 +130,7 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         return result
 
 
-@app.task(bind=True, name="tasks.recon.expand_recon")
+@app.task(bind=True, name="tasks.recon.expand_recon", soft_time_limit=2400, time_limit=3600)
 def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None):
     """
     Expand reconnaissance with additional targets

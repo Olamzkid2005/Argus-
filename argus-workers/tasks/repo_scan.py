@@ -181,7 +181,6 @@ def run_repo_scan(
                 ],
                 kwargs=scan_kwargs if scan_kwargs else None,
             )
-            )
         except Exception as e:
             logger.error("Failed to enqueue scan for engagement %s: %s", engagement_id, e)
             ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
@@ -190,7 +189,7 @@ def run_repo_scan(
         return result
 
 
-@app.task(bind=True, name="tasks.repo_scan.expand_repo_scan")
+@app.task(bind=True, name="tasks.repo_scan.expand_repo_scan", soft_time_limit=2400, time_limit=3600)
 def expand_repo_scan(
     self,
     engagement_id: str,

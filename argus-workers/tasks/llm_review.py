@@ -66,7 +66,7 @@ def _get_finding_repo(db_conn_string: str):
     return _finding_repo
 
 
-@app.task(bind=True, name="tasks.llm_review.run_llm_review")
+@app.task(bind=True, name="tasks.llm_review.run_llm_review", soft_time_limit=1200, time_limit=1800)
 def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str = None):
     """
     Post-scan LLM review task.
