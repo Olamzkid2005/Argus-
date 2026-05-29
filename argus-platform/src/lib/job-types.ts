@@ -47,4 +47,5 @@ export interface JobMessage {
   created_at: string;
   platform?: string;
   output_path?: string;
+  generate_chain_exploits?: boolean;
 }

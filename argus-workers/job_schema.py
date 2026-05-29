@@ -46,7 +46,7 @@ def build_task_args(
         agent_mode = True
     repo_url = kwargs.get("repo_url") or target
     args_map = {
-        # tasks.recon.run_recon(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, ...)
+        # tasks.recon.run_recon(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None)
         "recon": [
             engagement_id,
             target,
@@ -57,7 +57,7 @@ def build_task_args(
             kwargs.get("aggressiveness"),
             kwargs.get("bug_bounty_mode"),
         ],
-        # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None)
+        # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None)
         "scan": [engagement_id, [target], budget, trace_id, agent_mode, kwargs.get("scan_mode"), kwargs.get("aggressiveness"), kwargs.get("bug_bounty_mode")],
         # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None)
         "analyze": [engagement_id, budget, trace_id],
@@ -65,7 +65,7 @@ def build_task_args(
         "report": [engagement_id, trace_id, kwargs.get("budget_for_report") or budget],
         # tasks.repo_scan.run_repo_scan(self, engagement_id, repo_url, budget, trace_id=None, ...)
         "repo_scan": [engagement_id, repo_url, budget, trace_id],
-        "compliance_report": [engagement_id, kwargs.get("standard")],
+        "compliance_report": [engagement_id, kwargs.get("standard"), trace_id],
         "full_report": [engagement_id, kwargs.get("report_id", "")],
         # tasks.asset_discovery.run_asset_discovery(self, engagement_id, target, trace_id=None, org_id=None)
         "asset_discovery": [engagement_id, target, trace_id, kwargs.get("org_id")],
@@ -100,11 +100,13 @@ class JobMessage:
     scan_mode: str | None = None
     bug_bounty_mode: bool | None = None
     auth_config: dict | None = None
+    dual_auth_config: dict | None = None
     trace_id: str = ""
     created_at: str = ""
     platform: str = ""
     output_path: str = ""
     generate_chain_exploits: bool | None = None
+    priority_vuln_classes: list[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "JobMessage":

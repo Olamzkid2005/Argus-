@@ -158,9 +158,9 @@ function buildCeleryArgs(job: JobMessage): unknown[] {
 
   switch (type) {
     case "recon":
-      return [engagement_id, target, budget, trace_id, agent_mode, job.scan_mode ?? null, job.aggressiveness ?? null, job.bug_bounty_mode ?? null];
+      return [engagement_id, target, budget, trace_id, agent_mode, job.scan_mode ?? null, job.aggressiveness ?? null, job.bug_bounty_mode ?? null, job.auth_config ?? null, job.dual_auth_config ?? null];
     case "scan":
-      return [engagement_id, [target], budget, trace_id, agent_mode, job.scan_mode ?? null, job.aggressiveness ?? null, job.bug_bounty_mode ?? null];
+      return [engagement_id, [target], budget, trace_id, agent_mode, job.scan_mode ?? null, job.aggressiveness ?? null, job.bug_bounty_mode ?? null, job.auth_config ?? null, job.dual_auth_config ?? null];
     case "analyze":
       return [engagement_id, budget, trace_id];
     case "report":
@@ -168,7 +168,7 @@ function buildCeleryArgs(job: JobMessage): unknown[] {
     case "repo_scan":
       return [engagement_id, repo_url, budget, trace_id];
     case "compliance_report":
-      return [engagement_id, job.standard ?? null];
+      return [engagement_id, job.standard ?? null, trace_id];
     case "full_report":
       return [engagement_id, job.report_id ?? ""];
     case "asset_discovery":
@@ -236,6 +236,11 @@ export async function pushJob(job: JobMessage): Promise<string> {
 
   if (result === 0) {
     // Genuine duplicate — job already being processed by another request
+    return traceId;
+  }
+
+  if (result === 3) {
+    // Already completed within idempotency window — treat as duplicate
     return traceId;
   }
 
@@ -326,6 +331,15 @@ export async function pollJobStatus(
   const startTime = Date.now();
 
   return new Promise((resolve, reject) => {
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (timerId !== null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+    };
+
     const checkStatus = async () => {
       try {
         // Check progress first
@@ -341,23 +355,24 @@ export async function pollJobStatus(
           });
 
           if (progress.status === "completed") {
+            cleanup();
             onComplete?.(progress.result);
-            // Clean up progress key to prevent memory growth
             redis.del(progressKey).catch(() => {});
             resolve(progress.result);
             return;
           }
 
           if (progress.status === "failed") {
+            cleanup();
             const error = progress.error_message || "Task failed";
             onError?.(error);
-            // Clean up progress key to prevent memory growth
             redis.del(progressKey).catch(() => {});
             reject(new Error(error));
             return;
           }
 
           if (progress.status === "cancelled") {
+            cleanup();
             const error = "Task was cancelled";
             onError?.(error);
             reject(new Error(error));
@@ -370,11 +385,13 @@ export async function pollJobStatus(
         if (meta) {
           const data = JSON.parse(meta);
           if (data.status === "SUCCESS") {
+            cleanup();
             onComplete?.(data.result);
             resolve(data.result);
             return;
           }
           if (data.status === "FAILURE") {
+            cleanup();
             onError?.(data.result);
             reject(new Error(data.result));
             return;
@@ -383,13 +400,15 @@ export async function pollJobStatus(
 
         // Check timeout
         if (Date.now() - startTime > timeout) {
+          cleanup();
           reject(new Error("Job polling timeout"));
           return;
         }
 
         // Schedule next check
-        setTimeout(checkStatus, interval);
+        timerId = setTimeout(checkStatus, interval);
       } catch (error) {
+        cleanup();
         reject(error);
       }
     };

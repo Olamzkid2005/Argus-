@@ -22,7 +22,7 @@ from tracing import TracingManager
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="tasks.report.generate_report")
+@app.task(bind=True, name="tasks.report.generate_report", soft_time_limit=1800, time_limit=2400)
 def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict | None = None):
     """
     Generate final report for an engagement
@@ -171,7 +171,7 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
 
 
 
-@app.task(bind=True, name="tasks.report.generate_scheduled_reports")
+@app.task(bind=True, name="tasks.report.generate_scheduled_reports", soft_time_limit=3600, time_limit=4200)
 def generate_scheduled_reports(self):
     """
     Generate all due scheduled reports and send them via email.
@@ -374,7 +374,7 @@ def _calculate_next_run(frequency: str) -> datetime:
     return now + timedelta(weeks=1)
 
 
-@app.task(bind=True, name="tasks.report.generate_compliance_report")
+@app.task(bind=True, name="tasks.report.generate_compliance_report", soft_time_limit=1800, time_limit=2400)
 def generate_compliance_report(
     self,
     engagement_id: str,
@@ -507,7 +507,7 @@ def generate_compliance_report(
                 conn.close()
 
 
-@app.task(bind=True, name="tasks.report.generate_full_report")
+@app.task(bind=True, name="tasks.report.generate_full_report", soft_time_limit=1800, time_limit=2400)
 def generate_full_report(
     self,
     engagement_id: str,

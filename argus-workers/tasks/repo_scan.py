@@ -17,10 +17,6 @@ import uuid
 from datetime import UTC, datetime
 
 from celery_app import app
-from distributed_lock import DistributedLock, LockContext
-from orchestrator import Orchestrator
-from state_machine import EngagementStateMachine
-from tracing import TracingManager
 
 logger = logging.getLogger(__name__)
 
@@ -99,120 +95,81 @@ def run_repo_scan(
         trace_id: Optional trace_id for distributed tracing (generated if not provided)
         custom_rules_path: Optional path to additional Semgrep/custom rules
     """
-    db_conn_string = os.getenv("DATABASE_URL")
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    from tasks.base import task_context
+    from utils.logging_utils import ScanLogger
+    slog = ScanLogger("repo_scan", engagement_id=engagement_id)
 
-    # Initialize tracing manager
-    tracing_manager = TracingManager(db_conn_string)
+    job_extra = {
+        "type": "repo_scan",
+        "repo_url": repo_url,
+        "budget": budget,
+        "custom_rules_path": custom_rules_path,
+    }
 
-    # Create or use existing trace context
-    if not trace_id:
-        trace_id = tracing_manager.generate_trace_id()
+    with task_context(self, engagement_id, "repo_scan",
+                      job_extra=job_extra,
+                      trace_id=trace_id) as ctx:
+        ctx.state.transition("recon", "Starting repository scan")
 
-    # Execute with trace context
-    with tracing_manager.trace_execution(engagement_id, "repo_scan", trace_id):
-        job = {
-            "type": "repo_scan",
-            "engagement_id": engagement_id,
-            "repo_url": repo_url,
-            "budget": budget,
-            "trace_id": trace_id,
-            "custom_rules_path": custom_rules_path,
-        }
+        result = ctx.orchestrator.run_repo_scan(ctx.job)
 
-        lock = DistributedLock(redis_url)
-
-        try:
-            with LockContext(lock, engagement_id):
-                state_machine = EngagementStateMachine(
+        # Generate SBOMs after dependency scanning
+        if result and isinstance(result, dict):
+            result.setdefault("sbom_paths", {})
+            dependencies = result.get("dependencies", [])
+            repo_path = result.get(
+                "repo_path",
+                os.path.join(
+                    os.getenv("ARTIFACTS_DIR", os.path.join(tempfile.gettempdir(), "argus_artifacts")),
                     engagement_id,
-                    db_connection_string=db_conn_string,
-                    current_state="created",
-                )
-                state_machine.transition("recon", "Starting repository scan")
-
-                orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-                result = orchestrator.run_repo_scan(job)
-
-                # Generate SBOMs after dependency scanning
-                if result and isinstance(result, dict):
-                    # Ensure sbom_paths key exists even if generation fails downstream
-                    result.setdefault("sbom_paths", {})
-                    dependencies = result.get("dependencies", [])
-                    # Get repo path from result or use default engagement artifact path
-                    repo_path = result.get(
-                        "repo_path",
-                        os.path.join(
-                            os.getenv("ARTIFACTS_DIR", os.path.join(tempfile.gettempdir(), "argus_artifacts")),
-                            engagement_id,
-                        ),
-                    )
-                    os.makedirs(repo_path, exist_ok=True)
-
-                    if dependencies:
-                        try:
-                            cyclonedx_sbom = generate_cyclonedx_sbom(
-                                repo_path, dependencies
-                            )
-                            cyclonedx_path = save_sbom(
-                                cyclonedx_sbom, repo_path, format="cyclonedx"
-                            )
-
-                            spdx_sbom = generate_spdx_sbom(repo_path, dependencies)
-                            spdx_path = save_sbom(spdx_sbom, repo_path, format="spdx")
-
-                            result["sbom_paths"] = {
-                                "cyclonedx": cyclonedx_path,
-                                "spdx": spdx_path,
-                            }
-                            logger.info(
-                                f"SBOMs generated for engagement {engagement_id}"
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to generate SBOMs: {str(e)}")
-                    else:
-                        logger.info(
-                            f"SBOM generation skipped for engagement {engagement_id}: no dependency data available (result keys: {list(result.keys())})"
-                        )
-
-                # Don't transition to "scanning" here — scan.py handles that transition
-                # and reads the actual DB state before transitioning
-                # Auto-push web scan job
-                from tasks.utils import (
-                    fetch_engagement_scan_options,
-                    get_engagement_state,
-                )
-
-                opts = fetch_engagement_scan_options(engagement_id)
-                app.send_task(
-                    "tasks.scan.run_scan",
-                    args=[
-                        engagement_id,
-                        [repo_url],
-                        budget,
-                        trace_id,
-                        opts["agent_mode"],
-                        opts["scan_mode"],
-                        opts["aggressiveness"],
-                        opts["bug_bounty_mode"],
-                    ],
-                )
-
-                return result
-        except Exception as e:
-            # Query actual current state from DB before transitioning to failed
-            current_state = get_engagement_state(engagement_id, db_conn_string)
-            state_machine = EngagementStateMachine(
-                engagement_id,
-                db_connection_string=db_conn_string,
-                current_state=current_state,
+                ),
             )
-            if not state_machine.safe_transition("failed", f"Repository scan failed: {str(e)}"):
-                logger.debug(
-                    "safe_transition skipped for engagement %s (already in terminal state)",
+            os.makedirs(repo_path, exist_ok=True)
+
+            if dependencies:
+                try:
+                    cyclonedx_sbom = generate_cyclonedx_sbom(repo_path, dependencies)
+                    cyclonedx_path = save_sbom(cyclonedx_sbom, repo_path, format="cyclonedx")
+
+                    spdx_sbom = generate_spdx_sbom(repo_path, dependencies)
+                    spdx_path = save_sbom(spdx_sbom, repo_path, format="spdx")
+
+                    result["sbom_paths"] = {
+                        "cyclonedx": cyclonedx_path,
+                        "spdx": spdx_path,
+                    }
+                    logger.info("SBOMs generated for engagement %s", engagement_id)
+                except Exception as e:
+                    logger.error("Failed to generate SBOMs: %s", e)
+            else:
+                logger.info(
+                    "SBOM generation skipped for engagement %s: no dependency data available",
                     engagement_id,
                 )
-            raise
+
+        # Auto-push web scan job
+        from tasks.utils import fetch_engagement_scan_options
+        opts = fetch_engagement_scan_options(engagement_id)
+        try:
+            app.send_task(
+                "tasks.scan.run_scan",
+                args=[
+                    engagement_id,
+                    [repo_url],
+                    budget,
+                    ctx.trace_id,
+                    opts["agent_mode"],
+                    opts["scan_mode"],
+                    opts["aggressiveness"],
+                    opts["bug_bounty_mode"],
+                ],
+            )
+        except Exception as e:
+            logger.error("Failed to enqueue scan for engagement %s: %s", engagement_id, e)
+            ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
+            return {"phase": "repo_scan", "status": "failed", "reason": "scan_dispatch_failed"}
+
+        return result
 
 
 @app.task(bind=True, name="tasks.repo_scan.expand_repo_scan")
@@ -234,32 +191,19 @@ def expand_repo_scan(
         budget: Budget configuration
         trace_id: Optional trace_id for distributed tracing
     """
-    db_conn_string = os.getenv("DATABASE_URL")
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    from tasks.base import task_context
 
-    # Initialize tracing manager
-    tracing_manager = TracingManager(db_conn_string)
+    job_extra = {
+        "type": "repo_scan_expand",
+        "repo_url": repo_url,
+        "additional_rules_path": additional_rules_path,
+        "budget": budget,
+    }
 
-    # Create or use existing trace context
-    if not trace_id:
-        trace_id = tracing_manager.generate_trace_id()
-
-    # Execute with trace context
-    with tracing_manager.trace_execution(engagement_id, "repo_scan_expand", trace_id):
-        job = {
-            "type": "repo_scan_expand",
-            "engagement_id": engagement_id,
-            "repo_url": repo_url,
-            "additional_rules_path": additional_rules_path,
-            "budget": budget,
-            "trace_id": trace_id,
-        }
-
-        lock = DistributedLock(redis_url)
-
-        with LockContext(lock, engagement_id):
-            orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-            return orchestrator.run_repo_scan(job)
+    with task_context(self, engagement_id, "repo_scan_expand",
+                      job_extra=job_extra,
+                      trace_id=trace_id) as ctx:
+        return ctx.orchestrator.run_repo_scan(ctx.job)
 
 
 def get_blame_for_finding(repo_path, finding):

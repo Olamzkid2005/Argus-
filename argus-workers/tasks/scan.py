@@ -23,6 +23,8 @@ def run_scan(
     scan_mode: str | None = None,
     aggressiveness: str | None = None,
     bug_bounty_mode: bool | None = None,
+    auth_config: dict | None = None,
+    dual_auth_config: dict | None = None,
 ):
     """
     Execute scanning phase for an engagement
@@ -70,6 +72,8 @@ def run_scan(
         "budget": budget,
         "agent_mode": agent_mode,
         "recon_context": recon_context,
+        "auth_config": auth_config or {},
+        "dual_auth_config": dual_auth_config,
     }
     if scan_mode is not None:
         job_extra["scan_mode"] = scan_mode

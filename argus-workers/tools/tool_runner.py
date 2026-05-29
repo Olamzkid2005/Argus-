@@ -535,6 +535,13 @@ class ToolRunner:
     ) -> ToolResult:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
+
+        # Safety check — mirror run()'s is_dangerous guard
+        if self.is_dangerous(tool, args):
+            raise SecurityError(
+                f"Blocked dangerous payload: {tool} {' '.join(args)}"
+            )
+
         env = self._locked_env(tool)
 
         # Redact sensitive args from command line (visible in /proc/pid/cmdline)

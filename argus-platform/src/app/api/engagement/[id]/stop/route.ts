@@ -50,9 +50,24 @@ export async function POST(
         [engagementId],
       );
 
-      // Update Redis state if applicable (M-v3-04: use shared singleton)
+      // Signal running Celery tasks to stop + set progress to cancelled
       try {
         const { redis } = await import("@/lib/redis");
+        // Set cancellation signal — task_context checks this before starting work
+        const cancelKey = `cancel:engagement:${engagementId}`;
+        await redis.set(cancelKey, "1", "EX", 3600);
+        // Update progress key so UI reflects cancelled state
+        const progressKey = `task:progress:${engagementId}`;
+        await redis.set(
+          progressKey,
+          JSON.stringify({
+            status: "cancelled",
+            updated_at: new Date().toISOString(),
+          }),
+          "EX",
+          3600,
+        );
+        // Clear engagement state
         const stateKey = `state:engagement:${engagementId}`;
         await redis.set(stateKey, "failed");
         await redis.expire(stateKey, 300);

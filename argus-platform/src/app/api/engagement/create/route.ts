@@ -348,7 +348,7 @@ export async function POST(req: NextRequest) {
             scan_mode: scanMode || "agent",
             bug_bounty_mode: bugBounty === true,
             auth_config: effectiveAuthConfig,
-            dual_auth_config: (effectiveDualAuthConfig ? encryptJson(effectiveDualAuthConfig) : null) as Record<string, unknown> | null,
+            dual_auth_config: effectiveDualAuthConfig,
             priority_vuln_classes: priorityVulnClasses || [],
             trace_id: traceId,
             created_at: new Date().toISOString(),

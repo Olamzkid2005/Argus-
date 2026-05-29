@@ -17,10 +17,13 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_BROWSER_SCHEMES = frozenset({"http", "https"})
 
 SPA_FRAMEWORKS = {"react", "vue", "angular", "next.js", "nuxt", "svelte", "ember", "backbone"}
 
@@ -39,6 +42,13 @@ def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 12
     """
     slog = ScanLogger("browser_scanner")
     slog.tool_start("browser_scan", target=target_url, tech=len(tech_stack) if tech_stack else 0)
+
+    # Validate URL scheme — block file://, ftp://, etc.
+    parsed = urlparse(target_url)
+    if parsed.scheme not in _ALLOWED_BROWSER_SCHEMES:
+        slog.warn(f"Rejected browser scan with scheme '{parsed.scheme}': {target_url}")
+        logger.warning("Rejected browser scan with disallowed scheme '%s': %s", parsed.scheme, target_url)
+        return []
 
     worker = Path(__file__).parent / "_browser_scan_worker.py"
     if not worker.exists():

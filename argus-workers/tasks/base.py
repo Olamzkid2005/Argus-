@@ -186,6 +186,18 @@ def task_context(
                 orchestrator.state = state  # Always wire state into orchestrator (regardless of type)
                 ctx.orchestrator = orchestrator
 
+                # Check for operator-initiated cancellation before starting work
+                try:
+                    import redis as _redis_mod
+                    _r = _redis_mod.from_url(redis_url)
+                    if _r.get(f"cancel:engagement:{engagement_id}"):
+                        _r.delete(f"cancel:engagement:{engagement_id}")
+                        slog.warning("Engagement %s was cancelled by operator — aborting", engagement_id)
+                        state.transition("failed", "Cancelled by operator")
+                        return
+                except Exception:
+                    pass  # Redis unavailable — proceed normally
+
                 yield ctx
         except SoftTimeLimitExceeded:
             slog.error("Soft time limit exceeded — transitioning to failed")

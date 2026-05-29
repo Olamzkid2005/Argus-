@@ -11,7 +11,7 @@ from tasks.base import task_context
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="tasks.analyze.run_analysis")
+@app.task(bind=True, name="tasks.analyze.run_analysis", soft_time_limit=1800, time_limit=2400)
 def run_analysis(self, engagement_id: str, budget: dict, trace_id: str = None,
                  bug_bounty_mode: bool | None = None):
     """

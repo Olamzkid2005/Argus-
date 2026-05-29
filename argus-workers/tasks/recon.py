@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 )
 def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str = None,
               agent_mode: bool = True, scan_mode: str | None = None, aggressiveness: str | None = None,
-              bug_bounty_mode: bool | None = None, prev_engagement_id: str | None = None):
+              bug_bounty_mode: bool | None = None, prev_engagement_id: str | None = None,
+              auth_config: dict | None = None, dual_auth_config: dict | None = None):
     """
     Execute reconnaissance phase for an engagement
 
@@ -52,6 +53,10 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
         job_extra["aggressiveness"] = aggressiveness
     if bug_bounty_mode is not None:
         job_extra["bug_bounty_mode"] = bug_bounty_mode
+    if auth_config is not None:
+        job_extra["auth_config"] = auth_config
+    if dual_auth_config is not None:
+        job_extra["dual_auth_config"] = dual_auth_config
 
     with task_context(self, engagement_id, "recon",
                       job_extra=job_extra,
@@ -106,6 +111,10 @@ def run_recon(self, engagement_id: str, target: str, budget: dict, trace_id: str
             scan_task = app.send_task(
                 'tasks.scan.run_scan',
                 args=[engagement_id, [target], budget, ctx.trace_id, agent_mode, scan_mode, aggressiveness, bug_bounty_mode],
+                kwargs={
+                    "auth_config": ctx.job.get("auth_config"),
+                    "dual_auth_config": ctx.job.get("dual_auth_config"),
+                } if ctx.job.get("auth_config") or ctx.job.get("dual_auth_config") else {},
             )
             slog.dispatch("scan", task_id=scan_task.id)
         except Exception as e:
@@ -218,6 +227,10 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                     opts["aggressiveness"],
                     opts.get("bug_bounty_mode"),
                 ],
+                kwargs={
+                    "auth_config": ctx.job.get("auth_config"),
+                    "dual_auth_config": ctx.job.get("dual_auth_config"),
+                } if ctx.job.get("auth_config") or ctx.job.get("dual_auth_config") else {},
             )
             slog.dispatch("scan", task_id=scan_task.id)
             logger.info("Dispatched scan after expand for engagement=%s (task=%s)", engagement_id, scan_task.id)
