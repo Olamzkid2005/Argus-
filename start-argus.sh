@@ -200,7 +200,8 @@ fi
 echo ""
 echo -e "${YELLOW}━━━ Loading Environment ━━━${NC}"
 
-if [ -f "argus-platform/.env.local" ]; then
+# Load root .env first (docker-compose compatible)
+if [ -f ".env" ]; then
     # Safer env loading — handles spaces and special chars better than xargs
     while IFS= read -r line || [ -n "$line" ]; do
         # Skip comments and empty lines
@@ -208,10 +209,18 @@ if [ -f "argus-platform/.env.local" ]; then
             \#*|'') continue ;;
         esac
         export "$line"
+    done < ".env"
+    log_ok "Environment loaded from .env"
+elif [ -f "argus-platform/.env.local" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            \#*|'') continue ;;
+        esac
+        export "$line"
     done < "argus-platform/.env.local"
     log_ok "Environment loaded from .env.local"
 else
-    log_warn ".env.local not found — services may fail"
+    log_warn ".env or .env.local not found — services may fail"
 fi
 
 # Verify critical env vars

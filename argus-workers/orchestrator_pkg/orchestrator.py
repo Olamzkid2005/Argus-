@@ -11,7 +11,6 @@ import logging
 import os
 import time
 
-from compliance_posture_scorer import CompliancePostureScorer
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
     HARD_TIMEOUT_SECONDS,
@@ -19,7 +18,6 @@ from config.constants import (
 )
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.finding_repository import (
-    FindingCapExceededError,
     FindingRepository,
 )
 from database.repositories.rate_limit_repository import RateLimitRepository
@@ -346,192 +344,22 @@ class Orchestrator:
     def _save_findings(self, findings: list[dict]) -> int:
         """Save findings to the database.
 
+        Delegates to FindingPersistenceService.
+
         Returns:
             Number of findings that failed to save. 0 means all succeeded.
             Callers should check this and abort the phase if too many fail.
         """
-        if not self.finding_repo:
-            logger.error("No finding repository configured — DATABASE_URL not set, cannot persist findings")
-            return len(findings)
-        if not findings:
-            return 0
+        from orchestrator_pkg.persistence import FindingPersistenceService
 
-        # Normalize heterogeneous inputs to plain dicts
-        normalized_inputs: list[dict] = []
-        for item in findings:
-            if isinstance(item, dict):
-                normalized_inputs.append(item)
-                continue
-            if hasattr(item, "tool") and hasattr(item, "output"):
-                logger.warning(f"_save_findings received unparsed tool result for tool "
-                               f"'{getattr(item, 'tool', 'unknown')}' — skipping.")
-                continue
-            if hasattr(item, "findings") and isinstance(item.findings, list):
-                for f in item.findings:
-                    if isinstance(f, dict):
-                        normalized_inputs.append(f)
-                continue
-            try:
-                normalized_inputs.append(vars(item))
-            except TypeError:
-                logger.warning(f"_save_findings: cannot coerce {type(item)} to dict, skipping")
-        findings = normalized_inputs
-        if not findings:
-            return 0
-
-        from database.services.embedding_service import EmbeddingService
-        EmbeddingService(self.engagement_id)
-
-        # Phase 1: Pre-process all findings (enrich metadata, classify, etc.)
-        # without touching the database.
-        bug_bounty = self.bug_bounty_mode
-        secret_tools = {"gitleaks", "trufflehog", "secret-scan"}
-        findings_to_save: list[dict] = []
-
-        for finding in findings:
-            if bug_bounty:
-                finding["bugbounty_source"] = True
-                if "source" not in finding or finding["source"] == "bugbounty":
-                    finding["source"] = "bugbounty"
-
-            if finding.get("cvss_score") is None:
-                try:
-                    from cvss_calculator import estimate_cvss
-                    finding["cvss_score"] = estimate_cvss(
-                        finding_type=finding.get("type", ""),
-                        severity=finding.get("severity", "MEDIUM"),
-                        evidence_strength=finding.get("evidence_strength", "moderate"),
-                    )
-                except Exception as cvss_err:
-                    logger.warning(f"CVSS estimation failed (non-fatal): {cvss_err}")
-
-            if not finding.get("owasp_category") or not finding.get("cwe_id"):
-                ftype = finding.get("type", "")
-                classification = self._classify_finding_type(ftype)
-                if not finding.get("owasp_category"):
-                    finding["owasp_category"] = classification.get("owasp")
-                if not finding.get("cwe_id"):
-                    finding["cwe_id"] = classification.get("cwe")
-
-            st = finding.get("tool") or finding.get("source_tool") or "unknown"
-            if not finding.get("source_tool"):
-                finding["source_tool"] = st
-
-            findings_to_save.append(finding)
-
-        if not findings_to_save:
-            return 0
-
-        # Phase 2: Batch save all non-secret findings in a single transaction.
-        # Secret findings use upsert_secret_finding individually (different conflict key).
-        non_secret = [f for f in findings_to_save
-                      if f.get("source_tool") not in secret_tools
-                      and not f.get("type", "").startswith("COMMITTED_SECRET")]
-        secret = [f for f in findings_to_save
-                  if f.get("source_tool") in secret_tools
-                  or f.get("type", "").startswith("COMMITTED_SECRET")]
-
-        failed_count = 0
-        _finding_emitter = StreamingFindingEmitter(self.engagement_id)
-
-        # Phase 2.5: Update compliance posture score after saving findings
-        # Computing posture requires the full set of saved findings. We query
-        # the DB for all engagement findings to get the latest state, then
-        # compute and persist a new posture snapshot.
-        try:
-            _posture_scorer = CompliancePostureScorer(self.engagement_id)
-            # Load all findings from the DB for an accurate posture calculation
-            all_db_findings, _ = self.finding_repo.get_findings_by_engagement(
-                self.engagement_id, limit=100000,
-            )
-            # Convert to dicts for the scorer
-            finding_dicts = []
-            for f in all_db_findings:
-                if hasattr(f, 'to_dict'):
-                    finding_dicts.append(f.to_dict())
-                elif isinstance(f, dict):
-                    finding_dicts.append(f)
-                elif isinstance(f, (list, tuple)):
-                    finding_dicts.append(dict(zip(
-                        ['id','type','severity','endpoint'], f[:4], strict=False
-                    )))
-            if finding_dicts:
-                _org_id = self._get_org_id()
-                snapshot = _posture_scorer.compute_and_save(finding_dicts, org_id=_org_id)
-                logger.info(
-                    "Compliance posture updated for %s: composite=%s, trend=%s",
-                    self.engagement_id, snapshot.composite_score, snapshot.trend,
-                )
-        except Exception as posture_err:
-            logger.warning(
-                "Failed to update compliance posture (non-fatal): %s", posture_err,
-            )
-
-        if non_secret:
-            try:
-                inserted, updated = self.finding_repo.batch_create_or_update_findings(
-                    self.engagement_id, non_secret
-                )
-                logger.info(
-                    "_save_findings: batch saved %d (inserted=%d, updated=%d) findings for %s",
-                    inserted + updated, inserted, updated, self.engagement_id,
-                )
-                # Emit real-time finding events for all saved findings
-                for f in non_secret:
-                    if f.get("_saved_id"):
-                        try:
-                            _finding_emitter.emit_finding(f)
-                        except Exception as emit_err:
-                            logger.warning("Failed to emit finding event (non-fatal): %s", emit_err)
-            except FindingCapExceededError:
-                logger.error("Finding cap exceeded for engagement %s during batch save", self.engagement_id)
-                failed_count += len(non_secret)
-            except Exception as e:
-                logger.error("_save_findings: batch save failed for %s: %s", self.engagement_id, e, exc_info=True)
-                failed_count += len(non_secret)
-
-        # Secret findings: save individually (different upsert logic)
-        for f in secret:
-            try:
-                saved_id = self.finding_repo.upsert_secret_finding(
-                    engagement_id=self.engagement_id,
-                    finding_type=f.get("type", "UNKNOWN"),
-                    severity=f.get("severity", "INFO"),
-                    endpoint=f.get("endpoint", ""),
-                    evidence=f.get("evidence", {}),
-                    confidence=f.get("confidence", 0.5),
-                    source_tool=f.get("source_tool", "unknown"),
-                    cvss_score=f.get("cvss_score"),
-                )
-                if saved_id:
-                    f["_saved_id"] = saved_id
-                    # Emit real-time finding event for each secret finding
-                    try:
-                        _finding_emitter.emit_finding(f)
-                    except Exception as emit_err:
-                        logger.warning("Failed to emit finding event (non-fatal): %s", emit_err)
-            except (ValueError, OSError, KeyError) as e:
-                failed_count += 1
-                logger.warning("Failed to save secret finding: %s", e)
-
-        # Phase 3: Post-save processing — webhooks for HIGH/CRITICAL findings.
-        for f in findings_to_save:
-            if f.get("_saved_id") and f.get("severity", "").upper() in ("CRITICAL", "HIGH"):
-                try:
-                    from post_finding_hooks import fire_finding_webhooks
-                    fire_finding_webhooks({
-                        "id": f["_saved_id"], "engagement_id": self.engagement_id,
-                        "type": f.get("type"), "severity": f.get("severity"),
-                        "endpoint": f.get("endpoint"), "source_tool": f.get("source_tool", ""),
-                        "confidence": f.get("confidence", 0),
-                    })
-                except Exception as hook_err:
-                    logger.warning(f"Webhook dispatch failed (non-fatal): {hook_err}")
-
-        if failed_count > 0:
-            logger.error("_save_findings: %d of %d findings failed to save for engagement %s",
-                         failed_count, len(findings), self.engagement_id)
-        return failed_count
+        svc = FindingPersistenceService(
+            engagement_id=self.engagement_id,
+            finding_repo=self.finding_repo,
+            bug_bounty_mode=self.bug_bounty_mode,
+            classify_finding_type_fn=self._classify_finding_type,
+            get_org_id_fn=self._get_org_id,
+        )
+        return svc.save(findings)
 
     def _update_finding_jsonb(self, finding_id: str, column: str, data: dict, log_label: str = "update") -> bool:
         """Save a JSONB dict to a findings column with an auto-timestamp column.
@@ -867,282 +695,91 @@ class Orchestrator:
         return findings
 
     def run_analysis(self, job: dict) -> dict:
+        from orchestrator_pkg.analysis import (
+            BudgetPersistenceService,
+            IntelligenceService,
+            LlmBatchService,
+            SnapshotService,
+        )
+
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_analysis", [])
         self._check_timeout()
-        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="analyze")
-        self.logger.log_job_started(job_type="analyze", engagement_id=self.engagement_id)
-        findings = []
-        if self.finding_repo:
-            try:
-                raw_findings, _ = self.finding_repo.get_findings_by_engagement(self.engagement_id, limit=100000)
-                findings = [f.to_dict() if hasattr(f, "to_dict") else dict(f) if isinstance(f, dict) else f for f in raw_findings]
-            except Exception as e:
-                logger.warning(f"Failed to load findings: {e}")
-
-        from intelligence_engine import IntelligenceEngine
-        from loop_budget_manager import LoopBudgetManager
-        from snapshot_manager import SnapshotManager
-        db_conn = os.getenv("DATABASE_URL")
-        if not db_conn:
-            raise OSError("DATABASE_URL is not set — cannot create snapshot for analysis")
-        snapshot_mgr = SnapshotManager(db_conn)
-        snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
-        budget_config = job.get("budget", {})
-        budget_mgr = LoopBudgetManager(self.engagement_id, budget_config)
-        # Load current budget state from database so max_cycles cap is effective
-        try:
-            from database.connection import db_cursor
-            with db_cursor() as cursor:
-                cursor.execute(
-                    "SELECT current_cycles, current_depth, current_llm_reviews FROM loop_budgets WHERE engagement_id = %s",
-                    (self.engagement_id,),
-                )
-                row = cursor.fetchone()
-                if row:
-                    budget_mgr.load_from_db({"current_cycles": row[0], "current_depth": row[1], "current_llm_reviews": row[2] or 0})
-        except Exception:
-            logger.debug("Could not load loop budget from DB for %s", self.engagement_id)
-        engine = IntelligenceEngine(db_conn)
-        snapshot["findings"] = findings
-        snapshot["loop_budget"] = budget_mgr.to_dict()
-        # Load org_id for learned FP rate lookups in IntelligenceEngine
-        org_id = self._get_org_id()
-        snapshot["org_id"] = org_id
-        # Load priority vulnerability classes for severity escalation
-        priority_classes = self._load_priority_vuln_classes()
-        if priority_classes:
-            snapshot["priority_vuln_classes"] = priority_classes
-            logger.info(
-                "Loaded %d priority vuln classes for engagement %s: %s",
-                len(priority_classes), self.engagement_id, priority_classes,
-            )
-        # Pass EngagementState reference for AttackGraph integration (Step 11)
-        if hasattr(self, "state"):
-            snapshot["_engagement_state"] = self.state
-        evaluation = engine.evaluate(snapshot, org_id=org_id)
-
-        # ── Shared per-engagement cost tracker ──
-        from config.constants import LLM_MAX_COST_PER_ENGAGEMENT
-        from tasks.utils import LlmCostTracker
-        engagement_cost_tracker = LlmCostTracker(
-            engagement_id=self.engagement_id,
-            max_cost=LLM_MAX_COST_PER_ENGAGEMENT,
+        self.ws_publisher.publish_job_started(
+            engagement_id=self.engagement_id, job_type="analyze",
+        )
+        self.logger.log_job_started(
+            job_type="analyze", engagement_id=self.engagement_id,
         )
 
-        synthesis = {}
-        llm_svc = None
-        recon_ctx = None
-        scored = []
-        if self.llm_client and self.llm_client.is_available():
-            try:
-                from llm_service import LLMService
-                llm_svc = LLMService(self.llm_client, cost_tracker=engagement_cost_tracker)
-                recon_ctx = load_recon_context(self.engagement_id)
-            except Exception as e:
-                logger.warning(f"LLM service init failed (non-fatal): {e}")
-
-        if llm_svc:
-            try:
-                from llm_synthesizer import LLMSynthesizer
-                synthesizer = LLMSynthesizer(llm_svc)
-                synthesis = synthesizer.synthesize(
-                    scored_findings=evaluation.get("scored_findings", []),
-                    attack_paths=snapshot.get("attack_graph", {}).get("paths", []),
-                    recon_context=recon_ctx,
-                )
-                emit_thinking(self.engagement_id, f"LLM analysis: {synthesis.get('risk_level', 'unknown')} risk — "
-                              f"{synthesis.get('executive_summary', '')[:100]}...")
-            except Exception as e:
-                logger.warning(f"LLM synthesis failed (non-fatal): {e}")
-
-        # ── PoC Generation for HIGH/CRITICAL findings ──
-        try:
-            from poc_generator import PoCGenerator
-
-            poc_gen = PoCGenerator(llm_client=self.llm_client)
-            scored = evaluation.get("scored_findings", [])
-
-            if engagement_cost_tracker and llm_svc:
-                from concurrent.futures import ThreadPoolExecutor
-
-                poc_futures = []
-                with ThreadPoolExecutor(max_workers=4) as pool:
-                    # Cap at 10 PoCs per engagement to prevent cost blow-up
-                    for finding in scored[:10]:
-                        future = pool.submit(
-                            poc_gen.generate,
-                            finding, llm_svc, engagement_cost_tracker,
-                        )
-                        poc_futures.append((finding, future))
-
-                    for finding, future in poc_futures:
-                        try:
-                            poc = future.result(timeout=30)
-                            if poc and finding.get("id"):
-                                self._save_poc_to_finding(
-                                    finding["id"], poc
-                                )
-                        except Exception as e:
-                            logger.debug(
-                                "PoC for finding %s failed: %s",
-                                finding.get("id", "?"), e,
-                            )
-        except Exception as e:
-            logger.warning(
-                "PoC generation batch failed (non-fatal): %s", e
+        db_conn = os.getenv("DATABASE_URL")
+        if not db_conn:
+            raise OSError(
+                "DATABASE_URL is not set — cannot create snapshot for analysis"
             )
 
-        # ── Chain Exploit Generation for CRITICAL/HIGH attack paths ──
-        try:
-            from chain_exploit_generator import ChainExploitGenerator
-            chain_gen = ChainExploitGenerator(llm_client=self.llm_client)
+        # ── 1. SnapshotService — load findings, create snapshot, load budget ──
+        snapshot_svc = SnapshotService(
+            db_conn=db_conn,
+            engagement_id=self.engagement_id,
+            finding_repo=self.finding_repo,
+            get_org_id_fn=self._get_org_id,
+            load_priority_vuln_classes_fn=self._load_priority_vuln_classes,
+            state=getattr(self, "state", None),
+        )
+        snapshot, budget_mgr, _findings, org_id = snapshot_svc.load_and_build(job)
 
-            # Load attack paths and build findings map
-            attack_paths = []
-            findings_map: dict[str, dict] = {}
-            conn = None
-            cursor = None
-            db = None
-            try:
-                from database.connection import get_db
-                db = get_db()
-                conn = db.get_connection()
-                cursor = conn.cursor()
-
-                # Fetch attack paths
-                cursor.execute(
-                    "SELECT id, path_nodes, risk_score, normalized_severity "
-                    "FROM attack_paths WHERE engagement_id = %s",
-                    (self.engagement_id,),
-                )
-                cols = ["id", "path_nodes", "risk_score", "normalized_severity"]
-                for row in cursor.fetchall():
-                    attack_paths.append(dict(zip(cols, row, strict=False)))
-
-                # Fetch findings with evidence and PoCs
-                cursor.execute(
-                    "SELECT id, type, endpoint, evidence, poc_generated "
-                    "FROM findings WHERE engagement_id = %s",
-                    (self.engagement_id,),
-                )
-                fcols = ["id", "type", "endpoint", "evidence", "poc_generated"]
-                for row in cursor.fetchall():
-                    f = dict(zip(fcols, row, strict=False))
-                    findings_map[f["id"]] = f
-            except Exception:
-                logger.debug("Failed to load attack paths for chain exploit gen", exc_info=True)
-            finally:
-                if cursor:
-                    cursor.close()
-                if conn and db:
-                    db.release_connection(conn)
-
-            if attack_paths and findings_map and engagement_cost_tracker and llm_svc:
-                scripts = chain_gen.generate_for_engagement(
-                    engagement_id=self.engagement_id,
-                    attack_paths=attack_paths,
-                    findings_map=findings_map,
-                    llm_service=llm_svc,
-                    cost_tracker=engagement_cost_tracker,
-                    max_chains=3,
-                )
-                if scripts:
-                    saved = ChainExploitGenerator.save_scripts_to_db(
-                        self.engagement_id, scripts,
-                    )
-                    logger.info(
-                        "Generated %d chain exploit scripts for engagement %s",
-                        saved, self.engagement_id,
-                    )
-            elif not engagement_cost_tracker:
-                logger.debug("No cost tracker — skipping chain exploit generation")
-            elif not llm_svc:
-                logger.debug("No LLM service — skipping chain exploit generation")
-        except Exception as e:
-            logger.warning(
-                "Chain exploit generation failed (non-fatal): %s", e,
+        # ── 2. IntelligenceService — evaluate + synthesize ──
+        intelligence_svc = IntelligenceService(
+            db_conn=db_conn,
+            engagement_id=self.engagement_id,
+            llm_client=self.llm_client,
+        )
+        evaluation = intelligence_svc.evaluate(snapshot, org_id)
+        synthesis, llm_svc, engagement_cost_tracker, recon_ctx, scored = (
+            intelligence_svc.run_synthesis(evaluation, snapshot)
+        )
+        if synthesis.get("risk_level") or synthesis.get("executive_summary"):
+            emit_thinking(
+                self.engagement_id,
+                f"LLM analysis: {synthesis.get('risk_level', 'unknown')} risk — "
+                f"{synthesis.get('executive_summary', '')[:100]}...",
             )
 
-        # ── Developer Fix Generation for MEDIUM+ findings ──
-        try:
-            from developer_fix_assistant import (
-                DeveloperFixAssistant,
-            )
+        # ── 3. LlmBatchService — PoC, chain exploits, fixes ──
+        llm_batch_svc = LlmBatchService(
+            llm_client=self.llm_client,
+            engagement_id=self.engagement_id,
+            save_poc_fn=self._save_poc_to_finding,
+            save_remediation_fn=self._save_remediation_fix,
+        )
+        llm_batch_svc.generate_pocs(scored, llm_svc, engagement_cost_tracker)
+        llm_batch_svc.generate_chain_exploits(llm_svc, engagement_cost_tracker)
+        llm_batch_svc.generate_fixes(
+            scored, recon_ctx, llm_svc, engagement_cost_tracker,
+        )
 
-            fix_assistant = DeveloperFixAssistant(
-                llm_client=self.llm_client
-            )
+        # ── 4. BudgetPersistenceService — persist budget counters ──
+        BudgetPersistenceService.persist(budget_mgr)
 
-            # Re-use engagement_cost_tracker and llm_svc from PoC section
-            if engagement_cost_tracker and llm_svc is not None:
-                from concurrent.futures import (
-                    ThreadPoolExecutor,
-                )
-
-                # Get tech stack from recon context (already loaded above)
-                tech_stack: list[str] = []
-                if recon_ctx:
-                    tech_stack = (
-                        recon_ctx.tech_stack
-                        if hasattr(recon_ctx, "tech_stack")
-                        else []
-                    ) or []
-
-                fix_futures = []
-                with ThreadPoolExecutor(max_workers=4) as pool:
-                    # Cap at 15 fixes per engagement
-                    for finding in scored[:15]:
-                        future = pool.submit(
-                            fix_assistant.generate,
-                            finding,
-                            tech_stack,
-                            llm_svc,
-                            engagement_cost_tracker,
-                        )
-                        fix_futures.append((finding, future))
-
-                    for finding, future in fix_futures:
-                        try:
-                            fix = future.result(timeout=45)
-                            if fix and finding.get("id"):
-                                self._save_remediation_fix(
-                                    finding["id"], fix
-                                )
-                        except Exception as e:
-                            logger.debug(
-                                "Fix for finding %s failed: %s",
-                                finding.get("id", "?"),
-                                e,
-                            )
-        except Exception as e:
-            logger.warning(
-                "Fix generation batch failed (non-fatal): %s", e
-            )
-
-        # ── Persist budget counters back to DB ──
-        # This ensures that if analysis loops back to recon and runs again,
-        # the budget counters continue from where they left off in memory
-        # rather than starting from the stale DB value (bug #3 fix).
-        budget_mgr.persist_to_db()
-
-        # No batch actions to dispatch — analysis is consumed by the agent loop.
-        # The analysis dict (risk_level, coverage_gaps, etc.) is returned for
-        # the caller to use in reporting/progress tracking.
         analysis = evaluation.get("analysis", {})
-
-        slog.tool_complete("orchestrator.run_analysis", success=True, findings=len(evaluation.get("scored_findings", [])))
+        slog.tool_complete(
+            "orchestrator.run_analysis", success=True,
+            findings=len(evaluation.get("scored_findings", [])),
+        )
         slog.info(
             "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d",
             analysis.get("risk_level", "unknown"),
             len(analysis.get("coverage_gaps", [])),
             len(analysis.get("high_value_targets", [])),
         )
-        return {"phase": "analyze", "status": "completed", "actions": [],
-                "analysis": analysis,
-                "scored_findings": evaluation.get("scored_findings", []),
-                "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
-                "next_state": "reporting", "trace_id": get_trace_id()}
+        return {
+            "phase": "analyze", "status": "completed", "actions": [],
+            "analysis": analysis,
+            "scored_findings": evaluation.get("scored_findings", []),
+            "reasoning": evaluation.get("reasoning", ""), "synthesis": synthesis,
+            "next_state": "reporting", "trace_id": get_trace_id(),
+        }
 
     def run_reporting(self, job: dict) -> dict:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)

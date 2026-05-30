@@ -24,7 +24,7 @@ class TestRepoScan:
     @patch("subprocess.run")
     def test_repo_scan_completes_successfully(self, mock_subprocess):
         """Verify a complete repo scan returns findings with correct structure."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         # Mock git clone (subprocess for checkout)
         mock_subprocess.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -66,7 +66,7 @@ class TestRepoScan:
     @patch("subprocess.run")
     def test_repo_scan_git_clone_failure(self, mock_subprocess):
         """Verify the orchestrator handles git clone failure gracefully."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         # Mock subprocess to fail for git clone
         mock_subprocess.side_effect = [
@@ -130,7 +130,7 @@ class TestRepoScan:
     @patch("tasks.recon.run_recon.delay")
     def test_repo_scan_chain_dispatches_correctly(self, _mock_run_recon):
         """Verify the task chain dispatches correctly after repo scan."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         with patch(
             "orchestrator_pkg.repo_scan.execute_repo_scan",
@@ -163,7 +163,7 @@ class TestRepoScan:
 
     def test_repo_scan_zero_findings_returns_cleanly(self):
         """Verify a clean scan with no vulnerabilities completes normally."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         with patch(
             "orchestrator_pkg.repo_scan.execute_repo_scan",

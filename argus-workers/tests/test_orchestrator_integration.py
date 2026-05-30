@@ -450,7 +450,7 @@ class TestOrchestratorScanFlow:
 
     def test_orchestrator_init(self):
         """Test that Orchestrator initializes with MCP and streaming."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
         orch = Orchestrator(engagement_id="test-123")
         assert orch.engagement_id == "test-123"
         assert hasattr(orch, 'mcp')
@@ -460,7 +460,7 @@ class TestOrchestratorScanFlow:
     def test_mcp_tool_execution_via_orchestrator(self, mock_run):
         """Test executing a tool through MCP via orchestrator."""
         from mcp_server import ToolDefinition, ToolSchema
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         mock_run.return_value = MagicMock(
             returncode=0, stdout='{"vulnerabilities": []}', stderr=""
@@ -480,7 +480,7 @@ class TestOrchestratorScanFlow:
 
     def test_mcp_tools_pre_registered(self):
         """Test that Orchestrator pre-registers standard tools with MCP."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
         orch = Orchestrator(engagement_id="test-123")
         tools = orch.mcp.get_tools()
         tool_names = [t["name"] for t in tools]
@@ -497,7 +497,7 @@ class TestOrchestratorScanFlow:
         """Test that recon phase is skipped when no target is provided."""
         mock_trace_id.return_value = "test-trace"
         mock_get_ws.return_value = MagicMock()
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
         orch = Orchestrator(engagement_id="test-123")
         result = orch.run({"type": "recon"})
         assert result["status"] == "failed"
@@ -506,14 +506,14 @@ class TestOrchestratorScanFlow:
 
     def test_unknown_job_type_raises_error(self):
         """Test that an unknown job type raises ValueError."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
         orch = Orchestrator(engagement_id="test-123")
         with pytest.raises(ValueError, match="Unknown job type"):
             orch.run({"type": "unknown_phase"})
 
     def test_orchestrator_has_tool_runner(self):
         """Test that Orchestrator has a ToolRunner instance."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
         orch = Orchestrator(engagement_id="test-123")
         assert hasattr(orch, 'tool_runner')
 
@@ -533,7 +533,7 @@ class TestFullPipelineIntegration:
         )
 
         from mcp_server import ToolDefinition, ToolSchema
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         orch = Orchestrator(engagement_id="test-e2e-123")
         assert hasattr(orch, 'mcp_run')
@@ -551,7 +551,7 @@ class TestFullPipelineIntegration:
     def test_pipeline_phase_sequence(self):
         """Test that the pipeline phase sequence is valid."""
         from agent_loop import CoordinatorAgent
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         coord = CoordinatorAgent("test-pipeline-123")
         Orchestrator(engagement_id="test-pipeline-123")
@@ -571,7 +571,7 @@ class TestFullPipelineIntegration:
         )
 
         from mcp_server import ToolDefinition, ToolSchema
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         orch = Orchestrator(engagement_id="test-compat-123")
 
@@ -587,7 +587,7 @@ class TestFullPipelineIntegration:
     @patch('subprocess.run')
     def test_orchestrator_run_scan_with_mocked_subprocess(self, mock_run):
         """Test that orchestrator handles scan phase with mocked subprocess."""
-        from orchestrator import Orchestrator
+        from orchestrator_pkg import Orchestrator
 
         mock_run.return_value = MagicMock(
             returncode=0, stdout=json.dumps({"status": "completed"}), stderr=""

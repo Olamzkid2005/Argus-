@@ -127,7 +127,7 @@ def task_context(
             ctx.state.transition("scanning", "...")
     """
     from distributed_lock import DistributedLock, LockAcquisitionError, LockContext
-    from orchestrator import Orchestrator
+    from orchestrator_pkg import Orchestrator
     from state_machine import EngagementStateMachine
     from tasks.utils import get_engagement_state
     from tracing import TracingManager

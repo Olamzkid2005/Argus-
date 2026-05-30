@@ -5,9 +5,9 @@ services:
   postgres:
     image: pgvector/pgvector:0.7.4-pg16
     environment:
-      POSTGRES_USER: argus_user
-      POSTGRES_PASSWORD: argus_dev_password_change_in_production
-      POSTGRES_DB: argus_pentest
+      POSTGRES_USER: ${POSTGRES_USER:-argus_user}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set in .env or export it}"
+      POSTGRES_DB: ${POSTGRES_DB:-argus_pentest}
     ports:
       - "5432:5432"
     volumes:
@@ -42,11 +42,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://argus_user:argus_dev_password_change_in_production@postgres:5432/argus_pentest
-      REDIS_URL: redis://redis:6379
-      NEXTAUTH_URL: http://localhost:3000
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-argus_dev_secret_key_change_in_production}
-      NODE_ENV: production
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required — set in .env or export it}"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required — generate with: openssl rand -base64 32}"
+      NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,9 +59,9 @@ services:
       context: ./argus-workers
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://argus_user:argus_dev_password_change_in_production@postgres:5432/argus_pentest
-      REDIS_URL: redis://redis:6379
-      CELERY_CONCURRENCY: "4"
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required — set in .env or export it}"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-4}
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,8 +75,8 @@ services:
       dockerfile: Dockerfile
     command: celery -A celery_app beat --loglevel=info
     environment:
-      DATABASE_URL: postgresql://argus_user:argus_dev_password_change_in_production@postgres:5432/argus_pentest
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required — set in .env or export it}"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     depends_on:
       postgres:
         condition: service_healthy

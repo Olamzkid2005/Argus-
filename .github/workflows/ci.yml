@@ -38,17 +38,15 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
-        continue-on-error: true
 
       - name: Unit tests
         run: npm test -- --ci --coverage
-        continue-on-error: true
 
       - name: Build
         run: npm run build
 
       - name: Dependency audit
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
         continue-on-error: true
 
   backend:
@@ -96,15 +94,13 @@ jobs:
 
       - name: Lint with ruff
         run: ruff check . --config pyproject.toml
-        continue-on-error: true
 
       - name: Dependency audit
-        run: pip-audit || true
+        run: pip-audit
         continue-on-error: true
 
       - name: Run tests
         run: pytest tests/ --tb=short -q --cov=. --cov-report=term-missing --cov-fail-under=70
-        continue-on-error: true
 
   e2e:
     name: E2E Tests (Playwright)
@@ -151,12 +147,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@postgres:5432/test
           REDIS_URL: redis://redis:6379
-        continue-on-error: true
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -167,7 +161,6 @@ jobs:
           else
             echo "gitleaks not available, skipping secret scan"
           fi
-        continue-on-error: true
 
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.28.0
