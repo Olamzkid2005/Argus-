@@ -423,6 +423,45 @@ _register(ToolDefinition(
         requires=ToolRequires(target_scheme="https")
 ))
 
+_register(ToolDefinition(
+    name="register",
+    description="Register a new test account on the target application. "
+                "Auto-generates a unique email and password. "
+                "Discovers registration form fields automatically. "
+                "On success, stores authenticated session for subsequent tools. "
+                "Handles email verification fallback gracefully.",
+    phases=["scan"],
+    parameters=[
+        ToolParameter(name="target", description="Base URL of the target application", required=True),
+    ],
+    timeout=120,
+    parallel_safe=False,
+    signal_quality=SignalQuality.CONFIRMED,
+    exploit_categories=["auth"],
+    estimated_cost=0.0,
+    estimated_runtime=30,
+))
+
+_register(ToolDefinition(
+    name="login",
+    description="Log in to the target application with stored or provided credentials. "
+                "Auto-discovers login form fields. "
+                "If email/password omitted, uses credentials from prior register() call. "
+                "On success, stores authenticated session for subsequent tools.",
+    phases=["scan"],
+    parameters=[
+        ToolParameter(name="target", description="Base URL of the target application", required=True),
+        ToolParameter(name="email", description="Email to log in with (auto-fills from register if empty)", required=False),
+        ToolParameter(name="password", description="Password to log in with (auto-fills from register if empty)", required=False),
+    ],
+    timeout=60,
+    parallel_safe=False,
+    signal_quality=SignalQuality.CONFIRMED,
+    exploit_categories=["auth"],
+    estimated_cost=0.0,
+    estimated_runtime=15,
+))
+
 
 # ── Repository scanning phase ──
 
@@ -712,8 +751,17 @@ _register(ToolDefinition(
 TOOLS_DEFINED = list(TOOLS.keys())
 
 
+# Agent-internal tools that have no external binary.
+# These are always "available" because they are implemented as
+# Python functions within the agent itself.
+_AGENT_INTERNAL_TOOLS = frozenset({"register", "login"})
+
+
 def is_tool_available(tool_name: str) -> bool:
     """Check if a tool binary is available on the system PATH.
+
+    Agent-internal tools (register, login) always return True since
+    they are Python functions, not external binaries.
 
     Uses the same augmented PATH resolution as ToolRunner to find
     tools installed via pip, go install, brew, etc.
@@ -724,6 +772,10 @@ def is_tool_available(tool_name: str) -> bool:
     Returns:
         True if the tool is found, False otherwise.
     """
+    # Agent-internal tools are always available
+    if tool_name in _AGENT_INTERNAL_TOOLS:
+        return True
+
     # Build augmented PATH matching ToolRunner.resolve_tool_path
     venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin")
     go_bin = os.path.expanduser("~/go/bin")
