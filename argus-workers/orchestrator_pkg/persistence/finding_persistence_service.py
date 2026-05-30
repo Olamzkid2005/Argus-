@@ -328,6 +328,61 @@ class FindingPersistenceService:
                 logger.warning("Failed to save secret finding: %s", e)
         return failed
 
+    # ------------------------------------------------------------------
+    # JSONB persistence (PoC / remediation fix)
+    # ------------------------------------------------------------------
+
+    def save_poc(self, finding_id: str, poc_data: dict) -> bool:
+        """Save PoC data to findings.poc_generated column."""
+        return self._update_finding_jsonb(
+            finding_id, "poc_generated", poc_data, log_label="PoC",
+        )
+
+    def save_remediation(self, finding_id: str, fix_data: dict) -> bool:
+        """Save remediation fix to findings.remediation_fix column."""
+        return self._update_finding_jsonb(
+            finding_id, "remediation_fix", fix_data, log_label="remediation fix",
+        )
+
+    def _update_finding_jsonb(
+        self,
+        finding_id: str,
+        column: str,
+        data: dict,
+        log_label: str = "update",
+    ) -> bool:
+        """Save a JSONB dict to a findings column with an auto-timestamp column.
+
+        Args:
+            finding_id: UUID of the finding
+            column: Column name to update (e.g. 'poc_generated', 'remediation_fix')
+            data: Dict to store as JSONB
+            log_label: Human-readable label for log messages
+
+        Returns:
+            True if saved successfully
+        """
+        from psycopg2.sql import Identifier, SQL
+
+        from database.connection import db_cursor
+
+        try:
+            with db_cursor() as cursor:
+                cursor.execute(
+                    SQL("UPDATE findings SET {col} = %s::jsonb, {col_at} = NOW() WHERE id = %s").format(
+                        col=Identifier(column),
+                        col_at=Identifier(f"{column}_at"),
+                    ),
+                    (json.dumps(data), finding_id),
+                )
+                return cursor.rowcount > 0
+        except Exception as e:
+            logger.warning(
+                "Failed to save %s for finding %s: %s",
+                log_label, finding_id, e,
+            )
+            return False
+
     def _fire_webhooks(self, findings_to_save: list[dict]) -> None:
         """Fire webhooks for HIGH / CRITICAL findings."""
         for f in findings_to_save:

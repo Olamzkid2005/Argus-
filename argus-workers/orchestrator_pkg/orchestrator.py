@@ -6,7 +6,6 @@ Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2, 31.2, 31.3
 """
 
 import atexit
-import json
 import logging
 import os
 import time
@@ -175,54 +174,8 @@ class Orchestrator:
         return result
 
     def _load_custom_rules(self, engagement_id: str) -> list[dict]:
-        from database.connection import db_cursor
-        try:
-            with db_cursor() as cursor:
-                cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
-                row = cursor.fetchone()
-                if not row:
-                    return []
-                org_id = row[0]
-
-                # First check for engagement-specific rules via junction table
-                cursor.execute("""
-                    SELECT cr.id, cr.name, cr.description, cr.severity,
-                           cr.category, cr.rule_yaml, cr.tags
-                    FROM custom_rules cr
-                    INNER JOIN engagement_custom_rules ecr
-                        ON cr.id = ecr.rule_id
-                    WHERE ecr.engagement_id = %s
-                      AND cr.status = 'active'
-                    ORDER BY cr.created_at DESC
-                """, (engagement_id,))
-                columns = [desc[0] for desc in cursor.description]
-                engagement_rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-
-                if engagement_rules:
-                    logger.info(
-                        "Loaded %d engagement-specific custom rule(s) for engagement %s",
-                        len(engagement_rules), engagement_id,
-                    )
-                    return engagement_rules
-
-                # Fallback: load org-level rules when no engagement-specific rules exist
-                logger.info(
-                    "No engagement-specific custom rules for %s, falling back to org-level rules",
-                    engagement_id,
-                )
-                cursor.execute("""
-                    SELECT id, name, description, severity, category, rule_yaml, tags
-                    FROM custom_rules WHERE org_id = %s AND status = 'active'
-                    ORDER BY created_at DESC
-                """, (org_id,))
-                org_rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-                logger.info(
-                    "Loaded %d org-level custom rule(s) for org %s", len(org_rules), org_id,
-                )
-                return org_rules
-        except Exception as e:
-            logger.warning(f"Failed to load custom rules: {e}")
-            return []
+        from orchestrator_pkg.custom_rules import CustomRulesService
+        return CustomRulesService.load(engagement_id)
 
     def _load_priority_vuln_classes(self) -> list[str]:
         """Load priority_vuln_classes from the engagement record."""
@@ -360,48 +313,6 @@ class Orchestrator:
             get_org_id_fn=self._get_org_id,
         )
         return svc.save(findings)
-
-    def _update_finding_jsonb(self, finding_id: str, column: str, data: dict, log_label: str = "update") -> bool:
-        """Save a JSONB dict to a findings column with an auto-timestamp column.
-
-        Args:
-            finding_id: UUID of the finding
-            column: Column name to update (e.g. 'poc_generated', 'remediation_fix')
-            data: Dict to store as JSONB
-            log_label: Human-readable label for log messages
-
-        Returns:
-            True if saved successfully
-        """
-
-        from psycopg2.sql import SQL, Identifier
-
-        from database.connection import db_cursor
-
-        try:
-            with db_cursor() as cursor:
-                cursor.execute(
-                    SQL("UPDATE findings SET {col} = %s::jsonb, {col_at} = NOW() WHERE id = %s").format(
-                        col=Identifier(column),
-                        col_at=Identifier(f"{column}_at"),
-                    ),
-                    (json.dumps(data), finding_id),
-                )
-                return cursor.rowcount > 0
-        except Exception as e:
-            logger.warning(
-                "Failed to save %s for finding %s: %s",
-                log_label, finding_id, e,
-            )
-            return False
-
-    def _save_poc_to_finding(self, finding_id: str, poc_data: dict) -> bool:
-        """Save PoC data to findings.poc_generated column."""
-        return self._update_finding_jsonb(finding_id, "poc_generated", poc_data, log_label="PoC")
-
-    def _save_remediation_fix(self, finding_id: str, fix_data: dict) -> bool:
-        """Save remediation fix to findings.remediation_fix column."""
-        return self._update_finding_jsonb(finding_id, "remediation_fix", fix_data, log_label="remediation fix")
 
     def run_scan_with_agent(self, targets, recon_context, aggressiveness=DEFAULT_AGGRESSIVENESS,
                             authorized_scope=None, auth_config=None, dual_auth_config=None,
@@ -747,11 +658,19 @@ class Orchestrator:
             )
 
         # ── 3. LlmBatchService — PoC, chain exploits, fixes ──
+        from orchestrator_pkg.persistence import FindingPersistenceService
+        _fps = FindingPersistenceService(
+            engagement_id=self.engagement_id,
+            finding_repo=self.finding_repo,
+            bug_bounty_mode=self.bug_bounty_mode,
+            classify_finding_type_fn=self._classify_finding_type,
+            get_org_id_fn=self._get_org_id,
+        )
         llm_batch_svc = LlmBatchService(
             llm_client=self.llm_client,
             engagement_id=self.engagement_id,
-            save_poc_fn=self._save_poc_to_finding,
-            save_remediation_fn=self._save_remediation_fix,
+            save_poc_fn=_fps.save_poc,
+            save_remediation_fn=_fps.save_remediation,
         )
         llm_batch_svc.generate_pocs(scored, llm_svc, engagement_cost_tracker)
         llm_batch_svc.generate_chain_exploits(llm_svc, engagement_cost_tracker)
@@ -782,107 +701,36 @@ class Orchestrator:
         }
 
     def run_reporting(self, job: dict) -> dict:
+        from orchestrator_pkg.reporting import (
+            ReportGenerationService,
+            TargetProfileService,
+        )
+
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_reporting", [])
         self._check_timeout()
-        self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="report")
-        self.logger.log_job_started(job_type="report", engagement_id=self.engagement_id)
-        report_data = {}
-        if self.llm_client and self.llm_client.is_available():
-            try:
-                from database.repositories.report_repository import ReportRepository
-                from llm_report_generator import LLMReportGenerator
-                from llm_service import LLMService
-                recon_ctx = load_recon_context(self.engagement_id)
-                scored_findings = job.get("scored_findings", [])
-                synthesis = job.get("synthesis", {})
-                llm_svc = LLMService(self.llm_client)
-                generator = LLMReportGenerator(llm_svc)
-                engagement_info = {"target_url": job.get("target", ""), "scan_type": job.get("type", "")}
-                report_data = generator.generate_report(
-                    synthesis=synthesis, scored_findings=scored_findings,
-                    engagement=engagement_info, recon_context=recon_ctx,
-                )
-                repo = ReportRepository()
-                sbom_json = None
-                try:
-                    from database.repositories.finding_repository import (
-                        FindingRepository,
-                    )
-                    from tools.sbom_generator import generate_sbom_from_findings
-                    db_url = os.getenv("DATABASE_URL")
-                    if not db_url:
-                        raise OSError("DATABASE_URL not set — cannot query findings for SBOM")
-                    fr = FindingRepository(db_url)
-                    all_findings, _ = fr.get_findings_by_engagement(self.engagement_id, limit=10000)
-                    sbom_json = generate_sbom_from_findings(
-                        engagement_id=self.engagement_id, findings=all_findings,
-                        target_url=job.get("target", ""), repo_url=job.get("repo_url", ""),
-                    )
-                except Exception as e:
-                    logger.warning(f"SBOM generation failed (non-fatal): {e}")
-                repo.upsert_report(engagement_id=self.engagement_id, report_data=report_data,
-                                   model_used=LLM_AGENT_MODEL, sbom_json=sbom_json)
-                emit_thinking(self.engagement_id, "LLM report generated successfully")
-            except Exception as e:
-                logger.warning(f"LLM report generation failed (non-fatal): {e}")
+        self.ws_publisher.publish_job_started(
+            engagement_id=self.engagement_id, job_type="report",
+        )
+        self.logger.log_job_started(
+            job_type="report", engagement_id=self.engagement_id,
+        )
 
-        # ── Update target profile with findings from this engagement ──
-        _org_id = self._get_org_id()
-        try:
-            from urllib.parse import urlparse
+        # ── 1. ReportGenerationService — LLM report + SBOM ──
+        report_svc = ReportGenerationService(
+            engagement_id=self.engagement_id,
+            llm_client=self.llm_client,
+            llm_model=LLM_AGENT_MODEL,
+        )
+        report_data = report_svc.generate(job)
 
-            from database.repositories.target_profile_repository import (
-                TargetProfileRepository,
-            )
-            from database.repositories.tool_accuracy_repository import (
-                ToolAccuracyRepository,
-            )
-
-            target_url = job.get("target", "")
-            target_domain = urlparse(target_url).netloc
-            if target_domain and _org_id:
-                profile_repo = TargetProfileRepository()
-
-                # Load findings from this engagement
-                all_findings, _ = (
-                    self.finding_repo.get_findings_by_engagement(
-                        self.engagement_id
-                    )
-                    if self.finding_repo
-                    else ([], None)
-                )
-
-                # Load recon context from Redis
-                recon_ctx = load_recon_context(self.engagement_id)
-                recon_ctx_dict = (
-                    recon_ctx.to_dict()
-                    if hasattr(recon_ctx, "to_dict")
-                    else {}
-                )
-
-                # Load tool accuracy for noisy-tool detection
-                acc_repo = ToolAccuracyRepository()
-                fp_rates = acc_repo.load_fp_rates(_org_id)
-
-                profile_repo.upsert_from_engagement(
-                    org_id=_org_id,
-                    target_url=target_url,
-                    engagement_id=self.engagement_id,
-                    recon_context=recon_ctx_dict,
-                    findings=[
-                        f.to_dict() if hasattr(f, "to_dict") else dict(f)
-                        for f in (all_findings or [])
-                    ],
-                    tool_accuracy_fp_rates=fp_rates,
-                )
-                logger.info(
-                    "Target profile updated for %s", target_domain
-                )
-        except Exception as e:
-            logger.warning(
-                "Target profile update failed (non-fatal): %s", e
-            )
+        # ── 2. TargetProfileService — target profile upsert ──
+        profile_svc = TargetProfileService(
+            engagement_id=self.engagement_id,
+            finding_repo=self.finding_repo,
+            get_org_id_fn=self._get_org_id,
+        )
+        profile_svc.update(job)
 
         # ── Scan diff dispatch removed from orchestrator ──
         # This is now handled by tasks/report.py::generate_report() which
@@ -891,8 +739,12 @@ class Orchestrator:
         # it doesn't depend on prev_engagement_id being set in the budget.
 
         slog.tool_complete("orchestrator.run_reporting", success=True)
-        return {"phase": "report", "status": "completed", "next_state": "complete",
-                "report": report_data, "trace_id": get_trace_id()}
+        return {
+            "phase": "report", "status": "completed",
+            "next_state": "complete",
+            "report": report_data,
+            "trace_id": get_trace_id(),
+        }
 
     def run_repo_scan(self, job: dict) -> dict:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
