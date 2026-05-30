@@ -373,6 +373,10 @@ class ReActAgent:
                         )
                     if ctx and ctx.is_authenticated():
                         self.set_auth_context(ctx)
+                        # Persist for Celery retry resilience
+                        if self.engagement_id:
+                            from agent.auth_checkpoint import save_auth_checkpoint
+                            save_auth_checkpoint(self.engagement_id, ctx)
                     return result
                 run_auth_tool.__name__ = tn
                 return run_auth_tool
@@ -714,6 +718,28 @@ class ReActAgent:
         empty_output_consecutive = 0  # FIX: track empty output, not findings count
 
         self._ensure_phase_tools()
+
+        # Restore AuthContext from checkpoint if available (Celery retry resilience)
+        if self._auth_context is None and self.engagement_id:
+            try:
+                from agent.auth_checkpoint import load_auth_checkpoint
+                checkpoint = load_auth_checkpoint(self.engagement_id)
+                if checkpoint and checkpoint.email and checkpoint.password:
+                    import requests
+                    http_session = requests.Session()
+                    from agent.tools.login_tool import run_login
+                    result, ctx = run_login(
+                        target=initial_target,
+                        http_session=http_session,
+                        email=checkpoint.email,
+                        password=checkpoint.password,
+                    )
+                    if ctx and ctx.is_authenticated():
+                        self.set_auth_context(ctx)
+                        slog.info("Auth session restored from checkpoint for %s", checkpoint.email)
+            except Exception as exc:
+                slog.warning("Failed to restore auth checkpoint: %s", exc)
+
         self.add_to_history("system", f"Task: {task}")
         initial_target = task.split(":", 1)[-1].strip() if ":" in task else task
 
