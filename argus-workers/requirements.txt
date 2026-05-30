@@ -44,3 +44,7 @@ structlog==24.4.0
 # HTML Parsing (form discovery for auth)
 beautifulsoup4>=4.12
 lxml>=5.0
+
+# WebSocket scanning
+httpx>=0.28
+websockets>=12.0

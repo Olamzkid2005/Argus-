@@ -43,7 +43,7 @@ class TestDeadLetterQueue:
         assert result is True
         mock_redis.zadd.assert_called()
         # Verify engagement-specific key was set
-        mock_redis.expire.assert_called_once()
+        assert mock_redis.expire.call_count == 3
 
     def test_enqueue_without_engagement(self, dlq, mock_redis):
         """Test enqueueing without engagement_id"""
@@ -57,8 +57,8 @@ class TestDeadLetterQueue:
         )
 
         assert result is True
-        # Should not set engagement-specific key
-        mock_redis.expire.assert_not_called()
+        # Should set expire on tasks + index keys (but NOT engagement key)
+        assert mock_redis.expire.call_count == 2
 
     def test_enqueue_redis_error(self, dlq, mock_redis):
         """Test enqueue handles Redis errors"""
