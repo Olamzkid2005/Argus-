@@ -22,7 +22,6 @@ from database.repositories.finding_repository import (
 from database.repositories.rate_limit_repository import RateLimitRepository
 from llm_client import LLMClient
 from mcp_server import get_mcp_server
-from models.recon_context import ReconContext
 from parsers.normalizer import FindingNormalizer
 from parsers.parser import Parser
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
@@ -175,20 +174,8 @@ class Orchestrator:
 
     def _load_priority_vuln_classes(self) -> list[str]:
         """Load priority_vuln_classes from the engagement record."""
-        from database.connection import db_cursor
-        try:
-            with db_cursor() as cursor:
-                cursor.execute(
-                    "SELECT priority_vuln_classes FROM engagements WHERE id = %s",
-                    (self.engagement_id,),
-                )
-                row = cursor.fetchone()
-                if row and row[0]:
-                    return list(row[0])
-                return []
-        except Exception as e:
-            logger.warning(f"Failed to load priority_vuln_classes: {e}")
-            return []
+        from orchestrator_pkg.engagement import EngagementService
+        return EngagementService.load_priority_vuln_classes(self.engagement_id)
 
     def run(self, job: dict) -> dict:
         if self.start_time is None:
@@ -768,58 +755,12 @@ class Orchestrator:
             logger.info(f"Repository scan completed with no findings for {repo_url}")
 
         if findings_count > 0:
-            try:
-                vuln_types = list({f.get("type", "UNKNOWN") for f in findings})
-                severity_breakdown = {}
-                critical_files = []
-                has_secrets = False
-                dep_vulns = 0
-                for f in findings:
-                    sev = f.get("severity", "INFO")
-                    severity_breakdown[sev] = severity_breakdown.get(sev, 0) + 1
-                    if sev in ("CRITICAL", "HIGH"):
-                        fp = f.get("file_path") or f.get("endpoint", "")
-                        if fp and fp not in critical_files:
-                            critical_files.append(fp)
-                    if f.get("type") in ("EXPOSED_SECRET", "COMMITTED_SECRET", "HARDCODED_SECRET"):
-                        has_secrets = True
-                    if f.get("type") == "DEPENDENCY_VULNERABILITY":
-                        dep_vulns += 1
-                lang_extensions = {".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".java": "Java",
-                                   ".go": "Go", ".rb": "Ruby", ".php": "PHP", ".rs": "Rust", ".cs": "C#", ".swift": "Swift"}
-                detected_langs = set()
-                for f in findings:
-                    fp = f.get("file_path") or f.get("endpoint", "")
-                    ext = os.path.splitext(fp)[1]
-                    if ext in lang_extensions:
-                        detected_langs.add(lang_extensions[ext])
-                frameworks = []
-                for f in findings:
-                    fp = (f.get("file_path") or f.get("endpoint", "")).lower()
-                    if "flask" in fp or "django" in fp:
-                        frameworks.append("Django")
-                    elif "express" in fp or "nestjs" in fp:
-                        frameworks.append("Express")
-                    elif "spring" in fp:
-                        frameworks.append("Spring")
-                    elif "laravel" in fp:
-                        frameworks.append("Laravel")
-                    elif "rails" in fp:
-                        frameworks.append("Rails")
-                    elif "fastapi" in fp:
-                        frameworks.append("FastAPI")
-                ctx = ReconContext(
-                    target_url=repo_url, scan_type="repo", repo_url=repo_url,
-                    findings_count=findings_count, repo_clone_success=True,
-                    languages_detected=sorted(detected_langs), vulnerability_types=sorted(set(vuln_types)),
-                    severity_breakdown=severity_breakdown, critical_files=critical_files[:20],
-                    frameworks_detected=list(set(frameworks)), has_hardcoded_secrets=has_secrets,
-                    dependency_vulns_count=dep_vulns,
-                )
-                save_recon_context(self.engagement_id, ctx)
-                logger.info(f"Saved repo recon context for {self.engagement_id}: {len(detected_langs)} languages, {len(vuln_types)} vuln types")
-            except Exception as e:
-                logger.warning(f"Failed to build repo recon context (non-fatal): {e}")
+            from orchestrator_pkg.repo_scan.recon_context_service import ReconContextService
+            ReconContextService.build_and_save(
+                engagement_id=self.engagement_id,
+                findings=findings,
+                repo_url=repo_url,
+            )
 
         # The task handler already transitioned the DB from 'created' to 'recon'
         # before calling this method, so use 'recon' as the from_state
@@ -857,19 +798,12 @@ class Orchestrator:
             )
 
     def _get_scan_state(self) -> str:
-        from database.connection import db_cursor
-        try:
-            with db_cursor() as cursor:
-                cursor.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
-                row = cursor.fetchone()
-                return row[0] if row else "recon"
-        except (ValueError, OSError, KeyError) as e:
-            logger.warning("State check failed for engagement %s: %s — defaulting to 'failed'", self.engagement_id, e)
-            return "failed"  # If budget check fails, stop the loop to prevent infinite cycles
+        from orchestrator_pkg.engagement import EngagementService
+        return EngagementService.get_scan_state(self.engagement_id)
 
     def _log_timeout_event(self, elapsed_seconds: float):
-        logger.warning(f"Engagement {self.engagement_id} exceeded hard timeout. "
-                       f"Elapsed: {elapsed_seconds:.2f}s, Limit: {HARD_TIMEOUT_SECONDS}s")
+        from orchestrator_pkg.engagement import EngagementService
+        EngagementService.log_timeout_event(self.engagement_id, elapsed_seconds)
 
     def get_elapsed_time(self) -> float:
         if self.start_time is None:
