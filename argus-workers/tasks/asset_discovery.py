@@ -171,6 +171,8 @@ def update_asset_risk_scores(self, org_id: str):
     # Estimate CVSS per severity — uses shared canonical mapping from attack_graph
     from attack_graph import AttackGraph
 
+    conn = None
+    cursor = None
     try:
         conn = connect(db_conn_string)
         cursor = conn.cursor()
@@ -259,10 +261,15 @@ def update_asset_risk_scores(self, org_id: str):
             scored_count += 1
 
         conn.commit()
-        cursor.close()
-        conn.close()
 
         return {"status": "completed", "assets_scored": scored_count}
 
     except Exception as e:
+        if conn:
+            conn.rollback()
         return {"status": "failed", "error": str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
