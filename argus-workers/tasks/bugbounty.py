@@ -111,12 +111,13 @@ def generate_bugbounty_report(
 def _fetch_findings(engagement_id: str) -> list[dict]:
     """Fetch findings for an engagement from PostgreSQL."""
     import psycopg2
+    import psycopg2.extras
 
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise OSError("DATABASE_URL not set — cannot fetch findings")
 
-    conn = psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url, connect_timeout=10)
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -159,12 +160,13 @@ def _fetch_findings(engagement_id: str) -> list[dict]:
 def _fetch_engagement(engagement_id: str) -> dict | None:
     """Fetch engagement metadata from PostgreSQL."""
     import psycopg2
+    import psycopg2.extras
 
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise OSError("DATABASE_URL not set — cannot fetch engagement")
 
-    conn = psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url, connect_timeout=10)
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
