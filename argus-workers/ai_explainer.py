@@ -241,9 +241,6 @@ class AIExplainer:
         if not explanation or not cluster:
             return False
 
-        {f.get("type", "").upper() for f in cluster.get("findings", []) if f.get("type")}
-        {f.get("endpoint", "").lower() for f in cluster.get("findings", []) if f.get("endpoint")}
-
         explanation_lower = explanation.lower()
 
         # Check: no new vulnerability types mentioned that aren't in input

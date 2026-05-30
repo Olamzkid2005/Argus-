@@ -276,7 +276,7 @@ class PGVectorRepository:
             logger.error(f"Failed to find similar findings: {e}")
             return []
 
-    def _generate_embedding_fallback(self, text: str) -> list[float] | None:
+    def generate_embedding_fallback(self, text: str) -> list[float] | None:
         """Fallback embedding for when embedding API is unavailable.
 
         M-v3-12: Uses SHA-256 hash expanded across all dimensions for reasonable

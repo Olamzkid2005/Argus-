@@ -67,7 +67,7 @@ class ToolAccuracyRepository:
                     fp_rate = (
                         (tool_accuracy.false_positives
                          + EXCLUDED.false_positives + 0.5)::decimal
-                        / NULLIF(tool_accuracy.total_verdicts + 1, 0)
+                        / NULLIF(tool_accuracy.total_verdicts + 1 + 1, 0)
                     ),
                     last_updated = NOW()
                 """,

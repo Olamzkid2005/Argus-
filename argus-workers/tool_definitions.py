@@ -548,20 +548,6 @@ _register(ToolDefinition(
 ))
 
 _register(ToolDefinition(
-    name="trufflehog",
-    description="High-entropy secret scanner for git history",
-    phases=["repo_scan"],
-    default_args=["git", "--json", "--no-update"],
-    parameters=[
-        ToolParameter("target", "Target path", required=True),
-        ToolParameter("since_commit", "Scan from commit", flag="--since-commit"),
-        ToolParameter("max_depth", "Max commit depth", flag="--max-depth"),
-    ],
-    timeout=600,
-    signal_quality=SignalQuality.PROBABLE
-))
-
-_register(ToolDefinition(
     name="brakeman",
     description="Ruby on Rails security scanner",
     phases=["repo_scan"],

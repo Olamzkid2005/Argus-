@@ -240,7 +240,7 @@ class AttackGraphRepository:
             graph = AttackGraph(engagement_id)
 
             for row in rows:
-                path_data = row[0] if isinstance(row, dict) else row[0]
+                path_data = row[0]
                 if isinstance(path_data, str):
                     path_data = json.loads(path_data)
 

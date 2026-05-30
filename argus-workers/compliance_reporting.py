@@ -476,7 +476,7 @@ class ComplianceReportGenerator:
 
         for finding in findings:
             nist_ref = self.mapper.map_to_nist_csf(finding.get("type", "UNKNOWN"))
-            nist_ref.split(".")[0]  # e.g. "PR"
+            # sub_prefix is the first word before space, e.g. "PR.PT-3"
             sub_prefix = nist_ref.split(" ")[0]  # e.g. "PR.PT-3"
 
             compliance_findings.append(ComplianceFinding(

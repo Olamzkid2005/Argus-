@@ -106,7 +106,10 @@ def main():
             logger.error("Job missing 'type' field")
             sys.exit(1)
 
-        task_name = TASK_NAME_MAP[job.type]
+        task_name = TASK_NAME_MAP.get(job.type)
+        if not task_name:
+            logger.error("Unknown job type: %s", job.type)
+            sys.exit(1)
         args = job.to_celery_args()
 
         result = dispatch_task(task_name, args)

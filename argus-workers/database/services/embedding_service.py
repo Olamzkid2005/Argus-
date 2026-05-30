@@ -141,7 +141,7 @@ class EmbeddingService:
             return embedding
 
         pg = self._pgvector_repo()
-        result = pg.generate_embedding_fallback(text) if hasattr(pg, 'generate_embedding_fallback') else None
+        result = pg.generate_embedding_fallback(text)
         if result is not None:
             self._get_embedding_cache[key] = result
         return result
