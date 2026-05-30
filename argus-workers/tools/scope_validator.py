@@ -2,7 +2,6 @@
 Scope Validator - Ensures LLM-selected tools stay within authorized scope.
 Prevents prompt injection from tricking the agent into scanning unauthorized targets.
 """
-import fnmatch
 import json
 import logging
 from urllib.parse import urlparse

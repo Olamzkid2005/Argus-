@@ -116,6 +116,7 @@ class LegacyAPISecurityScanner:
         # L-17: Validate target URL before scanning — prevent scanning
         # private IPs, localhost, and metadata endpoints.
         from urllib.parse import urlparse as _urlparse
+
         from tools.scope_validator import validate_target_scope
         parsed = _urlparse(target_url)
         if parsed.scheme not in ("http", "https"):

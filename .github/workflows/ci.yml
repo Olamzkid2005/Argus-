@@ -45,9 +45,9 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Dependency audit
-        run: npm audit --audit-level=high
-        continue-on-error: true
+      - name: Dependency audit (critical only — blocking)
+        run: npm audit --audit-level=critical
+        continue-on-error: false
 
   backend:
     name: Backend (Python Workers)
@@ -96,8 +96,8 @@ jobs:
         run: ruff check . --config pyproject.toml
 
       - name: Dependency audit
-        run: pip-audit
-        continue-on-error: true
+        run: pip-audit --severity critical
+        continue-on-error: false
 
       - name: Run tests
         run: pytest tests/ --tb=short -q --cov=. --cov-report=term-missing --cov-fail-under=70
@@ -157,9 +157,9 @@ jobs:
       - name: Check for secrets with gitleaks
         run: |
           if command -v gitleaks &>/dev/null; then
-            gitleaks detect --source . --no-git -v 2>&1 || echo "gitleaks found issues (non-blocking)"
+            gitleaks detect --source . --no-git -v 2>&1
           else
-            echo "gitleaks not available, skipping secret scan"
+            echo "::warning::gitleaks not installed — skipping secret scan"
           fi
 
       - name: Trivy filesystem scan
@@ -169,3 +169,4 @@ jobs:
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
+          skip-files: '.git/**,**/test-results/**,**/node_modules/**,**/*.min.js,**/*.map,**/coverage/**'

@@ -24,7 +24,7 @@ describe("useScanEstimates", () => {
 
   it("adjusts estimates based on target type and aggressiveness", () => {
     const { result: defaultResult } = renderHook(() =>
-      useScanEstimates("scanning", { targetType: "default", aggressiveness: "medium" }, "2024-01-01T00:00:00.000Z")
+      useScanEstimates("scanning", { targetType: "default", aggressiveness: "high" }, "2024-01-01T00:00:00.000Z")
     );
 
     const { result: highAggro } = renderHook(() =>

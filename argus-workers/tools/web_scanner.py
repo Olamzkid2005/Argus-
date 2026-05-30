@@ -1096,9 +1096,7 @@ class WebScanner:
 
             # Check if endpoint exists
             resp = self._safe_request("GET", url)
-            if resp and resp.status_code in (200, 302):
-                # Test default credentials
-                if self.ENABLE_CREDENTIAL_TESTING:
+            if resp and resp.status_code in (200, 302) and self.ENABLE_CREDENTIAL_TESTING:
                     for username, password in self.DEFAULT_CREDS[:3]:  # Limit to 3
                         login_resp = self._safe_request(
                             "POST", url,
@@ -2322,7 +2320,6 @@ class WebScanner:
             return
 
         body = resp.text
-        body_lower = body.lower()
 
         # DOM sources — where attacker-controlled data enters the page
         dom_sources = [
@@ -2342,11 +2339,10 @@ class WebScanner:
         found_sources = [s for s in dom_sources if s in body]
         found_sink_actual = [s for s in dom_sinks if s in body]
 
-        # Need both a source AND a sink for a real DOM XSS risk
-        if not found_sources or not found_sink_actual:
-            # Also check for reflection-based DOM XSS (source in URL, sink in JS)
-            if not any(s in body for s in ["location", "hash", "search"]):
-                return
+        # Need both a source AND a sink for a real DOM XSS risk.
+        # If neither sources nor sinks found, check for reflection-based DOM XSS.
+        if (not found_sources or not found_sink_actual) and not any(s in body for s in ["location", "hash", "search"]):
+            return
 
         # Test payloads targeting the specific source→sink path
         llm_payloads = []
