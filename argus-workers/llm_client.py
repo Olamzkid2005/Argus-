@@ -83,10 +83,25 @@ class LLMClient:
             or self._load_key_from_db()
             or self._load_key_from_redis(redis_url)
         )
-        # Auto-detect OpenRouter: if key was loaded from Redis openrouter key or starts with sk-or-
-        if self.api_key and self.api_key.startswith("sk-or-"):
-            self.provider = "generic"
-            self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        # Auto-detect provider from API key prefix
+        if self.api_key:
+            if self.api_key.startswith("sk-or-"):
+                # OpenRouter
+                self.provider = "generic"
+                self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+            elif self.api_key.startswith("AIzaSy") or self.api_key.startswith("AQ."):
+                # Google Gemini / AI Studio (AIzaSy=old format, AQ.=new format)
+                self.provider = "generic"
+                self.api_url = api_url or os.getenv("LLM_API_URL",
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                )
+                # Default model for Gemini if not explicitly set
+                if not model and not os.getenv("LLM_MODEL"):
+                    self.model = "gemini-2.0-flash"
+            else:
+                self.api_url = api_url or os.getenv("LLM_API_URL",
+                    "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
+                )
         else:
             self.api_url = api_url or os.getenv("LLM_API_URL",
                 "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
@@ -198,31 +213,36 @@ class LLMClient:
 
             r = redis_module.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
 
+            # Try multiple key patterns in priority order
+            key_patterns = ["gemini_api_key", "openrouter_api_key", "openai_api_key", "llm_api_key"]
+
             if getattr(self, '_user_email', None):
                 # Tenant-scoped lookup (M-v5-01): exact key for this user
-                key = f"settings:{self._user_email}:openrouter_api_key"
-                value = r.get(key)
-                if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
-                    api_key = value.decode() if isinstance(value, bytes) else value
-                    logger.info("Loaded API key from Redis for user %s (redacted)", self._user_email)
-                    return api_key
+                for pattern in key_patterns:
+                    key = f"settings:{self._user_email}:{pattern}"
+                    value = r.get(key)
+                    if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
+                        api_key = value.decode() if isinstance(value, bytes) else value
+                        logger.info("Loaded API key from Redis for user %s (redacted)", self._user_email)
+                        return api_key
             else:
                 # Unscoped fallback — cross-tenant risk (M-v5-01)
                 logger.warning(
                     "No user_email set for LLMClient — scanning all Redis keys for API key. "
                     "Set user_email to prevent cross-tenant key leakage."
                 )
-                cursor = 0
-                while True:
-                    cursor, keys = r.scan(cursor=cursor, match="settings:*:openrouter_api_key", count=20)
-                    for key in keys:
-                        value = r.get(key)
-                        if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
-                            api_key = value.decode() if isinstance(value, bytes) else value
-                            logger.info("Loaded API key from Redis (key redacted)")
-                            return api_key
-                    if cursor == 0:
-                        break
+                for pattern in key_patterns:
+                    cursor = 0
+                    while True:
+                        cursor, keys = r.scan(cursor=cursor, match=f"settings:*:{pattern}", count=20)
+                        for key in keys:
+                            value = r.get(key)
+                            if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
+                                api_key = value.decode() if isinstance(value, bytes) else value
+                                logger.info("Loaded API key from Redis (key redacted)")
+                                return api_key
+                        if cursor == 0:
+                            break
 
             logger.debug("No API key found in Redis settings")
             return None
