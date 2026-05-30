@@ -29,6 +29,9 @@ from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
 from utils.logging_utils import ScanLogger
 
+from agent.auth_context import AuthContext
+from tools.models import ToolResult
+
 from .agent_action import AgentAction
 from .agent_prompts import (
     BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT,
@@ -140,6 +143,11 @@ class ReActAgent:
                 TOOLS = {}
 
             for tool_name in phase_tools:
+                # register and login are agent-internal tools, not external binaries.
+                # They are registered in set_tool_runner() which has access to self.
+                if tool_name in ("register", "login"):
+                    continue
+
                 def make_runner(tn):
                     def run_tool(target: str = "", **kwargs):
                         args = kwargs.pop("args", [])
@@ -213,10 +221,19 @@ class ReActAgent:
         self._mode = mode
         self._candidate_list = None
         self._cancelled = False
+        self._auth_context: AuthContext | None = None
 
     def set_candidate_list(self, candidate_list) -> None:
         """Accept a CandidateList from the scan phase for agent reasoning."""
         self._candidate_list = candidate_list
+
+    def set_auth_context(self, ctx: AuthContext) -> None:
+        """Store an authenticated AuthContext for all subsequent tool calls.
+
+        Once set, the tool wrappers automatically inject cookies/headers
+        into CLI arguments for tools like sqlmap, nuclei, dalfox, etc.
+        """
+        self._auth_context = ctx
 
     def cancel(self) -> None:
         """Signal the agent to stop after the current iteration."""
@@ -323,9 +340,42 @@ class ReActAgent:
                     timeout = kwargs.pop("timeout", 300)
                     if target:
                         args = [target] + (args or [])
+                    # Inject auth context for tools that support it
+                    if self._auth_context:
+                        from agent.auth_injectors import inject_auth
+                        args = inject_auth(tn, args, self._auth_context)
                     return tool_runner.run(tn, args, timeout=timeout)
                 run_tool.__name__ = tn
                 return run_tool
+
+            def make_auth_tool(tn):
+                """Factory for register/login tools that wire AuthContext."""
+                def run_auth_tool(target: str = "", **kwargs):
+                    import requests
+                    http_session = requests.Session()
+                    if tn == "register":
+                        from agent.tools.register_tool import run_register
+                        result, ctx = run_register(
+                            target=target,
+                            http_session=http_session,
+                            auth_context=self._auth_context,
+                        )
+                    else:
+                        from agent.tools.login_tool import run_login
+                        email = kwargs.pop("email", None)
+                        password = kwargs.pop("password", None)
+                        result, ctx = run_login(
+                            target=target,
+                            http_session=http_session,
+                            auth_context=self._auth_context,
+                            email=email,
+                            password=password,
+                        )
+                    if ctx and ctx.is_authenticated():
+                        self.set_auth_context(ctx)
+                    return result
+                run_auth_tool.__name__ = tn
+                return run_auth_tool
 
             if self.registry.get_tool(tool_name) is None:
                 # Pull real description and parameters from SSOT
@@ -347,9 +397,15 @@ class ReActAgent:
                     description = f"Security tool: {tool_name}"
                     parameters = [{"name": "target", "description": "Target URL or path", "required": True}]
 
+                # register and login are agent-internal tools — use make_auth_tool
+                if tool_name in ("register", "login"):
+                    tool_fn = make_auth_tool(tool_name)
+                else:
+                    tool_fn = make_runner(tool_name)
+
                 self.registry.register(
                     tool_name,
-                    make_runner(tool_name),
+                    tool_fn,
                     {
                         "name": tool_name,
                         "description": description,
