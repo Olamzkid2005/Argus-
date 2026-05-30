@@ -173,10 +173,6 @@ class Orchestrator:
         )
         return result
 
-    def _load_custom_rules(self, engagement_id: str) -> list[dict]:
-        from orchestrator_pkg.custom_rules import CustomRulesService
-        return CustomRulesService.load(engagement_id)
-
     def _load_priority_vuln_classes(self) -> list[str]:
         """Load priority_vuln_classes from the engagement record."""
         from database.connection import db_cursor
@@ -435,7 +431,12 @@ class Orchestrator:
         self.ws_publisher.publish_job_started(engagement_id=self.engagement_id, job_type="scan", target=str(targets))
         self.logger.log_job_started(job_type="scan", engagement_id=self.engagement_id, target=str(targets))
 
-        self._load_and_publish_custom_rules(targets)
+        from orchestrator_pkg.custom_rules import CustomRulesService
+        CustomRulesService.publish(
+            engagement_id=self.engagement_id,
+            targets=targets,
+            ws_publisher=self.ws_publisher,
+        )
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         recon_context = job.get("recon_context") or load_recon_context(self.engagement_id)
@@ -490,17 +491,6 @@ class Orchestrator:
         slog.tool_complete("orchestrator.run_scan", success=True, findings=findings_count)
         return {"phase": "scan", "status": "completed", "findings_count": findings_count,
                 "next_state": "analyzing", "trace_id": get_trace_id()}
-
-    def _load_and_publish_custom_rules(self, targets: list[str]) -> None:
-        custom_rules = self._load_custom_rules(self.engagement_id)
-        if custom_rules:
-            for rule in custom_rules:
-                self.ws_publisher.publish_scanner_activity(
-                    engagement_id=self.engagement_id, tool_name="Custom Rules Engine",
-                    activity="custom rule loaded", status="completed", target=str(targets),
-                    details=f"{rule.get('name', 'unknown')} ({rule.get('severity', 'unknown')}) — {rule.get('description', '')[:120]}",
-                )
-            logger.info(f"Loaded {len(custom_rules)} custom rule(s) for engagement {self.engagement_id}")
 
     def _run_scan_with_fallback(
         self, targets: list[str], recon_context,

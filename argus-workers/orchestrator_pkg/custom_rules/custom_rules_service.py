@@ -1,17 +1,20 @@
 """
-CustomRulesService — loads custom rules from the database.
+CustomRulesService — loads and publishes custom rules from the database.
 
-Extracted from Orchestrator._load_custom_rules().
-The method had zero self.* references, making it a pure function.
+Extracted from Orchestrator._load_custom_rules() and
+Orchestrator._load_and_publish_custom_rules().
 """
 
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class CustomRulesService:
-    """Loads custom rules for an engagement (engagement-specific → org-level fallback)."""
+    """Loads and publishes custom rules for an engagement
+    (engagement-specific → org-level fallback).
+    """
 
     @staticmethod
     def load(engagement_id: str) -> list[dict]:
@@ -75,3 +78,41 @@ class CustomRulesService:
         except Exception as e:
             logger.warning(f"Failed to load custom rules: {e}")
             return []
+
+    @staticmethod
+    def publish(
+        engagement_id: str,
+        targets: list[str],
+        ws_publisher: Any,
+    ) -> None:
+        """Load custom rules and publish them via the websocket publisher.
+
+        Combines the load and publish steps so callers only need a single
+        invocation. Uses ``ws_publisher.publish_scanner_activity()`` to
+        emit each rule to the websocket stream.
+
+        Args:
+            engagement_id: The engagement UUID.
+            targets: Target URLs or identifiers for the scan.
+            ws_publisher: Object with a ``publish_scanner_activity`` method
+                (typically ``self.ws_publisher`` from the orchestrator).
+        """
+        custom_rules = CustomRulesService.load(engagement_id)
+        if custom_rules:
+            for rule in custom_rules:
+                ws_publisher.publish_scanner_activity(
+                    engagement_id=engagement_id,
+                    tool_name="Custom Rules Engine",
+                    activity="custom rule loaded",
+                    status="completed",
+                    target=str(targets),
+                    details=(
+                        f"{rule.get('name', 'unknown')} "
+                        f"({rule.get('severity', 'unknown')}) — "
+                        f"{rule.get('description', '')[:120]}"
+                    ),
+                )
+            logger.info(
+                "Loaded %d custom rule(s) for engagement %s",
+                len(custom_rules), engagement_id,
+            )
