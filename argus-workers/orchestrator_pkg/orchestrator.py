@@ -769,8 +769,8 @@ class Orchestrator:
         """
         if self.engagement_repo:
             try:
-                eng = self.engagement_repo.get_engagement(self.engagement_id)
-                return str(eng.org_id) if eng else None
+                eng = self.engagement_repo.find_by_id(self.engagement_id)
+                return str(eng["org_id"]) if eng and eng.get("org_id") else None
             except Exception as e:
                 logger.warning(f"Failed to get org_id for engagement {self.engagement_id}: {e}")
         return None
