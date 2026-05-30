@@ -39,9 +39,10 @@ def _get_rate_limit_repo():
             import os
 
             from database.repositories.rate_limit_repository import RateLimitRepository
-            db_conn = os.getenv("DATABASE_URL")
-            if db_conn:
-                _RATE_LIMIT_REPO = RateLimitRepository(db_conn)
+            # IMPORTANT: Pass None so RateLimitRepository uses db_cursor()
+            # (connection pool). Passing a connection string as db_connection
+            # would crash on self.db.cursor() since strings have no cursor().
+            _RATE_LIMIT_REPO = RateLimitRepository(db_connection=None)
         except ImportError:
             pass
     return _RATE_LIMIT_REPO
