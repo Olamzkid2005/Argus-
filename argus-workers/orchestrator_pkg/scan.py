@@ -128,8 +128,13 @@ def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
         tags.add('fuzz')
     if tech_stack:
         for tech in tech_stack:
+            tech_lower = tech.lower()
             for key, mapped_tags in TECH_TAG_MAP.items():
-                if key in tech.lower():
+                # Match if the tech name directly corresponds to a key,
+                # or if any mapped tag appears in the tech name.
+                # Checks both directions to prevent false positives like
+                # matching "java" key against "javascript" tech.
+                if tech_lower == key or any(tag in tech_lower for tag in mapped_tags):
                     tags.update(mapped_tags)
     return ['-tags', ','.join(sorted(tags))]
 
