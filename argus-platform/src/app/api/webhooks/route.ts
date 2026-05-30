@@ -18,9 +18,25 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { webhook_url, events, engagement_id } = body;
 
-    if (!webhook_url) {
+    if (!webhook_url || typeof webhook_url !== "string") {
       return NextResponse.json(
-        { error: "webhook_url required" },
+        { error: "webhook_url required and must be a string" },
+        { status: 400 },
+      );
+    }
+
+    // Validate events is an array if provided
+    if (events !== undefined && !Array.isArray(events)) {
+      return NextResponse.json(
+        { error: "events must be an array of strings" },
+        { status: 400 },
+      );
+    }
+
+    // Validate engagement_id is a string if provided
+    if (engagement_id !== undefined && typeof engagement_id !== "string") {
+      return NextResponse.json(
+        { error: "engagement_id must be a string" },
         { status: 400 },
       );
     }

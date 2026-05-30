@@ -755,7 +755,7 @@ class Orchestrator:
             logger.info(f"Repository scan completed with no findings for {repo_url}")
 
         if findings_count > 0:
-            from orchestrator_pkg.repo_scan.recon_context_service import ReconContextService
+            from orchestrator_pkg.recon_context_service import ReconContextService
             ReconContextService.build_and_save(
                 engagement_id=self.engagement_id,
                 findings=findings,

@@ -6,6 +6,38 @@ import { log } from "@/lib/logger";
  * Optimized for production use with proper timeouts and error handling
  * Supports PgBouncer transaction pooling
  */
+/**
+ * Parse DB_SSLMODE env var into pg-compatible SSL config.
+ * Supported modes: prefer, require, verify-ca, verify-full, disable
+ */
+function getSslConfig(): PoolConfig["ssl"] {
+  const sslMode = process.env.DB_SSLMODE || "prefer";
+  switch (sslMode) {
+    case "disable":
+      return false;
+    case "require":
+      return { rejectUnauthorized: false };
+    case "verify-ca":
+      return {
+        rejectUnauthorized: true,
+        ca: process.env.DB_SSL_CA ?? undefined,
+      };
+    case "verify-full":
+      return {
+        rejectUnauthorized: true,
+        ca: process.env.DB_SSL_CA ?? undefined,
+        cert: process.env.DB_SSL_CERT ?? undefined,
+        key: process.env.DB_SSL_KEY ?? undefined,
+      };
+    case "prefer":
+    default:
+      // prefer: connect without SSL first, fall back to SSL (handled by pg)
+      return process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: false }
+        : undefined;
+  }
+}
+
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
   max: parseInt(process.env.DB_POOL_MAX || "20", 10),
@@ -14,6 +46,8 @@ const poolConfig: PoolConfig = {
   connectionTimeoutMillis: 5000,
   maxUses: 10000,
   allowExitOnIdle: false,
+  // SSL configuration from DB_SSLMODE env var
+  ssl: getSslConfig(),
   // PgBouncer compatibility: disable prepared statements in transaction mode
   ...(process.env.PGBOUNCER_MODE === "transaction"
     ? { prepare: false }

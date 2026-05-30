@@ -14,6 +14,40 @@ const engagementRateLimit = createRateLimit({
   maxRequests: 10,
 });
 
+/**
+ * Encrypt auth_config at rest using AES-256-GCM before storing (H-27).
+ * The encryption key comes from AUTH_CONFIG_ENCRYPTION_KEY env var.
+ * If no key is configured, auth_config is stored as plaintext (degraded mode).
+ *
+ * Returns:
+ *   - null if data is null/undefined
+ *   - JSON string if no encryption key configured (degraded mode with warning)
+ *   - "iv:authTag:ciphertext" hex-encoded string if encryption succeeds
+ */
+function encryptAuthConfig(data: unknown): string | null {
+  if (!data) return null;
+  const encryptionKey = process.env.AUTH_CONFIG_ENCRYPTION_KEY;
+  if (!encryptionKey || encryptionKey.length < 32) {
+    log.warn("AUTH_CONFIG_ENCRYPTION_KEY not configured — storing auth_config in plaintext");
+    return JSON.stringify(data);
+  }
+  try {
+    // Derive a 32-byte key from the env var using SHA-256
+    const key = crypto.createHash("sha256").update(encryptionKey).digest();
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    const plaintext = JSON.stringify(data);
+    let encrypted = cipher.update(plaintext, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    const authTag = cipher.getAuthTag().toString("hex");
+    // Format: iv:authTag:ciphertext (all hex-encoded)
+    return `${iv.toString("hex")}:${authTag}:${encrypted}`;
+  } catch (encError) {
+    log.error("Failed to encrypt auth_config: %s", encError);
+    return JSON.stringify(data);
+  }
+}
+
 export async function POST(req: NextRequest) {
   log.api('POST', '/api/engagement/create');
   try {
@@ -186,31 +220,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Encrypt auth_config at rest using AES-256-GCM before storing (H-27)
-      // The encryption key comes from AUTH_CONFIG_ENCRYPTION_KEY env var.
-      // If no key is configured, auth_config is stored as plaintext (degraded mode).
-      const encryptJson = (data: unknown): string | null => {
-        if (!data) return null;
-        const encryptionKey = process.env.AUTH_CONFIG_ENCRYPTION_KEY;
-        if (!encryptionKey || encryptionKey.length < 32) {
-          log.warn("AUTH_CONFIG_ENCRYPTION_KEY not configured — storing auth_config in plaintext");
-          return JSON.stringify(data);
-        }
-        try {
-          // Derive a 32-byte key from the env var using SHA-256
-          const key = crypto.createHash("sha256").update(encryptionKey).digest();
-          const iv = crypto.randomBytes(16);
-          const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-          const plaintext = JSON.stringify(data);
-          let encrypted = cipher.update(plaintext, "utf8", "hex");
-          encrypted += cipher.final("hex");
-          const authTag = cipher.getAuthTag().toString("hex");
-          // Format: iv:authTag:ciphertext (all hex-encoded)
-          return `${iv.toString("hex")}:${authTag}:${encrypted}`;
-        } catch (encError) {
-          log.error("Failed to encrypt auth_config: %s", encError);
-          return JSON.stringify(data);
-        }
-      };
+      // Delegates to the shared utility function defined below.
 
       // Also validate dual auth config if provided (same logic as authConfig)
 
@@ -276,8 +286,8 @@ export async function POST(req: NextRequest) {
           "created",
           session.user.id,
           rateLimitConfig ? JSON.stringify(rateLimitConfig) : null,
-          encryptJson(effectiveAuthConfig),
-          encryptJson(effectiveDualAuthConfig),
+          encryptAuthConfig(effectiveAuthConfig),
+          encryptAuthConfig(effectiveDualAuthConfig),
           effectiveScanType,
           effectiveAggressiveness,
           effectiveAgentMode,
@@ -356,27 +366,41 @@ export async function POST(req: NextRequest) {
         }
         jobPushed = true;
       } catch (jobError) {
-        console.error("Failed to push job:", jobError);
+        log.error("Failed to push job: %s", jobError instanceof Error ? jobError.message : String(jobError));
         // Rollback: delete engagement + related rows if job push failed.
-        // Wrap cleanup in a new transaction to ensure atomicity.
+        // Use a separate client for cleanup since the original client's
+        // transaction state is ambiguous after the error.
+        const cleanupClient = await pool.connect();
         try {
-          await client.query("BEGIN");
-          await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
-          await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
-          await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
-          await client.query("COMMIT");
+          await cleanupClient.query("BEGIN");
+          await cleanupClient.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
+          await cleanupClient.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
+          await cleanupClient.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+          await cleanupClient.query("COMMIT");
         } catch (cleanupErr) {
-          console.error("Cleanup after job push failure also failed:", cleanupErr);
-          await client.query("ROLLBACK").catch(() => {});
+          log.error("Cleanup after job push failure also failed: %s", cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr));
+          await cleanupClient.query("ROLLBACK").catch(() => {});
+        } finally {
+          cleanupClient.release();
         }
         throw new Error(`Job dispatch failed: ${jobError instanceof Error ? jobError.message : "unknown error"}`);
       }
 
       if (!jobPushed) {
         // Clean up if job wasn't pushed
-        await client.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
-        await client.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
-        await client.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+        const cleanupClient = await pool.connect();
+        try {
+          await cleanupClient.query("BEGIN");
+          await cleanupClient.query("DELETE FROM engagement_states WHERE engagement_id = $1", [engagementId]);
+          await cleanupClient.query("DELETE FROM loop_budgets WHERE engagement_id = $1", [engagementId]);
+          await cleanupClient.query("DELETE FROM engagements WHERE id = $1", [engagementId]);
+          await cleanupClient.query("COMMIT");
+        } catch (cleanupErr) {
+          log.error("Cleanup after missing job push failed: %s", cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr));
+          await cleanupClient.query("ROLLBACK").catch(() => {});
+        } finally {
+          cleanupClient.release();
+        }
         throw new Error("Failed to queue scan job");
       }
 
