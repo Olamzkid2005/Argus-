@@ -178,4 +178,36 @@ class SslCheck:
         self.name = "ssl"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        from urllib.parse import urlparse
+        parsed = urlparse(target_url)
+        hostname = parsed.hostname or ""
+        port = 443
+        if ":" in hostname:
+            hostname, port_str = hostname.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                port = 443
+
+        _check_hsts(target_url, hostname, session, findings)
+
+        # Fetch cert for deeper checks
+        try:
+            import ssl as _ssl
+            import socket as _socket
+            ctx = _ssl.create_default_context()
+            with _socket.create_connection((hostname, port), timeout=10) as sock:
+                with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    tls_version = ssock.version()
+                    cipher = ssock.cipher()
+                    _check_cert_expiry(cert, hostname, port, findings)
+                    _check_self_signed(cert, hostname, port, findings)
+                    _check_san(cert, hostname, port, findings)
+                    _check_tls_version(tls_version, hostname, port, findings)
+                    if cipher:
+                        _check_weak_cipher(cipher, findings, hostname, port)
+        except Exception:
+            logger.debug("SSL cert fetch failed for %s", target_url, exc_info=True)
+
+        return findings

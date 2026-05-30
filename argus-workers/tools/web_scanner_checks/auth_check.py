@@ -211,4 +211,9 @@ class AuthCheck:
         self.name = "auth"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _check_default_credentials(target_url, session, findings)
+        _check_brute_force(target_url, session, findings)
+        _check_session_fixation(target_url, session, findings)
+        _check_password_reset(target_url, session, findings)
+        _check_registration_endpoints(target_url, session, findings)
+        return findings

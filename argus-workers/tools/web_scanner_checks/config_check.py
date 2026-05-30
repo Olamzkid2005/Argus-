@@ -113,4 +113,8 @@ class ConfigCheck:
         self.name = "config"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _check_security_headers(target_url, session, findings)
+        _check_csp(target_url, session, findings)
+        _check_cookies(target_url, session, findings)
+        _check_cors(target_url, session, findings)
+        return findings

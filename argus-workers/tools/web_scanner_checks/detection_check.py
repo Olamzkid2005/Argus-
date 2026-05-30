@@ -162,4 +162,7 @@ class DetectionCheck:
         self.name = "detection"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _check_debug_endpoints(target_url, session, findings)
+        _check_sensitive_files(target_url, session, findings)
+        _check_verb_tampering(target_url, session, findings)
+        return findings

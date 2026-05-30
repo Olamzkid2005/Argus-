@@ -125,4 +125,7 @@ class ApiCheck:
         self.name = "api"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _check_mass_assignment(target_url, session, findings)
+        _check_openapi_discovery(target_url, session, findings)
+        _check_jwt_algorithm_confusion(target_url, session, findings)
+        return findings

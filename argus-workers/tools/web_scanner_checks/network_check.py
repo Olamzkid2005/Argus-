@@ -92,4 +92,7 @@ class NetworkCheck:
         self.name = "network"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _check_host_header_injection(target_url, session, findings)
+        _check_cache_poisoning(target_url, session, findings)
+        _check_http_request_smuggling(target_url, session, findings)
+        return findings

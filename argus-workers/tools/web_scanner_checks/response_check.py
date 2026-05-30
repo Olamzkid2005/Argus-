@@ -289,4 +289,8 @@ class ResponseCheck:
         self.name = "response"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _detect_waf(target_url, session, findings)
+        _time_based_detection(target_url, session, findings)
+        _response_analysis(target_url, session, findings)
+        _differential_analysis(target_url, session, findings)
+        return findings

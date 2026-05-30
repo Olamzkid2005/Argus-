@@ -51,4 +51,17 @@ class JsSecretsCheck:
         self.name = "js_secrets"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        from urllib.parse import urljoin
+        resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+        if not resp or not resp.text:
+            return findings
+        js_urls = re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']', resp.text)
+        html_content = resp.text
+        _scan_content_for_secrets(html_content, target_url, findings)
+        for js_url in js_urls[:10]:
+            if not js_url.startswith("http"):
+                js_url = urljoin(target_url, js_url)
+            js_resp = safe_request("GET", js_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+            if js_resp and js_resp.status_code == 200:
+                _scan_content_for_secrets(js_resp.text, js_url, findings)
+        return findings

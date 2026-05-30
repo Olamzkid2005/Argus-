@@ -377,4 +377,12 @@ class InjectionCheck:
         self.name = "injection"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        return run_check(target_url, session, findings)
+        _check_sqli(target_url, session, findings)
+        _check_sqli_time_based(target_url, session, findings)
+        _check_xss(target_url, session, findings)
+        _check_xss_dom_based(target_url, session, findings)
+        _check_ssti(target_url, session, findings)
+        _check_lfi(target_url, session, findings)
+        _check_xxe(target_url, session, findings)
+        _check_cmdi(target_url, session, findings)
+        return findings
