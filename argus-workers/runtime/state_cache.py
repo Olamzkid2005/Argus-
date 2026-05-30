@@ -43,14 +43,11 @@ class RedisStateCache:
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
         self.ttl = ttl
         self._client = None
-        self._available: bool | None = None  # None = not yet checked
 
     # ── Connection management ──
 
     def _get_client(self):
         """Lazy-init Redis client with graceful degradation."""
-        if self._available is False:
-            return None
         if self._client is not None:
             try:
                 self._client.ping()
@@ -58,7 +55,6 @@ class RedisStateCache:
             except Exception:
                 logger.warning("Redis connection lost — reconnecting")
                 self._client = None
-                self._available = None
 
         try:
             import redis as redis_module
@@ -69,10 +65,8 @@ class RedisStateCache:
                 decode_responses=True,
             )
             self._client.ping()
-            self._available = True
             return self._client
         except Exception as e:
-            self._available = False
             logger.debug("Redis unavailable for state cache: %s", e)
             return None
 

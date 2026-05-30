@@ -36,15 +36,20 @@ def _get_rollout_timestamp() -> datetime | None:
     Returns:
         datetime in UTC, or None if unset (all engagements eligible).
     """
+    global _ROLLOUT_TIMESTAMP_CACHE
+    if _ROLLOUT_TIMESTAMP_CACHE is not None:
+        return _ROLLOUT_TIMESTAMP_CACHE
     raw = os.environ.get("ARGUS_FF_ROLLOUT_TIMESTAMP")
     if raw:
         try:
             dt = datetime.fromisoformat(raw)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
+            _ROLLOUT_TIMESTAMP_CACHE = dt
             return dt
         except ValueError:
             logger.warning("Invalid ARGUS_FF_ROLLOUT_TIMESTAMP=%r — ignoring", raw)
+    _ROLLOUT_TIMESTAMP_CACHE = None
     return None
 
 
@@ -235,6 +240,7 @@ def migrate_engagement(
     # Step 4: Normalize created_at to UTC-aware for comparison
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=UTC)
+    rollout_ts = None
     if not force:
         rollout_ts = _get_rollout_timestamp()
         if rollout_ts is not None and created_at < rollout_ts:
@@ -259,11 +265,7 @@ def migrate_engagement(
         reason="Engagement eligible for EngagementState path",
         details={
             "created_at": created_at.isoformat(),
-            "rollout_timestamp": (
-                _get_rollout_timestamp().isoformat()
-                if _get_rollout_timestamp()
-                else None
-            ),
+            "rollout_timestamp": rollout_ts.isoformat() if rollout_ts else None,
         },
     )
 

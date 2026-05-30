@@ -76,6 +76,8 @@ class DecisionCheckpoint:
     def from_dict(cls, d: dict) -> "DecisionCheckpoint":
         """Deserialize from a DB row dict."""
         data = dict(d)
+        # Remove DB-only columns not present in the dataclass
+        data.pop("created_at", None)
         if isinstance(data.get("arguments"), str):
             try:
                 data["arguments"] = json.loads(data["arguments"])
@@ -130,10 +132,10 @@ class DecisionCheckpointRepository:
             with db_cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT checkpoint_id, engagement_id, action_id,
+                    SELECT id AS checkpoint_id, engagement_id, action_id,
                            observation_hash, reasoning_hash, selected_tool,
                            arguments, tool_cost_usd, state_version,
-                           created_at, execution_success, execution_error
+                           execution_success, execution_error
                     FROM agent_decision_log
                     WHERE action_id = %s
                     ORDER BY created_at DESC
@@ -147,7 +149,7 @@ class DecisionCheckpointRepository:
                         "checkpoint_id", "engagement_id", "action_id",
                         "observation_hash", "reasoning_hash", "selected_tool",
                         "arguments", "tool_cost_usd", "state_version",
-                        "created_at", "execution_success", "execution_error",
+                        "execution_success", "execution_error",
                     ]
                     return DecisionCheckpoint.from_dict(dict(zip(cols, row, strict=False)))
         except Exception as e:
@@ -163,10 +165,10 @@ class DecisionCheckpointRepository:
             with db_cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT checkpoint_id, engagement_id, action_id,
+                    SELECT id AS checkpoint_id, engagement_id, action_id,
                            observation_hash, reasoning_hash, selected_tool,
                            arguments, tool_cost_usd, state_version,
-                           created_at, execution_success, execution_error
+                           execution_success, execution_error
                     FROM agent_decision_log
                     WHERE engagement_id = %s
                     ORDER BY created_at DESC
@@ -178,7 +180,7 @@ class DecisionCheckpointRepository:
                     "checkpoint_id", "engagement_id", "action_id",
                     "observation_hash", "reasoning_hash", "selected_tool",
                     "arguments", "tool_cost_usd", "state_version",
-                    "created_at", "execution_success", "execution_error",
+                    "execution_success", "execution_error",
                 ]
                 return [
                     DecisionCheckpoint.from_dict(dict(zip(cols, row, strict=False)))
@@ -199,7 +201,7 @@ class DecisionCheckpointRepository:
                     """
                     UPDATE agent_decision_log
                     SET execution_success = %s, execution_error = %s
-                    WHERE checkpoint_id = %s
+                    WHERE id = %s
                     """,
                     (success, error[:500], checkpoint_id),
                 )
