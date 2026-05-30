@@ -425,6 +425,31 @@ Continue until all language-appropriate tools have completed.
 # SYSTEM PROMPTS
 # ---------------------------------------------------------------------------
 
+AUTH_GUIDANCE = """
+### Authentication Tools Available
+You have `register` and `login` tools available in this phase.
+
+Use `register` when:
+  - Recon discovered a registration form (/register, /signup, etc.)
+  - You need authenticated access to test protected endpoints
+  - You don't have existing credentials
+
+Use `login` when:
+  - You already have credentials (from register or provided config)
+  - You need to re-establish a session after a failure
+
+Strategy:
+  1. If the site has registration, call register() first.
+  2. register() auto-logs in on success — proceed to other tools.
+  3. If register() returns needs_verification, call login() with the
+     returned email/password. Some apps work without verification.
+  4. If all auth attempts fail, generate a finding and continue with
+     unauthenticated testing. Partial coverage is better than none.
+
+IMPORTANT: Do NOT call register() or login() repeatedly. If auth fails
+after retries, move on to other tools.
+"""
+
 TOOL_SELECTION_SYSTEM_PROMPT = f"""
 You are a senior penetration tester operating an automated web application scanner.
 
@@ -443,6 +468,8 @@ Select the tool whose findings would be most valuable given the evidence.
 {WEBAPP_TOOL_CATALOGUE}
 
 {WEBAPP_STOPPING_RULES}
+
+{AUTH_GUIDANCE}
 
 Return ONLY valid JSON. No markdown, no explanation outside the JSON.
 {{
