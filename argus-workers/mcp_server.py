@@ -5,6 +5,7 @@ Implements Model Context Protocol for standardized tool calling
 import logging
 import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -257,11 +258,24 @@ class MCPServer:
         self._execution_stats[name]["calls"] += 1
 
         try:
+            # Build a locked-down environment to prevent credential leakage
+            # to subprocesses (same pattern as ToolRunner._locked_env).
+            _env = os.environ.copy()
+            # Strip sensitive variables that should not leak to tool subprocesses
+            for _key in ("DATABASE_URL", "REDIS_URL", "OPENAI_API_KEY",
+                         "LLM_API_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID"):
+                _env.pop(_key, None)
+            # Add venv to PATH so pip-installed tools are findable
+            _venv_bin = str(Path(sys.executable).parent)
+            _env["PATH"] = f"{_venv_bin}:/usr/local/bin:/usr/bin:/bin"
+            _env["PYTHONDONTWRITEBYTECODE"] = "1"
+
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout or tool.timeout,
+                env=_env,
             )
             duration_ms = int((time.time() - start) * 1000)
 
