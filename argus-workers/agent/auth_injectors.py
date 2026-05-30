@@ -45,7 +45,10 @@ def inject_nuclei_auth(args: list[str], ctx: AuthContext) -> list[str]:
     if ctx.cookie_string and not _has_header_flag(args, "Cookie"):
         args.extend(["-H", f"Cookie: {ctx.cookie_string}"])
     if ctx.authorization and not _has_header_flag(args, "Authorization"):
-        args.extend(["-H", ctx.authorization])
+        auth_value = ctx.authorization
+        if not auth_value.startswith("Authorization:"):
+            auth_value = f"Authorization: {auth_value}"
+        args.extend(["-H", auth_value])
     return args
 
 
