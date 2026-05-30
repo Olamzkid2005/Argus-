@@ -9,6 +9,7 @@ And text lines with indicators:
     [WARNING] Some security issue
     [-] Nothing here (ignored)
 """
+import hashlib
 import json
 import logging
 
@@ -91,7 +92,7 @@ class JwtToolParser(BaseParser):
                 finding = {
                     "type": "JWT_VULNERABILITY",
                     "severity": "HIGH",
-                    "endpoint": f"jwt://{hash(stripped) & 0xffffffff:08x}",
+                    "endpoint": f"jwt://{hashlib.md5(stripped.encode()).hexdigest()[:8]}",
                     "evidence": {
                         "finding": stripped,
                     },
@@ -103,7 +104,7 @@ class JwtToolParser(BaseParser):
                 finding = {
                     "type": "JWT_VULNERABILITY",
                     "severity": "MEDIUM",
-                    "endpoint": f"jwt://{hash(stripped) & 0xffffffff:08x}",
+                    "endpoint": f"jwt://{hashlib.md5(stripped.encode()).hexdigest()[:8]}",
                     "evidence": {
                         "finding": stripped,
                     },

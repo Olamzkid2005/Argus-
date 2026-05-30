@@ -18,6 +18,10 @@ def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
     Returns the validated dict (possibly with defaults filled in)
     or None if the data is invalid.
     """
+    if not isinstance(data, dict):
+        logger.debug("Nuclei finding data is not a dict, skipping")
+        return None
+
     # Check required top-level fields
     if not data.get("template-id") or not data.get("matched-at"):
         logger.warning("Nuclei finding missing required fields: template-id or matched-at")

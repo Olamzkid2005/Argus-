@@ -22,6 +22,7 @@ class GovulncheckParser(BaseParser):
                     continue
 
                 severity = "HIGH" if vuln.get("severity") == "HIGH" else "MEDIUM"
+                vuln_info = vuln.get("vulnerability") or {}
                 finding = {
                     "type": "DEPENDENCY_VULNERABILITY",
                     "severity": severity,
@@ -30,8 +31,8 @@ class GovulncheckParser(BaseParser):
                         "module": vuln.get("module", ""),
                         "version": vuln.get("version", ""),
                         "fixed_version": vuln.get("fixed_version", ""),
-                        "vulnerability": vuln.get("vulnerability", {}),
-                        "title": vuln.get("vulnerability", {}).get("title", "Go Vulnerability"),
+                        "vulnerability": vuln_info,
+                        "title": vuln_info.get("title", "Go Vulnerability"),
                     },
                     "confidence": 0.95,
                     "tool": "govulncheck",

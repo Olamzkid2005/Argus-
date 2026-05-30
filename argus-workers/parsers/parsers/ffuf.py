@@ -1,6 +1,9 @@
 import json
+import logging
 
 from parsers.parsers.base import BaseParser
+
+logger = logging.getLogger(__name__)
 
 
 class FfufParser(BaseParser):
@@ -38,7 +41,6 @@ class FfufParser(BaseParser):
                 findings.append(finding)
 
         except json.JSONDecodeError:
-            # Ffuf output not in JSON format
-            pass
+            logger.debug("ffuf: output is not valid JSON, skipping")
 
         return findings

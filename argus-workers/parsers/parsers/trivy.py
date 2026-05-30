@@ -34,6 +34,7 @@ class TrivyParser(BaseParser):
                         "title": vuln.get("Title", ""),
                         "target": target,
                     },
+                    "confidence": 0.95,
                     "tool": "trivy",
                 }
                 findings.append(finding)
