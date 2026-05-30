@@ -19,6 +19,7 @@ from config.constants import (
     TOOL_TIMEOUT_DEFAULT,
     TOOL_TIMEOUT_LONG,
 )
+from orchestrator_pkg.normalizer_utils import normalize_finding
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -388,7 +389,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 parsed = orchestrator.parser.parse("gitleaks", gitleaks_result.stdout)
                 count = 0
                 for p in parsed:
-                    normalized = orchestrator._normalize_finding(p, "gitleaks")
+                    normalized = normalize_finding(orchestrator.normalizer, p, "gitleaks")
                     if normalized:
                         add_finding(normalized)
                         count += 1
@@ -440,7 +441,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                             "confidence": 0.95 if parsed.get("verified", False) else 0.75,
                             "tool": "trufflehog",
                         }
-                        normalized = orchestrator._normalize_finding(finding, "trufflehog")
+                        normalized = normalize_finding(orchestrator.normalizer, finding, "trufflehog")
                         if normalized:
                             add_finding(normalized)
                             count += 1
@@ -474,7 +475,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                         with open(fpath, errors="ignore") as fh:
                             content = fh.read(2000)
                         if "PRIVATE KEY" in content or "BEGIN RSA" in content or "BEGIN EC" in content or "BEGIN DSA" in content or "BEGIN OPENSSH" in content:
-                            normalized = orchestrator._normalize_finding({
+                            normalized = normalize_finding(orchestrator.normalizer, {
                                 "type": "EXPOSED_PRIVATE_KEY",
                                 "severity": "CRITICAL",
                                 "endpoint": f"file:{rel}",
@@ -506,7 +507,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                         for line in populated[:10]:
                             key, _, val = line.partition("=")
                             masked.append(f"{key}=***" if val else line)
-                        normalized = orchestrator._normalize_finding({
+                        normalized = normalize_finding(orchestrator.normalizer, {
                             "type": "EXPOSED_ENV_FILE",
                             "severity": "HIGH",
                             "endpoint": f"file:{rel}",
@@ -546,7 +547,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                             content = fh.read(10000)
                         secret_keys = re.findall(r'^\s*(password|secret|private_key|api_key|api_secret|auth_token|access_token|db_password|connection_string)\s*[:=]\s*["\']?([^"\'#\s]+)["\']?\s*$', content, re.MULTILINE | re.IGNORECASE)
                         if secret_keys:
-                            normalized = orchestrator._normalize_finding({
+                            normalized = normalize_finding(orchestrator.normalizer, {
                                 "type": "EXPOSED_CONFIG_SECRET",
                                 "severity": "HIGH",
                                 "endpoint": f"file:{rel}",
@@ -591,7 +592,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 parsed = orchestrator.parser.parse("trivy", trivy_result.stdout)
                 count = 0
                 for p in parsed:
-                    normalized = orchestrator._normalize_finding(p, "trivy")
+                    normalized = normalize_finding(orchestrator.normalizer, p, "trivy")
                     if normalized:
                         add_finding(normalized)
                         count += 1
@@ -639,7 +640,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                 "confidence": 0.90,
                                 "tool": "bandit",
                             }
-                            normalized = orchestrator._normalize_finding(finding, "bandit")
+                            normalized = normalize_finding(orchestrator.normalizer, finding, "bandit")
                             if normalized:
                                 add_finding(normalized)
                                 count += 1
@@ -691,7 +692,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                 "confidence": 0.85,
                                 "tool": "brakeman",
                             }
-                            normalized = orchestrator._normalize_finding(finding, "brakeman")
+                            normalized = normalize_finding(orchestrator.normalizer, finding, "brakeman")
                             if normalized:
                                 add_finding(normalized)
                                 count += 1
@@ -743,7 +744,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                 "confidence": 0.85,
                                 "tool": "gosec",
                             }
-                            normalized = orchestrator._normalize_finding(finding, "gosec")
+                            normalized = normalize_finding(orchestrator.normalizer, finding, "gosec")
                             if normalized:
                                 add_finding(normalized)
                                 count += 1
@@ -797,7 +798,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                     "confidence": 0.85,
                                     "tool": "eslint",
                                 }
-                                normalized = orchestrator._normalize_finding(finding, "eslint")
+                                normalized = normalize_finding(orchestrator.normalizer, finding, "eslint")
                                 if normalized:
                                     add_finding(normalized)
                                     count += 1
@@ -850,7 +851,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                     "confidence": 0.85,
                                     "tool": "phpcs",
                                 }
-                                normalized = orchestrator._normalize_finding(finding, "phpcs")
+                                normalized = normalize_finding(orchestrator.normalizer, finding, "phpcs")
                                 if normalized:
                                     add_finding(normalized)
                                     count += 1
@@ -910,7 +911,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                                 "confidence": 0.85,
                                 "tool": "spotbugs",
                             }
-                            normalized = orchestrator._normalize_finding(finding, "spotbugs")
+                            normalized = normalize_finding(orchestrator.normalizer, finding, "spotbugs")
                             if normalized:
                                 add_finding(normalized)
                                 count += 1
@@ -960,7 +961,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                             "confidence": 0.85,
                             "tool": "snyk",
                         }
-                        normalized = orchestrator._normalize_finding(finding, "snyk")
+                        normalized = normalize_finding(orchestrator.normalizer, finding, "snyk")
                         if normalized:
                             add_finding(normalized)
                             count += 1
@@ -983,7 +984,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 npm_findings = run_npm_audit(temp_dir)
                 count = 0
                 for f in npm_findings:
-                    normalized = orchestrator._normalize_finding(f, "npm_audit")
+                    normalized = normalize_finding(orchestrator.normalizer, f, "npm_audit")
                     if normalized:
                         add_finding(normalized)
                         count += 1
@@ -1003,7 +1004,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 pip_findings = run_pip_audit(temp_dir)
                 count = 0
                 for f in pip_findings:
-                    normalized = orchestrator._normalize_finding(f, "pip_audit")
+                    normalized = normalize_finding(orchestrator.normalizer, f, "pip_audit")
                     if normalized:
                         add_finding(normalized)
                         count += 1
@@ -1020,7 +1021,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 go_findings = run_govulncheck(temp_dir)
                 count = 0
                 for f in go_findings:
-                    normalized = orchestrator._normalize_finding(f, "govulncheck")
+                    normalized = normalize_finding(orchestrator.normalizer, f, "govulncheck")
                     if normalized:
                         add_finding(normalized)
                         count += 1
@@ -1037,7 +1038,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 maven_findings = check_maven_dependencies(temp_dir)
                 count = 0
                 for f in maven_findings:
-                    normalized = orchestrator._normalize_finding(f, "maven_check")
+                    normalized = normalize_finding(orchestrator.normalizer, f, "maven_check")
                     if normalized:
                         add_finding(normalized)
                         count += 1
@@ -1102,7 +1103,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 parsed = orchestrator.parser.parse("semgrep", semgrep_result.stdout)
                 count = 0
                 for p in parsed:
-                    normalized = orchestrator._normalize_finding(p, "semgrep")
+                    normalized = normalize_finding(orchestrator.normalizer, p, "semgrep")
                     if normalized:
                         add_finding(normalized)
                         count += 1

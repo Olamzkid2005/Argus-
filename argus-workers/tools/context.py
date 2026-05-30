@@ -38,24 +38,17 @@ class ToolContext:
     tool_runner: ToolRunner
     parser: ParserProtocol
     normalizer: NormalizerProtocol
-    normalize_finding: Any = None  # optional wrapper: raw_finding, tool -> dict | None
     ws_publisher: Any = None  # WebSocket event publisher (optional)
     llm_payload_generator: Any = None  # optional LLM payload generator
 
     @staticmethod
     def from_orchestrator(orchestrator) -> "ToolContext":
         """Extract a ToolContext from an Orchestrator instance."""
-        # Capture _normalize_finding as a bound method so the extracted
-        # functions don't need access to the full orchestrator.
-        normalize = getattr(orchestrator, "_normalize_finding", None)
-        if normalize is not None:
-            normalize = normalize.__get__(orchestrator, type(orchestrator))
         return ToolContext(
             engagement_id=orchestrator.engagement_id,
             tool_runner=orchestrator.tool_runner,
             parser=orchestrator.parser,
             normalizer=orchestrator.normalizer,
-            normalize_finding=normalize,
             ws_publisher=orchestrator.ws_publisher,
             llm_payload_generator=getattr(orchestrator, "llm_payload_generator", None),
         )
@@ -80,21 +73,9 @@ class ToolContext:
             )
 
     def _normalize_finding(self, raw_finding: dict, tool: str) -> dict | None:
-        if self.normalize_finding is not None:
-            return self.normalize_finding(raw_finding, tool)
         if self.normalizer is not None:
-            try:
-                finding = self.normalizer.normalize(raw_finding, tool)
-                return {
-                    "type": finding.type,
-                    "severity": finding.severity.value if hasattr(finding.severity, "value") else finding.severity,
-                    "endpoint": finding.endpoint,
-                    "evidence": finding.evidence,
-                    "confidence": finding.confidence,
-                    "source_tool": tool,
-                }
-            except Exception:
-                return None
+            from orchestrator_pkg.normalizer_utils import normalize_finding
+            return normalize_finding(self.normalizer, raw_finding, tool)
         return raw_finding
 
     def normalize(self, raw_finding: dict, tool: str) -> dict | None:

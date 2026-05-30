@@ -256,19 +256,8 @@ class Orchestrator:
         }
 
     def _normalize_finding(self, raw_finding: dict, tool: str) -> dict | None:
-        try:
-            finding = self.normalizer.normalize(raw_finding, tool)
-            return {
-                "type": finding.type,
-                "severity": finding.severity.value if hasattr(finding.severity, "value") else finding.severity,
-                "endpoint": finding.endpoint,
-                "evidence": finding.evidence,
-                "confidence": finding.confidence,
-                "source_tool": tool,
-            }
-        except Exception as e:
-            logger.warning(f"Failed to normalize finding: {e}")
-            return None
+        from orchestrator_pkg.normalizer_utils import normalize_finding
+        return normalize_finding(self.normalizer, raw_finding, tool)
 
     @staticmethod
     def _classify_finding_type(finding_type: str) -> dict[str, str | None]:
