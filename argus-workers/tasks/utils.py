@@ -238,7 +238,8 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
         with db_cursor() as cursor:
             cursor.execute(
                 """
-                SELECT scan_mode, scan_aggressiveness, agent_mode, bug_bounty_mode
+                SELECT scan_mode, scan_aggressiveness, agent_mode, bug_bounty_mode,
+                       auth_config, dual_auth_config
                 FROM engagements WHERE id = %s
                 """,
                 (eid,),
@@ -246,11 +247,15 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
             row = cursor.fetchone()
             if row:
                 sm, sa, am, bbm = row[0], row[1], row[2], row[3]
+                auth_config = row[4] if len(row) > 4 else None
+                dual_auth_config = row[5] if len(row) > 5 else None
                 return {
                     "scan_mode": (sm or defaults["scan_mode"]) if isinstance(sm, str) else defaults["scan_mode"],
                     "aggressiveness": (sa or defaults["aggressiveness"]) if isinstance(sa, str) else defaults["aggressiveness"],
                     "agent_mode": bool(am) if am is not None else defaults["agent_mode"],
                     "bug_bounty_mode": bool(bbm) if bbm is not None else defaults["bug_bounty_mode"],
+                    "auth_config": auth_config,
+                    "dual_auth_config": dual_auth_config,
                 }
             logger.error("Engagement %s not found for scan options — returning defaults", engagement_id)
             return defaults

@@ -214,7 +214,15 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
             logger.error("Failed to transition to scanning for engagement=%s: %s", engagement_id, e, exc_info=True)
             ctx.state.safe_transition("failed", f"State transition failed: {e}")
             return result
+
         try:
+            _scan_kwargs = {}
+            _auth = opts.get("auth_config") or ctx.job.get("auth_config")
+            _dual = opts.get("dual_auth_config") or ctx.job.get("dual_auth_config")
+            if _auth:
+                _scan_kwargs["auth_config"] = _auth
+            if _dual:
+                _scan_kwargs["dual_auth_config"] = _dual
             scan_task = app.send_task(
                 'tasks.scan.run_scan',
                 args=[
@@ -227,10 +235,7 @@ def expand_recon(self, engagement_id: str, targets: list, budget: dict, trace_id
                     opts["aggressiveness"],
                     opts.get("bug_bounty_mode"),
                 ],
-                kwargs={
-                    "auth_config": ctx.job.get("auth_config"),
-                    "dual_auth_config": ctx.job.get("dual_auth_config"),
-                } if ctx.job.get("auth_config") or ctx.job.get("dual_auth_config") else {},
+                kwargs=_scan_kwargs,
             )
             slog.dispatch("scan", task_id=scan_task.id)
             logger.info("Dispatched scan after expand for engagement=%s (task=%s)", engagement_id, scan_task.id)

@@ -319,8 +319,9 @@ def _maybe_transactional(engagement_id: str, event_type: str, data: dict) -> boo
             )
         elif event_type == "finding":
             emitter.emit_finding(
-                "", data.get("type", ""), data.get("severity", "INFO"),
-                0.0, data.get("endpoint", ""), "",
+                data.get("_id", ""), data.get("type", ""), data.get("severity", "INFO"),
+                data.get("confidence", 0.5), data.get("endpoint", ""),
+                data.get("source_tool", ""),
             )
         elif event_type == "state_change":
             emitter.emit_state_change(
@@ -386,20 +387,42 @@ def emit_tool_complete(engagement_id: str, tool: str, success: bool, duration_ms
     ))
 
 
-def emit_finding(engagement_id: str, finding_type: str, severity: str, endpoint: str, title: str):
-    """Emit a finding discovered event."""
+def emit_finding(
+    engagement_id: str, finding_type: str, severity: str, endpoint: str, title: str,
+    confidence: float | None = None, source_tool: str | None = None,
+):
+    """Emit a finding discovered event.
+
+    Args:
+        engagement_id: Engagement UUID
+        finding_type: Type of finding (XSS, SQL_INJECTION, etc.)
+        severity: Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+        endpoint: Affected endpoint URL
+        title: Human-readable title
+        confidence: Optional confidence score 0.0-1.0
+        source_tool: Optional tool that discovered the finding
+    """
     data = {"type": finding_type, "severity": severity, "endpoint": endpoint, "title": title}
+    if confidence is not None:
+        data["confidence"] = confidence
+    if source_tool is not None:
+        data["source_tool"] = source_tool
     if _maybe_transactional(engagement_id, "finding", data):
         return
+    event_data = {
+        "type": finding_type,
+        "severity": severity,
+        "endpoint": endpoint,
+        "title": title,
+    }
+    if confidence is not None:
+        event_data["confidence"] = confidence
+    if source_tool is not None:
+        event_data["source_tool"] = source_tool
     get_stream_manager().publish(Event(
         type=EventType.FINDING,
         engagement_id=engagement_id,
-        data={
-            "type": finding_type,
-            "severity": severity,
-            "endpoint": endpoint,
-            "title": title,
-        },
+        data=event_data,
     ))
 
 
@@ -678,8 +701,8 @@ def emit_finding_rt(
     severity = finding.get("severity", "INFO")
     endpoint = finding.get("endpoint", "")
     source_tool = finding.get("source_tool", tool_name)
-    finding.get("confidence", 0.5)
-    finding.get("_id", finding.get("id", ""))
+    confidence = finding.get("confidence", 0.5)
+    finding_id = finding.get("_id", finding.get("id", ""))
 
     # In-flight dedup: skip if we've already emitted this type+endpoint+tool combo
     fp = _rt_fingerprint(finding_type, endpoint, source_tool)
@@ -698,6 +721,8 @@ def emit_finding_rt(
             severity=severity,
             endpoint=endpoint,
             title=f"{finding_type} on {endpoint}",
+            confidence=confidence,
+            source_tool=source_tool,
         )
     except Exception as e:
         logger.debug("SSE finding emit failed (non-fatal): %s", e)

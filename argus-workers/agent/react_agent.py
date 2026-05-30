@@ -719,6 +719,9 @@ class ReActAgent:
 
         self._ensure_phase_tools()
 
+        self.add_to_history("system", f"Task: {task}")
+        initial_target = task.split(":", 1)[-1].strip() if ":" in task else task
+
         # Restore AuthContext from checkpoint if available (Celery retry resilience)
         if self._auth_context is None and self.engagement_id:
             try:
@@ -739,9 +742,6 @@ class ReActAgent:
                         slog.info("Auth session restored from checkpoint for %s", checkpoint.email)
             except Exception as exc:
                 slog.warning("Failed to restore auth checkpoint: %s", exc)
-
-        self.add_to_history("system", f"Task: {task}")
-        initial_target = task.split(":", 1)[-1].strip() if ":" in task else task
 
         for iteration in range(self.max_iterations):
             if self._cancelled:

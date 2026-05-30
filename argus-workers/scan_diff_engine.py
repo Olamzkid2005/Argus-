@@ -160,7 +160,13 @@ class ScanDiffEngine:
             columns = [desc[0] for desc in cursor.description]
             findings: dict[str, dict] = {}
             for row in cursor.fetchall():
-                finding = dict(zip(columns, row, strict=False))
+                if len(columns) != len(row):
+                    logger.warning(
+                        "Column/row length mismatch in _load_findings: "
+                        "%d columns vs %d rows — using strict zip",
+                        len(columns), len(row),
+                    )
+                finding = dict(zip(columns, row, strict=True))
                 fp = self._fingerprint(finding)
                 findings[fp] = finding
             return findings

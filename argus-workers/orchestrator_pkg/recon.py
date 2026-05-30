@@ -78,7 +78,7 @@ def execute_recon_tools(
         "default": ["enum", "-d"],
         "high": ["enum", "-d", "-brute", "-active"],
         "extreme": ["enum", "-d", "-brute", "-w",
-                    os.path.join(os.path.dirname(os.path.dirname(__file__)), "wordlists", "common.txt")],
+                    str(get_wordlist_path("common.txt"))],
     }.get(agg, ["enum", "-d"])
 
     def _emit(

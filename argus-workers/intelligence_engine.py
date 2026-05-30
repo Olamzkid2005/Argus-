@@ -273,7 +273,11 @@ class IntelligenceEngine:
         Returns:
             Tool agreement score
         """
-        num_tools = len({f.get("source_tool") or "" for f in findings_group})
+        # Only count non-empty source tools to prevent None/empty values
+        # from inflating agreement. A finding with no source_tool should
+        # not count as evidence of multi-tool confirmation.
+        source_tools = {f.get("source_tool") for f in findings_group if f.get("source_tool")}
+        num_tools = len(source_tools)
 
         if num_tools >= 3:
             return 1.0
