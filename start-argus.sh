@@ -282,10 +282,23 @@ fi
 # Start Celery with PYTHONPATH so forked workers can find local modules
 export PYTHONPATH="$PWD:$PYTHONPATH"
 export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())' 2>/dev/null || echo '')"
-# Remove stale env vars that might override Redis-stored settings
-# The LLMClient prefers env vars over Redis, so unset to force Redis lookup
-# OPENAI_API_KEY set from env.local for worker access 2>/dev/null || true
-# LLM_API_KEY set from env.local for worker access 2>/dev/null || true
+# Load worker-specific .env (API keys, model config — gitignored)
+if [ -f ".env" ]; then
+    log_info "Loading worker .env"
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            \#*|'') continue ;;
+        esac
+        export "$line"
+    done < ".env"
+fi
+
+# If using Gemini (LLM_API_KEY starts with AQ. or AIzaSy), unset OpenRouter key
+# so the LLM client routes to Google's API instead of OpenRouter
+if echo "${LLM_API_KEY:-}" | grep -qE '^(AQ\.|AIzaSy)'; then
+    unset OPENAI_API_KEY
+    log_ok "Gemini API key detected — using Google AI"
+fi
 celery -A celery_app worker \
   --loglevel=info \
   --concurrency=8 \

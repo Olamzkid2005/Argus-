@@ -285,6 +285,7 @@ export async function pushJob(job: JobMessage): Promise<string> {
       delivery_info: {
         priority: 0,
         routing_key: queueName,
+        exchange: "",
       },
       priority: 0,
       body_encoding: "base64",

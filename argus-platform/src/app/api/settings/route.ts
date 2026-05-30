@@ -22,16 +22,34 @@ export async function GET() {
     
     const email = session.user.email;
     
+    // Try all known LLM API key types (generic — any provider)
+    const llmApiKey = await redis.get(`settings:${email}:llm_api_key`);
     const openrouterKey = await redis.get(`settings:${email}:openrouter_api_key`);
+    const geminiKey = await redis.get(`settings:${email}:gemini_api_key`);
     const preferredModel = await redis.get(`settings:${email}:preferred_ai_model`);
     const scanAggressiveness = await redis.get(`settings:${email}:scan_aggressiveness`);
     const llmReviewEnabled = await redis.get(`settings:${email}:llm_review_enabled`);
     const llmPayloadGenEnabled = await redis.get(`settings:${email}:llm_payload_generation_enabled`);
     const settings: Record<string, string> = {};
 
-    // Mask the key
-    if (openrouterKey) {
-      settings.openrouter_api_key = "sk-or-" + "•".repeat(20);
+    // Detect provider and mask key accordingly
+    const activeKey = llmApiKey || openrouterKey || geminiKey;
+    if (activeKey) {
+      const keyStr = activeKey.toString();
+      const prefix = keyStr.startsWith("sk-or-") ? "sk-or-" 
+        : keyStr.startsWith("AIzaSy") ? "AIzaSy" 
+        : keyStr.startsWith("AQ.") ? "AQ."
+        : keyStr.substring(0, 8);
+      settings.llm_api_key = prefix + "•".repeat(20);
+      
+      // Report detected provider
+      if (keyStr.startsWith("sk-or-")) {
+        settings.llm_provider = "openrouter";
+      } else if (keyStr.startsWith("AIzaSy") || keyStr.startsWith("AQ.")) {
+        settings.llm_provider = "gemini";
+      } else {
+        settings.llm_provider = "generic";
+      }
     }
     if (preferredModel) {
       settings.preferred_ai_model = preferredModel;
@@ -69,7 +87,7 @@ export async function PUT(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { openrouter_api_key, preferred_ai_model, ...otherSettings } = body;
+    const { llm_api_key, openrouter_api_key, preferred_ai_model, ...otherSettings } = body;
     const email = session.user.email;
     const userId = (session.user as { id?: string }).id || email;
 
@@ -86,9 +104,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(JSON.parse(cachedResult), { status: 200 });
     }
     
-    // Store OpenRouter key (if not masked with •)
-    if (openrouter_api_key && openrouter_api_key.length > 5 && !openrouter_api_key.includes("•")) {
-      await redis.setex(`settings:${email}:openrouter_api_key`, 2592000, openrouter_api_key);
+    // Store the active API key (generic — works with any provider)
+    // Supports: OpenRouter (sk-or-*), Gemini (AIzaSy*, AQ.*), OpenAI (sk-*), generic
+    const activeKey = llm_api_key || openrouter_api_key;
+    if (activeKey && activeKey.length > 5 && !activeKey.includes("•")) {
+      await redis.setex(`settings:${email}:llm_api_key`, 2592000, activeKey);
+      // Clean up legacy key names
+      await redis.del(`settings:${email}:openrouter_api_key`);
+      await redis.del(`settings:${email}:gemini_api_key`);
     }
     
     // Store preferred model
