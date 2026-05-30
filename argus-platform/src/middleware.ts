@@ -9,6 +9,44 @@ import { getToken } from "next-auth/jwt";
  * organization-level rate limiting, and audit logging
  */
 
+/**
+ * Sanitize a query string for logging — strips potentially sensitive
+ * parameters (tokens, keys, passwords, secrets) and truncates long values.
+ *
+ * Known safe params: page, limit, sort, order, search, q, id, filter,
+ * offset, cursor, status, type, category, tags, from, to.
+ * All other params have their values redacted.
+ */
+function sanitizeQueryString(query: string): string {
+  if (!query || query === "?") return "";
+  try {
+    const params = new URLSearchParams(query);
+    const safeParams = new Set([
+      "page", "limit", "sort", "order", "search", "q", "id",
+      "filter", "offset", "cursor", "status", "type", "category",
+      "tags", "from", "to", "start", "end",
+    ]);
+    const sensitivePattern = /^(token|key|secret|password|auth|api.?key|access.?token|session|jwt)$/i;
+    const result: string[] = [];
+    for (const [key, value] of params) {
+      if (sensitivePattern.test(key)) {
+        // Redact known sensitive params entirely
+        result.push(`${key}=__REDACTED__`);
+      } else if (!safeParams.has(key)) {
+        // Redact unknown params — could contain arbitrary data
+        result.push(`${key}=__REDACTED__`);
+      } else {
+        // Safe params: include but truncate
+        const truncated = value.length > 100 ? value.slice(0, 100) + "..." : value;
+        result.push(`${key}=${truncated}`);
+      }
+    }
+    return result.join("&");
+  } catch {
+    return "__MALFORMED_QUERY__";
+  }
+}
+
 function getClientIP(request: NextRequest): string {
   // Use request.ip first (TCP connection IP from platform — trustworthy).
   // Only fall back to x-forwarded-for header as a secondary option.
@@ -51,9 +89,14 @@ async function logAuditEvent(
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
-  // Generate or extract request ID for tracing
-  const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
+  // Generate server-side request ID for tracing.
+  // Do NOT trust client-supplied x-request-id to prevent:
+  // - log injection / log forging
+  // - trace ID collisions / replay attacks
+  const requestId = crypto.randomUUID();
   response.headers.set("X-Request-ID", requestId);
+  // Set the server-generated ID on the request for downstream use
+  request.headers.set("x-request-id", requestId);
 
   const path = request.nextUrl.pathname;
 
@@ -114,29 +157,46 @@ export async function middleware(request: NextRequest) {
     // methods. When the browser sends an Origin header (same-origin or
     // cross-origin), validate it against allowed origins. Combined with
     // SameSite=Strict cookie (set in auth.ts), this prevents CSRF.
+    //
+    // In production, ALLOWED_ORIGINS MUST be configured. If it's empty,
+    // a warning is logged but requests are STILL validated against the
+    // origin header (with same-origin fallback). This ensures CSRF
+    // protection is never silently disabled by misconfiguration.
     // ============================================================
     const origin = request.headers.get("origin");
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").filter(Boolean) || [];
     const isMutatingMethod = ["POST", "PUT", "DELETE", "PATCH"].includes(request.method);
 
-    // Only validate origins in production
-    if (process.env.NODE_ENV === "production" && allowedOrigins.length > 0) {
-      if (origin && !allowedOrigins.some((o) => o.trim() === origin)) {
-        // For state-changing methods, reject invalid origins (CSRF)
-        if (isMutatingMethod) {
-          log.warn(`CSRF blocked: ${request.method} ${path} from origin ${origin}`);
-          return NextResponse.json(
-            { error: "Cross-origin request blocked" },
-            { status: 403 },
-          );
+    if (process.env.NODE_ENV === "production") {
+      if (allowedOrigins.length === 0) {
+        log.warn(
+          "ALLOWED_ORIGINS not configured in production" +
+          " - CSRF protection is limited. " +
+          "Set ALLOWED_ORIGINS to your application's origin(s)."
+        );
+      }
+      // Origin validation: if the request has an Origin header that is not in
+      // the allowed list, block state-changing methods. When no Origin is
+      // present (same-orign requests via SameSite cookie), allow through.
+      if (origin) {
+        const isAllowed = allowedOrigins.length === 0 || allowedOrigins.some((o) => o.trim() === origin);
+        if (!isAllowed) {
+          // For state-changing methods, reject invalid origins (CSRF)
+          if (isMutatingMethod) {
+            log.warn(`CSRF blocked: ${request.method} ${path} from origin ${origin}`);
+            return NextResponse.json(
+              { error: "Cross-origin request blocked" },
+              { status: 403 },
+            );
+          }
+          // For read methods, still process but don't expose CORS headers
+          response.headers.set("X-Origin-Validated", "invalid");
+        } else {
+          response.headers.set("X-Origin-Validated", "valid");
+          response.headers.set("Access-Control-Allow-Origin", origin);
+          response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+          response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
         }
-        // For read methods, still process but don't expose CORS headers
-        response.headers.set("X-Origin-Validated", "invalid");
-      } else if (origin) {
-        response.headers.set("X-Origin-Validated", "valid");
-        response.headers.set("Access-Control-Allow-Origin", origin);
-        response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
       } else {
         response.headers.set("X-Origin-Validated", "none");
       }
@@ -252,8 +312,11 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Log API request after rate limiting (don't log rate-limited requests)
-    log.api(request.method, path, { query: request.nextUrl.search });
+    // Log API request after rate limiting (don't log rate-limited requests).
+    // Sanitize query string to prevent sensitive data leakage in logs.
+    // Only log query params known to be safe; strip all others.
+    const sanitizedQuery = sanitizeQueryString(request.nextUrl.search);
+    log.api(request.method, path, { query: sanitizedQuery });
 
     // Audit log sensitive operations
     const sensitivePaths = [

@@ -61,17 +61,32 @@ class CircuitBreaker:
 
     @property
     def state(self) -> CircuitState:
-        """Get current circuit state, checking for cooldown expiry."""
+        """Get current circuit state (read-only, no side effects).
+
+        NOTE: Use is_available() to check if a call can proceed — it
+        handles the OPEN -> HALF_OPEN transition on cooldown expiry.
+        This property is intentionally side-effect-free for safe use
+        in logging and monitoring.
+        """
+        with self._lock:
+            return self._state
+
+    def is_available(self) -> bool:
+        """
+        Check if calls are currently allowed.
+
+        If the circuit is OPEN and the cooldown has expired, transitions
+        to HALF_OPEN to allow a test call. This is the only method that
+        should trigger this transition.
+        """
         with self._lock:
             if self._state == CircuitState.OPEN and self._last_failure_time:
                 elapsed = time.time() - self._last_failure_time
                 if elapsed >= self.cooldown_seconds:
                     self._state = CircuitState.HALF_OPEN
-            return self._state
-
-    def is_available(self) -> bool:
-        """Check if calls are currently allowed."""
-        return self.state != CircuitState.OPEN
+                    slog = ScanLogger("circuit_breaker", engagement_id=self.name)
+                    slog.info(f"Circuit {self.name}: OPEN -> HALF_OPEN (cooldown expired)")
+            return self._state != CircuitState.OPEN
 
     def record_success(self):
         """Record a successful call, resetting failure count."""

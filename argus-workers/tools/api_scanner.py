@@ -66,6 +66,7 @@ class LegacyAPISecurityScanner:
     def __init__(
         self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None,
         session: requests.Session | None = None, tech_stack: list[str] | None = None,
+        engagement_id: str = "",
     ):
         """
         Initialize API security scanner.
@@ -77,12 +78,14 @@ class LegacyAPISecurityScanner:
             authorized_scope: Optional URL prefix that defines the authorized testing scope
             session: Optional pre-authenticated requests.Session
             tech_stack: Detected technology stack from recon
+            engagement_id: Engagement UUID for scope validation
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.llm_payload_generator = llm_payload_generator
         self.authorized_scope = authorized_scope
         self.tech_stack = tech_stack or []
+        self.engagement_id = engagement_id
         self.session = session or requests.Session()
         self.session.headers.update(
             {

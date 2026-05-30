@@ -302,6 +302,61 @@ class ToolRunner:
                 return candidate
         return tool
 
+    @staticmethod
+    def _redact_sensitive_args(
+        args: list[str], env: dict[str, str]
+    ) -> tuple[list[str], dict[str, str]]:
+        """
+        Redact sensitive CLI arguments (API tokens, passwords) that would otherwise
+        be visible in /proc/<pid>/cmdline. Instead of passing them as CLI flags,
+        inject them as environment variables (TOOL_TOKEN, TOOL_SECRET).
+
+        Handles both --flag=value and --flag value formats.
+
+        Args:
+            args: Original argument list
+            env: Environment dict to inject redacted values into
+
+        Returns:
+            Tuple of (sanitized_args, updated_env)
+        """
+        sensitive_prefixes = (
+            "--api-token", "--token", "--password", "--secret", "--key", "--auth"
+        )
+        sanitized_args: list[str] = []
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            # Handle --flag=value format: split on '=' and check the key part
+            if "=" in arg and any(
+                arg.split("=")[0].startswith(p) for p in sensitive_prefixes
+            ):
+                flag_key, flag_value = arg.split("=", 1)
+                env[
+                    f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"
+                ] = flag_value
+                sanitized_args.append(flag_key + "=__REDACTED__")
+                i += 1
+                continue
+            if any(arg.startswith(p) for p in sensitive_prefixes):
+                flag = arg
+                value = (
+                    args[i + 1]
+                    if i + 1 < len(args) and not args[i + 1].startswith("--")
+                    else ""
+                )
+                if value:
+                    env[
+                        f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"
+                    ] = value
+                    sanitized_args.append(flag)
+                    sanitized_args.append("__REDACTED__")
+                    i += 2
+                    continue
+            sanitized_args.append(arg)
+            i += 1
+        return sanitized_args, env
+
     def run(self, tool: str, args: list[str], timeout: int = 180) -> ToolResult:
         """
         Execute tool with safety validation
@@ -341,30 +396,7 @@ class ToolRunner:
         # Detect and redact sensitive arguments (API tokens, passwords) that would
         # otherwise be visible in /proc/<pid>/cmdline. Instead of passing them as
         # CLI flags, inject them as environment variables (TOOL_TOKEN, TOOL_SECRET).
-        sensitive_prefixes = ("--api-token", "--token", "--password", "--secret", "--key", "--auth")
-        sanitized_args = []
-        i = 0
-        while i < len(args):
-            arg = args[i]
-            # Handle --flag=value format (H-v3-14): split on '=' and check the key part
-            if "=" in arg and any(arg.split("=")[0].startswith(p) for p in sensitive_prefixes):
-                flag_key, flag_value = arg.split("=", 1)
-                env[f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"] = flag_value
-                sanitized_args.append(flag_key + "=__REDACTED__")
-                i += 1
-                continue
-            if any(arg.startswith(p) for p in sensitive_prefixes):
-                flag = arg
-                value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
-                if value:
-                    env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = value
-                    sanitized_args.append(flag)
-                    sanitized_args.append("__REDACTED__")
-                    i += 2
-                    continue
-            sanitized_args.append(arg)
-            i += 1
-        args = sanitized_args
+        args, env = self._redact_sensitive_args(args, env)
 
         # Record start time
         start_time = time.time()
@@ -545,30 +577,7 @@ class ToolRunner:
         env = self._locked_env(tool)
 
         # Redact sensitive args from command line (visible in /proc/pid/cmdline)
-        sensitive_prefixes = ("--api-token", "--token", "--password", "--secret", "--key", "--auth")
-        sanitized_args = []
-        i = 0
-        while i < len(args):
-            arg = args[i]
-            # Handle --flag=value format (H-v3-14): split on '=' and check the key part
-            if "=" in arg and any(arg.split("=")[0].startswith(p) for p in sensitive_prefixes):
-                flag_key, flag_value = arg.split("=", 1)
-                env[f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"] = flag_value
-                sanitized_args.append(flag_key + "=__REDACTED__")
-                i += 1
-                continue
-            if any(arg.startswith(p) for p in sensitive_prefixes):
-                flag = arg
-                value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
-                if value:
-                    env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = value
-                    sanitized_args.append(flag)
-                    sanitized_args.append("__REDACTED__")
-                    i += 2
-                    continue
-            sanitized_args.append(arg)
-            i += 1
-        args = sanitized_args
+        args, env = self._redact_sensitive_args(args, env)
 
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         slog.tool_start(tool, f"streaming, timeout={timeout}s")
@@ -831,7 +840,6 @@ class ToolRunner:
     def run_with_circuit_breaker(
         self, tool: str, args: list[str], timeout: int = 180
     ) -> ToolResult:
-        ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         """
         Execute tool with circuit breaker protection.
 

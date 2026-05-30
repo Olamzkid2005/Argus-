@@ -97,29 +97,21 @@ export async function POST(request: NextRequest) {
         [userId, orgId, email.toLowerCase().trim(), passwordHash, "admin"],
       );
 
-      await client.query("COMMIT");
-
-      // H-06: Generate verification token and send email
-      // Follow C-v3-04 pattern: send email FIRST, store token only on success
+      // H-06: Generate verification token FIRST (before commit) so we can abort
+      // the transaction cleanly if anything goes wrong with email sending.
       const verifyToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = crypto.createHash("sha256").update(verifyToken).digest("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+      // Try to send verification email while still inside the transaction.
+      // If email fails, the ROLLBACK in the outer catch will clean up atomically.
       const emailResult = await sendVerificationEmail(
         email.toLowerCase().trim(),
         verifyToken,
       );
 
       if (!emailResult.success) {
-        // Email failed to send — rollback the user creation
-        await client.query(
-          "DELETE FROM users WHERE id = $1",
-          [userId],
-        );
-        await client.query(
-          "DELETE FROM organizations WHERE id = $1",
-          [orgId],
-        );
+        await client.query("ROLLBACK");
         log.error("Signup failed: verification email not sent", {
           email: email.toLowerCase().trim(),
           error: emailResult.error,
@@ -138,6 +130,9 @@ export async function POST(request: NextRequest) {
          WHERE id = $3`,
         [tokenHash, expiresAt, userId],
       );
+
+      // All checks passed — now commit the transaction atomically
+      await client.query("COMMIT");
 
       return NextResponse.json(
         {

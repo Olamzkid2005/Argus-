@@ -117,6 +117,10 @@ class ScopeValidator:
 
         Wildcard domains (*.example.com) must match exactly one subdomain level.
         'sub.example.com' matches, but 'xsub.example.com' does NOT.
+
+        Only wildcard-prefix patterns (*.example.com) are supported. The fnmatch
+        fallback is intentionally removed to prevent bypass via `*` matching
+        across DNS label boundaries (e.g., `foo.*.com` matching `foo.evil.com`).
         """
         hostname = hostname.lower()
         for domain in self._scope.get("domains", []):
@@ -128,8 +132,6 @@ class ScopeValidator:
                 suffix = domain[1:]  # ".example.com"
                 if hostname.endswith(suffix) and hostname.count(".") == domain.count("."):
                     return True
-            elif fnmatch.fnmatch(hostname, domain):
-                return True
         return False
 
     def _matches_ip_range(self, hostname: str) -> bool:

@@ -121,11 +121,41 @@ export function sanitizeFilename(input: string): string {
     return "";
   }
 
-  // Remove path traversal attempts — strip ".." but keep single dots (e.g., file extensions)
-  const filename = input
+  // Step 1: Decode URL-encoded path traversal attempts (%2e%2e%2f, %252e, etc.)
+  let filename = input;
+  // Normalize unicode to ASCII to catch Unicode-normalized path traversal
+  try {
+    filename = filename.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  } catch {
+    // If normalization fails, continue with original
+  }
+
+  // Step 2: Repeatedly decode URL encoding to catch double-encoded attempts
+  let prev = "";
+  while (prev !== filename) {
+    prev = filename;
+    try {
+      filename = decodeURIComponent(filename);
+    } catch {
+      break;
+    }
+  }
+
+  // Step 3: Remove path traversal patterns including:
+  // - ".." and "." (dot segments)
+  // - Backslashes and forward slashes
+  // - Null bytes and control characters
+  // - Absolute paths on Unix (/etc) and Windows (C:)
+  filename = filename
     .replace(/\.\./g, "")
-    .replace(/[^a-zA-Z0-9_.-]/g, "_")
+    .replace(/\./g, "_")
+    .replace(/[\\\/]/g, "_")
+    .replace(/[\x00-\x1f\x7f]/g, "")
+    .replace(/^[a-zA-Z]:\\?/, "")
     .substring(0, 255);
+
+  // Step 4: Only allow safe characters
+  filename = filename.replace(/[^a-zA-Z0-9_-]/g, "_");
 
   return filename;
 }

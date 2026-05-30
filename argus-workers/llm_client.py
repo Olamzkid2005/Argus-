@@ -575,19 +575,22 @@ class LLMUnavailableError(Exception):
     pass
 
 
-def load_llm_setting(key: str, default: str = "") -> str:
+def load_llm_setting(key: str, default: str = "", user_email: str | None = None) -> str:
     """
     Load an LLM feature setting from Redis.
 
-    Scans Redis keys matching settings:*:{key} to find the setting value.
-    These are set by the UI Settings page when users configure LLM features.
+    Settings are stored by the UI Settings page at Redis keys in the format:
+    - settings:{user_email}:{key} (user-level)
+    - settings:global:{key} (global default)
 
-    This allows users to toggle LLM features (review, payload generation)
-    from the UI without restarting worker processes.
+    When user_email is provided, the lookup is scoped to that user only.
+    When not provided, only the global setting is checked — cross-tenant
+    scanning of all users' settings is NOT performed (C-v5-01).
 
     Args:
         key: Setting key name (e.g., "llm_review_enabled", "llm_payload_generation_enabled")
         default: Default value if not found in Redis
+        user_email: Optional user email for tenant-scoped lookup
 
     Returns:
         Setting value string, or default if not found
@@ -601,22 +604,34 @@ def load_llm_setting(key: str, default: str = "") -> str:
 
         r = redis_module.from_url(redis_url, socket_connect_timeout=2, socket_timeout=2)
 
-        # Scan for any user's setting
-        cursor = 0
-        while True:
-            cursor, keys = r.scan(cursor=cursor, match=f"settings:*:{key}", count=20)
-            for redis_key in keys:
-                value = r.get(redis_key)
-                if value is not None:
-                    val = value.decode() if isinstance(value, bytes) else value
-                    if val:
-                        logger.debug(f"Loaded LLM setting '{key}' from Redis")
-                        return val
-            if cursor == 0:
-                break
+        # Tenant-scoped lookup: check this specific user's setting first
+        if user_email:
+            user_key = f"settings:{user_email}:{key}"
+            value = r.get(user_key)
+            if value is not None:
+                val = value.decode() if isinstance(value, bytes) else value
+                if val:
+                    logger.debug("Loaded LLM setting '%s' for user '%s' from Redis", key, user_email)
+                    return val
+
+        # Global fallback: check the global default setting
+        global_key = f"settings:global:{key}"
+        value = r.get(global_key)
+        if value is not None:
+            val = value.decode() if isinstance(value, bytes) else value
+            if val:
+                logger.debug("Loaded LLM setting '%s' from global Redis key", key)
+                return val
+
+        if not user_email:
+            logger.debug(
+                "No user_email provided for LLM setting '%s' — checked global default only. "
+                "Pass user_email for tenant-scoped lookup (C-v5-01).",
+                key,
+            )
 
         return default
 
     except Exception as e:
-        logger.debug(f"Could not load LLM setting '{key}' from Redis: {e}")
+        logger.debug("Could not load LLM setting '%s' from Redis: %s", key, e)
         return default

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { redis } from "@/lib/redis";
@@ -16,16 +16,43 @@ async function checkRateLimit(identifier: string): Promise<boolean> {
 }
 
 /**
+ * Check that a password meets complexity requirements:
+ * - At least 12 characters
+ * - Contains uppercase, lowercase, digit, and special character
+ */
+function isPasswordStrong(password: string): { valid: boolean; message: string } {
+  if (password.length < 12) {
+    return { valid: false, message: "Password must be at least 12 characters" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one uppercase letter" };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one lowercase letter" };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one digit" };
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one special character" };
+  }
+  return { valid: true, message: "" };
+}
+
+/**
  * POST /api/auth/reset-password
  *
  * Reset password with token
  * 
- * Security: Rate limited, token hashed with bcrypt, single use
+ * Security: Rate limited (uses request.ip to prevent spoofing), 
+ * token hashed with bcrypt, single use tokens
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { token, password } = await req.json();
-    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    // Use request.ip (TCP connection IP from platform) instead of
+    // x-forwarded-for header which is trivially spoofable (H-v5-01)
+    const ip = req.ip || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
 
     if (!token || typeof token !== "string") {
       return NextResponse.json(
@@ -34,9 +61,18 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!password || typeof password !== "string" || password.length < 12) {
+    if (!password || typeof password !== "string") {
       return NextResponse.json(
         { message: "Password must be at least 12 characters" },
+        { status: 400 }
+      );
+    }
+
+    // Check password strength
+    const strengthCheck = isPasswordStrong(password);
+    if (!strengthCheck.valid) {
+      return NextResponse.json(
+        { message: strengthCheck.message },
         { status: 400 }
       );
     }
