@@ -201,7 +201,7 @@ def run_register(
                 # Check response body for specific errors
                 body = resp.text.lower() if resp.text else ""
 
-                if "captcha" in body or "bot" in body or "recaptcha" in body:
+                if "captcha" in body or "bot" in body or "recaptcha" in body or "robot" in body:
                     last_error = ERROR_CODES["CAPTCHA_DETECTED"]
                     result_data["error_code"] = "CAPTCHA_DETECTED"
                     break  # Don't retry CAPTCHA
