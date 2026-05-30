@@ -58,10 +58,12 @@ def run_due_scans(self):
 
     from database.connection import connect
 
-    conn = connect(db_url)
-    cursor = conn.cursor()
-
+    conn = None
+    cursor = None
     try:
+        conn = connect(db_url)
+        cursor = conn.cursor()
+
         # Find all enabled schedules that are due to run
         cursor.execute(
             """
@@ -89,7 +91,11 @@ def run_due_scans(self):
                 created_by,
             ) = row
 
+            # Use savepoint so a single failure doesn't abort the entire
+            # transaction — PostgreSQL requires ROLLBACK before any new
+            # statement after an error.
             try:
+                cursor.execute("SAVEPOINT spawn_schedule")
                 dispatch_info = _spawn_engagement(
                     conn=conn,
                     sched_id=sched_id,
@@ -102,10 +108,15 @@ def run_due_scans(self):
                     created_by=created_by,
                     db_url=db_url,
                 )
+                cursor.execute("RELEASE SAVEPOINT spawn_schedule")
                 if dispatch_info:
                     dispatch_queue.append(dispatch_info)
                 spawned += 1
             except Exception as e:
+                try:
+                    cursor.execute("ROLLBACK TO SAVEPOINT spawn_schedule")
+                except Exception:
+                    pass
                 logger.error("Failed to spawn scheduled engagement %s: %s", sched_id, e)
                 # Continue with next schedule — don't fail the batch
 
@@ -147,8 +158,10 @@ def run_due_scans(self):
         logger.error("run_due_scans failed: %s", e)
         return {"status": "failed", "error": str(e)}
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 def _spawn_engagement(

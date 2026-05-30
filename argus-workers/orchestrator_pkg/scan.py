@@ -36,8 +36,6 @@ def _get_rate_limit_repo():
     global _RATE_LIMIT_REPO
     if _RATE_LIMIT_REPO is None:
         try:
-            import os
-
             from database.repositories.rate_limit_repository import RateLimitRepository
             # IMPORTANT: Pass None so RateLimitRepository uses db_cursor()
             # (connection pool). Passing a connection string as db_connection

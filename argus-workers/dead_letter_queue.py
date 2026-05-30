@@ -318,12 +318,22 @@ class DeadLetterQueue:
                     for tid in eng_task_ids:
                         self.redis.zrem(main_key, tid)
                     self.redis.zremrangebyscore(eng_key, 0, cutoff)
+                    # Best-effort index cleanup
+                    try:
+                        self.redis.delete(self.TASK_INDEX_KEY)
+                    except Exception:
+                        pass
                 return count
             elif engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 count = self.redis.zcard(key)
                 self.redis.delete(key)
+                # Best-effort index cleanup
+                try:
+                    self.redis.delete(self.TASK_INDEX_KEY)
+                except Exception:
+                    pass
                 return count
             elif cutoff is not None:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
