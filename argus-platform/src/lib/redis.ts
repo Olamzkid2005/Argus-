@@ -281,6 +281,7 @@ export async function pushJob(job: JobMessage): Promise<string> {
     properties: {
       correlation_id: taskId,
       delivery_mode: 2,
+      delivery_tag: taskId,
       delivery_info: {
         priority: 0,
         routing_key: queueName,

@@ -110,6 +110,8 @@ export async function middleware(request: NextRequest) {
       const token = await getToken({
         req: request,
         secret: process.env.NEXTAUTH_SECRET,
+        cookieName: process.env.NODE_ENV === "production" ? "__Secure-session-token" : "session-token",
+        secureCookie: process.env.NODE_ENV === "production",
       });
       if (!token) {
         const signinUrl = new URL('/auth/signin', request.url);
@@ -140,8 +142,11 @@ export async function middleware(request: NextRequest) {
     // ============================================================
     // M-21: Content-Type validation for state-changing API methods.
     // Reject POST/PUT/PATCH with no Content-Type or non-JSON types.
+    //
+    // Exclude NextAuth callback routes — they use standard HTML form
+    // POST with application/x-www-form-urlencoded.
     // ============================================================
-    if (["POST", "PUT", "PATCH"].includes(request.method)) {
+    if (["POST", "PUT", "PATCH"].includes(request.method) && !path.startsWith("/api/auth/callback/")) {
       const contentType = request.headers.get("content-type") || "";
       if (!contentType.includes("application/json") && !contentType.includes("multipart/form-data")) {
         log.warn(`Content-Type validation failed for ${request.method} ${path}: ${contentType}`);

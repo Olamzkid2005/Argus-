@@ -566,8 +566,20 @@ class LLMClient:
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 
     def is_available(self) -> bool:
-        """Check if the LLM client is configured and potentially reachable."""
-        return bool(self.api_key)
+        """Check if the LLM client is configured and potentially reachable.
+        
+        Also checks the circuit breaker — if it's open, the client is
+        considered unavailable even though an API key is configured.
+        """
+        if not self.api_key:
+            return False
+        with self._circuit_lock:
+            if self._circuit_failures >= self._circuit_threshold:
+                if time.time() < self._circuit_open_until:
+                    return False
+                # Cooldown expired — reset so next call can try again
+                self._circuit_failures = 0
+        return True
 
 
 class LLMUnavailableError(Exception):

@@ -498,6 +498,69 @@ CREATE INDEX idx_assets_asset_type ON assets(asset_type);
 CREATE INDEX idx_assets_risk_score ON assets(risk_score);
 CREATE INDEX idx_assets_lifecycle_status ON assets(lifecycle_status);
 
+-- ============================================================================
+-- Schema additions discovered by E2E test — columns/tables the code expects
+-- that were missing from the original schema.sql
+-- ============================================================================
+
+-- Add trace_id to engagement_states for state machine persistence
+ALTER TABLE engagement_states ADD COLUMN IF NOT EXISTS trace_id VARCHAR(64);
+
+-- Add chain_exploit_script to attack_paths for exploit chain storage
+ALTER TABLE attack_paths ADD COLUMN IF NOT EXISTS chain_exploit_script TEXT;
+
+-- Add chain_exploit_script and updated_at to findings
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS chain_exploit_script TEXT;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+-- Agent decision log table (used by runtime/decision_checkpoint.py)
+CREATE TABLE IF NOT EXISTS agent_decision_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+    action_id VARCHAR(64),
+    observation_hash VARCHAR(32),
+    reasoning_hash VARCHAR(32),
+    selected_tool VARCHAR(128),
+    arguments JSONB,
+    timestamp DOUBLE PRECISION,
+    state_version INTEGER,
+    tool_cost_usd DOUBLE PRECISION DEFAULT 0,
+    execution_success BOOLEAN,
+    execution_error TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent decisions table (used by database/repositories/agent_decision_repository.py)
+CREATE TABLE IF NOT EXISTS agent_decisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+    phase VARCHAR(50),
+    iteration INTEGER,
+    tool_selected VARCHAR(128),
+    reasoning TEXT,
+    confidence DOUBLE PRECISION,
+    cost_usd DOUBLE PRECISION,
+    mode VARCHAR(20),
+    checkpoint_id UUID,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Webhooks table for notification subscriptions (post_finding_hooks.py)
+CREATE TABLE IF NOT EXISTS webhooks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    events TEXT[] DEFAULT '{}',
+    secret TEXT,
+    enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Additional columns for agent_decision_log (decision_checkpoint.py)
+ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS checkpoint_id VARCHAR(64);
+ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS execution_result TEXT;
+
 -- M-v3-06: Missing indexes on core tables — all filter by engagement_id
 CREATE INDEX IF NOT EXISTS idx_checkpoints_engagement_id ON checkpoints(engagement_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_phase ON checkpoints(phase);
@@ -521,3 +584,17 @@ BEGIN
     END IF;
 END
 $$;
+
+-- Additional columns discovered during testing
+ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS checkpoint_id VARCHAR(64);
+ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS execution_result TEXT;
+ALTER TABLE agent_decisions ADD COLUMN IF NOT EXISTS tool_selected VARCHAR(128);
+
+-- Webhooks table for notification subscriptions
+
+-- Additional columns discovered during testing
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS generated_by UUID REFERENCES users(id);
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS executive_summary TEXT;
+ALTER TABLE agent_decisions ADD COLUMN IF NOT EXISTS arguments JSONB;
+ALTER TABLE agent_decisions ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT false;
+ALTER TABLE webhooks ADD COLUMN IF NOT EXISTS webhook_url TEXT;

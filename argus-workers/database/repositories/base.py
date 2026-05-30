@@ -231,7 +231,7 @@ class BaseRepository:
 
         Args:
             commit: If True, auto-commits on success and rolls back on exception.
-                    Only applies when NOT using an external connection.
+                    Only applies when NOT using an externally-owned connection.
             cursor_factory: Optional cursor factory (e.g., RealDictCursor).
 
         Yields:
@@ -247,12 +247,16 @@ class BaseRepository:
         """
         conn = self._get_connection()
         cursor = conn.cursor(cursor_factory=cursor_factory)
+        # We should commit on both pooled connections (external_conn=None)
+        # AND string-initiated connections (external_conn is a URL string).
+        # Only skip auto-commit when an actual connection OBJECT is passed in.
+        _should_manage = not isinstance(self._external_conn, psycopg2.extensions.connection)
         try:
             yield (conn, cursor)
-            if commit and not self._external_conn:
+            if commit and _should_manage:
                 conn.commit()
         except Exception:
-            if commit and not self._external_conn:
+            if commit and _should_manage:
                 with suppress(Exception):
                     conn.rollback()
             raise

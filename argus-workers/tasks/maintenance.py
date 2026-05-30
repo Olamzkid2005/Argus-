@@ -176,3 +176,21 @@ def cleanup_checkpoints(self):
     except Exception as e:
         logger.error("cleanup_checkpoints failed: %s", e)
         return {"status": "error", "error": str(e)}
+
+
+@app.task(bind=True, name="tasks.maintenance.worker_health_check")
+def worker_health_check(self):
+    """
+    Periodic health check to verify Celery workers are responsive.
+
+    This task is invoked by Celery Beat every 60 seconds. If the worker
+    fails to process it (e.g., stuck or crashed), the beat scheduler
+    will detect the missed heartbeat and alert.
+    """
+    import socket
+    now = datetime.now(UTC)
+    return {
+        "status": "ok",
+        "hostname": socket.gethostname(),
+        "timestamp": now.isoformat(),
+    }

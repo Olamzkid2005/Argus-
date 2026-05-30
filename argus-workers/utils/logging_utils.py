@@ -378,24 +378,46 @@ class ScanLogger:
         msg = f"{self._prefix()}   {self._DIM}  -> {detail}{self._RESET}"
         self._logger.info(msg)
 
-    def info(self, message: str):
-        """Log a simple info message with the standard prefix."""
+    def info(self, message: str, *args, **kwargs):
+        """Log a simple info message with the standard prefix.
+
+        Supports printf-style format substitution via *args, matching the
+        standard logging.Logger.info() API:
+            slog.info("Found %d findings", count)
+            slog.info("Static message")
+        """
+        if args:
+            message = message % args
         msg = f"{self._prefix()}  {message}"
-        self._logger.info(msg)
+        self._logger.info(msg, **kwargs)
 
-    def warn(self, message: str):
-        """Log a warning message with the standard prefix."""
+    def warn(self, message: str, *args, **kwargs):
+        """Log a warning message with the standard prefix.
+
+        Supports printf-style format substitution via *args:
+            slog.warn("Found %d suspicious entries", count)
+            slog.warn("Static warning message")
+        """
+        if args:
+            message = message % args
         msg = f"{self._prefix()}  {self._YELLOW}{message}{self._RESET}"
-        self._logger.warning(msg)
+        self._logger.warning(msg, **kwargs)
 
-    def warning(self, message: str):
+    def warning(self, message: str, *args, **kwargs):
         """Alias for warn(). Using the standard logging API name."""
-        self.warn(message)
+        self.warn(message, *args, **kwargs)
 
-    def error(self, message: str):
-        """Log an error message with the standard prefix."""
+    def error(self, message: str, *args, **kwargs):
+        """Log an error message with the standard prefix.
+
+        Supports printf-style format substitution via *args:
+            slog.error("Failed after %d attempts: %s", retries, detail)
+            slog.error("Static error message")
+        """
+        if args:
+            message = message % args
         msg = f"{self._prefix()}  {self._RED}{self._BOLD}ERROR: {message}{self._RESET}"
-        self._logger.error(msg)
+        self._logger.error(msg, **kwargs)
 
     def target_start(self, target: str, index: int = 0, total: int = 1):
         """Log the start of processing a specific target."""
