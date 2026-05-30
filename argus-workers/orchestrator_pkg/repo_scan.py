@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 from urllib.parse import urlparse
 
+from typing import Optional
+
 from config.constants import (
     ALLOWED_GIT_SCHEMES,
     DEFAULT_AGGRESSIVENESS,
@@ -171,7 +173,8 @@ def run_govulncheck(repo_path: str) -> list[dict]:
                     continue
                 try:
                     vuln = json.loads(line)
-                    severity = 'HIGH' if vuln.get('severity') == 'HIGH' else 'MEDIUM'
+                    raw_sev = vuln.get('severity', 'MEDIUM').upper()
+                    severity = raw_sev if raw_sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] else 'MEDIUM'
                     finding = {
                         'type': 'DEPENDENCY_VULNERABILITY',
                         'severity': severity,
@@ -287,7 +290,8 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
         _sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
         seen: dict[str, int] = {}
         def add_finding(finding: dict):
-            key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{finding.get('evidence', {}).get('check_id', '') or finding.get('evidence', {}).get('cve_id', '')}"
+            evidence = finding.get("evidence") or {}
+            key = f"{finding.get('endpoint', '')}:{finding.get('type', '')}:{evidence.get('check_id', '') or evidence.get('cve_id', '')}"
             sev = finding.get('severity', 'INFO')
             rank = _sev_rank.get(sev, 0)
             if key not in seen:
@@ -300,7 +304,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 if rank > existing_rank:
                     all_findings[idx] = finding
 
-        def _emit(tool: str, activity: str, status: str, items: int = None):
+        def _emit(tool: str, activity: str, status: str, items: Optional[int] = None):
             orchestrator.ws_publisher.publish_scanner_activity(
                 engagement_id=orchestrator.engagement_id,
                 tool_name=tool,
@@ -1081,7 +1085,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
             if os.path.isdir(config_dir):
                 custom_configs.append(config_dir)
 
-        if custom_rules_path and os.path.isdir(custom_rules_path) or custom_rules_path and os.path.isfile(custom_rules_path):
+        if (custom_rules_path and os.path.isdir(custom_rules_path)) or (custom_rules_path and os.path.isfile(custom_rules_path)):
             custom_configs.append(custom_rules_path)
 
         # Run Semgrep with registry configs + custom rules
