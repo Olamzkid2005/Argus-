@@ -96,7 +96,9 @@ jobs:
         run: ruff check . --config pyproject.toml
 
       - name: Dependency audit
-        run: pip-audit --severity critical
+        run: |
+          pip install --upgrade pip
+          pip-audit -r requirements.txt
         continue-on-error: false
 
       - name: Run tests
