@@ -210,7 +210,8 @@ class TestDeadLetterQueue:
 
         assert count == 3
         # Also cleans up the index key
-        mock_redis.delete.assert_called_once_with("dlq:task:engagement:ENG-001")
+        mock_redis.delete.assert_any_call("dlq:task:engagement:ENG-001")
+        mock_redis.delete.assert_any_call("dlq:task:index")
 
     def test_purge_older_than(self, dlq, mock_redis):
         """Test purging tasks older than specified hours"""

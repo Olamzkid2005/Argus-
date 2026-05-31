@@ -62,6 +62,7 @@ class TestToolExecutionRecord:
         assert set(d.keys()) == {
             "tool", "args", "timestamp", "result_summary",
             "token_usage", "execution_cost", "success", "failure_state",
+            "duration_ms",
         }
 
 

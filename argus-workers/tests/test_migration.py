@@ -223,6 +223,11 @@ class TestBatchMigration:
 class TestHelperFunctions:
     """Tests for internal helper functions."""
 
+    def setup_method(self):
+        """Clear any cached rollout timestamp between tests."""
+        from runtime.migration import _clear_rollout_cache
+        _clear_rollout_cache()
+
     def test_get_rollout_timestamp_no_env(self):
         """Without environment var, returns None."""
         from runtime.migration import _get_rollout_timestamp
@@ -285,6 +290,11 @@ class TestHelperFunctions:
 
 class TestGetMigrationStatus:
     """Tests for get_migration_status()."""
+
+    def setup_method(self):
+        """Clear any cached rollout timestamp between tests."""
+        from runtime.migration import _clear_rollout_cache
+        _clear_rollout_cache()
 
     def test_returns_status_dict(self):
         """get_migration_status returns expected keys."""
