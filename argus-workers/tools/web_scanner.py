@@ -1869,7 +1869,10 @@ class WebScanner:
                     parts = raw_token.split(".")
                     if len(parts) != 3:
                         continue
-                    payload_bytes = _b64.urlsafe_b64decode(parts[1] + "==")
+                    padding = 4 - len(parts[1]) % 4
+                    if padding != 4:
+                        parts[1] += "=" * padding
+                    payload_bytes = _b64.urlsafe_b64decode(parts[1])
                     payload = json.loads(payload_bytes)
                     exp = payload.get("exp")
                     now = time.time()
