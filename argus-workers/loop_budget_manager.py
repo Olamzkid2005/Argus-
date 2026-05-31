@@ -114,13 +114,16 @@ class LoopBudgetManager:
                     """
                     INSERT INTO loop_budgets (
                         engagement_id, max_cycles, max_depth,
-                        current_cycles, current_depth
-                    ) VALUES (%s, %s, %s, %s, %s)
+                        current_cycles, current_depth,
+                        max_llm_reviews, current_llm_reviews
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (engagement_id) DO UPDATE SET
                         max_cycles = EXCLUDED.max_cycles,
                         max_depth = EXCLUDED.max_depth,
                         current_cycles = EXCLUDED.current_cycles,
                         current_depth = EXCLUDED.current_depth,
+                        max_llm_reviews = EXCLUDED.max_llm_reviews,
+                        current_llm_reviews = EXCLUDED.current_llm_reviews,
                         updated_at = NOW()
                     """,
                     (
@@ -129,6 +132,8 @@ class LoopBudgetManager:
                         self.max_depth,
                         self.current_cycles,
                         self.current_depth,
+                        self.max_llm_reviews,
+                        self.current_llm_reviews,
                     ),
                 )
         except Exception as e:

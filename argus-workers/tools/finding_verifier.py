@@ -52,11 +52,17 @@ def _validate_verification_url(endpoint: str) -> str:
         raise ValueError(f"Blocked protocol '{parsed.scheme}' in endpoint: {endpoint}")
 
     hostname = parsed.hostname or ""
+    import socket as _socket
     try:
+        # Check if hostname is an IP literal
         ip = ipaddress.ip_address(hostname)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
             raise ValueError(f"Blocked internal IP: {hostname}")
-    except ValueError:
+        return endpoint
+    except ValueError as ve:
+        # Re-raise our own ValueError (blocked IP), suppress ip_address parsing errors
+        if "Blocked internal IP" in str(ve):
+            raise
         # Not an IP literal — check hostname against blocklist
         pass
 
@@ -314,7 +320,11 @@ async def verify_finding(finding: dict, engagement_id: str = "") -> dict:
     payload = finding.get("evidence", {}).get("payload") or finding.get("payload") or ""
 
     bound_verifier = functools.partial(verifier, engagement_id=engagement_id)
-    result = await bound_verifier(endpoint, payload)
+    # Open redirect verifier does not accept payload (only endpoint + engagement_id)
+    if finding_type in ("open-redirect", "open_redirect"):
+        result = await bound_verifier(endpoint)
+    else:
+        result = await bound_verifier(endpoint, payload)
     finding["verification"] = result
 
     return finding

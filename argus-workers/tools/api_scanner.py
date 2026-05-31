@@ -398,7 +398,7 @@ class LegacyAPISecurityScanner:
                     )
                     # LLM might return JWT-related manipulation payloads
                     # Try to use them as alternative Authorization headers
-                    for lp in llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]:
+                    for lp in (llm_payloads or [])[:LLM_MAX_GENERATED_PAYLOADS]:
                         if len(lp) > 20:  # Looks like a token
                             llm_jwt_payloads.append(lp)
                 if alg == "none":

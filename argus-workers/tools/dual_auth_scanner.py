@@ -87,6 +87,7 @@ class DualAuthScanner:
         self.verify = verify
         self.engagement_id = engagement_id
         self.emit_finding_callback = emit_finding_callback
+        self.findings: list[dict] = []
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
 

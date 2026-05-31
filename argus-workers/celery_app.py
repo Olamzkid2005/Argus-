@@ -230,6 +230,7 @@ class BaseTask(app.Task):
         from shutdown_handler import shutdown_handler
 
         classification = classify_error(exc, self.name)
+        self._last_classification = classification
 
         log_classified_error(
             classification=classification,
