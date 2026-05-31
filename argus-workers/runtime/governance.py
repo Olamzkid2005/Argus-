@@ -86,8 +86,12 @@ class Governance:
         if self._is_shutdown:
             return False, self._shutdown_reason
 
-        tool_name = getattr(action, "tool", None) or (action.get("tool") if isinstance(action, dict) else "unknown")
-        cost = getattr(action, "cost_usd", None) or (action.get("cost_usd", 0.0) if isinstance(action, dict) else 0.0)
+        if isinstance(action, dict):
+            tool_name = action.get("tool", "unknown")
+            cost = action.get("cost_usd", 0.0) or 0.0
+        else:
+            tool_name = getattr(action, "tool", "unknown") or "unknown"
+            cost = getattr(action, "cost_usd", 0.0) or 0.0
 
         # 1. Runtime timeout check
         elapsed = time.time() - self._start_time
@@ -125,13 +129,19 @@ class Governance:
 
         # Track cost
         if action is not None:
-            cost = getattr(action, "cost_usd", None) or (action.get("cost_usd", 0.0) if isinstance(action, dict) else 0.0)
+            if isinstance(action, dict):
+                cost = action.get("cost_usd", 0.0) or 0.0
+            else:
+                cost = getattr(action, "cost_usd", 0.0) or 0.0
             self._total_cost_usd += float(cost)
 
         # Track tokens (estimated)
         tool_name = ""
         if action is not None:
-            tool_name = getattr(action, "tool", None) or (action.get("tool") if isinstance(action, dict) else "")
+            if isinstance(action, dict):
+                tool_name = action.get("tool", "") or ""
+            else:
+                tool_name = getattr(action, "tool", "") or ""
         self._total_tokens_used += self._estimate_token_usage(tool_name)
 
         # Track signal quality

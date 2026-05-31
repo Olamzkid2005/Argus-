@@ -145,8 +145,8 @@ class ExecutionEngine:
                 result_summary=(result.stdout or "")[:500] if result.success else (result.stderr or "")[:200],
                 success=result.success,
                 failure_state="" if result.success else (result.stderr or "")[:200],
+                duration_ms=duration_ms,
             )
-            record.duration_ms = duration_ms
             self.engagement_state.record_tool_execution(record)
 
         return result

@@ -34,6 +34,7 @@ class ToolExecutionRecord:
         execution_cost: float = 0.0,
         success: bool = True,
         failure_state: str = "",
+        duration_ms: int = 0,
     ):
         self.tool = tool
         self.args = args
@@ -43,6 +44,7 @@ class ToolExecutionRecord:
         self.execution_cost = execution_cost
         self.success = success
         self.failure_state = failure_state
+        self.duration_ms = duration_ms
 
     def to_dict(self) -> dict:
         return {
@@ -54,6 +56,7 @@ class ToolExecutionRecord:
             "execution_cost": self.execution_cost,
             "success": self.success,
             "failure_state": self.failure_state,
+            "duration_ms": self.duration_ms,
         }
 
 
@@ -323,7 +326,7 @@ class EngagementState:
         state.attack_graph = data.get("attack_graph", {})
         state._last_agent_tried_tools = set(data.get("tried_tools", []))
         state.current_phase = data.get("current_phase", "created")
-        if data.get("budget"):
+        if data.get("budget") is not None:
             state.budget_manager.load_from_db(data["budget"])
         return state
 

@@ -104,9 +104,7 @@ class DecisionCheckpointRepository:
                          reasoning_hash, selected_tool, arguments,
                          tool_cost_usd, state_version, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    ON CONFLICT (id) DO UPDATE SET
-                        execution_success = EXCLUDED.execution_success,
-                        execution_error = EXCLUDED.execution_error
+                    ON CONFLICT (id) DO NOTHING
                     """,
                     (
                         checkpoint.checkpoint_id,

@@ -427,6 +427,7 @@ class WebScanner:
             self.response_analysis,
         ]
 
+        import concurrent.futures as _cf
         with ThreadPoolExecutor(max_workers=6) as pool:
             futures = {pool.submit(check): check.__name__ for check in checks}
             try:
@@ -435,7 +436,7 @@ class WebScanner:
                         future.result(timeout=10)
                     except Exception as e:
                         logger.warning(f'{futures[future]} failed: {e}')
-            except TimeoutError:
+            except (TimeoutError, _cf.TimeoutError):
                 logger.warning("WebScanner check batch timed out")
 
         logger.info(f"Scan complete: {len(self.findings)} findings")
@@ -1861,10 +1862,10 @@ class WebScanner:
                 auth_header = resp.headers.get("Authorization") or resp.headers.get("Set-Cookie", "")
                 tokens = re.findall(jwt_pattern, auth_header)
 
+            import base64 as _b64
             for raw_token in tokens[:2]:
                 try:
                     # Decode JWT without signature verification
-                    import base64 as _b64
                     parts = raw_token.split(".")
                     if len(parts) != 3:
                         continue
@@ -2232,7 +2233,7 @@ class WebScanner:
                     evidence={
                         "technique": "CL.TE",
                         "status_code": resp.status_code,
-                        "message": "Possible CL.TE desunc (inconclusive — 500/504 can have other causes)",
+                        "message": "Possible CL.TE desync (inconclusive — 500/504 can have other causes)",
                     },
                     confidence=0.4,
                 )
@@ -2963,8 +2964,8 @@ class WebScanner:
         ]
 
         for pattern in stack_patterns:
-            if re.search(pattern, resp.text, re.IGNORECASE):
-                match = re.search(pattern, resp.text, re.IGNORECASE)
+            match = re.search(pattern, resp.text, re.IGNORECASE)
+            if match:
                 snippet = resp.text[max(0, match.start()-100):match.end()+200]
                 self._add_finding(
                     finding_type="STACK_TRACE_EXPOSURE",

@@ -248,7 +248,6 @@ class ReActAgent:
         Content is truncated to 2000 chars to prevent unbounded token growth
         from large tool outputs (nuclei can produce thousands of JSON lines).
         """
-        from feature_flags import is_enabled as _ff_enabled
         max_history_entry = 2000
         if (
             _ff_enabled("ENGAGEMENT_STATE", default=False)
@@ -277,7 +276,6 @@ class ReActAgent:
         When EngagementState is available, reads from state.observations
         for canonical state tracking. Falls back to self.history.
         """
-        from feature_flags import is_enabled as _ff_enabled
         if (
             _ff_enabled("ENGAGEMENT_STATE", default=False)
             and self.engagement_state is not None
@@ -749,7 +747,6 @@ class ReActAgent:
                 break
 
             # Check if engagement state signals completion
-            from feature_flags import is_enabled as _ff_enabled
             if (
                 _ff_enabled("ENGAGEMENT_STATE", default=False)
                 and self.engagement_state is not None
@@ -1017,7 +1014,6 @@ class ReActAgent:
             lifecycle_results[phase] = phase_results
 
             # Check if EngagementState signals terminal state
-            from feature_flags import is_enabled as _ff_enabled
             if (
                 _ff_enabled("ENGAGEMENT_STATE", default=False)
                 and self.engagement_state is not None

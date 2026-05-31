@@ -364,7 +364,7 @@ class ToolRunner:
         Args:
             tool: Tool name/path to execute
             args: List of arguments
-            timeout: Timeout in seconds (default: 60)
+            timeout: Timeout in seconds (default: 180)
 
         Returns:
             ToolResult with stdout, stderr, returncode, success

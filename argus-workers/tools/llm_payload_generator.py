@@ -241,7 +241,7 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             payloads = self._parse_payloads(response_text)
 
             # Inject callback marker into payloads (ensure detectability)
-            payloads = [p.replace(callback, callback) for p in payloads]
+            payloads = [p if callback in p else f"{callback}{p}" for p in payloads]
 
             # Cache
             if payloads:

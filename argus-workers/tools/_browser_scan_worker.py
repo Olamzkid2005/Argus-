@@ -60,7 +60,11 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
     slog = ScanLogger("browser_scan_worker")
     findings = []
     browser = None
-    target_url = _validate_url(target_url)  # SSRF guard
+    try:
+        target_url = _validate_url(target_url)  # SSRF guard
+    except ValueError as ve:
+        slog.warn(f"URL validation failed: {ve}")
+        return findings
     slog.tool_start("browser_scan", target=target_url)
     with sync_playwright() as p:
         try:

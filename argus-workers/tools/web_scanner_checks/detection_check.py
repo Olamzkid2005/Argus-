@@ -149,12 +149,13 @@ def _check_sensitive_files(target_url, session, findings):
 def _check_verb_tampering(target_url, session, findings):
     for method in ("TRACE", "DELETE", "PUT", "PATCH", "OPTIONS"):
         resp = safe_request(method, target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
-        if resp and resp.status_code not in (405, 404, 403, 501) and method == "TRACE":
-                findings.append(make_finding("HTTP_VERB_TAMPERING", "MEDIUM", target_url, {
-                    "method": method,
-                    "status_code": resp.status_code,
-                    "message": f"Server accepts {method} method",
-                }, 0.8))
+        if resp and resp.status_code not in (405, 404, 403, 501):
+            severity = "HIGH" if method == "TRACE" else "MEDIUM"
+            findings.append(make_finding("HTTP_VERB_TAMPERING", severity, target_url, {
+                "method": method,
+                "status_code": resp.status_code,
+                "message": f"Server accepts {method} method",
+            }, 0.8))
 
 
 class DetectionCheck:

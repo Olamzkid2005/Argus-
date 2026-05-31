@@ -135,7 +135,7 @@ class WebSocketScanner:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=self.timeout)
                         response_text = self._decode_message(msg)
-                    except TimeoutError:
+                    except (TimeoutError, asyncio.TimeoutError):
                         response_text = "<no response within timeout>"
 
                     findings.append({
@@ -153,7 +153,7 @@ class WebSocketScanner:
                     await ws.close()
             except InvalidStatus:
                 logger.debug("Server rejected origin validation for %s with origin %s", ws_url, origin)
-            except (OSError, TimeoutError):
+            except (OSError, TimeoutError, asyncio.TimeoutError):
                 logger.debug("Network error during origin validation for %s with origin %s", ws_url, origin)
             except WebSocketException:
                 logger.debug("WebSocket protocol error during origin validation for %s with origin %s", ws_url, origin)
@@ -169,7 +169,7 @@ class WebSocketScanner:
                 try:
                     msg = await asyncio.wait_for(ws.recv(), timeout=self.timeout)
                     response_text = self._decode_message(msg)
-                except TimeoutError:
+                except (TimeoutError, asyncio.TimeoutError):
                     response_text = "<no response within timeout>"
 
                 findings.append({
@@ -186,7 +186,7 @@ class WebSocketScanner:
                 await ws.close()
         except InvalidStatus:
             logger.debug("Server rejected auth test for %s (expected)", ws_url)
-        except (OSError, TimeoutError):
+        except (OSError, TimeoutError, asyncio.TimeoutError):
             logger.debug("Network error during auth test for %s", ws_url)
         except WebSocketException:
             logger.debug("WebSocket protocol error during auth test for %s", ws_url)
@@ -232,12 +232,12 @@ class WebSocketScanner:
                                 },
                                 "source_tool": "websocket_scanner",
                             })
-                    except TimeoutError:
+                    except (TimeoutError, asyncio.TimeoutError):
                         pass
                     await ws.close()
             except InvalidStatus:
                 logger.debug("Server rejected injection test for %s (expected)", ws_url)
-            except (OSError, TimeoutError):
+            except (OSError, TimeoutError, asyncio.TimeoutError):
                 logger.debug("Network error during injection test for %s", ws_url)
             except WebSocketException:
                 logger.debug("WebSocket protocol error during injection test for %s", ws_url)
@@ -294,7 +294,7 @@ class WebSocketScanner:
                 await ws.close()
         except InvalidStatus:
             logger.debug("Server rejected rate limit test for %s (expected)", ws_url)
-        except (OSError, TimeoutError):
+        except (OSError, TimeoutError, asyncio.TimeoutError):
             logger.debug("Network error during rate limit test for %s", ws_url)
         except WebSocketException:
             logger.debug("WebSocket protocol error during rate limit test for %s", ws_url)
