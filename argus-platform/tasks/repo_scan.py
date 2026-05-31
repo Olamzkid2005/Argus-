@@ -367,3 +367,41 @@ def scan_repo(repo_path: str) -> Dict:
     results['git_secret_findings'] = scan_git_history_for_secrets(repo_path)
     
     return results
+
+
+# ── ToolRunner bridge (optional) ────────────────────────────────────────────
+# When ToolRunner from argus-workers is available, these functions route
+# tool execution through ToolRunner for sandboxing, env locking, and
+# circuit-breaker protection.
+
+try:
+    from tools.tool_runner import ToolRunner
+
+    _TOOL_RUNNER_BRIDGE = ToolRunner()
+
+    def run_bandit_via_toolrunner(repo_path):
+        """Bandit via ToolRunner with env locking."""
+        result = _TOOL_RUNNER_BRIDGE.run("bandit", ["-r", repo_path, "-f", "json"], timeout=300)
+        if result.status.is_ok and result.stdout:
+            import json as _json
+            data = _json.loads(result.stdout)
+            findings = []
+            for issue in data.get("results", []):
+                findings.append({
+                    "type": "STATIC_ANALYSIS_FINDING",
+                    "severity": {"LOW": "LOW", "MEDIUM": "MEDIUM", "HIGH": "HIGH"}.get(issue.get("severity"), "MEDIUM"),
+                    "title": issue.get("issue_text", "Python Security Issue"),
+                    "file_path": issue.get("filename", ""),
+                    "line_number": issue.get("line_number", 0),
+                    "code_snippet": issue.get("code", ""),
+                    "tool": "bandit",
+                    "cwe": issue.get("cwe", ""),
+                    "confidence": issue.get("confidence", "medium"),
+                })
+            return findings
+        return []
+
+    logger.info("ToolRunner bridge available for repo_scan tasks")
+except ImportError:
+    # ToolRunner not available — repo_scan uses raw subprocess
+    pass

@@ -626,6 +626,43 @@ class WebScanner:
         self.findings.append(finding)
 
 
+# ── tool_core bridge (optional) ─────────────────────────────────────────────
+# When tool_core is available (pip install -e ../argus-workers/tool_core),
+# WebScanner also implements AbstractTool via BridgedWebScanner.
+
+try:
+    from tool_core.base import AbstractTool, ToolContext
+    from tool_core.result import ToolStatus, UnifiedToolResult
+
+    class BridgedWebScanner(AbstractTool):
+        """WebScanner that implements AbstractTool via tool_core."""
+
+        tool_name: str = "web_scanner"
+
+        def execute(self, ctx: ToolContext) -> UnifiedToolResult:
+            scanner = WebScanner(ctx.target, timeout=ctx.timeout or 30)
+            scan_result = scanner.scan(run_crawl=True)
+
+            result = UnifiedToolResult(
+                tool_name=self.tool_name,
+                target=ctx.target,
+            )
+
+            findings = scan_result.get("findings", [])
+            for f in findings:
+                f["source_tool"] = self.tool_name
+            result.findings = findings
+            result.status = ToolStatus.SUCCESS
+            result.mark_finished()
+            return result
+
+    __all__ = ["WebScanner", "BridgedWebScanner", "detect_waf", "run_katana_crawl"]
+
+except ImportError:
+    # tool_core not available — use WebScanner standalone
+    __all__ = ["WebScanner", "detect_waf", "run_katana_crawl"]
+
+
 if __name__ == '__main__':
     # Example usage
     scanner = WebScanner('https://example.com')
