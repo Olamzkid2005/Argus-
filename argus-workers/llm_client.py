@@ -587,7 +587,7 @@ class LLMClient:
 
     def is_available(self) -> bool:
         """Check if the LLM client is configured and potentially reachable.
-        
+
         Also checks the circuit breaker — if it's open, the client is
         considered unavailable even though an API key is configured.
         """

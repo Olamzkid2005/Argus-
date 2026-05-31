@@ -3,7 +3,6 @@ Open redirect parameter detection and testing.
 """
 import logging
 import re
-from urllib.parse import urljoin, urlparse
 
 from config.constants import RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
 
@@ -30,7 +29,7 @@ def _check_open_redirect(target_url: str, session, findings: list) -> None:
     param_pattern = re.compile(r'[?&](' + '|'.join(REDIRECT_PARAMS) + r')=([^&\s"\']+)', re.I)
     for match in param_pattern.finditer(resp.text):
         param_name = match.group(1)
-        existing_val = match.group(2)
+        _ = match.group(2)  # existing value (unused, future use)
         test_url = target_url + ("&" if "?" in target_url else "?")
         test_url += f"{param_name}={EXTERNAL_TEST_URL}"
         redirect_resp = safe_request(

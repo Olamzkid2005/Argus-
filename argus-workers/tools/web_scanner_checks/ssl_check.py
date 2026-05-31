@@ -193,8 +193,8 @@ class SslCheck:
 
         # Fetch cert for deeper checks
         try:
-            import ssl as _ssl
             import socket as _socket
+            import ssl as _ssl
             ctx = _ssl.create_default_context()
             with _socket.create_connection((hostname, port), timeout=10) as sock:
                 with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:

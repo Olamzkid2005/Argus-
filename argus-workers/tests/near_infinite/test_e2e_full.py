@@ -35,9 +35,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
 
 import pytest
 
@@ -74,7 +72,7 @@ class Checklist:
             "name": name,
             "status": "🔄",
             "error": "",
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
         }
         with self._lock:
             self.items.append(item)
@@ -105,7 +103,7 @@ class Checklist:
     def print_report(self) -> str:
         s = self.summary()
         lines = ["=" * 60, "  ARGUS NEAR-INFINITE E2E TEST REPORT",
-                 f"  {datetime.now(timezone.utc).isoformat()}", "=" * 60, ""]
+                 f"  {datetime.now(UTC).isoformat()}", "=" * 60, ""]
         cur = ""
         for item in self.items:
             if item["section"] != cur:
@@ -138,7 +136,7 @@ class NextJSServer:
         self._create_env()
         self._kill_stale()
         os.makedirs("/tmp", exist_ok=True)
-        lf = open("/tmp/argus-e2e-nextjs.log", "w")
+        lf = open("/tmp/argus-e2e-nextjs.log", "w")  # noqa: SIM115 — intentionally kept open for subprocess
         self.proc = subprocess.Popen(
             ["npm", "run", "dev"],
             cwd=PLATFORM_ROOT, stdout=lf, stderr=subprocess.STDOUT,
@@ -344,8 +342,8 @@ def db_setup():
 
     # Create DB if missing
     subprocess.run([psql, "-U", "postgres", "-c",
-                    f"SELECT 'CREATE DATABASE argus_test' WHERE NOT EXISTS "
-                    f"(SELECT FROM pg_database WHERE datname = 'argus_test')\\gexec"],
+                    "SELECT 'CREATE DATABASE argus_test' WHERE NOT EXISTS "
+                    "(SELECT FROM pg_database WHERE datname = 'argus_test')\\gexec"],
                    capture_output=True, timeout=10)
 
     # Check tables
@@ -440,14 +438,21 @@ def _install_mocks():
             self.timeout = timeout
     class _FakeTS:
         def __init__(self, name="", type="string", description="", **kw):
-            self.name = name; self.type = type; self.description = description
+            self.name = name
+            self.type = type
+            self.description = description
     class _FakeMCP:
-        def __init__(self, *a, **kw): self.tools = []
-        def get_tools(self): return []
-        def register_tool(self, *a, **kw): pass
+        def __init__(self, *_, **__):
+            self.tools = []
+        def get_tools(self):
+            return []
+        def register_tool(self, *_, **__):
+            pass
     class _FakeMod:
-        MCPServer = _FakeMCP; ToolDefinition = _FakeTD; ToolSchema = _FakeTS
-        get_mcp_server = staticmethod(lambda *a, **kw: _FakeMCP())
+        MCPServer = _FakeMCP
+        ToolDefinition = _FakeTD
+        ToolSchema = _FakeTS
+        get_mcp_server = staticmethod(lambda *_, **__: _FakeMCP())
     sys.modules["mcp_server"] = _FakeMod()
 
 

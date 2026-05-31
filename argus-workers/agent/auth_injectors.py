@@ -9,7 +9,7 @@ Keeps tool-specific auth knowledge out of the agent and the tool wrappers.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from agent.auth_context import AuthContext
 
@@ -132,7 +132,6 @@ def _has_header_flag(args: list[str], header_name: str) -> bool:
     """
     prefix = header_name.lower() + ":"
     for i, arg in enumerate(args):
-        if arg == "-H" and i + 1 < len(args):
-            if args[i + 1].lower().startswith(prefix):
+        if arg == "-H" and i + 1 < len(args) and args[i + 1].lower().startswith(prefix):
                 return True
     return False

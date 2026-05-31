@@ -7,7 +7,6 @@ All methods are @staticmethod taking ``engagement_id`` as the first parameter.
 from __future__ import annotations
 
 import logging
-import time
 
 from config.constants import HARD_TIMEOUT_SECONDS
 

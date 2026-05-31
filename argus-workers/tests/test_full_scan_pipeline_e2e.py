@@ -30,7 +30,7 @@ import fnmatch
 import os
 import sys
 import uuid
-from unittest.mock import MagicMock, PropertyMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -338,7 +338,7 @@ class TestFullScanPipelineE2E:
             patch("tasks.utils.load_recon_context", return_value=None),
             patch("tasks.utils.save_recon_context", return_value=None),
         ):
-            result = recon_module.run_recon.run(
+            recon_module.run_recon.run(  # noqa: F841 — intentionally ignored
                 engagement_id,
                 target_url,
                 budget,
@@ -678,11 +678,6 @@ class TestFullScanPipelineE2E:
         mock_celery_app.send_task.side_effect = capturing_send_task
 
         # ── Data flow test values ──
-        recon_context_data = {
-            "target_url": target_url,
-            "live_endpoints": ["/api", "/login"],
-        }
-
         # Build a real ReconContext for the scan phase to receive
         from models.recon_context import ReconContext
         recon_context_obj = ReconContext(
@@ -1563,9 +1558,8 @@ class TestFullScanPipelineE2E:
         the correct queues via task_routes, and that no send_task call
         explicitly passes queue= (which would bypass the central routing config).
         """
-        from tasks import recon as recon_module
-
         from celery_app import app
+        from tasks import recon as recon_module
         routes = app.conf.task_routes
 
         def _resolve_queue(task_name: str) -> str | None:
@@ -1857,7 +1851,7 @@ class TestFullScanPipelineE2E:
         Orchestrator instance to test only the run() routing logic.
         """
         import time
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         # Must import AFTER mock_heavy_deps patches sys.modules
         import orchestrator_pkg.orchestrator as orch_module

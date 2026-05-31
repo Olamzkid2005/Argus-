@@ -18,6 +18,7 @@ import logging
 import time
 from typing import Any
 
+from agent.auth_context import AuthContext
 from config.constants import (
     LLM_AGENT_CONTEXT_MAX_TOKENS,
     LLM_AGENT_MAX_COST_USD,
@@ -28,9 +29,6 @@ from config.constants import (
 from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
 from utils.logging_utils import ScanLogger
-
-from agent.auth_context import AuthContext
-from tools.models import ToolResult
 
 from .agent_action import AgentAction
 from .agent_prompts import (

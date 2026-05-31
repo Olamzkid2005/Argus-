@@ -52,7 +52,6 @@ def _validate_verification_url(endpoint: str) -> str:
         raise ValueError(f"Blocked protocol '{parsed.scheme}' in endpoint: {endpoint}")
 
     hostname = parsed.hostname or ""
-    import socket as _socket
     try:
         # Check if hostname is an IP literal
         ip = ipaddress.ip_address(hostname)

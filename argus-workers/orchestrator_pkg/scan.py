@@ -238,6 +238,7 @@ _emitted_fingerprints_lock = threading.Lock()
 # process crashes mid-scan without reaching the cleanup code.
 import atexit as _atexit
 
+
 def _cleanup_emitted_fingerprints():
     with _emitted_fingerprints_lock:
         _emitted_fingerprints.clear()

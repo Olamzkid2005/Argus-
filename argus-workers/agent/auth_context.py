@@ -83,7 +83,7 @@ class AuthContext:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AuthContext":
+    def from_dict(cls, data: dict[str, Any]) -> AuthContext:
         """Deserialize from dict.
 
         The ``session`` field is set to ``None`` — the caller must

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class FindingPersistenceService:
         - Assigns OWASP category and CWE ID when missing.
         - Ensures ``source_tool`` is set.
         """
-        secret_tools = self.SECRET_TOOLS
+        _ = self.SECRET_TOOLS  # retained for interface consistency
         processed: list[dict] = []
 
         for finding in findings:
@@ -362,7 +363,7 @@ class FindingPersistenceService:
         Returns:
             True if saved successfully
         """
-        from psycopg2.sql import Identifier, SQL
+        from psycopg2.sql import SQL, Identifier
 
         from database.connection import db_cursor
 

@@ -31,8 +31,8 @@ import requests
 from agent.auth_context import AuthContext
 from agent.form_discovery import (
     ERROR_CODES,
-    discover_auth_endpoints,
     _extract_form_fields,
+    discover_auth_endpoints,
     has_verification_requirement,
 )
 from tools.models import ToolResult

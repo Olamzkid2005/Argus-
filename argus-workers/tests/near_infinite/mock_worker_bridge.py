@@ -25,8 +25,8 @@ import traceback
 # ─── Apply patches BEFORE any task modules are imported ──────────────────────
 # These patches replace external dependencies with mocks so tests run
 # without real LLM API keys, real security tools, or network access.
-
 import unittest.mock as mock
+import uuid
 
 # ── Mock LLM client ──────────────────────────────────────────────────────────
 # Replace the real LLMClient with one that returns canned responses.
@@ -287,16 +287,16 @@ def _install_patches():
         MCPServer = _FakeMCPServer
         ToolDefinition = _FakeToolDef
         ToolSchema = _FakeToolSchema
-        get_mcp_server = staticmethod(lambda *a, **kw: _FakeMCPServer())
+        get_mcp_server = staticmethod(lambda *_, **__: _FakeMCPServer())
 
     sys.modules["mcp_server"] = _FakeModule()
-    _PATCHED_MODULES["mcp_server"] = mock_mcp
+    _PATCHED_MODULES["mcp_server"] = True  # mark as patched
 
 
 def parse_celery_message(queue_key: str, raw: bytes) -> dict | None:
     """
     Parse a Celery v5.x Redis message.
-    
+
     The Next.js server pushes messages in this format (redis.ts):
       body = base64(JSON.stringify([args, kwargs, embed]))
       message = JSON.stringify({
@@ -304,7 +304,7 @@ def parse_celery_message(queue_key: str, raw: bytes) -> dict | None:
         headers: { task: "tasks.recon.run_recon", id: "..." },
         properties: { body_encoding: "base64" },
       })
-    
+
     Returns dict with task_name, args, kwargs if parseable, None otherwise.
     """
     try:
@@ -369,7 +369,7 @@ def _make_mock_task_context(
     redis_url: str = "",
 ):
     """Build a mock TaskContext shaped like the real TaskContext dataclass.
-    
+
     Follows the pattern from test_full_scan_pipeline_e2e.py.
     """
     ctx = mock.MagicMock()
@@ -460,8 +460,8 @@ def execute_task(task_info: dict, redis_url: str = "") -> dict:
 
         # Patch task_context and app for this execution
         with (
-            mock.patch(f"{module_path}.task_context", side_effect=lambda *a, **kw: _CapturingContext(ctx)),
-            mock.patch(f"{module_path}.app.send_task", side_effect=lambda *a, **kw: mock.MagicMock(id=f"mock-{uuid.uuid4().hex[:8]}")),
+            mock.patch(f"{module_path}.task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
+            mock.patch(f"{module_path}.app.send_task", side_effect=lambda *_, **__: mock.MagicMock(id=f"mock-{uuid.uuid4().hex[:8]}")),
         ):
             # Call .run() — the Celery task's actual implementation
             result = task_func.run(*raw_args, **raw_kwargs)

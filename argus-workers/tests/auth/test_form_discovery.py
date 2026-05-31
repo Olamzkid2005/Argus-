@@ -1,8 +1,6 @@
 """Tests for form discovery utility."""
 
-import sys
 import importlib.util
-import json
 
 _spec = importlib.util.spec_from_file_location(
     "form_discovery", "agent/form_discovery.py",

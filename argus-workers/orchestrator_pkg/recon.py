@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
@@ -337,8 +336,8 @@ def _probe_login_pages(
     Returns:
         Tuple of (verified_auth_endpoints, has_login_form)
     """
-    from urllib.parse import urljoin
     import warnings
+    from urllib.parse import urljoin
 
     import requests
     import urllib3

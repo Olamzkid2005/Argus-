@@ -1,6 +1,5 @@
 """Tests for tool auth injectors."""
 
-import sys
 import importlib.util
 
 _spec = importlib.util.spec_from_file_location(

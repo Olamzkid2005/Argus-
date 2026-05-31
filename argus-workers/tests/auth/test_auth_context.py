@@ -1,6 +1,5 @@
 """Tests for AuthContext dataclass."""
 
-import sys
 import importlib.util
 
 # Load auth_context without triggering agent __init__.py

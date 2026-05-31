@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from models.confidence_scorer import ConfidenceScorer
 from tracing import ExecutionSpan, StructuredLogger, get_trace_id
 
 logger = logging.getLogger(__name__)

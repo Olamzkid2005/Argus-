@@ -12,8 +12,6 @@ import subprocess
 import tempfile
 from urllib.parse import urlparse
 
-from typing import Optional
-
 from config.constants import (
     ALLOWED_GIT_SCHEMES,
     DEFAULT_AGGRESSIVENESS,
@@ -304,7 +302,7 @@ def execute_repo_scan(orchestrator, repo_url: str, budget: dict, aggressiveness:
                 if rank > existing_rank:
                     all_findings[idx] = finding
 
-        def _emit(tool: str, activity: str, status: str, items: Optional[int] = None):
+        def _emit(tool: str, activity: str, status: str, items: int | None = None):
             orchestrator.ws_publisher.publish_scanner_activity(
                 engagement_id=orchestrator.engagement_id,
                 tool_name=tool,

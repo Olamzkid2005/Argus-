@@ -7,8 +7,8 @@ Extracted from Orchestrator.run_analysis() Section 1 (Snapshot/Load phase).
 from __future__ import annotations
 
 import logging
-import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,6 @@ class SnapshotService:
         findings: list[dict] = []
         if self.finding_repo:
             try:
-                from database.repositories.finding_repository import (
-                    FindingRepository,  # noqa: F811
-                )
 
                 raw_findings, _ = self.finding_repo.get_findings_by_engagement(
                     self.engagement_id, limit=100000,

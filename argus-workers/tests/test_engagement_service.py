@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -125,6 +125,7 @@ class TestEngagementService:
     def test_log_timeout_event_logs_warning(self, caplog):
         """log_timeout_event logs a warning with engagement ID and elapsed time."""
         import logging
+
         from orchestrator_pkg.engagement.engagement_service import EngagementService
 
         caplog.set_level(logging.WARNING)
@@ -141,6 +142,7 @@ class TestEngagementService:
     def test_log_timeout_event_formats_elapsed_with_two_decimals(self, caplog):
         """Elapsed seconds should be formatted with 2 decimal places."""
         import logging
+
         from orchestrator_pkg.engagement.engagement_service import EngagementService
 
         caplog.set_level(logging.WARNING)

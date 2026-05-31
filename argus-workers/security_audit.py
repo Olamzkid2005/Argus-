@@ -222,7 +222,7 @@ class SecurityAudit:
 
     def print_report(self, report: dict | None = None):
         """Print human-readable report
-        
+
         Args:
             report: Pre-generated report dict. If None, generates a new one.
         """

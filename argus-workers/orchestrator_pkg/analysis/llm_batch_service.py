@@ -10,8 +10,9 @@ Extracted from Orchestrator.run_analysis() Sections 3–5:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

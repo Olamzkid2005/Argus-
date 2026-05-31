@@ -232,7 +232,7 @@ def _extract_form_fields(html: str, form_type: str = "register") -> dict[str, st
                 # May be the email field if no explicit email field found
                 if "email" not in fields:
                     fields["email"] = name
-            elif "csrf" in name.lower() or "token" in name.lower() or "_token" == name:
+            elif "csrf" in name.lower() or "token" in name.lower() or name == "_token":
                 fields["csrf"] = name
                 csrf_value = inp.get("value", "")
                 if csrf_value:

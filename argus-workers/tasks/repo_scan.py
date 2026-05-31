@@ -100,8 +100,6 @@ def run_repo_scan(
         dual_auth_config: Second auth config for dual-account BOLA testing
     """
     from tasks.base import task_context
-    from utils.logging_utils import ScanLogger
-    slog = ScanLogger("repo_scan", engagement_id=engagement_id)
 
     job_extra = {
         "type": "repo_scan",

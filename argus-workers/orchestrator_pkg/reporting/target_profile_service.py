@@ -7,7 +7,8 @@ Extracted from Orchestrator.run_reporting() second section.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

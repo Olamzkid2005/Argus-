@@ -701,8 +701,6 @@ def emit_finding_rt(
     endpoint = finding.get("endpoint", "")
     source_tool = finding.get("source_tool", tool_name)
     confidence = finding.get("confidence", 0.5)
-    finding_id = finding.get("_id", finding.get("id", ""))
-
     # In-flight dedup: skip if we've already emitted this type+endpoint+tool combo
     fp = _rt_fingerprint(finding_type, endpoint, source_tool)
     with _rt_fingerprints_lock:
