@@ -25,6 +25,8 @@ class KatanaParser(BaseParser):
             try:
                 data = json.loads(line)
                 request = _safe_get(data, "request", default={})
+                if not isinstance(request, dict):
+                    request = {}
 
                 finding = {
                     "type": "CRAWLED_ENDPOINT",

@@ -614,24 +614,25 @@ class FindingRepository(BaseRepository):
         with self.db_operation(commit=True) as (conn, cursor):
             for idx, f in enumerate(findings):
                 sp_name = f"finding_sp_{idx}"
+                # Extract finding fields before try block to avoid UnboundLocalError
+                # if the savepoint creation fails (H-v4-12).
+                finding_id = str(uuid.uuid4())
+                _type = f.get("type", "UNKNOWN")
+                _severity = f.get("severity", "INFO")
+                _endpoint = f.get("endpoint", "")
+                _evidence = f.get("evidence", {})
+                _confidence = f.get("confidence", 0.5)
+                _source_tool = f.get("source_tool", "") or ""
+                _cvss = f.get("cvss_score")
+                _owasp = f.get("owasp_category")
+                _cwe = f.get("cwe_id")
+                _ev_strength = f.get("evidence_strength")
+                _tool_agree = f.get("tool_agreement_level")
+                _fp_like = f.get("fp_likelihood")
                 try:
                     # Create a savepoint before each finding so individual
                     # failures can be rolled back without aborting the batch.
                     cursor.execute(SQL("SAVEPOINT {}").format(Identifier(sp_name)))
-
-                    finding_id = str(uuid.uuid4())
-                    _type = f.get("type", "UNKNOWN")
-                    _severity = f.get("severity", "INFO")
-                    _endpoint = f.get("endpoint", "")
-                    _evidence = f.get("evidence", {})
-                    _confidence = f.get("confidence", 0.5)
-                    _source_tool = f.get("source_tool", "") or ""
-                    _cvss = f.get("cvss_score")
-                    _owasp = f.get("owasp_category")
-                    _cwe = f.get("cwe_id")
-                    _ev_strength = f.get("evidence_strength")
-                    _tool_agree = f.get("tool_agreement_level")
-                    _fp_like = f.get("fp_likelihood")
 
                     cursor.execute(
                         """

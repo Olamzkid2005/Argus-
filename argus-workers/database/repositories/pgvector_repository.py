@@ -223,7 +223,7 @@ class PGVectorRepository:
             List of similar finding dictionaries
         """
         # Generate embedding for text (would call external service in production)
-        embedding = self._generate_embedding_fallback(text_content)
+        embedding = self.generate_embedding_fallback(text_content)
 
         if embedding is None:
             logger.warning("Could not generate embedding, using fallback")

@@ -270,12 +270,12 @@ class FindingNormalizer:
             if context:
                 normalized_severity = Severity(
                     self.normalize_severity_with_context(
-                        raw_finding.get("severity", "INFO"), context
+                        raw_finding.get("severity") or "INFO", context
                     )
                 )
             else:
                 normalized_severity = self._normalize_severity(
-                    raw_finding.get("severity", "INFO")
+                    raw_finding.get("severity") or "INFO"
                 )
 
             # Calculate confidence if not provided
@@ -284,7 +284,7 @@ class FindingNormalizer:
                 confidence = self._calculate_confidence(raw_finding, source_tool)
 
             # Structure evidence consistently
-            evidence = self._structure_evidence(raw_finding.get("evidence", {}))
+            evidence = self._structure_evidence(raw_finding.get("evidence") or {})
 
             # Assess evidence strength
             evidence_strength = self._assess_evidence_strength(raw_finding)
@@ -333,7 +333,7 @@ class FindingNormalizer:
 
         # If we have CWE info in evidence, use it to determine type
         if raw_finding:
-            evidence = raw_finding.get("evidence", {})
+        evidence = raw_finding.get("evidence") or {}
 
             # Extract CWE from evidence (Semgrep puts it here)
             cwe = evidence.get("cwe", "")
@@ -352,7 +352,7 @@ class FindingNormalizer:
                 return self.OWASP_TYPE_MAPPINGS[owasp]
 
             # Try to extract from metadata or other fields
-            metadata = raw_finding.get("metadata", {})
+            metadata = raw_finding.get("metadata") or {}
             if metadata:
                 cwe = metadata.get("cwe", "")
                 if cwe:

@@ -23,6 +23,14 @@ class RateLimitRepository:
         """
         self.db = db_connection
 
+    @staticmethod
+    def _row_to_dict(cursor, row) -> dict | None:
+        """Convert a regular cursor tuple row to a dict using cursor.description."""
+        if row is None:
+            return None
+        columns = [desc[0] for desc in cursor.description]
+        return dict(zip(columns, row, strict=False))
+
     def create_event(
         self,
         domain: str,
@@ -59,12 +67,12 @@ class RateLimitRepository:
                 with self.db.cursor() as cursor:
                     cursor.execute(query, (domain, event_type, status_code, current_rps))
                     row = cursor.fetchone()
-                    return dict(row) if row else None
+                    return self._row_to_dict(cursor, row)
             else:
                 with db_cursor() as cursor:
                     cursor.execute(query, (domain, event_type, status_code, current_rps))
                     row = cursor.fetchone()
-                    return dict(row) if row else None
+                    return self._row_to_dict(cursor, row)
         except Exception as e:
             logger.error("Failed to create rate limit event: %s", e)
             raise
@@ -96,11 +104,11 @@ class RateLimitRepository:
             if self.db:
                 with self.db.cursor() as cursor:
                     cursor.execute(query, (domain, limit))
-                    return [dict(row) for row in cursor.fetchall()]
+                    return [self._row_to_dict(cursor, row) for row in cursor.fetchall()]
             else:
                 with db_cursor() as cursor:
                     cursor.execute(query, (domain, limit))
-                    return [dict(row) for row in cursor.fetchall()]
+                    return [self._row_to_dict(cursor, row) for row in cursor.fetchall()]
         except Exception as e:
             logger.error("Failed to get rate limit events: %s", e)
             raise

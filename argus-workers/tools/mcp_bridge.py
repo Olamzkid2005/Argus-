@@ -259,7 +259,8 @@ class MCPToolBridge:
         registered_count = 0
         skipped_tools = []
         for tool in tools:
-            if not _is_binary_available(getattr(tool, 'binary', None) or tool.name):
+            binary_name = tool.binary if tool.binary is not None else tool.command
+            if not _is_binary_available(binary_name):
                 skipped_tools.append(tool.name)
                 slog.info(f"Skipping tool '{tool.name}' — binary not found on PATH")
                 continue
