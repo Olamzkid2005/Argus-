@@ -229,7 +229,6 @@ class IntelligenceEngine:
                 fp_likelihood = max(0.001, min(1.0, fp_likelihood))
 
                 # Calculate confidence using shared formula
-                from models.confidence_scorer import ConfidenceScorer
                 confidence = ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
 
                 # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings.
@@ -247,7 +246,9 @@ class IntelligenceEngine:
                 # Update finding
                 scored_finding = finding.copy()
                 scored_finding["confidence"] = confidence
-                scored_finding["tool_agreement_level"] = self._get_agreement_level(len(group))
+                # Count unique source tools for agreement level, not total findings
+                _unique_tools = {f.get("source_tool") for f in group if f.get("source_tool")}
+                scored_finding["tool_agreement_level"] = self._get_agreement_level(len(_unique_tools))
                 # Tag fp_rate source for auditability
                 scored_finding["fp_rate_source"] = (
                     "learned" if _learned_fp_valid is not None

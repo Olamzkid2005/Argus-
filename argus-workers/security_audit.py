@@ -220,9 +220,14 @@ class SecurityAudit:
             "findings": [asdict(f) for f in findings]
         }
 
-    def print_report(self):
-        """Print human-readable report"""
-        report = self.generate_report()
+    def print_report(self, report: dict | None = None):
+        """Print human-readable report
+        
+        Args:
+            report: Pre-generated report dict. If None, generates a new one.
+        """
+        if report is None:
+            report = self.generate_report()
 
         print("=" * 60)
         print("ARGUS SECURITY AUDIT REPORT")
@@ -250,10 +255,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     audit = SecurityAudit()
-    audit.print_report()
+    report = audit.generate_report()
+    audit.print_report(report)
 
     # Exit with error code if critical findings
-    report = audit.generate_report()
     if report["summary"]["critical"] > 0 or report["summary"]["high"] > 0:
         sys.exit(1)
     sys.exit(0)

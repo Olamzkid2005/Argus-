@@ -53,9 +53,10 @@ class LLMSynthesizer:
         duration_ms = int((_time.time() - start) * 1000)
         slog.llm_complete("synthesizer", duration_ms=duration_ms)
 
-        if result.get("_fallback"):
-            slog.warn("LLM synthesis returned fallback")
-            logger.warning("LLM synthesis returned fallback — findings will lack LLM analysis")
+        if result is None or result.get("_fallback"):
+            slog.warn("LLM synthesis returned fallback or None")
+            logger.warning("LLM synthesis returned fallback or None — findings will lack LLM analysis")
+            result = result or {}
             result["_synthesis_fallback"] = True
         else:
             slog.llm_result(f"Risk level: {result.get('risk_level', 'unknown')}")

@@ -166,7 +166,7 @@ class ScanDiffEngine:
                         "%d columns vs %d rows — using strict zip",
                         len(columns), len(row),
                     )
-                finding = dict(zip(columns, row, strict=True))
+                finding = dict(zip(columns, row, strict=False))
                 fp = self._fingerprint(finding)
                 findings[fp] = finding
             return findings

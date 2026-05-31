@@ -218,7 +218,8 @@ class LLMParserFallback:
                     "LLMParserFallback: %d/%d findings discarded by post-validation for %s",
                     len(findings) - validated_count, len(findings), tool_name,
                 )
-                findings = [f for f in findings if f.get("ai_generated") and str(f.get("type", "")).strip()
+                findings = [f for f in findings if isinstance(f, dict) and f.get("ai_generated")
+                           and str(f.get("type", "")).strip()
                            and str(f.get("severity", "")).strip().upper() in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
                            and str(f.get("endpoint", "")).strip()]
 
