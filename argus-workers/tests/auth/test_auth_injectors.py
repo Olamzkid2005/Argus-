@@ -1,15 +1,18 @@
 """Tests for tool auth injectors."""
 
 import importlib.util
+import os
 
 _spec = importlib.util.spec_from_file_location(
-    "auth_injectors", "agent/auth_injectors.py",
+    "auth_injectors",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "auth_injectors.py"),
 )
 _ai = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_ai)
 
 _spec_ctx = importlib.util.spec_from_file_location(
-    "auth_context", "agent/auth_context.py",
+    "auth_context",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "auth_context.py"),
 )
 _ctx_mod = importlib.util.module_from_spec(_spec_ctx)
 _spec_ctx.loader.exec_module(_ctx_mod)

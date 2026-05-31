@@ -24,6 +24,8 @@ from streaming import (
     emit_tool_complete,
     emit_tool_start,
 )
+from tool_core.base import ToolContext as ScannerContext
+from tool_core.config.models import DualAuthConfig
 from tools.web_scanner import WebScanner
 from utils.logging_utils import ScanLogger
 
@@ -759,7 +761,15 @@ def execute_scan_tools(
                 emit_finding_callback=_stream_finding,
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
-            web_findings = web_scanner.scan(target)
+            _ws_result = web_scanner.execute(ScannerContext(
+                target=target,
+                timeout=SSL_TIMEOUT,
+                rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                engagement_id=ctx.engagement_id,
+                tech_stack=tech_stack,
+                emit_finding=_stream_finding,
+            ))
+            web_findings = _ws_result.findings
 
             # Log any rate limit findings detected by the web scanner
             if rate_limit_repo:
@@ -793,41 +803,45 @@ def execute_scan_tools(
             slog.tool_complete("web_scanner", success=False)
             logger.warning(f"WebScanner failed for {target}: {e}")
 
-        # DualAuthScanner — cross-account BOLA/BOPLA testing when dual_auth_config is provided
-        if dual_auth_config is not None and auth_config is not None:
-            slog.tool_start("dual_auth_scanner", [target])
-            try:
-                from tools.dual_auth_scanner import DualAuthScanner
-                dual_scanner = DualAuthScanner(
-                    auth_config_a=auth_config,
-                    auth_config_b=dual_auth_config,
-                    timeout=SSL_TIMEOUT,
-                    rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
-                    engagement_id=ctx.engagement_id,
-                    emit_finding_callback=_stream_finding,
-                )
-                emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
-                dual_findings = dual_scanner.scan(target)
-                slog.tool_complete("dual_auth_scanner", success=True, findings=len(dual_findings))
-                # Findings already emitted inline via _stream_finding callback
-                # Collect any remaining that weren't streamed (backward compat)
-                for df in dual_findings:
-                    normalized = ctx._normalize_finding(df, "dual_auth_scanner")
-                    if normalized:
-                        # Dedup: only add if not already in all_findings (streamed inline)
-                        dedup_key = (normalized.get("type"), normalized.get("endpoint"))
-                        if not any(
-                            f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
-                            for f in all_findings
-                        ):
-                            emit_finding_rt(ctx.engagement_id, normalized, "dual_auth_scanner")
-                            all_findings.append(normalized)
-                emit_tool_complete(ctx.engagement_id, "dual_auth_scanner", True, 0,
-                                    finding_count=len(dual_findings))
-                logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
-            except Exception as e:
-                slog.tool_complete("dual_auth_scanner", success=False)
-                logger.warning(f"DualAuthScanner failed for {target}: {e}")
+    # DualAuthScanner — cross-account BOLA/BOPLA testing when dual_auth_config is provided
+    if dual_auth_config is not None and auth_config is not None:
+        slog.tool_start("dual_auth_scanner", [target])
+        try:
+            from tools.dual_auth_scanner import DualAuthScanner
+            dual_scanner = DualAuthScanner()
+            emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
+            _dual_result = dual_scanner.execute(ScannerContext(
+                target=target,
+                timeout=SSL_TIMEOUT,
+                rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                engagement_id=ctx.engagement_id,
+                emit_finding=_stream_finding,
+                dual_auth=DualAuthConfig(
+                    auth_a=auth_config,
+                    auth_b=dual_auth_config,
+                ),
+            ))
+            dual_findings = _dual_result.findings
+            slog.tool_complete("dual_auth_scanner", success=True, findings=len(dual_findings))
+            # Findings already emitted inline via _stream_finding callback
+            # Collect any remaining that weren't streamed (backward compat)
+            for df in dual_findings:
+                normalized = ctx._normalize_finding(df, "dual_auth_scanner")
+                if normalized:
+                    # Dedup: only add if not already in all_findings (streamed inline)
+                    dedup_key = (normalized.get("type"), normalized.get("endpoint"))
+                    if not any(
+                        f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
+                        for f in all_findings
+                    ):
+                        emit_finding_rt(ctx.engagement_id, normalized, "dual_auth_scanner")
+                        all_findings.append(normalized)
+            emit_tool_complete(ctx.engagement_id, "dual_auth_scanner", True, 0,
+                               finding_count=len(dual_findings))
+            logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
+        except Exception as e:
+            slog.tool_complete("dual_auth_scanner", success=False)
+            logger.warning(f"DualAuthScanner failed for {target}: {e}")
 
         # AIVulnScanner — prompt injection and AI information disclosure
         slog.tool_start("ai_vuln_scanner", [target])
@@ -841,7 +855,14 @@ def execute_scan_tools(
                 emit_finding_callback=_stream_finding,
             )
             emit_tool_start(ctx.engagement_id, "ai_vuln_scanner", [target])
-            ai_findings = ai_scanner.scan(target)
+            _ai_result = ai_scanner.execute(ScannerContext(
+                target=target,
+                timeout=SSL_TIMEOUT * 2,
+                rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                engagement_id=ctx.engagement_id,
+                emit_finding=_stream_finding,
+            ))
+            ai_findings = _ai_result.findings
             slog.tool_complete("ai_vuln_scanner", success=True, findings=len(ai_findings))
             # Findings already emitted inline via _stream_finding callback
             # Collect any remaining that weren't streamed (backward compat)
@@ -883,8 +904,11 @@ def execute_scan_tools(
                     for ws_url in ws_urls:
                         try:
                             scanner = WebSocketScanner(timeout=SSL_TIMEOUT)
-                            result = _run_async(scanner.scan(ws_url))
-                            ws_findings.extend(result)
+                            _ws_result = _run_async(scanner.async_execute(ScannerContext(
+                                target=ws_url,
+                                timeout=SSL_TIMEOUT,
+                            )))
+                            ws_findings.extend(_ws_result.findings)
                         except RuntimeError as ws_err:
                             # Missing dependency (websockets or httpx) — skip gracefully
                             if "is required" in str(ws_err):

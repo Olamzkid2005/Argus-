@@ -61,7 +61,7 @@ def test_build_task_args_analyze_includes_budget_and_trace():
     tid = str(uuid.uuid4())
     b = {"max_cycles": 2, "max_depth": 1}
     args = build_task_args("analyze", eid, "", b, tid)
-    assert args == [eid, b, tid]
+    assert args == [eid, b, tid, None]  # generate_chain_exploits defaults to None
 
 
 def test_build_task_args_repo_scan_uses_repo_url_and_trace():

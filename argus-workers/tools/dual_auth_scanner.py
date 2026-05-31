@@ -17,12 +17,15 @@ import requests
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
+from tool_core.base import AbstractTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
 
-class DualAuthScanner:
+class DualAuthScanner(AbstractTool):
     """Scanner for cross-account access control testing (BOLA/BOPLA/IDOR)."""
 
     # Resource patterns to discover in API responses
@@ -57,8 +60,8 @@ class DualAuthScanner:
 
     def __init__(
         self,
-        auth_config_a: dict,
-        auth_config_b: dict,
+        auth_config_a: dict | None = None,
+        auth_config_b: dict | None = None,
         timeout: int = 60,
         rate_limit: float = 0.3,
         verify: bool = True,
@@ -78,25 +81,43 @@ class DualAuthScanner:
         """
         from tools.auth_manager import AuthConfig, AuthManager
 
-        self.auth_config_a = AuthConfig(**auth_config_a) if isinstance(auth_config_a, dict) else auth_config_a
-        self.auth_config_b = AuthConfig(**auth_config_b) if isinstance(auth_config_b, dict) else auth_config_b
-        self.auth_manager_a = AuthManager(self.auth_config_a)
-        self.auth_manager_b = AuthManager(self.auth_config_b)
+        self.auth_config_a = None
+        self.auth_config_b = None
+        self.auth_manager_a = None
+        self.auth_manager_b = None
+        if auth_config_a:
+            self.auth_config_a = AuthConfig(**auth_config_a) if isinstance(auth_config_a, dict) else auth_config_a
+            self.auth_manager_a = AuthManager(self.auth_config_a)
+        if auth_config_b:
+            self.auth_config_b = AuthConfig(**auth_config_b) if isinstance(auth_config_b, dict) else auth_config_b
+            self.auth_manager_b = AuthManager(self.auth_config_b)
         self.timeout = timeout
         self.rate_limit = rate_limit
         self.verify = verify
         self.engagement_id = engagement_id
         self.emit_finding_callback = emit_finding_callback
         self.findings: list[dict] = []
+        self._builder: FindingBuilder | None = None
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
 
     def _emit_finding(self, finding: dict) -> None:
         """Emit a finding in real-time if callback is configured.
 
-        This enables per-finding streaming so analysts see results as they're
-        discovered rather than waiting for the entire dual-auth scan to complete.
+        When ``self._builder`` is available (called via ``execute()``), the
+        finding is registered through ``FindingBuilder.add()`` for standardized
+        creation, evidence sanitization, and severity validation.  When called
+        directly (backward compat), the raw dict is appended to
+        ``self.findings`` as before.
         """
+        if self._builder:
+            finding = self._builder.add(
+                finding.get("type", "UNKNOWN"),
+                finding.get("severity", "INFO"),
+                finding.get("endpoint", ""),
+                finding.get("evidence", {}),
+                confidence=finding.get("confidence", 0.8),
+            )
         self.findings.append(finding)
         if self.emit_finding_callback and self.engagement_id:
             try:
@@ -104,17 +125,46 @@ class DualAuthScanner:
             except Exception:
                 logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
 
-    def scan(self, target_url: str) -> list[dict]:
-        """
-        Run dual-auth scan against target.
+    tool_name = "dual_auth_scanner"
 
-        1. Authenticate as User A, discover owned resources.
-        2. Authenticate as User B, attempt cross-account access.
-        3. Check BOPLA on both sessions.
-
-        Returns:
-            List of vulnerability finding dicts.
+    def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
+        AbstractTool entry point.
+
+        Creates a ``FindingBuilder`` from the context, maps ``ToolContext``
+        settings, runs all checks (auth phases, resource discovery,
+        cross-account access, BOPLA), and returns a ``UnifiedToolResult``
+        with findings.
+
+        Auth configs are read from ``ctx.dual_auth`` when available (the
+        canonical path via ``execute()``).  Falls back to constructor-set
+        ``self.auth_manager_*`` for backward compatibility with callers
+        that instantiate the scanner with constructor params and call
+        ``scan()`` (which creates a bare ``ToolContext`` with no dual_auth).
+        """
+        self._builder = FindingBuilder(
+            source_tool=self.tool_name,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding,
+        )
+
+        # Map ToolContext settings
+        if ctx.timeout:
+            self.timeout = ctx.timeout
+        if ctx.rate_limit:
+            self.rate_limit = ctx.rate_limit
+        if ctx.engagement_id:
+            self.engagement_id = ctx.engagement_id
+
+        # Read auth configs from ToolContext (canonical path)
+        if ctx.dual_auth:
+            from tools.auth_manager import AuthConfig as _AuthCfg, AuthManager as _AuthMgr
+            self.auth_config_a = _AuthCfg(**ctx.dual_auth.auth_a)
+            self.auth_config_b = _AuthCfg(**ctx.dual_auth.auth_b)
+            self.auth_manager_a = _AuthMgr(self.auth_config_a)
+            self.auth_manager_b = _AuthMgr(self.auth_config_b)
+
+        target_url = ctx.target
         slog = ScanLogger("dual_auth_scanner", engagement_id=self.engagement_id)
         self.target_url = target_url.rstrip("/")
         self.findings: list[dict] = []
@@ -124,6 +174,8 @@ class DualAuthScanner:
 
         # Phase 1: Authenticate as User A and discover owned resources
         slog.info("Phase 1: Authenticating as User A")
+        session_a = None
+        session_b = None
         try:
             session_a = self.auth_manager_a.authenticate(self.target_url)
             slog.info("User A authenticated")
@@ -131,53 +183,77 @@ class DualAuthScanner:
         except Exception as e:
             slog.warn(f"User A authentication failed: {e}")
             logger.warning(f"User A authentication failed: {e}")
-            return self.findings
 
-        slog.tool_start("resource_discovery")
-        owned_resources = self._discover_owned_resources(session_a)
-        resource_count = sum(len(v) for v in owned_resources.values())
-        slog.tool_complete("resource_discovery", findings=resource_count)
-        logger.info(f"Discovered {resource_count} resources as User A")
+        if session_a:
+            slog.tool_start("resource_discovery")
+            owned_resources = self._discover_owned_resources(session_a)
+            resource_count = sum(len(v) for v in owned_resources.values())
+            slog.tool_complete("resource_discovery", findings=resource_count)
+            logger.info(f"Discovered {resource_count} resources as User A")
 
-        if not owned_resources:
-            slog.info("No owned resources — skipping cross-account tests")
-            # Still run BOPLA check on User A session
-            for bopla in self._check_bopla(session_a, "user_a"):
-                self._emit_finding(bopla)
-            slog.tool_complete("dual_auth_scan", findings=len(self.findings))
-            return self.findings
+            if not owned_resources:
+                slog.info("No owned resources — skipping cross-account tests")
+                # Still run BOPLA check on User A session
+                for bopla in self._check_bopla(session_a, "user_a"):
+                    self._emit_finding(bopla)
+            else:
+                # Phase 2: Authenticate as User B and test cross-account access
+                slog.info("Phase 2: Authenticating as User B")
+                try:
+                    session_b = self.auth_manager_b.authenticate(self.target_url)
+                    slog.info("User B authenticated")
+                    logger.info("User B authenticated successfully")
+                except Exception as e:
+                    slog.warn(f"User B authentication failed: {e}")
+                    logger.warning(f"User B authentication failed: {e}")
 
-        # Phase 2: Authenticate as User B and test cross-account access
-        slog.info("Phase 2: Authenticating as User B")
-        try:
-            session_b = self.auth_manager_b.authenticate(self.target_url)
-            slog.info("User B authenticated")
-            logger.info("User B authenticated successfully")
-        except Exception as e:
-            slog.warn(f"User B authentication failed: {e}")
-            logger.warning(f"User B authentication failed: {e}")
-            # Still run BOPLA on User A session
-            for bopla in self._check_bopla(session_a, "user_a"):
-                self._emit_finding(bopla)
-            slog.tool_complete("dual_auth_scan", findings=len(self.findings))
-            return self.findings
+                if session_b:
+                    slog.tool_start("cross_account_access")
+                    bola_findings = self._test_cross_account_access(session_b, owned_resources)
+                    for bf in bola_findings:
+                        self._emit_finding(bf)
+                    slog.tool_complete("cross_account_access", findings=len(bola_findings))
 
-        slog.tool_start("cross_account_access")
-        bola_findings = self._test_cross_account_access(session_b, owned_resources)
-        for bf in bola_findings:
-            self._emit_finding(bf)
-        slog.tool_complete("cross_account_access", findings=len(bola_findings))
-
-        # Phase 3: BOPLA check on both sessions
-        slog.info("Phase 3: Checking BOPLA on both sessions")
-        for bopla in self._check_bopla(session_a, "user_a"):
-            self._emit_finding(bopla)
-        for bopla in self._check_bopla(session_b, "user_b"):
-            self._emit_finding(bopla)
+                    # Phase 3: BOPLA check on both sessions
+                    slog.info("Phase 3: Checking BOPLA on both sessions")
+                    for bopla in self._check_bopla(session_a, "user_a"):
+                        self._emit_finding(bopla)
+                    for bopla in self._check_bopla(session_b, "user_b"):
+                        self._emit_finding(bopla)
+                else:
+                    # No User B — still run BOPLA on User A
+                    for bopla in self._check_bopla(session_a, "user_a"):
+                        self._emit_finding(bopla)
 
         slog.tool_complete("dual_auth_scan", findings=len(self.findings))
         logger.info(f"Dual-auth scan complete: {len(self.findings)} findings")
-        return self.findings
+
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=ctx.target,
+        )
+        result.findings = self._builder.findings
+        result.status = ToolStatus.SUCCESS
+        result.mark_finished()
+        return result
+
+    def scan(self, target_url: str) -> list[dict]:
+        """
+        Run dual-auth scan against target.
+
+        Backward-compatible shim that delegates to ``execute()``. Existing
+        callers that call ``scan()`` directly still work unchanged.
+
+        1. Authenticate as User A, discover owned resources.
+        2. Authenticate as User B, attempt cross-account access.
+        3. Check BOPLA on both sessions.
+
+        Returns:
+            List of vulnerability finding dicts.
+        """
+        ctx = ToolContext(target=target_url)
+        result = self.execute(ctx)
+        return result.findings
 
     # --- Private helpers ---
 

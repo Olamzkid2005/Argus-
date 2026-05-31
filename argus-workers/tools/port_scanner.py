@@ -1,5 +1,5 @@
 """
-Port Scanner — naabu (SYN scan) + nmap (service detection) via subprocess.
+Port Scanner — PortScanner(AbstractTool) using naabu + nmap via ToolRunner.
 
 Gated behind ARGUS_FF_PORT_SCANNER feature flag.
 Runs during recon phase after subdomain discovery.
@@ -11,10 +11,13 @@ import json
 import logging
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from feature_flags import is_enabled
+from tool_core.base import AbstractTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import UnifiedToolResult, ToolStatus
 from tools.tool_runner import ToolRunner
 from utils.logging_utils import ScanLogger
 
@@ -38,6 +41,8 @@ SERVICE_TEMPLATE_MAP: dict[str, list[str]] = {
 
 @dataclass
 class OpenPort:
+    """Internal port representation used by parsing helpers."""
+
     port: int
     protocol: str
     service: str = ""
@@ -54,82 +59,84 @@ class OpenPort:
         }
 
 
-@dataclass
-class PortScanResult:
-    target: str
-    open_ports: list[OpenPort] = field(default_factory=list)
-    service_map: dict[int, OpenPort] = field(default_factory=dict)
-    scan_duration: float = 0.0
+class PortScanner(AbstractTool):
+    """
+    Comprehensive port scanner — naabu (SYN scan) + nmap (service detection).
 
-    @property
-    def suggested_templates(self) -> dict[str, list[str]]:
-        templates: dict[str, list[str]] = {}
-        for port in self.open_ports:
-            svc = port.service.lower()
-            if svc in SERVICE_TEMPLATE_MAP:
-                if self.target not in templates:
-                    templates[self.target] = []
-                for scanner in SERVICE_TEMPLATE_MAP[svc]:
-                    if scanner not in templates[self.target]:
-                        templates[self.target].append(scanner)
-        return templates
+    Implements ``AbstractTool`` so it integrates with the standard tool lifecycle:
+    timing, error handling, finding emission, and return as ``UnifiedToolResult``.
 
-    def _service_name_lower(self, port: OpenPort | None = None) -> str:
-        if port is None:
-            return ""
-        return port.service.lower()
+    Feature-gated by ``ARGUS_FF_PORT_SCANNER``.
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "target": self.target,
-            "open_ports": [p.to_dict() for p in self.open_ports],
-            "service_map": {str(k): v.to_dict() for k, v in self.service_map.items()},
-            "scan_duration": self.scan_duration,
-            "suggested_templates": self.suggested_templates,
-        }
+    Calling convention::
 
+        scanner = PortScanner()
+        result = await scanner.run(ToolContext(target="example.com"))
+        # result.ports  → list of port dicts
+        # result.open_ports_count → len(result.ports)
+    """
 
-class PortScanner:
-    """Comprehensive port scanning with service detection via ToolRunner."""
+    tool_name: str = "port_scanner"
 
     NAABU_TIMEOUT = 600
     NMAP_TIMEOUT = 900
+    DEFAULT_PORTS = "1-10000"
 
-    def __init__(self):
+    def __init__(self) -> None:
         # ToolRunner handles locked environment, dangerous command detection,
-        # circuit breaker, and output size limits (unlike raw subprocess.run).
+        # circuit breaker, and output size limits.
         self._tool_runner = ToolRunner()
 
-    def scan(self, target: str, ports: str = "1-10000") -> PortScanResult:
+    def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
-        Run port scan with naabu + nmap service detection via ToolRunner.
+        Run port scan with naabu + nmap service detection.
 
-        1. Feature-gated by ARGUS_FF_PORT_SCANNER.
-        2. Fast SYN scan via naabu with JSONL output.
-        3. Service detection via nmap -sV -sC on live ports.
-        4. Returns structured PortScanResult.
+        Args:
+            ctx: ToolContext with ``target`` set to the host to scan.
 
-        All subprocess calls go through ToolRunner which provides safety checks,
-        environment locking, circuit breaker, and output size enforcement.
+        Returns:
+            UnifiedToolResult with ``ports`` populated as list of dicts:
+            ``{"port": 80, "protocol": "tcp", "service": "http", ...}``
         """
-        slog = ScanLogger("port_scanner", engagement_id=target)
+        target = ctx.target
+        ports = self.DEFAULT_PORTS
+        slog = ScanLogger(self.tool_name, engagement_id=target)
         slog.phase_header("PORT SCAN", f"target={target}, ports={ports}")
 
-        result = PortScanResult(target=target)
-        start = time.time()
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=target,
+        )
+        builder = FindingBuilder(source_tool=self.tool_name, engagement_id=target)
 
+        # ── Feature flag gate ──────────────────────────────────────────
         if not is_enabled("PORT_SCANNER", default=False):
             slog.info("Port scanner disabled (ARGUS_FF_PORT_SCANNER not set)")
             logger.info("Port scanner disabled (ARGUS_FF_PORT_SCANNER not set)")
+            result.status = ToolStatus.SKIPPED
+            result.mark_finished()
             return result
+
+        # ── Tool availability check ────────────────────────────────────
+        tools_available = self._check_tools_available()
+        if not tools_available.get("naabu", False):
+            msg = "naabu not available — skipping port scan"
+            logger.warning(msg)
+            return UnifiedToolResult(
+                tool_name=self.tool_name,
+                target=target,
+                status=ToolStatus.NONZERO_EXIT,
+                error_message=msg,
+            )
 
         live_ports: list[dict] = []
 
-        # --- Phase 1: naabu SYN scan via ToolRunner ---
+        # ── Phase 1: naabu SYN scan via ToolRunner ────────────────────
         slog.tool_start("naabu", f"target={target}, ports={ports}")
         try:
             naabu_result = self._tool_runner.run(
-                "naabu", ["-host", target, "-ports", ports, "-json"],
+                "naabu",
+                ["-host", target, "-ports", ports, "-json"],
                 timeout=self.NAABU_TIMEOUT,
             )
             if naabu_result.success:
@@ -142,48 +149,88 @@ class PortScanner:
         except Exception as e:
             slog.tool_complete("naabu", success=False)
             logger.warning("naabu scan failed: %s", e)
+            result.error_message = str(e)
+            result.mark_finished()
             return result
 
         if not live_ports:
-            result.scan_duration = time.time() - start
+            result.mark_finished()
             return result
 
-        # --- Phase 2: nmap service detection via ToolRunner ---
+        # ── Phase 2: nmap service detection via ToolRunner ────────────
         port_list = ",".join(str(p.get("port")) for p in live_ports if p.get("port"))
         if not port_list:
             slog.warn(f"No live ports found for {target}")
-            result.scan_duration = time.time() - start
+            result.mark_finished()
             return result
 
         slog.tool_start("nmap", f"target={target}, ports={port_list}")
+        nmap_ports: dict[int, dict] = {}
         try:
             nmap_result = self._tool_runner.run(
-                "nmap", ["-sV", "-sC", "-p", port_list, target, "-oX", "-"],
+                "nmap",
+                ["-sV", "-sC", "-p", port_list, target, "-oX", "-"],
                 timeout=self.NMAP_TIMEOUT,
             )
             if nmap_result.success:
-                result = self._parse_nmap_services(nmap_result.stdout, result)
-                slog.tool_complete("nmap", success=True, findings=len(result.open_ports))
+                nmap_ports = self._parse_nmap_services(nmap_result.stdout)
+                slog.tool_complete("nmap", success=True, findings=len(nmap_ports))
             else:
                 slog.tool_complete("nmap", success=False)
-                logger.warning("nmap service detection failed: %s", nmap_result.error or nmap_result.stderr[:200])
+                logger.warning(
+                    "nmap service detection failed: %s",
+                    nmap_result.error or nmap_result.stderr[:200],
+                )
         except Exception as e:
             slog.tool_complete("nmap", success=False)
             logger.warning("nmap service detection failed: %s", e)
 
-        # Build result from naabu data even if nmap failed
-        for p in live_ports:
-            op = OpenPort(
-                port=p.get("port", 0),
-                protocol=p.get("protocol", "tcp"),
-                state="open",
-            )
-            if op.port not in result.service_map:
-                result.open_ports.append(op)
-                result.service_map[op.port] = op
+        # ── Merge results ────────────────────────────────────────────
+        final_ports: list[dict] = []
+        seen = set[int]()
 
-        result.scan_duration = time.time() - start
+        # nmap data first (has service details)
+        for port_num in sorted(nmap_ports):
+            final_ports.append(nmap_ports[port_num])
+            seen.add(port_num)
+
+        # naabu fills in any ports nmap didn't cover
+        for p in live_ports:
+            port_num = p.get("port", 0)
+            if port_num not in seen:
+                final_ports.append({
+                    "port": port_num,
+                    "protocol": p.get("protocol", "tcp"),
+                    "service": "",
+                    "version": "",
+                    "state": "open",
+                })
+                seen.add(port_num)
+
+        # Log open ports as findings
+        for port_dict in final_ports:
+            builder.info(
+                "OPEN_PORT",
+                f"{target}:{port_dict['port']}/{port_dict['protocol']}",
+                port_dict,
+            )
+
+        result.ports = final_ports
+        result.findings = builder.findings
+        result.mark_finished()
         return result
+
+    # ── Helpers ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _check_tools_available() -> dict[str, bool]:
+        """Check whether required external binaries are available."""
+        from tool_definitions import is_tool_available
+
+        return {
+            "naabu": is_tool_available("naabu"),
+            "nmap": is_tool_available("nmap"),
+        }
 
     @staticmethod
     def _parse_naabu_ports(stdout: str) -> list[dict]:
@@ -211,8 +258,15 @@ class PortScanner:
         return ports
 
     @staticmethod
-    def _parse_nmap_services(xml_output: str, result: PortScanResult) -> PortScanResult:
-        """Parse nmap XML output (-oX -) into PortScanResult."""
+    def _parse_nmap_services(xml_output: str) -> dict[int, dict]:
+        """
+        Parse nmap XML output (-oX -) into a dict of port → port dict.
+
+        Returns:
+            Mapping of port number to port dict with service details.
+            ``{80: {"port": 80, "protocol": "tcp", "service": "http", ...}}``
+        """
+        result: dict[int, dict] = {}
         if not xml_output or not xml_output.strip():
             return result
 
@@ -251,15 +305,14 @@ class PortScanner:
                     parts = [p for p in [svc_product, svc_version, svc_extrainfo] if p]
                     service_version = " ".join(parts)
 
-                op = OpenPort(
-                    port=int(port_id),
-                    protocol=protocol,
-                    service=service_name,
-                    version=service_version,
-                    state=state,
-                )
-                result.open_ports.append(op)
-                result.service_map[op.port] = op
+                port_num = int(port_id)
+                result[port_num] = {
+                    "port": port_num,
+                    "protocol": protocol,
+                    "service": service_name,
+                    "version": service_version,
+                    "state": state,
+                }
 
         return result
 

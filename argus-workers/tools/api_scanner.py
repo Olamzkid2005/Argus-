@@ -16,16 +16,21 @@ import requests
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
 from config.constants import LLM_MAX_GENERATED_PAYLOADS
+from tool_core.base import AbstractTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
 
-class LegacyAPISecurityScanner:
+class LegacyAPISecurityScanner(AbstractTool):
     """
     Comprehensive API security scanner.
     Supports REST, GraphQL, and generic HTTP API testing.
     """
+
+    tool_name = "api_scanner"
 
     # Common GraphQL introspection query
     GRAPHQL_INTROSPECTION_QUERY = """
@@ -95,36 +100,54 @@ class LegacyAPISecurityScanner:
             }
         )
         self.findings = []
+        self._builder: FindingBuilder | None = None
+        self.target_url: str = ""
 
-    def scan(
-        self, target_url: str, api_type: str = "rest", auth_config: dict | None = None
-    ) -> list[dict]:
+    def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
-        Run comprehensive API security scan.
-
-        Args:
-            target_url: Base API URL
-            api_type: API type ('rest', 'graphql', 'openapi')
-            auth_config: Optional authentication configuration
-
-        Returns:
-            List of vulnerability findings
+        AbstractTool entry point.  Creates a ``FindingBuilder`` from the
+        context, runs all checks, and returns a ``UnifiedToolResult``.
         """
+        self._builder = FindingBuilder(
+            source_tool=self.tool_name,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding,
+        )
+
+        # Map ToolContext fields to scanner config
+        if ctx.timeout:
+            self.timeout = ctx.timeout
+        if ctx.rate_limit:
+            self.rate_limit = ctx.rate_limit
+        if ctx.engagement_id:
+            self.engagement_id = ctx.engagement_id
+        if ctx.authorized_scope:
+            self.authorized_scope = ctx.authorized_scope
+        if ctx.tech_stack:
+            self.tech_stack = ctx.tech_stack
+
+        target_url = ctx.target
+        api_type = getattr(self, "_scan_api_type", "rest")
+        auth_config = getattr(self, "_scan_auth_config", None)
+
         slog = ScanLogger("api_scanner", engagement_id=getattr(self, 'engagement_id', ''))
         slog.phase_header("API SCAN", f"target={target_url}, type={api_type}")
 
-        # L-17: Validate target URL before scanning — prevent scanning
-        # private IPs, localhost, and metadata endpoints.
+        # L-17: Validate target URL before scanning
         from urllib.parse import urlparse as _urlparse
 
         from tools.scope_validator import validate_target_scope
         parsed = _urlparse(target_url)
         if parsed.scheme not in ("http", "https"):
             slog.warn(f"Rejected scan with scheme '{parsed.scheme}': {target_url}")
-            return []
+            result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
+            result.mark_finished()
+            return result
         if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
             slog.warn(f"Target {target_url} is outside authorized scope — scan aborted")
-            return []
+            result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
+            result.mark_finished()
+            return result
 
         self.findings = []
         self.target_url = target_url.rstrip("/")
@@ -171,9 +194,44 @@ class LegacyAPISecurityScanner:
         self.test_rate_limiting()
         slog.tool_complete("rate_limit_test", success=True)
 
+        # Sync findings from builder
+        if self._builder is not None:
+            self.findings = self._builder.findings
+
         slog.tool_complete("api_scan", success=True, findings=len(self.findings))
         slog.info(f"API scan complete: {len(self.findings)} total findings")
-        return self.findings
+
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=target_url,
+        )
+        result.findings = self._builder.findings or self.findings
+        result.status = ToolStatus.SUCCESS
+        result.mark_finished()
+        return result
+
+    def scan(
+        self, target_url: str, api_type: str = "rest", auth_config: dict | None = None
+    ) -> list[dict]:
+        """
+        Run comprehensive API security scan.
+
+        Backward-compatible shim that delegates to ``execute()``. Existing
+        callers that call ``scan()`` directly still work unchanged.
+
+        Args:
+            target_url: Base API URL
+            api_type: API type ('rest', 'graphql', 'openapi')
+            auth_config: Optional authentication configuration
+
+        Returns:
+            List of vulnerability findings
+        """
+        self._scan_api_type = api_type
+        self._scan_auth_config = auth_config
+        ctx = ToolContext(target=target_url)
+        result = self.execute(ctx)
+        return result.findings
 
     def _safe_request(
         self, method: str, url: str, **kwargs
@@ -196,17 +254,17 @@ class LegacyAPISecurityScanner:
         evidence: dict,
         confidence: float = 0.8,
     ):
-        """Add a finding to results."""
-        self.findings.append(
-            {
-                "type": finding_type,
-                "severity": severity,
-                "endpoint": endpoint,
-                "evidence": evidence,
-                "confidence": confidence,
-                "source_tool": "api_scanner",
-            }
-        )
+        """Add a finding to results.
+
+        Delegates to ``FindingBuilder`` for schema consistency.  Creates the
+        builder lazily if ``execute()`` was not called (backward-compat path).
+        """
+        if self._builder is None:
+            self._builder = FindingBuilder(
+                source_tool=self.tool_name,
+                engagement_id=self.engagement_id,
+            )
+        self._builder.add(finding_type, severity, endpoint, evidence, confidence)
 
     def check_security_headers(self):
         """Check API security headers."""

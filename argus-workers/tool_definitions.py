@@ -19,11 +19,11 @@ Pattern: Declarative agent registry with derived types and phase maps.
 
 from __future__ import annotations
 
-import os
-import shutil
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import final
+
+from tool_core.config.models import ToolMetadata
 
 # ── Signal quality tiers for findings prioritization ──
 
@@ -141,6 +141,9 @@ class ToolDefinition:
 
     #: Rate limit impact (low, medium, high)
     rate_limit_impact: str | None = None
+
+    #: Optional static metadata (vendor, version, download URL, etc.)
+    metadata: ToolMetadata | None = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -340,7 +343,13 @@ _register(ToolDefinition(
         ToolParameter("tags", "Template tags to run", flag="-tags"),
     ],
     timeout=600,
-    signal_quality=SignalQuality.CONFIRMED
+    signal_quality=SignalQuality.CONFIRMED,
+    metadata=ToolMetadata(
+        vendor="projectdiscovery",
+        homepage="https://github.com/projectdiscovery/nuclei",
+        license="MIT",
+        default_version="3.2.0",
+    ),
 ))
 
 _register(ToolDefinition(
@@ -749,8 +758,8 @@ def is_tool_available(tool_name: str) -> bool:
     Agent-internal tools (register, login) always return True since
     they are Python functions, not external binaries.
 
-    Uses the same augmented PATH resolution as ToolRunner to find
-    tools installed via pip, go install, brew, etc.
+    Delegates to tools.tool_utils for the augmented PATH resolution
+    (venv/bin, ~/go/bin, /opt/homebrew/bin, etc.).
 
     Args:
         tool_name: Name of the tool binary to check.
@@ -762,31 +771,8 @@ def is_tool_available(tool_name: str) -> bool:
     if tool_name in _AGENT_INTERNAL_TOOLS:
         return True
 
-    # Build augmented PATH matching ToolRunner.resolve_tool_path
-    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin")
-    go_bin = os.path.expanduser("~/go/bin")
-    extra_dirs = [
-        venv_bin,
-        "/usr/local/bin",
-        "/opt/homebrew/bin",
-        go_bin,
-    ]
-    current_path = os.environ.get("PATH", "")
-    for d in extra_dirs:
-        if d not in current_path and os.path.isdir(d):
-            current_path = f"{d}:{current_path}"
-
-    resolved = shutil.which(tool_name, path=current_path)
-    if resolved:
-        return True
-
-    # Final fallback: direct file check
-    for d in extra_dirs:
-        candidate = os.path.join(d, tool_name)
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return True
-
-    return False
+    from tools.tool_utils import is_tool_available as _check_binary
+    return _check_binary(tool_name)
 
 
 def get_tools_for_phase(phase: PhaseName) -> list[ToolDefinition]:

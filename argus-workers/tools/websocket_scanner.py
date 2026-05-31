@@ -18,6 +18,9 @@ import re
 from typing import Any
 
 from feature_flags import is_enabled
+from tool_core.base import AsyncTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -38,8 +41,10 @@ except ImportError:
     HAS_HTTPX = False
 
 
-class WebSocketScanner:
+class WebSocketScanner(AsyncTool):
     """Test WebSocket endpoints for security issues."""
+
+    tool_name = "websocket_scanner"
 
     INJECTION_PAYLOADS: list[str] = [
         "<script>alert(1)</script>",
@@ -59,6 +64,7 @@ class WebSocketScanner:
 
     def __init__(self, timeout: int = 10) -> None:
         self.timeout = timeout
+        self._builder: FindingBuilder | None = None
         self._check_deps()
 
     @staticmethod
@@ -73,51 +79,53 @@ class WebSocketScanner:
                 "httpx library is required. Install with: pip install httpx"
             )
 
-    async def scan(self, ws_url: str) -> list[dict[str, Any]]:
-        """Run all WebSocket security tests.
+    def _add_finding(
+        self,
+        finding_type: str,
+        severity: str,
+        endpoint: str,
+        evidence: dict,
+        confidence: float = 0.8,
+    ) -> dict:
+        """Register a finding via ``self._builder``, lazily creating it if needed.
+
+        Returns the finding dict so callers can build a local results list for
+        backward compat with direct test calls.
+
+        Matches the ``APISecurityScanner._add_finding`` pattern.
+        """
+        if self._builder is None:
+            self._builder = FindingBuilder(
+                source_tool=self.tool_name,
+                engagement_id=getattr(self, "engagement_id", ""),
+            )
+        return self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+
+    async def scan(self, ws_url: str, builder: FindingBuilder | None = None) -> list[dict[str, Any]]:
+        """
+        Run all WebSocket security tests.
+
+        Backward-compatible shim that delegates to ``async_execute()``.
+        Existing callers that call ``scan()`` directly still work unchanged.
 
         Args:
             ws_url: WebSocket URL (ws:// or wss://)
+            builder: Deprecated — ignored, ``async_execute()`` creates its own builder.
 
         Returns:
             List of finding dicts compatible with VulnerabilityFinding schema
         """
-        slog = ScanLogger("websocket_scanner")
-
-        if not is_enabled("WS_SCANNER", default=False):
-            slog.info("WebSocket scanner disabled (feature flag off)")
-            logger.info("WebSocket scanner disabled (ARGUS_FF_WS_SCANNER not set)")
-            return []
-
-        slog.phase_header("WebSocket Scan", ws_url)
-        findings: list[dict[str, Any]] = []
-
-        slog.tool_start("origin_validation", target=ws_url)
-        origin_findings = await self._test_origin_validation(ws_url)
-        slog.tool_result("origin_validation", f"{len(origin_findings)} finding(s)")
-        findings.extend(origin_findings)
-
-        slog.tool_start("auth_required", target=ws_url)
-        auth_findings = await self._test_auth_required(ws_url)
-        slog.tool_result("auth_required", f"{len(auth_findings)} finding(s)")
-        findings.extend(auth_findings)
-
-        slog.tool_start("message_injection", target=ws_url)
-        injection_findings = await self._test_message_injection(ws_url)
-        slog.tool_result("message_injection", f"{len(injection_findings)} finding(s)")
-        findings.extend(injection_findings)
-
-        slog.tool_start("rate_limiting", target=ws_url)
-        rate_findings = await self._test_rate_limiting(ws_url)
-        slog.tool_result("rate_limiting", f"{len(rate_findings)} finding(s)")
-        findings.extend(rate_findings)
-
-        slog.tool_complete("websocket_scan", findings=len(findings))
-        return findings
+        ctx = ToolContext(target=ws_url)
+        result = await self.async_execute(ctx)
+        return result.findings
 
     async def _test_origin_validation(self, ws_url: str) -> list[dict[str, Any]]:
-        """Connect with spoofed Origin headers to check if server validates."""
+        """Connect with spoofed Origin headers to check if server validates.
+
+        Findings are registered via ``self._builder`` and returned as a list.
+        """
         findings: list[dict[str, Any]] = []
+
         spoofed_origins = [
             "https://evil.com",
             "https://attacker.org",
@@ -138,18 +146,15 @@ class WebSocketScanner:
                     except TimeoutError:
                         response_text = "<no response within timeout>"
 
-                    findings.append({
-                        "type": "WEBSOCKET_ORIGIN_BYPASS",
-                        "severity": "MEDIUM",
-                        "confidence": 0.7,
-                        "endpoint": ws_url,
-                        "evidence": {
-                            "spoofed_origin": origin,
-                            "server_response": response_text,
-                            "detail": "Server accepted connection with spoofed origin header",
-                        },
-                        "source_tool": "websocket_scanner",
-                    })
+                    evidence = {
+                        "spoofed_origin": origin,
+                        "server_response": response_text,
+                        "detail": "Server accepted connection with spoofed origin header",
+                    }
+                    findings.append(self._add_finding(
+                        "WEBSOCKET_ORIGIN_BYPASS", "MEDIUM", ws_url,
+                        evidence, confidence=0.7,
+                    ))
                     await ws.close()
             except InvalidStatus:
                 logger.debug("Server rejected origin validation for %s with origin %s", ws_url, origin)
@@ -161,7 +166,11 @@ class WebSocketScanner:
         return findings
 
     async def _test_auth_required(self, ws_url: str) -> list[dict[str, Any]]:
-        """Connect without auth tokens to see if the server rejects the connection."""
+        """Connect without auth tokens to see if the server rejects the connection.
+
+        Findings are registered via ``self._builder`` and returned as a list.
+        """
+
         findings: list[dict[str, Any]] = []
 
         try:
@@ -172,17 +181,14 @@ class WebSocketScanner:
                 except TimeoutError:
                     response_text = "<no response within timeout>"
 
-                findings.append({
-                    "type": "WEBSOCKET_NO_AUTH",
-                    "severity": "HIGH",
-                    "confidence": 0.6,
-                    "endpoint": ws_url,
-                    "evidence": {
-                        "detail": "Server accepted connection without authentication",
-                        "server_response": response_text,
-                    },
-                    "source_tool": "websocket_scanner",
-                })
+                evidence = {
+                    "detail": "Server accepted connection without authentication",
+                    "server_response": response_text,
+                }
+                findings.append(self._add_finding(
+                    "WEBSOCKET_NO_AUTH", "HIGH", ws_url,
+                    evidence, confidence=0.6,
+                ))
                 await ws.close()
         except InvalidStatus:
             logger.debug("Server rejected auth test for %s (expected)", ws_url)
@@ -194,7 +200,11 @@ class WebSocketScanner:
         return findings
 
     async def _test_message_injection(self, ws_url: str) -> list[dict[str, Any]]:
-        """Send malformed/injection messages to test for error leakage."""
+        """Send malformed/injection messages to test for error leakage.
+
+        Findings are registered via ``self._builder`` and returned as a list.
+        """
+
         findings: list[dict[str, Any]] = []
 
         for payload in self.INJECTION_PAYLOADS:
@@ -217,21 +227,18 @@ class WebSocketScanner:
                                 "unexpected",
                             ]
                         ):
-                            findings.append({
-                                "type": "WEBSOCKET_INJECTION",
-                                "severity": "HIGH",
-                                "confidence": 0.7,
-                                "endpoint": ws_url,
-                                "evidence": {
-                                    "payload": payload,
-                                    "server_response": response_text,
-                                    "detail": (
-                                        "Server returned error-like response "
-                                        "to injected payload"
-                                    ),
-                                },
-                                "source_tool": "websocket_scanner",
-                            })
+                            evidence = {
+                                "payload": payload,
+                                "server_response": response_text,
+                                "detail": (
+                                    "Server returned error-like response "
+                                    "to injected payload"
+                                ),
+                            }
+                            findings.append(self._add_finding(
+                                "WEBSOCKET_INJECTION", "HIGH", ws_url,
+                                evidence, confidence=0.7,
+                            ))
                     except TimeoutError:
                         pass
                     await ws.close()
@@ -245,7 +252,11 @@ class WebSocketScanner:
         return findings
 
     async def _test_rate_limiting(self, ws_url: str) -> list[dict[str, Any]]:
-        """Send rapid messages to test for rate limiting."""
+        """Send rapid messages to test for rate limiting.
+
+        Findings are registered via ``self._builder`` and returned as a list.
+        """
+
         findings: list[dict[str, Any]] = []
 
         try:
@@ -261,35 +272,29 @@ class WebSocketScanner:
                         break
 
                 if rate_limited:
-                    findings.append({
-                        "type": "WEBSOCKET_RATE_LIMITED",
-                        "severity": "INFO",
-                        "confidence": 0.9,
-                        "endpoint": ws_url,
-                        "evidence": {
-                            "messages_sent": messages_sent,
-                            "total_attempted": self.RATE_LIMIT_MESSAGE_COUNT,
-                            "detail": (
-                                "Server closed connection after rapid messages "
-                                "- rate limiting is active"
-                            ),
-                        },
-                        "source_tool": "websocket_scanner",
-                    })
+                    evidence = {
+                        "messages_sent": messages_sent,
+                        "total_attempted": self.RATE_LIMIT_MESSAGE_COUNT,
+                        "detail": (
+                            "Server closed connection after rapid messages "
+                            "- rate limiting is active"
+                        ),
+                    }
+                    findings.append(self._add_finding(
+                        "WEBSOCKET_RATE_LIMITED", "INFO", ws_url,
+                        evidence, confidence=0.9,
+                    ))
                 else:
-                    findings.append({
-                        "type": "WEBSOCKET_NO_RATE_LIMIT",
-                        "severity": "MEDIUM",
-                        "confidence": 0.7,
-                        "endpoint": ws_url,
-                        "evidence": {
-                            "messages_sent": self.RATE_LIMIT_MESSAGE_COUNT,
-                            "detail": (
-                                "Server accepted all messages without rate limiting"
-                            ),
-                        },
-                        "source_tool": "websocket_scanner",
-                    })
+                    evidence = {
+                        "messages_sent": self.RATE_LIMIT_MESSAGE_COUNT,
+                        "detail": (
+                            "Server accepted all messages without rate limiting"
+                        ),
+                    }
+                    findings.append(self._add_finding(
+                        "WEBSOCKET_NO_RATE_LIMIT", "MEDIUM", ws_url,
+                        evidence, confidence=0.7,
+                    ))
 
                 await ws.close()
         except InvalidStatus:
@@ -300,6 +305,65 @@ class WebSocketScanner:
             logger.debug("WebSocket protocol error during rate limit test for %s", ws_url)
 
         return findings
+
+    async def async_execute(self, ctx: ToolContext) -> UnifiedToolResult:
+        """
+        AsyncTool entry point.
+
+        Creates a ``FindingBuilder`` from the context, maps ``ToolContext``
+        settings, runs all WebSocket security tests, and returns a
+        ``UnifiedToolResult`` with findings.
+        """
+        builder = FindingBuilder(
+            source_tool=self.tool_name,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding,
+        )
+
+        # Map ToolContext timeout
+        if ctx.timeout:
+            self.timeout = ctx.timeout
+
+        ws_url = ctx.target
+        self._builder = builder
+
+        slog = ScanLogger("websocket_scanner")
+
+        if not is_enabled("WS_SCANNER", default=False):
+            slog.info("WebSocket scanner disabled (feature flag off)")
+            logger.info("WebSocket scanner disabled (ARGUS_FF_WS_SCANNER not set)")
+            result = UnifiedToolResult(tool_name=self.tool_name, target=ws_url)
+            result.mark_finished()
+            return result
+
+        slog.phase_header("WebSocket Scan", ws_url)
+
+        slog.tool_start("origin_validation", target=ws_url)
+        await self._test_origin_validation(ws_url)
+        slog.tool_result("origin_validation", f"{len(builder.findings)} finding(s)")
+
+        slog.tool_start("auth_required", target=ws_url)
+        await self._test_auth_required(ws_url)
+        slog.tool_result("auth_required", f"{len(builder.findings)} finding(s)")
+
+        slog.tool_start("message_injection", target=ws_url)
+        await self._test_message_injection(ws_url)
+        slog.tool_result("message_injection", f"{len(builder.findings)} finding(s)")
+
+        slog.tool_start("rate_limiting", target=ws_url)
+        await self._test_rate_limiting(ws_url)
+        slog.tool_result("rate_limiting", f"{len(builder.findings)} finding(s)")
+
+        slog.tool_complete("websocket_scan", findings=len(builder.findings))
+
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=ws_url,
+        )
+        result.findings = builder.findings
+        result.status = ToolStatus.SUCCESS
+        result.mark_finished()
+        return result
 
     @staticmethod
     def _decode_message(msg: Any) -> str:

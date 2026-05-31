@@ -245,17 +245,19 @@ class ToolRunner:
 
     def _resolve_tool_path(self, tool: str) -> str:
         """
-        Resolve the full path to a tool binary by checking the ToolCache,
-        common locations, and the current environment PATH.
+        Resolve the full path to a tool binary.
+
+        Checks the ToolCache first, then falls back to the shared
+        ``tools.tool_utils.resolve_tool_binary()`` which searches the
+        augmented PATH (venv/bin, ~/go/bin, /opt/homebrew/bin, etc.).
 
         Args:
             tool: Tool name (e.g., 'nuclei', 'httpx')
 
         Returns:
-            Full path to the tool binary, or the tool name if not found
+            Full path to the tool binary, or the tool name if not found.
         """
         self._validate_tool_name(tool)
-        import shutil
 
         # 1. Check ToolCache first (cached/pre-installed tools)
         try:
@@ -269,37 +271,12 @@ class ToolRunner:
         except Exception as e:
             logger.debug(f"ToolCache lookup failed for {tool}: {e}")
 
-        # Build a comprehensive PATH that includes venv/bin and ~/go/bin
-        # so tools installed via pip or go install are always findable
-        venv_bin = str(Path(sys.executable).parent)
-        go_bin = os.path.expanduser("~/go/bin")
-        # Also check the project's explicit venv bin (in case system python is used)
-        project_venv_bin = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "venv", "bin")
-        )
-        extra_paths = [
-            venv_bin,
-            project_venv_bin,
-            go_bin,
-            "/usr/local/bin",
-            "/opt/homebrew/bin",
-        ]
-
-        current_path = os.environ.get("PATH", "")
-        for p in extra_paths:
-            if p not in current_path:
-                current_path = f"{p}:{current_path}"
-
-        # Search the augmented PATH
-        resolved = shutil.which(tool, path=current_path)
+        # 2. Use shared utility for augmented PATH resolution
+        from tools.tool_utils import resolve_tool_binary
+        resolved = resolve_tool_binary(tool)
         if resolved:
             return resolved
 
-        # Direct file check as final fallback
-        for d in extra_paths:
-            candidate = os.path.join(d, tool)
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                return candidate
         return tool
 
     @staticmethod

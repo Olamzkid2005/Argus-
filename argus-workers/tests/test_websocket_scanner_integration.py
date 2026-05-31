@@ -43,10 +43,34 @@ class _TestWsEchoServer:
         self.server = None
 
     async def _handler(self, websocket):
-        """Echo each received message back."""
-        async for message in websocket:
+        """Echo each received message back (except rate-limit probes).
+
+        If the client doesn't send a message within 0.1 s of connecting, a
+        welcome message is sent instead.  This prevents the scanner's
+        ``recv()`` calls from blocking for the full timeout in
+        origin-validation and auth tests (the scanner connects and waits
+        for a server message — without a welcome message neither side
+        sends first, causing a 5 s deadlock per connection).
+
+        Rate-limit probes (messages starting with ``"rate-test"``) are
+        silently consumed without echo to avoid filling the client's
+        WebSocket receive buffer (``max_queue=16``) and causing
+        backpressure hangs.  All other messages (including injection
+        payloads) are echoed normally.
+        """
+        welcome_sent = False
+        while True:
             try:
+                message = await asyncio.wait_for(websocket.recv(), timeout=0.1)
+                text = message if isinstance(message, str) else message.decode("utf-8", errors="replace")
+                if text.startswith("rate-test"):
+                    continue
                 await websocket.send(message)
+            except asyncio.TimeoutError:
+                if not welcome_sent:
+                    await websocket.send("Welcome to test echo server")
+                    welcome_sent = True
+                # Nothing to read — loop back to the next recv()
             except Exception:
                 break
 

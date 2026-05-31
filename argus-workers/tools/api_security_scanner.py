@@ -21,9 +21,13 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from feature_flags import is_enabled
+from tool_core.base import AsyncTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
 
 try:
     import httpx
@@ -33,8 +37,10 @@ except ImportError:
     HAS_HTTPX = False
 
 
-class APISecurityScanner:
+class APISecurityScanner(AsyncTool):
     """Automated API security testing — no OpenAPI spec required."""
+
+    tool_name = "api_security_scanner"
 
     PUBLIC_ENDPOINT_PATTERNS: list[str] = [
         "/health", "/api/health", "/api/version", "/api/status",
@@ -69,6 +75,7 @@ class APISecurityScanner:
 
     def __init__(self, timeout: int = 15) -> None:
         self.timeout = timeout
+        self._builder: FindingBuilder | None = None
         self._check_deps()
 
     @staticmethod
@@ -77,6 +84,28 @@ class APISecurityScanner:
             raise RuntimeError(
                 "httpx library is required. Install with: pip install httpx"
             )
+
+    def _add_finding(
+        self,
+        finding_type: str,
+        severity: str,
+        endpoint: str,
+        evidence: dict,
+        confidence: float = 0.8,
+    ) -> dict:
+        """Register a finding via ``self._builder``, lazily creating it if needed.
+
+        Returns the finding dict so callers can build a local results list for
+        backward compat with direct test calls.
+
+        Matches the ``WebScanner._add_finding`` pattern.
+        """
+        if self._builder is None:
+            self._builder = FindingBuilder(
+                source_tool=self.tool_name,
+                engagement_id=getattr(self, "engagement_id", ""),
+            )
+        return self._builder.add(finding_type, severity, endpoint, evidence, confidence)
 
     @staticmethod
     def _validate_external_url(url: str) -> None:
@@ -92,10 +121,10 @@ class APISecurityScanner:
         # Block internal/reserved IPs and localhost variants
         try:
             ip = ipaddress.ip_address(hostname)
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-                raise ValueError(f"Blocked internal IP: {hostname}")
         except ValueError:
-            pass  # not an IP literal — check hostname patterns and resolve DNS
+            ip = None  # not an IP literal — check hostname patterns and resolve DNS
+        if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast):
+            raise ValueError(f"Blocked internal IP: {hostname}")
         blocked_hostnames = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"}
         hostname_lower = hostname.lower()
         if hostname_lower in blocked_hostnames:
@@ -115,12 +144,12 @@ class APISecurityScanner:
                 resolved_ip = sockaddr[0]
                 try:
                     addr = ipaddress.ip_address(resolved_ip)
-                    if addr.is_private or addr.is_loopback or addr.is_link_local:
-                        raise ValueError(
-                            f"Blocked hostname {hostname} resolves to private IP {resolved_ip}"
-                        )
                 except ValueError:
                     continue
+                if addr.is_private or addr.is_loopback or addr.is_link_local:
+                    raise ValueError(
+                        f"Blocked hostname {hostname} resolves to private IP {resolved_ip}"
+                    )
         except _socket.gaierror:
             pass  # DNS resolution failed — let the caller handle connection errors
 
@@ -129,58 +158,115 @@ class APISecurityScanner:
         base_url: str,
         endpoints: list[str],
         auth_headers: dict[str, str] | None = None,
+        builder: FindingBuilder | None = None,
     ) -> list[dict[str, Any]]:
-        """Run all API security tests.
+        """
+        Run all API security tests.
+
+        Backward-compatible shim that delegates to ``async_execute()``.
+        Existing callers that call ``scan()`` directly still work unchanged.
 
         Args:
             base_url: Base URL of the target API.
             endpoints: List of endpoint paths (e.g. ["/api/users/123", "/api/login"]).
-            auth_headers: Authenticated session headers.
+            auth_headers: Deprecated — ``async_execute()`` stores auth_headers on self.
+            builder: Deprecated — ``async_execute()`` creates its own ``FindingBuilder``.
 
         Returns:
             List of finding dicts compatible with VulnerabilityFinding schema.
         """
+        self._scan_auth_headers = auth_headers or {}
+        ctx = ToolContext(target=base_url)
+        result = await self.async_execute(ctx, endpoints=endpoints)
+        return result.findings
+
+    async def async_execute(
+        self,
+        ctx: ToolContext,
+        endpoints: list[str] | None = None,
+    ) -> UnifiedToolResult:
+        """
+        AsyncTool entry point.
+
+        Creates a ``FindingBuilder`` from the context, maps ``ToolContext``
+        settings, runs all API security checks (BOLA, mass assignment,
+        auth bypass, rate limiting), and returns a ``UnifiedToolResult``
+        with findings.
+
+        Args:
+            ctx: Tool execution context with target, engagement_id, etc.
+            endpoints: Optional list of pre-discovered API endpoint paths.
+                       When ``None`` (default), triggers automatic endpoint
+                       discovery via ``discover_endpoints()``.
+                       Provide explicit endpoints to avoid relying on discovery.
+
+        Returns:
+            ``UnifiedToolResult`` with findings from all API security checks.
+        """
+        builder = FindingBuilder(
+            source_tool=self.tool_name,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding,
+        )
+
+        # Map ToolContext timeout
+        if ctx.timeout:
+            self.timeout = ctx.timeout
+
+        base_url = ctx.target
+        self._builder = builder
+
         slog = ScanLogger("api_security_scanner")
 
         if not is_enabled("API_SCANNER", default=False):
             slog.info("API security scanner disabled (ARGUS_FF_API_SCANNER not set)")
-            return []
+            result = UnifiedToolResult(tool_name=self.tool_name, target=base_url)
+            result.status = ToolStatus.SUCCESS
+            result.mark_finished()
+            return result
 
         self._validate_external_url(base_url)
 
-        if not endpoints:
+        # When endpoints are not provided, pass empty list to trigger discovery
+        scan_endpoints = [] if endpoints is None else endpoints
+        if not scan_endpoints:
             slog.info("No endpoints provided, running discovery...")
-            endpoints = await self.discover_endpoints(base_url)
-            if not endpoints:
-                return []
+            scan_endpoints = await self.discover_endpoints(base_url)
+            if not scan_endpoints:
+                result = UnifiedToolResult(tool_name=self.tool_name, target=base_url)
+                result.mark_finished()
+                return result
 
-        auth_headers = auth_headers or {}
+        auth_headers: dict[str, str] = getattr(self, '_scan_auth_headers', {})
 
-        slog.phase_header("API SECURITY SCAN", f"{len(endpoints)} endpoints")
-        findings: list[dict[str, Any]] = []
+        slog.phase_header("API SECURITY SCAN", f"{len(scan_endpoints)} endpoints")
 
-        slog.tool_start("bola", f"{len(endpoints)} endpoints")
-        findings.extend(await self._test_bola(base_url, endpoints, auth_headers))
-        slog.tool_complete("bola", findings=len(findings))
+        slog.tool_start("bola", f"{len(scan_endpoints)} endpoints")
+        await self._test_bola(base_url, scan_endpoints, auth_headers)
+        slog.tool_complete("bola", findings=len(builder.findings))
 
-        slog.tool_start("mass_assignment", f"{len(endpoints)} endpoints")
-        findings.extend(
-            await self._test_mass_assignment(base_url, endpoints, auth_headers)
-        )
+        slog.tool_start("mass_assignment", f"{len(scan_endpoints)} endpoints")
+        await self._test_mass_assignment(base_url, scan_endpoints, auth_headers)
         slog.tool_complete("mass_assignment")
 
-        slog.tool_start("auth_bypass", f"{len(endpoints)} endpoints")
-        findings.extend(await self._test_auth_bypass(base_url, endpoints))
+        slog.tool_start("auth_bypass", f"{len(scan_endpoints)} endpoints")
+        await self._test_auth_bypass(base_url, scan_endpoints)
         slog.tool_complete("auth_bypass")
 
-        slog.tool_start("rate_limiting", f"{len(endpoints)} endpoints")
-        findings.extend(
-            await self._test_api_rate_limiting(base_url, endpoints, auth_headers)
-        )
+        slog.tool_start("rate_limiting", f"{len(scan_endpoints)} endpoints")
+        await self._test_api_rate_limiting(base_url, scan_endpoints, auth_headers)
         slog.tool_complete("rate_limiting")
 
-        slog.tool_complete("api_security_scan", findings=len(findings))
-        return findings
+        slog.tool_complete("api_security_scan", findings=len(builder.findings))
+
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=base_url,
+        )
+        result.findings = builder.findings
+        result.status = ToolStatus.SUCCESS
+        result.mark_finished()
+        return result
 
     # ------------------------------------------------------------------
     # BOLA / IDOR
@@ -197,6 +283,9 @@ class APISecurityScanner:
         Read-only approach: sends two requests (original ID and alt ID) and
         compares response sizes/content. A similar-sized response with the
         alt ID suggests the endpoint lacks proper authorization.
+
+        Findings are also registered via ``self._builder`` for the
+        ``async_execute()`` entry point.
         """
         findings: list[dict[str, Any]] = []
 
@@ -220,52 +309,50 @@ class APISecurityScanner:
                 if orig_resp.status_code in (401, 403) or alt_resp.status_code in (401, 403):
                     continue
 
-                if alt_resp.status_code == 200 and orig_resp.status_code == 200:
+                alt_resp_404 = alt_resp.status_code == 404
+
+                if not alt_resp_404 and alt_resp.status_code == 200 and orig_resp.status_code == 200:
                     orig_body = orig_resp.text
                     alt_body = alt_resp.text
                     size_ratio = len(alt_body) / max(len(orig_body), 1)
 
                     if 0.8 <= size_ratio <= 1.2 and alt_body != orig_body:
-                        findings.append({
-                            "type": "API_BOLA",
-                            "severity": "HIGH",
-                            "confidence": 0.7,
-                            "endpoint": full_original,
-                            "evidence": {
-                                "original_url": full_original,
-                                "altered_url": full_alt,
-                                "original_status": orig_resp.status_code,
-                                "altered_status": alt_resp.status_code,
-                                "original_size": len(orig_body),
-                                "altered_size": len(alt_body),
-                                "size_ratio": round(size_ratio, 3),
-                                "detail": (
-                                    "Response to altered user ID is similar in size "
-                                    "to the original, suggesting BOLA/IDOR"
-                                ),
-                            },
-                            "source_tool": "api_security_scanner",
-                        })
-                    elif alt_resp.status_code != 404 and orig_resp.status_code != alt_resp.status_code:
-                        findings.append({
-                            "type": "API_BOLA",
-                            "severity": "MEDIUM",
-                            "confidence": 0.5,
-                            "endpoint": full_original,
-                            "evidence": {
-                                "original_url": full_original,
-                                "altered_url": full_alt,
-                                "original_status": orig_resp.status_code,
-                                "altered_status": alt_resp.status_code,
-                                "original_size": len(orig_body),
-                                "altered_size": len(alt_body),
-                                "detail": (
-                                    "Altered ID produced a different status code "
-                                    "but not a 404"
-                                ),
-                            },
-                            "source_tool": "api_security_scanner",
-                        })
+                        evidence = {
+                            "original_url": full_original,
+                            "altered_url": full_alt,
+                            "original_status": orig_resp.status_code,
+                            "altered_status": alt_resp.status_code,
+                            "original_size": len(orig_body),
+                            "altered_size": len(alt_body),
+                            "size_ratio": round(size_ratio, 3),
+                            "detail": (
+                                "Response to altered user ID is similar in size "
+                                "to the original, suggesting BOLA/IDOR"
+                            ),
+                        }
+                        findings.append(self._add_finding(
+                            "API_BOLA", "HIGH", full_original,
+                            evidence, confidence=0.7,
+                        ))
+
+                # Different status codes (not 401/403/404) → potential BOLA
+                if not alt_resp_404 and orig_resp.status_code != alt_resp.status_code:
+                    evidence = {
+                        "original_url": full_original,
+                        "altered_url": full_alt,
+                        "original_status": orig_resp.status_code,
+                        "altered_status": alt_resp.status_code,
+                        "original_size": len(orig_resp.text),
+                        "altered_size": len(alt_resp.text),
+                        "detail": (
+                            "Altered ID produced a different status code "
+                            "but not a 404"
+                        ),
+                    }
+                    findings.append(self._add_finding(
+                        "API_BOLA", "MEDIUM", full_original,
+                        evidence, confidence=0.5,
+                    ))
 
         return findings
 
@@ -303,7 +390,9 @@ class APISecurityScanner:
 
         Checks if the server reflects the injected fields in its response,
         which indicates the extra fields were accepted.
+        Findings are registered via ``self._builder`` and returned as a list.
         """
+
         findings: list[dict[str, Any]] = []
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -331,25 +420,22 @@ class APISecurityScanner:
                                 str(value).lower() in body.lower()
                             )
                             if key_in_body or value_in_body:
-                                findings.append({
-                                    "type": "API_MASS_ASSIGNMENT",
-                                    "severity": "HIGH",
-                                    "confidence": 0.6,
-                                    "endpoint": full_url,
-                                    "evidence": {
-                                        "method": method,
-                                        "payload": payload,
-                                        "response_status": resp.status_code,
-                                        "reflected_key": key,
-                                        "reflected_key_found": key_in_body,
-                                        "reflected_value_found": value_in_body,
-                                        "detail": (
-                                            f"Extra field '{key}' was reflected "
-                                            f"in the response"
-                                        ),
-                                    },
-                                    "source_tool": "api_security_scanner",
-                                })
+                                evidence = {
+                                    "method": method,
+                                    "payload": payload,
+                                    "response_status": resp.status_code,
+                                    "reflected_key": key,
+                                    "reflected_key_found": key_in_body,
+                                    "reflected_value_found": value_in_body,
+                                    "detail": (
+                                        f"Extra field '{key}' was reflected "
+                                        f"in the response"
+                                    ),
+                                }
+                                findings.append(self._add_finding(
+                                    "API_MASS_ASSIGNMENT", "HIGH", full_url,
+                                    evidence, confidence=0.6,
+                                ))
 
         return findings
 
@@ -365,7 +451,9 @@ class APISecurityScanner:
         """Send requests with missing or malformed auth headers.
 
         Flags endpoints that return 200 without valid authentication.
+        Findings are registered via ``self._builder`` and returned as a list.
         """
+
         findings: list[dict[str, Any]] = []
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -391,22 +479,19 @@ class APISecurityScanner:
                                 if headers is None
                                 else f"auth variant: {headers}"
                             )
-                            findings.append({
-                                "type": "API_AUTH_BYPASS",
-                                "severity": "CRITICAL",
-                                "confidence": 0.5,
-                                "endpoint": full_url,
-                                "evidence": {
-                                    "auth_headers_used": headers,
-                                    "method": method,
-                                    "response_status": resp.status_code,
-                                    "response_size": len(resp.text),
-                                    "detail": (
-                                        f"{method} returned 200 with {label}"
-                                    ),
-                                },
-                                "source_tool": "api_security_scanner",
-                            })
+                            evidence = {
+                                "auth_headers_used": headers,
+                                "method": method,
+                                "response_status": resp.status_code,
+                                "response_size": len(resp.text),
+                                "detail": (
+                                    f"{method} returned 200 with {label}"
+                                ),
+                            }
+                            findings.append(self._add_finding(
+                                "API_AUTH_BYPASS", "CRITICAL", full_url,
+                                evidence, confidence=0.5,
+                            ))
 
         return findings
 
@@ -423,8 +508,10 @@ class APISecurityScanner:
         """Send a burst of rapid requests to auth-related endpoints.
 
         Checks for 429 Too Many Requests responses.
+        Findings are registered via ``self._builder`` and returned as a list.
         """
         findings: list[dict[str, Any]] = []
+
         auth_endpoints = [
             ep for ep in endpoints
             if any(kw in ep.lower() for kw in ("login", "auth", "token", "signin", "signup", "register"))
@@ -463,51 +550,42 @@ class APISecurityScanner:
                             rate_limited = True
 
                 if rate_limited:
-                    findings.append({
-                        "type": "API_RATE_LIMITED",
-                        "severity": "INFO",
-                        "confidence": 0.9,
-                        "endpoint": full_url,
-                        "evidence": {
-                            "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
-                            "status_distribution": status_counts,
-                            "detail": "Server implements rate limiting (429 detected)",
-                        },
-                        "source_tool": "api_security_scanner",
-                    })
+                    evidence = {
+                        "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
+                        "status_distribution": status_counts,
+                        "detail": "Server implements rate limiting (429 detected)",
+                    }
+                    findings.append(self._add_finding(
+                        "API_RATE_LIMITED", "INFO", full_url,
+                        evidence, confidence=0.9,
+                    ))
                 else:
                     if not status_counts:
-                        findings.append({
-                            "type": "API_RATE_LIMIT_INCONCLUSIVE",
-                            "severity": "INFO",
-                            "confidence": 0.3,
-                            "endpoint": full_url,
-                            "evidence": {
-                                "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
-                                "status_distribution": {},
-                                "detail": "All requests failed — rate limit test inconclusive",
-                            },
-                            "source_tool": "api_security_scanner",
-                        })
+                        evidence = {
+                            "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
+                            "status_distribution": {},
+                            "detail": "All requests failed — rate limit test inconclusive",
+                        }
+                        findings.append(self._add_finding(
+                            "API_RATE_LIMIT_INCONCLUSIVE", "INFO", full_url,
+                            evidence, confidence=0.3,
+                        ))
                         continue
                     non_error_codes = [c for c in status_counts if c < 500]
                     total_ok = sum(status_counts.get(c, 0) for c in non_error_codes)
                     if total_ok >= self.RATE_LIMIT_REQUEST_COUNT * 0.8:
-                        findings.append({
-                            "type": "API_NO_RATE_LIMIT",
-                            "severity": "MEDIUM",
-                            "confidence": 0.6,
-                            "endpoint": full_url,
-                            "evidence": {
-                                "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
-                                "status_distribution": status_counts,
-                                "detail": (
-                                    "Server accepted most requests without "
-                                    "rate limiting"
-                                ),
-                            },
-                            "source_tool": "api_security_scanner",
-                        })
+                        evidence = {
+                            "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
+                            "status_distribution": status_counts,
+                            "detail": (
+                                "Server accepted most requests without "
+                                "rate limiting"
+                            ),
+                        }
+                        findings.append(self._add_finding(
+                            "API_NO_RATE_LIMIT", "MEDIUM", full_url,
+                            evidence, confidence=0.6,
+                        ))
 
         return findings
 

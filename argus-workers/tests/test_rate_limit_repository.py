@@ -18,6 +18,14 @@ def _make_mock_db():
     mock_cursor = MagicMock()
     mock_cursor.fetchone.return_value = None
     mock_cursor.fetchall.return_value = []
+    mock_cursor.description = [
+        ("id", None, None, None, None, None, None),
+        ("domain", None, None, None, None, None, None),
+        ("event_type", None, None, None, None, None, None),
+        ("status_code", None, None, None, None, None, None),
+        ("current_rps", None, None, None, None, None, None),
+        ("created_at", None, None, None, None, None, None),
+    ]
     mock_db.cursor.return_value.__enter__.return_value = mock_cursor
     return mock_db, mock_cursor
 
@@ -44,14 +52,7 @@ class TestRateLimitRepositoryCreateEvent:
     def test_creates_event_with_correct_query_and_params(self):
         """Verifies create_event builds correct SQL and passes all params."""
         mock_db, mock_cursor = _make_mock_db()
-        mock_cursor.fetchone.return_value = {
-            "id": 1,
-            "domain": "example.com",
-            "event_type": "tool_rate_limited",
-            "status_code": 429,
-            "current_rps": 0.0,
-            "created_at": "2025-01-01T00:00:00Z",
-        }
+        mock_cursor.fetchone.return_value = (1, "example.com", "tool_rate_limited", 429, 0.0, "2025-01-01T00:00:00Z")
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -107,14 +108,7 @@ class TestRateLimitRepositoryCreateEvent:
     def test_create_event_with_null_status_code(self):
         """status_code can be None (e.g., connection timeout)."""
         mock_db, mock_cursor = _make_mock_db()
-        mock_cursor.fetchone.return_value = {
-            "id": 2,
-            "domain": "test.dev",
-            "event_type": "timeout",
-            "status_code": None,
-            "current_rps": 0.0,
-            "created_at": "2025-01-01T00:00:00Z",
-        }
+        mock_cursor.fetchone.return_value = (2, "test.dev", "timeout", None, 0.0, "2025-01-01T00:00:00Z")
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -130,14 +124,7 @@ class TestRateLimitRepositoryCreateEvent:
     def test_create_event_with_nonzero_rps(self):
         """current_rps reflects actual rate when limit was hit."""
         mock_db, mock_cursor = _make_mock_db()
-        mock_cursor.fetchone.return_value = {
-            "id": 3,
-            "domain": "bursty.app",
-            "event_type": "tool_rate_limited",
-            "status_code": 429,
-            "current_rps": 45.5,
-            "created_at": "2025-01-01T00:00:00Z",
-        }
+        mock_cursor.fetchone.return_value = (3, "bursty.app", "tool_rate_limited", 429, 45.5, "2025-01-01T00:00:00Z")
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -157,8 +144,7 @@ class TestRateLimitRepositoryGetRecentEvents:
         """Verifies correct SQL and params for retrieving recent events."""
         mock_db, mock_cursor = _make_mock_db()
         mock_cursor.fetchall.return_value = [
-            {"id": 1, "domain": "example.com", "event_type": "tool_rate_limited",
-             "status_code": 429, "current_rps": 0.0, "created_at": "2025-01-01T00:00:00Z"},
+            (1, "example.com", "tool_rate_limited", 429, 0.0, "2025-01-01T00:00:00Z"),
         ]
         repo = RateLimitRepository(mock_db)
 
@@ -209,11 +195,14 @@ class TestRateLimitRepositoryWiring:
     """Tests for the RateLimitRepository wiring in scan.py."""
 
     def test_get_rate_limit_repo_lazy_import_no_db_url(self):
-        """Without DATABASE_URL in env, returns None gracefully."""
+        """Without DATABASE_URL in env, returns a RateLimitRepository instance
+        (connection is lazy — only created when create_event is called)."""
         from orchestrator_pkg.scan import _get_rate_limit_repo
         with patch.dict("os.environ", {}, clear=True):
             repo = _get_rate_limit_repo()
-            assert repo is None
+            assert repo is not None, "Expected a RateLimitRepository instance even without DATABASE_URL"
+            from database.repositories.rate_limit_repository import RateLimitRepository
+            assert isinstance(repo, RateLimitRepository)
 
     def test_get_rate_limit_repo_with_db_url(self):
         """With DATABASE_URL set, returns a RateLimitRepository instance."""

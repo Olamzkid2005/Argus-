@@ -50,6 +50,10 @@ from tools.scope_validator import validate_target_scope  # M-25: scope validatio
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
 from utils.logging_utils import ScanLogger
 
+from tool_core.base import AbstractTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import ToolStatus, UnifiedToolResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,11 +75,13 @@ def _is_in_scope(url: str, target_url: str) -> bool:
         return False
 
 
-class WebScanner:
+class WebScanner(AbstractTool):
     """
     Comprehensive web application vulnerability scanner.
     Performs security configuration checks and active vulnerability testing.
     """
+
+    tool_name = "web_scanner"
 
     # Security headers to check
     SECURITY_HEADERS = [
@@ -297,34 +303,75 @@ class WebScanner:
         self._reauth_request_counter = 0
         self._reauth_interval = 10
         self._reauth_lock = threading.Lock()
+        self._builder: FindingBuilder | None = None
 
-    @staticmethod
-    def _redact_for_llm(text: str) -> str:
-        """Redact sensitive data before sending to LLM provider.
-
-        Strips potential secrets (tokens, passwords, keys, internal URLs)
-        from HTTP response snippets to prevent data exfiltration.
+    def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
-        import re as _re
-        # Redact common credential patterns
-        text = _re.sub(r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', text)
-        # Redact bearer tokens
-        text = _re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', text)
-        # Redact AWS keys
-        text = _re.sub(r'(?i)(AKIA[0-9A-Z]{16})', '__AWS_KEY_REDACTED__', text)
-        # Redact internal IPs
-        text = _re.sub(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', 'INTERNAL_IP_REDACTED', text)
-        return text[:500]
+        AbstractTool entry point.
+
+        Sets up a ``FindingBuilder`` from the context, runs all scan checks
+        (SSRF check, SSL test, ThreadPoolExecutor with 38+ checks), and
+        returns a ``UnifiedToolResult`` populated with findings.
+
+        Args:
+            ctx: Tool execution context with target, engagement_id, etc.
+
+        Returns:
+            ``UnifiedToolResult`` with findings, status = SUCCESS.
+        """
+        engagement_id = ctx.engagement_id or self.engagement_id
+        self._builder = FindingBuilder(
+            source_tool="web_scanner",
+            engagement_id=engagement_id,
+            emit_finding=ctx.emit_finding or self.emit_finding_callback,
+        )
+
+        # Apply ToolContext settings to instance
+        self.timeout = ctx.timeout
+        self.rate_limit = ctx.rate_limit
+        self.tech_stack = ctx.tech_stack or self.tech_stack
+        self.engagement_id = engagement_id
+
+        # Run the actual scan logic
+        target_url = ctx.target
+        self._run_scan_impl(target_url)
+
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=target_url,
+        )
+        result.findings = self._builder.findings
+        result.status = ToolStatus.SUCCESS
+        result.mark_finished()
+        return result
 
     def scan(self, target_url: str) -> list[dict]:
         """
         Run comprehensive scan against target.
+
+        Backward-compatible shim that delegates to ``execute()``. Existing
+        callers that call ``scan()`` directly still work unchanged.
 
         Args:
             target_url: Target URL to scan
 
         Returns:
             List of vulnerability findings
+
+        Raises:
+            ValueError: If target_url uses a disallowed scheme (SSRF prevention)
+        """
+        ctx = ToolContext(target=target_url)
+        result = self.execute(ctx)
+        return result.findings
+
+    def _run_scan_impl(self, target_url: str) -> None:
+        """
+        Core scan logic — SSRF prevention, scope validation, SSL test, then
+        all 38+ checks executed in a ThreadPoolExecutor.
+
+        Mutates ``self._builder`` (via ``_add_finding`` calls from each check)
+        and ``self.findings`` (synced from builder at the end).
 
         Raises:
             ValueError: If target_url uses a disallowed scheme (SSRF prevention)
@@ -346,7 +393,7 @@ class WebScanner:
                 target_url, self.engagement_id,
             )
             self.findings = []
-            return self.findings
+            return
 
         self.findings = []
         self.target_url = target_url.rstrip("/")
@@ -376,12 +423,15 @@ class WebScanner:
                 self._base_response = resp
             except Exception as retry_err:
                 logger.error("Web scanner: cannot connect to %s even without SSL verification: %s", self.target_url, retry_err)
-                return self.findings
+                # Sync builder findings before returning (SSL finding may have been added)
+                if self._builder:
+                    self.findings = self._builder.findings
+                return
             finally:
                 unverified_session.close()
         except Exception as e:
             logger.error("Web scanner: failed to connect to %s: %s", self.target_url, e)
-            return self.findings
+            return
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -439,19 +489,39 @@ class WebScanner:
             except (TimeoutError, _cf.TimeoutError):
                 logger.warning("WebScanner check batch timed out")
 
+        # Sync findings from builder to self.findings for backward compat
+        if self._builder:
+            self.findings = self._builder.findings
+
         logger.info(f"Scan complete: {len(self.findings)} findings")
-        return self.findings
+
+    @staticmethod
+    def _redact_for_llm(text: str) -> str:
+        """Redact sensitive data before sending to LLM provider.
+
+        Strips potential secrets (tokens, passwords, keys, internal URLs)
+        from HTTP response snippets to prevent data exfiltration.
+        """
+        import re as _re
+        # Redact common credential patterns
+        text = _re.sub(r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', text)
+        # Redact bearer tokens
+        text = _re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', text)
+        # Redact AWS keys
+        text = _re.sub(r'(?i)(AKIA[0-9A-Z]{16})', '__AWS_KEY_REDACTED__', text)
+        # Redact internal IPs
+        text = _re.sub(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', 'INTERNAL_IP_REDACTED', text)
+        return text[:500]
 
     def _report_ssl_finding(self, error_msg: str) -> None:
         """Record an SSL/TLS certificate error as a finding."""
-        self.findings.append({
-            "type": "SSL_CERTIFICATE_ERROR",
-            "severity": "MEDIUM",
-            "endpoint": self.target_url,
-            "source_tool": "web_scanner",
-            "evidence": {"error": error_msg[:500]},
-            "confidence": 0.85,
-        })
+        self._add_finding(
+            finding_type="SSL_CERTIFICATE_ERROR",
+            severity="MEDIUM",
+            endpoint=self.target_url,
+            evidence={"error": error_msg[:500]},
+            confidence=0.85,
+        )
 
     def _safe_request(self, method: str, url: str, session: requests.Session | None = None, **kwargs) -> requests.Response | None:
         """Make HTTP request with error handling. Thread-safe.
@@ -501,36 +571,19 @@ class WebScanner:
 
     def _add_finding(self, finding_type: str, severity: str, endpoint: str,
                      evidence: dict, confidence: float = 0.8):
-        """Add a finding to the results with sanitized evidence.
+        """Add a finding — delegates to FindingBuilder.
 
-        If an emit_finding_callback was provided, this also streams the finding
-        in real-time via SSE and WebSocket so analysts can see findings as they're
-        discovered rather than waiting for scan() to complete.
+        Creates the builder lazily if needed (backward compat for direct
+        ``scan()`` calls without ``execute()``). If an emit_finding_callback
+        was provided, streaming is handled automatically by the builder.
         """
-        # Import sanitization utilities
-        try:
-            from utils.sanitization import sanitize_evidence
-            sanitized_evidence = sanitize_evidence(evidence)
-        except ImportError:
-            # If sanitization not available, use evidence as-is
-            sanitized_evidence = evidence
-
-        finding = {
-            "type": finding_type,
-            "severity": severity,
-            "endpoint": endpoint,
-            "evidence": sanitized_evidence,
-            "confidence": confidence,
-            "source_tool": "web_scanner",
-        }
-        self.findings.append(finding)
-
-        # Real-time streaming: emit as soon as each finding is discovered
-        if self.emit_finding_callback and self.engagement_id:
-            try:
-                self.emit_finding_callback(self.engagement_id, finding, "web_scanner")
-            except Exception:
-                logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
+        if self._builder is None:
+            self._builder = FindingBuilder(
+                source_tool="web_scanner",
+                engagement_id=self.engagement_id,
+                emit_finding=self.emit_finding_callback,
+            )
+        self._builder.add(finding_type, severity, endpoint, evidence, confidence)
 
     def _detect_framework(self, response) -> str:
         """

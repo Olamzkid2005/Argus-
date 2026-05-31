@@ -9,6 +9,7 @@ class TestErrorLogging:
     def test_port_scanner_missing_tool_logs_warning(self, _mock_is_enabled):
         """Missing tools should produce warning logs, not silent failures."""
         from tools.port_scanner import PortScanner
+        from tool_core.base import ToolContext
 
         scanner = PortScanner()
         scanner._check_tools_available = MagicMock(
@@ -16,30 +17,34 @@ class TestErrorLogging:
         )
 
         with patch("tools.port_scanner.logger") as mock_logger:
-            result = scanner.scan("example.com")
+            ctx = ToolContext(target="example.com")
+            result = scanner.execute(ctx)
 
         assert mock_logger.warning.called
-        assert result.open_ports == []
+        assert result.ports == []
 
     @patch("tools.port_scanner.is_enabled", return_value=True)
     def test_port_scanner_returns_empty_on_missing_naabu(self, _mock_is_enabled):
         """When naabu is unavailable, scan returns empty result without crashing."""
         from tools.port_scanner import PortScanner
+        from tool_core.base import ToolContext
 
         scanner = PortScanner()
         scanner._check_tools_available = MagicMock(
             return_value={"naabu": False, "nmap": False}
         )
 
-        result = scanner.scan("example.com")
+        ctx = ToolContext(target="example.com")
+        result = scanner.execute(ctx)
 
-        assert isinstance(result.open_ports, list)
+        assert isinstance(result.ports, list)
         assert result.target == "example.com"
 
     @patch("tools.port_scanner.is_enabled", return_value=True)
     def test_port_scanner_continues_without_nmap(self, _mock_is_enabled):
         """When only nmap is missing, scan should still return naabu results."""
         from tools.port_scanner import PortScanner
+        from tool_core.base import ToolContext
         from tools.tool_runner import ToolResult
 
         scanner = PortScanner()
@@ -48,23 +53,26 @@ class TestErrorLogging:
         scanner._tool_runner = MagicMock()
         scanner._tool_runner.run.return_value = naabu_result
 
-        result = scanner.scan("example.com")
+        ctx = ToolContext(target="example.com")
+        result = scanner.execute(ctx)
 
-        assert len(result.open_ports) == 1
-        assert result.open_ports[0].port == 80
+        assert len(result.ports) == 1
+        assert result.ports[0]["port"] == 80
 
     @patch("tools.port_scanner.is_enabled", return_value=False)
     def test_port_scanner_disabled_flag(self, _mock_is_enabled):
         """When PORT_SCANNER feature flag is off, scan returns empty without checking tools."""
         from tools.port_scanner import PortScanner
+        from tool_core.base import ToolContext
 
         scanner = PortScanner()
         scanner._check_tools_available = MagicMock()
 
         with patch("tools.port_scanner.logger") as mock_logger:
-            result = scanner.scan("example.com")
+            ctx = ToolContext(target="example.com")
+            result = scanner.execute(ctx)
 
         assert mock_logger.info.called
         assert mock_logger.warning.called is False
-        assert result.open_ports == []
+        assert result.ports == []
         scanner._check_tools_available.assert_not_called()

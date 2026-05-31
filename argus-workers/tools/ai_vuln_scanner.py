@@ -19,6 +19,9 @@ import requests
 import urllib3
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
+from tool_core.base import AbstractTool, ToolContext
+from tool_core.finding_builder import FindingBuilder
+from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -108,8 +111,10 @@ SENSITIVE_DATA_PATTERNS = [
 ]
 
 
-class AIVulnScanner:
+class AIVulnScanner(AbstractTool):
     """Scanner for AI/LLM endpoint vulnerabilities."""
+
+    tool_name = "ai_vuln_scanner"
 
     # Default AI endpoint paths to probe if none specified
     DEFAULT_AI_ENDPOINTS = [
@@ -157,14 +162,97 @@ class AIVulnScanner:
         self._rate_lock = threading.Lock()
         self._detected_format = None  # Cached successful AI payload format
         self._thread_session = threading.local()  # Thread-local sessions
+        self._builder: FindingBuilder | None = None
 
     def _emit_finding(self, finding: dict) -> None:
-        """Emit a finding in real-time if callback is configured."""
-        if self.emit_finding_callback and self.engagement_id:
+        """
+        Register a finding.
+
+        When ``self._builder`` is available (called via ``execute()``), the
+        finding is registered through ``FindingBuilder.add()`` for standardized
+        creation and evidence sanitization.  Extra fields (e.g. ``"cwe"``) are
+        passed through via ``**extra``.
+        """
+        _STANDARD_KEYS = {"type", "severity", "endpoint", "evidence", "confidence"}
+        extra = {k: v for k, v in finding.items() if k not in _STANDARD_KEYS}
+
+        if self._builder:
+            self._builder.add(
+                finding.get("type", "UNKNOWN"),
+                finding.get("severity", "INFO"),
+                finding.get("endpoint", ""),
+                finding.get("evidence", {}),
+                confidence=finding.get("confidence", 0.8),
+                **extra,
+            )
+        elif self.emit_finding_callback and self.engagement_id:
             try:
-                self.emit_finding_callback(self.engagement_id, finding, "ai_vuln_scanner")
+                self.emit_finding_callback(
+                    self.engagement_id, finding, "ai_vuln_scanner",
+                )
             except Exception:
                 logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
+
+    def execute(self, ctx: ToolContext) -> UnifiedToolResult:
+        """
+        AbstractTool entry point.
+
+        Creates a ``FindingBuilder`` from the context, maps ``ToolContext``
+        settings, runs all checks, and returns a ``UnifiedToolResult`` with
+        findings.
+        """
+        self._builder = FindingBuilder(
+            source_tool=self.tool_name,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding,
+        )
+
+        # Map ToolContext settings
+        if ctx.timeout:
+            self.timeout = ctx.timeout
+        if ctx.rate_limit:
+            self.rate_limit = ctx.rate_limit
+        if ctx.engagement_id:
+            self.engagement_id = ctx.engagement_id
+
+        target_url = ctx.target
+        self.target_url = target_url.rstrip("/")
+        ai_endpoints = getattr(self, "_scan_ai_endpoints", None) or self.DEFAULT_AI_ENDPOINTS
+        slog = ScanLogger("ai_vuln_scanner", engagement_id=self.engagement_id)
+
+        slog.phase_header("AI VULN SCAN", target=self.target_url, endpoints=len(ai_endpoints))
+
+        # Discover which AI endpoints actually exist
+        active_endpoints = self._discover_ai_endpoints(ai_endpoints)
+        if not active_endpoints:
+            slog.info("No AI endpoints detected — skipping AI scan")
+        else:
+            slog.info(f"Found {len(active_endpoints)} active AI endpoints")
+
+            for endpoint in active_endpoints:
+                url = urljoin(self.target_url, endpoint.lstrip("/"))
+                slog.tool_start("prompt_injection", [endpoint])
+                injection_findings = self._test_prompt_injection(url)
+                slog.tool_complete("prompt_injection", success=True, findings=len(injection_findings))
+                for f in injection_findings:
+                    self._emit_finding(f)
+
+                slog.tool_start("info_disclosure", [endpoint])
+                disclosure_findings = self._test_information_disclosure(url)
+                slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
+                for f in disclosure_findings:
+                    self._emit_finding(f)
+
+        slog.tool_complete("ai_vuln_scan", success=True, findings=len(self._builder.findings))
+
+        result = UnifiedToolResult(
+            tool_name=self.tool_name,
+            target=ctx.target,
+        )
+        result.findings = self._builder.findings
+        result.status = ToolStatus.SUCCESS
+        result.mark_finished()
+        return result
 
     def scan(
         self,
@@ -174,6 +262,9 @@ class AIVulnScanner:
         """
         Scan AI endpoints for prompt injection and information disclosure.
 
+        Backward-compatible shim that delegates to ``execute()``. Existing
+        callers that call ``scan()`` directly still work unchanged.
+
         Args:
             target_url: Base target URL.
             ai_endpoints: Specific AI endpoint paths. Falls back to DEFAULT_AI_ENDPOINTS.
@@ -181,39 +272,10 @@ class AIVulnScanner:
         Returns:
             List of vulnerability finding dicts.
         """
-        self.target_url = target_url.rstrip("/")
-        findings = []
-        endpoints = ai_endpoints or self.DEFAULT_AI_ENDPOINTS
-        slog = ScanLogger("ai_vuln_scanner", engagement_id=self.engagement_id)
-
-        slog.phase_header("AI VULN SCAN", target=self.target_url, endpoints=len(endpoints))
-
-        # Discover which AI endpoints actually exist
-        active_endpoints = self._discover_ai_endpoints(endpoints)
-        if not active_endpoints:
-            slog.info("No AI endpoints detected — skipping AI scan")
-            return findings
-
-        slog.info(f"Found {len(active_endpoints)} active AI endpoints")
-
-        for endpoint in active_endpoints:
-            url = urljoin(self.target_url, endpoint.lstrip("/"))
-            slog.tool_start("prompt_injection", [endpoint])
-            injection_findings = self._test_prompt_injection(url)
-            slog.tool_complete("prompt_injection", success=True, findings=len(injection_findings))
-            for f in injection_findings:
-                self._emit_finding(f)
-            findings.extend(injection_findings)
-
-            slog.tool_start("info_disclosure", [endpoint])
-            disclosure_findings = self._test_information_disclosure(url)
-            slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
-            for f in disclosure_findings:
-                self._emit_finding(f)
-            findings.extend(disclosure_findings)
-
-        slog.tool_complete("ai_vuln_scan", success=True, findings=len(findings))
-        return findings
+        self._scan_ai_endpoints = ai_endpoints
+        ctx = ToolContext(target=target_url)
+        result = self.execute(ctx)
+        return result.findings
 
     # --- Private helpers ---
 
