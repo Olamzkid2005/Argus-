@@ -634,7 +634,6 @@ class StreamingFindingEmitter:
                 - source_tool: Tool that discovered the finding
                 - confidence: Confidence score 0.0-1.0
         """
-        finding.get("_saved_id") or finding.get("id") or ""
         finding_type = finding.get("type", "UNKNOWN")
         severity = finding.get("severity", "INFO")
         endpoint = finding.get("endpoint", "")
