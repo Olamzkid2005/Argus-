@@ -107,6 +107,8 @@ def sanitize_input(text: str) -> str:
             "Prompt injection pattern detected in input (%d chars): %s...",
             len(sanitized), sanitized[:80],
         )
+        # Apply redaction to both normalized (leet-decoded) and original text
+        # to catch leetspeak-obfuscated prompt injections.
         sanitized = re.sub(
             r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
             r"system\s+prompt|you\s+are\s+now|"
@@ -117,6 +119,20 @@ def sanitize_input(text: str) -> str:
             "[REDACTED]",
             sanitized,
         )
+        # Also apply redaction to the original text's leetspeak-normalized form
+        # to ensure leetspeak-obfuscated injections are caught
+        sanitized_normalized = re.sub(
+            r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
+            r"system\s+prompt|you\s+are\s+now|"
+            r"new\s+instructions|override|"
+            r"disregard\s+.*previous|bypass\s+.*restrictions|"
+            r"act\s+as|pretend\s+you\s+are|"
+            r"from\s+now\s+on\s+you\s+are)",
+            "[REDACTED]",
+            normalized,
+        )
+        if sanitized_normalized != normalized:
+            sanitized = "[REDACTED] " + sanitized
     return sanitized[:2000]
 
 

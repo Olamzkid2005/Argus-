@@ -67,8 +67,8 @@ def build_task_args(
             kwargs.get("auth_config"),
             kwargs.get("dual_auth_config"),
         ],
-        # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None)
-        "analyze": [engagement_id, budget, trace_id],
+        # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None, generate_chain_exploits=None)
+        "analyze": [engagement_id, budget, trace_id, kwargs.get("generate_chain_exploits")],
         # tasks.report.generate_report(self, engagement_id, trace_id=None, budget=None)
         "report": [engagement_id, trace_id, kwargs.get("budget_for_report") or budget],
         # tasks.repo_scan.run_repo_scan(self, engagement_id, repo_url, budget, trace_id=None, ...)
