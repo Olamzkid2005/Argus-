@@ -115,8 +115,10 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
     try:
         async with httpx.AsyncClient(timeout=15.0, verify=True) as client:
             # Test with the original payload
+            # httpx merges params with any existing query string in the URL,
+            # so we always pass params regardless of whether ? is present.
             try:
-                original_resp = await client.get(endpoint, params={"q": payload} if "?" not in endpoint else None)
+                original_resp = await client.get(endpoint, params={"q": payload})
                 original_text = original_resp.text.lower()
             except Exception:
                 original_resp = await client.post(endpoint, data={"input": payload})
@@ -125,7 +127,7 @@ async def verify_sqli(endpoint: str, payload: str, benign_variant: str | None = 
             # Test with benign variant
             benign = benign_variant or payload.replace("'", "").replace('"', "").replace(";", "")
             try:
-                benign_resp = await client.get(endpoint, params={"q": benign} if "?" not in endpoint else None)
+                benign_resp = await client.get(endpoint, params={"q": benign})
                 benign_text = benign_resp.text.lower()
             except Exception:
                 benign_resp = await client.post(endpoint, data={"input": benign})
