@@ -333,7 +333,7 @@ class FindingNormalizer:
 
         # If we have CWE info in evidence, use it to determine type
         if raw_finding:
-        evidence = raw_finding.get("evidence") or {}
+            evidence = raw_finding.get("evidence") or {}
 
             # Extract CWE from evidence (Semgrep puts it here)
             cwe = evidence.get("cwe", "")
