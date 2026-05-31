@@ -100,7 +100,7 @@ class ExecutionEngine:
         Returns:
             ToolRunner result object
         """
-        from tools.tool_runner import ToolResult
+        from tool_core.result import ToolStatus, UnifiedToolResult
 
         args = args or []
 
@@ -108,12 +108,11 @@ class ExecutionEngine:
         for middleware_fn in self._middleware:
             result = middleware_fn(tool_name, args, kwargs)
             if result is None:
-                return ToolResult(
-                    tool=tool_name,
-                    success=False,
-                    stdout="",
+                return UnifiedToolResult(
+                    tool_name=tool_name,
+                    status=ToolStatus.SKIPPED,
                     stderr="Blocked by middleware",
-                    returncode=-1,
+                    exit_code=-1,
                 )
             # Allow middleware to modify args/kwargs
             if isinstance(result, tuple) and len(result) == 3:
@@ -124,12 +123,12 @@ class ExecutionEngine:
         try:
             result = self.tool_runner.run(tool_name, args, timeout=timeout)
         except Exception as e:
-            result = ToolResult(
-                tool=tool_name,
-                success=False,
-                stdout="",
+            result = UnifiedToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.EXCEPTION,
                 stderr=str(e),
-                returncode=-1,
+                exit_code=-1,
+                error_message=str(e),
             )
 
         duration_ms = int((time.time() - start) * 1000)

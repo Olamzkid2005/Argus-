@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cache import cache
@@ -21,7 +22,7 @@ from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
 )
-from tools.models import ToolResult
+from tool_core.result import ToolStatus, UnifiedToolResult
 from tracing import ExecutionSpan, StructuredLogger, get_trace_id
 from utils.logging_utils import ScanLogger
 
@@ -334,7 +335,7 @@ class ToolRunner:
             i += 1
         return sanitized_args, env
 
-    def run(self, tool: str, args: list[str], timeout: int = 180) -> ToolResult:
+    def run(self, tool: str, args: list[str], timeout: int = 180) -> UnifiedToolResult:
         """
         Execute tool with safety validation
 
@@ -344,7 +345,7 @@ class ToolRunner:
             timeout: Timeout in seconds (default: 180)
 
         Returns:
-            ToolResult with stdout, stderr, returncode, success
+            UnifiedToolResult with stdout, stderr, exit_code, status
 
         Raises:
             SecurityError: If dangerous payload detected
@@ -356,7 +357,7 @@ class ToolRunner:
         cache_key = f"tool_result:{tool}:{hashlib.md5(args_key.encode(), usedforsecurity=False).hexdigest()}"
         cached_result = cache.get(cache_key)
         if cached_result is not None:
-            return ToolResult(**cached_result)
+            return UnifiedToolResult.from_legacy_dict(cached_result, tool_name_hint=tool)
 
         # Safety check
         if self.is_dangerous(tool, args):
@@ -452,19 +453,22 @@ class ToolRunner:
                 except Exception as log_err:
                     logger.warning("Failed to log tool execution: %s", log_err)
 
-                tool_result = ToolResult(
+                result_duration = time.time() - start_time
+                tool_result = UnifiedToolResult(
+                    tool_name=tool,
+                    command=[tool_path] + args,
+                    target="",
+                    status=ToolStatus.SUCCESS,
                     stdout=result.stdout,
                     stderr=result.stderr,
-                    returncode=result.returncode,
-                    tool=tool,
-                    success=success,
-                    duration_ms=duration_ms,
-                    timeout=False,
-                    error=None,
-                    trace_id=get_trace_id(),
+                    exit_code=result.returncode,
+                    started_at=datetime.fromtimestamp(start_time, tz=UTC),
+                    duration_seconds=result_duration,
+                    error_message="",
                 )
+                tool_result.mark_finished()
 
-                cache.set(cache_key, tool_result.as_dict(), ttl=300)
+                cache.set(cache_key, tool_result.to_legacy_dict(), ttl=300)
                 slog.info(f"Tool cache set for {tool}")
                 return tool_result
 
@@ -492,16 +496,13 @@ class ToolRunner:
                     return_code=-1,
                 )
 
-                return ToolResult(
-                    stdout="",
+                return UnifiedToolResult(
+                    tool_name=tool,
+                    command=[tool_path] + args,
+                    status=ToolStatus.TIMEOUT,
                     stderr=f"Tool execution timed out after {timeout} seconds",
-                    returncode=-1,
-                    tool=tool,
-                    success=False,
-                    duration_ms=duration_ms,
-                    timeout=True,
-                    error=None,
-                    trace_id=get_trace_id(),
+                    exit_code=-1,
+                    error_message=f"Tool execution timed out after {timeout}s",
                 )
             except Exception as e:
                 duration_ms = int((time.time() - start_time) * 1000)
@@ -527,21 +528,18 @@ class ToolRunner:
                     return_code=-1,
                 )
 
-                return ToolResult(
-                    stdout="",
+                return UnifiedToolResult(
+                    tool_name=tool,
+                    command=[tool_path] + args,
+                    status=ToolStatus.EXCEPTION,
                     stderr=str(e),
-                    returncode=-1,
-                    tool=tool,
-                    success=False,
-                    duration_ms=duration_ms,
-                    timeout=False,
-                    error=str(e),
-                    trace_id=get_trace_id(),
+                    exit_code=-1,
+                    error_message=str(e),
                 )
 
     def run_streaming(
         self, tool: str, args: list[str], timeout: int, on_line: callable
-    ) -> ToolResult:
+    ) -> UnifiedToolResult:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
 
@@ -637,20 +635,17 @@ class ToolRunner:
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1
-        success = returncode == 0
         duration_ms = int((time.time() - start) * 1000)
         timed_out = time.time() - start > timeout
 
-        slog.tool_complete(tool, success=success, duration_ms=duration_ms)
-        return ToolResult(
+        slog.tool_complete(tool, success=returncode == 0, duration_ms=duration_ms)
+        return UnifiedToolResult(
+            tool_name=tool,
+            command=[tool_path] + args,
+            status=ToolStatus.TIMEOUT if timed_out else ToolStatus.SUCCESS if returncode == 0 else ToolStatus.NONZERO_EXIT,
             stdout=stdout,
-            stderr="",
-            returncode=returncode,
-            tool=tool,
-            success=success,
-            duration_ms=duration_ms,
-            timeout=timed_out,
-            trace_id=get_trace_id(),
+            exit_code=returncode,
+            duration_seconds=(time.time() - start),
         )
 
     def run_nuclei(
@@ -660,7 +655,7 @@ class ToolRunner:
         severity: str | None = None,
         tags: str | None = None,
         timeout: int = 600,
-    ) -> ToolResult:
+    ) -> UnifiedToolResult:
         """
         Execute Nuclei with optional template path and filters
 
@@ -693,7 +688,7 @@ class ToolRunner:
         top_ports: str | None = None,
         port_range: str | None = None,
         timeout: int = 300,
-    ) -> ToolResult:
+    ) -> UnifiedToolResult:
         """
         Execute Naabu port scanner
 
@@ -720,7 +715,7 @@ class ToolRunner:
         target: str,
         depth: int = 3,
         timeout: int = 300,
-    ) -> ToolResult:
+    ) -> UnifiedToolResult:
         """
         Execute Gospider for JavaScript file and endpoint discovery
 
@@ -741,7 +736,7 @@ class ToolRunner:
         api_token: str | None = None,
         enumerate_options: list[str] | None = None,
         timeout: int = 600,
-    ) -> ToolResult:
+    ) -> UnifiedToolResult:
         """
         Execute WPScan for WordPress security scanning
 
@@ -816,7 +811,7 @@ class ToolRunner:
 
     def run_with_circuit_breaker(
         self, tool: str, args: list[str], timeout: int = 180
-    ) -> ToolResult:
+    ) -> UnifiedToolResult:
         """
         Execute tool with circuit breaker protection.
 

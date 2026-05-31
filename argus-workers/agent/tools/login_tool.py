@@ -27,7 +27,7 @@ import requests
 
 from agent.auth_context import AuthContext
 from agent.form_discovery import ERROR_CODES, discover_auth_endpoints
-from tools.models import ToolResult
+from tool_core.result import ToolStatus, UnifiedToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def run_login(
     email: str | None = None,
     password: str | None = None,
     recon_crawled_paths: list[str] | None = None,
-) -> tuple[ToolResult, AuthContext | None]:
+) -> tuple[UnifiedToolResult, AuthContext | None]:
     """Execute the login tool.
 
     Discovers login form → submits credentials → captures session →
@@ -68,7 +68,7 @@ def run_login(
         recon_crawled_paths: Optional list of discovered paths from recon phase.
 
     Returns:
-        Tuple of (ToolResult, updated AuthContext or None).
+        Tuple of (UnifiedToolResult, updated AuthContext or None).
     """
     ctx = auth_context or AuthContext()
 
@@ -78,7 +78,9 @@ def run_login(
 
     if not login_email or not login_password:
         return (
-            ToolResult(
+            UnifiedToolResult(
+                tool_name="login",
+                status=ToolStatus.NONZERO_EXIT,
                 stdout=json.dumps({
                     "status": "failed",
                     "error_code": "NO_CREDENTIALS",
@@ -91,8 +93,6 @@ def run_login(
                     "No credentials available. Call register() first "
                     "or provide email/password."
                 ),
-                success=False,
-                tool="login",
             ),
             ctx,
         )
@@ -103,15 +103,15 @@ def run_login(
 
     if not login_url:
         return (
-            ToolResult(
+            UnifiedToolResult(
+                tool_name="login",
+                status=ToolStatus.NONZERO_EXIT,
                 stdout=json.dumps({
                     "status": "failed",
                     "error_code": "FORM_NOT_FOUND",
                     "message": ERROR_CODES["FORM_NOT_FOUND"],
                 }),
                 stderr=ERROR_CODES["FORM_NOT_FOUND"],
-                success=False,
-                tool="login",
             ),
             ctx,
         )
@@ -179,10 +179,10 @@ def run_login(
                 result_data["status"] = "logged_in"
 
                 return (
-                    ToolResult(
+                    UnifiedToolResult(
+                        tool_name="login",
+                        status=ToolStatus.SUCCESS,
                         stdout=json.dumps(result_data),
-                        success=True,
-                        tool="login",
                     ),
                     ctx,
                 )
@@ -209,11 +209,11 @@ def run_login(
     # All retries exhausted
     result_data["error"] = last_error
     return (
-        ToolResult(
+        UnifiedToolResult(
+            tool_name="login",
+            status=ToolStatus.NONZERO_EXIT,
             stdout=json.dumps(result_data),
             stderr=last_error or ERROR_CODES["UNKNOWN_FAILURE"],
-            success=False,
-            tool="login",
         ),
         ctx,
     )
@@ -265,18 +265,18 @@ def _fail_result(
     error_code: str,
     error_message: str,
     ctx: AuthContext,
-) -> tuple[ToolResult, AuthContext | None]:
-    """Build a failure ToolResult for login."""
+) -> tuple[UnifiedToolResult, AuthContext | None]:
+    """Build a failure UnifiedToolResult for login."""
     return (
-        ToolResult(
+        UnifiedToolResult(
+            tool_name="login",
+            status=ToolStatus.NONZERO_EXIT,
             stdout=json.dumps({
                 "status": "failed",
                 "error_code": error_code,
                 "message": error_message,
             }),
             stderr=error_message,
-            success=False,
-            tool="login",
         ),
         ctx,
     )

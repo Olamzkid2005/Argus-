@@ -5,19 +5,25 @@ Single return type for all tool execution in Argus.
 
 Evolves ``tools.tool_result.StructuredToolResult`` (which already has
 ``mark_finished()``, class-method constructors, ``to_report_dict()``, etc.)
-by adding port-scan-specific fields and backward-compatibility methods.
+by adding port-scan-specific fields and backward-compatibility methods
+that make it a drop-in replacement for the legacy ``tools.models.ToolResult``.
 
 Supersedes:
     - ``tools.models.ToolResult`` (legacy dict wrapper)
     - ``tools.port_scanner.PortScanResult``
     - Ad-hoc ``list[dict]`` returns from scanners
 
-Migration path:
-    1. ``UnifiedToolResult`` inherits from ``StructuredToolResult`` — zero code duplication.
-    2. After all callers migrate, ``StructuredToolResult`` is renamed to ``UnifiedToolResult``.
-    3. ``PortScanResult`` becomes a thin wrapper/factory for ``UnifiedToolResult``.
-    4. ``ToolResult`` (from ``tools/models.py``) kept as a thin wrapper with
-       ``to_legacy_dict()`` until all ToolRunner callers migrate.
+Backward-compat properties (so old callers accessing ``result.success``,
+``result.returncode``, etc. continue working):
+    - ``.success`` → ``.status.is_ok``
+    - ``.returncode`` → ``.exit_code``
+    - ``.tool`` → ``.tool_name``
+    - ``.error`` → ``.error_message``
+    - ``.duration_ms`` → ``int(.duration_seconds * 1000)``
+    - ``.timeout`` → ``.status == ToolStatus.TIMEOUT``
+    - ``.trace_id`` → ``""``
+    - ``.output`` → combined stdout+stderr
+    - ``.as_dict()`` → ``.to_legacy_dict()``
 """
 
 from __future__ import annotations
@@ -41,6 +47,11 @@ class UnifiedToolResult(StructuredToolResult):
 
     Adds port-scan-specific fields and legacy compatibility methods.
 
+    Backward-compat properties (``.success``, ``.returncode``, ``.tool``,
+    ``.error``, ``.duration_ms``, ``.timeout``, ``.trace_id``, ``.output``)
+    let callers treat this like the old ``tools.models.ToolResult`` with
+    zero code changes.
+
     Example::
 
         result = UnifiedToolResult(tool_name="web_scanner", target="https://example.com")
@@ -57,10 +68,6 @@ class UnifiedToolResult(StructuredToolResult):
 
     open_ports_count: int = 0
 
-    # ── Lifecycle fields used by template methods ────────────────────
-    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    exit_code: int = 0
-
     # ── Lifecycle ────────────────────────────────────────────────────
 
     def mark_finished(self) -> None:
@@ -69,7 +76,53 @@ class UnifiedToolResult(StructuredToolResult):
         if self.ports:
             self.open_ports_count = len(self.ports)
 
-    # ── Backward compatibility ───────────────────────────────────────
+    # ── Backward compatibility (ToolResult shape) ────────────────────
+
+    @property
+    def success(self) -> bool:
+        """Legacy ``ToolResult.success`` → ``.status.is_ok``."""
+        return self.status.is_ok
+
+    @property
+    def returncode(self) -> int | None:
+        """Legacy ``ToolResult.returncode`` → ``.exit_code``."""
+        return self.exit_code
+
+    @property
+    def tool(self) -> str:
+        """Legacy ``ToolResult.tool`` → ``.tool_name``."""
+        return self.tool_name
+
+    @property
+    def error(self) -> str | None:
+        """Legacy ``ToolResult.error`` → ``.error_message``."""
+        return self.error_message or None
+
+    @property
+    def duration_ms(self) -> int:
+        """Legacy ``ToolResult.duration_ms`` → computed from seconds."""
+        return int(self.duration_seconds * 1000)
+
+    @property
+    def timeout(self) -> bool:
+        """Legacy ``ToolResult.timeout`` → ``.status == ToolStatus.TIMEOUT``."""
+        return self.status == ToolStatus.TIMEOUT
+
+    @property
+    def trace_id(self) -> str:
+        """Legacy ``ToolResult.trace_id`` → empty (field removed in new model)."""
+        return ""
+
+    @property
+    def output(self) -> str:
+        """Legacy ``ToolResult.output`` → combined stdout+stderr."""
+        if self.stderr and self.stdout:
+            return self.stdout + "\n" + self.stderr
+        return self.stdout or self.stderr or ""
+
+    def as_dict(self) -> dict[str, Any]:
+        """Legacy ``ToolResult.as_dict()`` → ``.to_legacy_dict()``."""
+        return self.to_legacy_dict()
 
     def to_legacy_dict(self) -> dict[str, Any]:
         """
@@ -81,7 +134,7 @@ class UnifiedToolResult(StructuredToolResult):
         return {
             "stdout": self.stdout,
             "stderr": self.stderr,
-            "returncode": self.exit_code,
+            "returncode": self.exit_code if self.exit_code is not None else 0,
             "tool": self.tool_name,
             "success": self.status.is_ok,
             "duration_ms": int(self.duration_seconds * 1000),
@@ -89,6 +142,34 @@ class UnifiedToolResult(StructuredToolResult):
             "error": self.error_message or None,
             "trace_id": "",
         }
+
+    @classmethod
+    def from_legacy_dict(cls, data: dict[str, Any], tool_name_hint: str = "") -> UnifiedToolResult:
+        """
+        Reconstruct from a legacy ``tools.models.ToolResult.as_dict()`` dict.
+
+        Handles field-name mapping (``returncode`` → ``exit_code``,
+        ``tool`` → ``tool_name``, ``success``/``timeout`` → ``status``).
+        """
+        exit_code: int | None = data.get("returncode", 0)
+        timed_out = data.get("timeout", False)
+        success = data.get("success", True)
+
+        if timed_out:
+            status = ToolStatus.TIMEOUT
+        elif success:
+            status = ToolStatus.SUCCESS
+        else:
+            status = ToolStatus.NONZERO_EXIT
+
+        return cls(
+            tool_name=data.get("tool", tool_name_hint),
+            stdout=data.get("stdout", ""),
+            stderr=data.get("stderr", ""),
+            exit_code=exit_code,
+            status=status,
+            duration_seconds=data.get("duration_ms", 0) / 1000.0,
+        )
 
     def to_finding_list(self) -> list[dict[str, Any]]:
         """

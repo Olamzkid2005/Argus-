@@ -45,12 +45,14 @@ class TestErrorLogging:
         """When only nmap is missing, scan should still return naabu results."""
         from tools.port_scanner import PortScanner
         from tool_core.base import ToolContext
-        from tools.tool_runner import ToolResult
+        from tool_core.result import ToolStatus, UnifiedToolResult
 
         scanner = PortScanner()
-        # Mock tool_runner.run() so naabu succeeds with fake output
-        naabu_result = ToolResult(success=True, stdout='{"port":80,"protocol":"tcp"}\n', stderr="", error=None)
+        naabu_result = UnifiedToolResult(tool_name="naabu", status=ToolStatus.SUCCESS, stdout='{"port":80,"protocol":"tcp"}\n')
         scanner._tool_runner = MagicMock()
+        scanner._check_tools_available = MagicMock(
+            return_value={"naabu": True, "nmap": False}
+        )
         scanner._tool_runner.run.return_value = naabu_result
 
         ctx = ToolContext(target="example.com")

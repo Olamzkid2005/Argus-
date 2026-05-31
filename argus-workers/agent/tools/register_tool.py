@@ -35,7 +35,7 @@ from agent.form_discovery import (
     discover_auth_endpoints,
     has_verification_requirement,
 )
-from tools.models import ToolResult
+from tool_core.result import ToolStatus, UnifiedToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def run_register(
     http_session: requests.Session,
     auth_context: AuthContext | None = None,
     recon_crawled_paths: list[str] | None = None,
-) -> tuple[ToolResult, AuthContext | None]:
+) -> tuple[UnifiedToolResult, AuthContext | None]:
     """Execute the register tool.
 
     Discovers registration form → generates credentials → submits form →
@@ -80,7 +80,7 @@ def run_register(
         recon_crawled_paths: Optional list of discovered paths from recon phase.
 
     Returns:
-        Tuple of (ToolResult, updated AuthContext or None).
+        Tuple of (UnifiedToolResult, updated AuthContext or None).
     """
     ctx = auth_context or AuthContext()
     result_data: dict[str, Any] = {"status": "failed", "attempts": 0}
@@ -92,15 +92,15 @@ def run_register(
 
     if not register_url:
         return (
-            ToolResult(
+            UnifiedToolResult(
+                tool_name="register",
+                status=ToolStatus.NONZERO_EXIT,
                 stdout=json.dumps({
                     "status": "failed",
                     "error_code": "FORM_NOT_FOUND",
                     "message": ERROR_CODES["FORM_NOT_FOUND"],
                 }),
                 stderr=ERROR_CODES["FORM_NOT_FOUND"],
-                success=False,
-                tool="register",
             ),
             ctx,
         )
@@ -166,10 +166,10 @@ def run_register(
                     result_data["email"] = email
 
                     return (
-                        ToolResult(
+                        UnifiedToolResult(
+                            tool_name="register",
+                            status=ToolStatus.SUCCESS,
                             stdout=json.dumps(result_data),
-                            success=True,
-                            tool="register",
                         ),
                         ctx,
                     )
@@ -185,11 +185,11 @@ def run_register(
                     result_data["email"] = email
 
                     return (
-                        ToolResult(
+                        UnifiedToolResult(
+                            tool_name="register",
+                            status=ToolStatus.NONZERO_EXIT,
                             stdout=json.dumps(result_data),
                             stderr=ERROR_CODES["EMAIL_VERIFICATION_REQUIRED"],
-                            success=False,
-                            tool="register",
                         ),
                         ctx,
                     )
@@ -231,11 +231,11 @@ def run_register(
     # All retries exhausted
     result_data["error"] = last_error
     return (
-        ToolResult(
+        UnifiedToolResult(
+            tool_name="register",
+            status=ToolStatus.NONZERO_EXIT,
             stdout=json.dumps(result_data),
             stderr=last_error or ERROR_CODES["UNKNOWN_FAILURE"],
-            success=False,
-            tool="register",
         ),
         ctx,
     )
