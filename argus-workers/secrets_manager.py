@@ -100,7 +100,8 @@ class SecretsManager:
                 response = vault.secrets.kv.v2.read_secret_version(
                     path=f"{path}/{key}"
                 )
-                value = response["data"]["data"]["value"]
+                data = response.get("data", {}).get("data", {})
+                value = data.get(key) or data.get("value") or ""
                 self._cache[key] = value
                 return value
             except Exception as e:
@@ -111,7 +112,13 @@ class SecretsManager:
         if aws:
             try:
                 response = aws.get_secret_value(SecretId=f"argus/{key}")
-                value = response.get("SecretString", default)
+                if "SecretString" in response:
+                    value = response["SecretString"]
+                elif "SecretBinary" in response:
+                    import base64
+                    value = base64.b64decode(response["SecretBinary"]).decode()
+                else:
+                    value = default
                 self._cache[key] = value
                 return value
             except Exception as e:

@@ -309,7 +309,7 @@ class AttackGraph:
             if new_severity_value > existing_severity_value:
                 existing_node.data["severity"] = finding_severity
                 existing_node.data["source_tool"] = finding.source_tool
-                existing_node.cvss = finding.cvss_score or self._estimate_cvss(finding_severity)
+                existing_node.cvss = finding.cvss_score if finding.cvss_score is not None else self._estimate_cvss(finding_severity)
                 # Update confidence to max of existing and new
                 if finding.confidence and finding.confidence > (existing_node.confidence or 0):
                     existing_node.confidence = finding.confidence
@@ -325,7 +325,7 @@ class AttackGraph:
                 "endpoint": finding.endpoint,
                 "source_tool": finding.source_tool,
             },
-            cvss=finding.cvss_score or self._estimate_cvss(finding_severity),
+            cvss=finding.cvss_score if finding.cvss_score is not None else self._estimate_cvss(finding_severity),
             confidence=finding.confidence,
         )
         self.nodes[vuln_node_id] = vuln_node
@@ -489,14 +489,17 @@ class AttackGraph:
         # Calculate risk for each path
         path_risks = []
         chains = self.find_chains()
-        chain_map = {c["prereq_node"].id: c for c in chains}
+        from collections import defaultdict
+        chain_map: dict[str, list[dict]] = defaultdict(list)
+        for c in chains:
+            chain_map[c["prereq_node"].id].append(c)
 
         for path in paths:
             risk = self.compute_risk(path)
 
-            # Apply chain bonus if this is a chain path
+            # Apply chain bonus if this is a chain path (all matching chains)
             if len(path.nodes) >= 2 and path.nodes[0].id in chain_map:
-                chain = chain_map[path.nodes[0].id]
+                chain = chain_map[path.nodes[0].id][0]
                 risk *= chain["correlation_factor"]
 
             path_risks.append({

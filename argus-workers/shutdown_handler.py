@@ -19,8 +19,8 @@ class GracefulShutdownHandler:
 
     def __init__(self):
         self.shutdown_requested = False
-        self.original_sigterm_handler: signal.Handler | None = None
-        self.original_sigint_handler: signal.Handler | None = None
+        self.original_sigterm_handler = None
+        self.original_sigint_handler = None
         self.active_tasks: set = set()  # Track active task IDs
         self._lock = threading.Lock()
         self.shutdown_deadline = None
@@ -46,9 +46,14 @@ class GracefulShutdownHandler:
         self.shutdown_requested = True
         self.shutdown_deadline = time.time() + self.force_exit_after
 
-        # Log active tasks
-        with self._lock:
-            active_count = len(self.active_tasks)
+        # Log active tasks (non-blocking acquire to prevent deadlock
+        # if signal arrives while lock is held by another thread)
+        active_count = 0
+        if self._lock.acquire(blocking=False):
+            try:
+                active_count = len(self.active_tasks)
+            finally:
+                self._lock.release()
         if active_count:
             logger.info(f"Waiting for {active_count} active tasks to complete")
 

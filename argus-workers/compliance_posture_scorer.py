@@ -551,8 +551,10 @@ class CompliancePostureScorer:
                         }
                     ctrl = control_map[fw_name][ref]
                     sev = f.get("severity", "INFO")
-                    severity_order = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
-                    if severity_order.index(sev) > severity_order.index(ctrl["worst_severity"]):
+                    severity_rank = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+                    sev_level = severity_rank.get(sev, -1)
+                    worst_level = severity_rank.get(ctrl["worst_severity"], -1)
+                    if sev_level > worst_level:
                         ctrl["worst_severity"] = sev
                     ctrl["count"] += 1
                     ctrl["last_finding_at"] = max(

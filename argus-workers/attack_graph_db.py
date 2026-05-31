@@ -94,8 +94,11 @@ class AttackGraphRepository:
                     # Build a fingerprint from the path node types to match across re-saves
                     try:
                         old_nodes = json.loads(old_path_nodes_json) if isinstance(old_path_nodes_json, str) else old_path_nodes_json
+                        # Use finding type from node.data (e.g. "XSS", "SQL_INJECTION")
+                        # not the generic node.type field ("vulnerability"/"endpoint")
+                        # to prevent chain scripts from being restored to wrong paths.
                         node_types = tuple(
-                            n.get("type", "") for n in (old_nodes.get("nodes") or [])
+                            n.get("data", {}).get("type", "") for n in (old_nodes.get("nodes") or [])
                         )
                         existing_scripts[str(node_types)] = script
                     except (json.JSONDecodeError, AttributeError):
@@ -142,7 +145,8 @@ class AttackGraphRepository:
                 normalized_severity = self._risk_to_normalized_severity(risk)
 
                 # Re-associate any previously-saved chain_exploit_script
-                node_types = tuple(n.get("type", "") for n in path_nodes["nodes"])
+                # Use finding type for matching (same fingerprint as above)
+                node_types = tuple(n.get("data", {}).get("type", "") for n in path_nodes["nodes"])
                 chain_script = existing_scripts.get(str(node_types))
 
                 if chain_script:
