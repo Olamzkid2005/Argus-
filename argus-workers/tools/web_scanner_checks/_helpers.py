@@ -133,7 +133,13 @@ def test_jwt_alg_none(
     if len(parts) != 3:
         return None
     try:
-        json.loads(base64.urlsafe_b64decode(parts[0] + "==").decode("utf-8"))
+        # JWT uses URL-safe base64 without padding — add padding correctly
+        padding = 4 - len(parts[0]) % 4
+        if padding != 4:
+            padded = parts[0] + "=" * padding
+        else:
+            padded = parts[0]
+        json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
     except Exception:
         return None
 

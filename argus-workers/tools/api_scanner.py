@@ -381,7 +381,14 @@ class LegacyAPISecurityScanner:
 
             parts = token.split(".")
             if len(parts) == 3:
-                header = json.loads(base64.b64decode(parts[0] + "=="))
+                # JWT uses URL-safe base64 (RFC 7515) — use urlsafe_b64decode
+                def _b64_decode(part: str) -> bytes:
+                    padding = 4 - len(part) % 4
+                    if padding != 4:
+                        part += "=" * padding
+                    return base64.urlsafe_b64decode(part)
+
+                header = json.loads(_b64_decode(parts[0]))
                 alg = header.get("alg", "").lower()
                 # Generate LLM JWT payloads for algorithm confusion testing
                 llm_jwt_payloads = []
@@ -423,7 +430,7 @@ class LegacyAPISecurityScanner:
 
                 # Check for weak secrets via common test
                 if alg == "hs256":
-                    payload = json.loads(base64.b64decode(parts[1] + "=="))
+                    payload = json.loads(_b64_decode(parts[1]))
                     if payload.get("admin") is True or payload.get("role") == "admin":
                         self._add_finding(
                             finding_type="JWT_PRIVILEGE_ESCALATION",
