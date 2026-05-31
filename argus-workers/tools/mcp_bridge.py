@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 
+from tool_core.result import UnifiedToolResult
 from tool_definitions import build_mcp_tool_definitions
 from mcp_server import ToolDefinition, get_mcp_server
 from tools.tool_runner import ToolRunner
@@ -78,7 +79,7 @@ class MCPToolBridge:
         slog.tool_complete(f"mcp_call:{tool}")
         return result
 
-    def call_via_runner(self, tool: str, args: list[str], timeout: int = None) -> dict:
+    def call_via_runner(self, tool: str, args: list[str], timeout: int = None) -> UnifiedToolResult:
         """Call a tool via the existing ToolRunner."""
         timeout = timeout or 300
         return self.tool_runner.run(tool, args, timeout=timeout)

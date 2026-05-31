@@ -458,7 +458,7 @@ class ToolRunner:
                     tool_name=tool,
                     command=[tool_path] + args,
                     target="",
-                    status=ToolStatus.SUCCESS,
+                    status=ToolStatus.SUCCESS if (result.returncode == 0 or result.returncode in findings_exit_codes.get(tool, set())) else ToolStatus.NONZERO_EXIT,
                     stdout=result.stdout,
                     stderr=result.stderr,
                     exit_code=result.returncode,
