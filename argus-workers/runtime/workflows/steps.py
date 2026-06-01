@@ -25,16 +25,13 @@ class AuthenticateStep(WorkflowStep):
 
     name = "authenticate"
 
-    def run(self, ctx: WorkflowContext) -> StepResult:  # type: ignore[override]
+    def run(self, ctx: WorkflowContext) -> StepResult:
         ctx.session_a = self._authenticate(ctx.auth_config_a, "user_a", ctx)
         ctx.session_b = self._authenticate(ctx.auth_config_b, "user_b", ctx)
         return StepResult(success=True)  # obstacles (if any) already recorded
 
     def _authenticate(
-        self,
-        auth_config: dict,
-        role: str,
-        ctx: WorkflowContext,
+        self, auth_config: dict, role: str, ctx: WorkflowContext
     ) -> requests.Session | None:
         from tools.auth_manager import AuthError, AuthManager
 
@@ -67,7 +64,7 @@ class DiscoverOwnedResourcesStep(WorkflowStep):
 
     name = "discover_resources"
 
-    def run(self, ctx: WorkflowContext) -> StepResult:  # type: ignore[override]
+    def run(self, ctx: WorkflowContext) -> StepResult:
         if not ctx.session_a:
             return StepResult(success=True, skipped=True)
 
@@ -126,7 +123,7 @@ class TestBolaStep(WorkflowStep):
 
     name = "test_bola"
 
-    def run(self, ctx: WorkflowContext) -> StepResult:  # type: ignore[override]
+    def run(self, ctx: WorkflowContext) -> StepResult:
         if not ctx.session_b or ctx.skip_bola or not ctx.owned_resources:
             return StepResult(success=True, skipped=True)
 
@@ -173,7 +170,7 @@ class TestBoplaStep(WorkflowStep):
 
     name = "test_bopla"
 
-    def run(self, ctx: WorkflowContext) -> StepResult:  # type: ignore[override]
+    def run(self, ctx: WorkflowContext) -> StepResult:
         from tools.dual_auth_scanner import DualAuthScanner
 
         scanner = DualAuthScanner.for_phase_execution(
