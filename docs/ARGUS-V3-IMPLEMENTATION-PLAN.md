@@ -207,14 +207,17 @@ class TestBolaStep(WorkflowStep):
         )
         # for_phase_execution sets scanner._builder = FindingBuilder(...) which
         # routes all findings through validation + sanitization + SSE streaming.
-        # _test_cross_account_access calls self._emit_finding(f) → FindingBuilder.add()
-        # → emit_finding callback. No lambda injection needed.
+        # _test_cross_account_access RETURNS findings but does NOT emit them
+        # (unlike _check_bopla which also returns without emitting — the caller
+        # in DualAuthScanner.execute() loops and emits). We must emit here.
 
-        findings = scanner._test_cross_account_access(ctx.session_b, ctx.owned_resources)
-        ctx.bola_findings = len(findings)
+        raw_findings = scanner._test_cross_account_access(ctx.session_b, ctx.owned_resources)
+        for f in raw_findings:
+            scanner._emit_finding(f)  # routes through FindingBuilder.add() → emit_finding_callback
+        ctx.bola_findings = len(raw_findings)
 
         # If the step ran but no requests succeeded, surface the failure.
-        if not scanner._last_request_succeeded and len(findings) == 0:
+        if not scanner._last_request_succeeded and len(raw_findings) == 0:
             ctx.state.add_obstacle({
                 "type": "target_unreachable",
                 "detected_at": time.time(),
@@ -224,7 +227,7 @@ class TestBolaStep(WorkflowStep):
                 "metadata": {"target": ctx.target, "phase": "bola_test"},
             })
 
-        return StepResult(success=True, findings_emitted=len(findings))
+        return StepResult(success=True, findings_emitted=len(raw_findings))
 ```
 
 **Obstacles emitted:** `target_unreachable` (only if every `_safe_request` call failed and no findings were produced)
@@ -577,7 +580,7 @@ class BolaWorkflow:
 | 4 | Wire into `orchestrator_pkg/scan.py:806-844` | ✅ `is_enabled("bola_workflow", default=False)` |
 | 5 | Remove flag, deprecate `DualAuthScanner` | Remove flag (after 1 sprint of stable bola_workflow) |
 
-**Step 4 is the safety gate.** Deploy all code with the flag OFF. Flip ON for test engagements. If it breaks, `redis-cli SET "feature_flag:bola_workflow" 0` restores legacy behavior (the next scan task runs `DualAuthScanner`).
+**Step 4 is the safety gate.** Deploy all code with the flag OFF. Flip ON for test engagements. If it breaks, `export ARGUS_FF_BOLA_WORKFLOW=0` (env var overrides all) or `UPDATE feature_flags SET enabled = false WHERE flag_name = 'bola_workflow';` (persistent) restores legacy behavior (the next scan task runs `DualAuthScanner`).
 
 **Wiring sketch (orchestrator_pkg/scan.py:806-844 replacement):**
 
@@ -618,8 +621,12 @@ if dual_auth_config is not None and auth_config is not None:
 
 ```bash
 # Scenario 1: BolaWorkflow crashes in production
-redis-cli SET "feature_flag:bola_workflow" 0
-# → next scan task runs DualAuthScanner (legacy path)
+# FeatureFlags checks env var (ARGUS_FF_<NAME>) then DB (feature_flags table),
+# NOT Redis. Use the fastest path for emergency disable:
+export ARGUS_FF_BOLA_WORKFLOW=0
+# → next scan task reads env var (priority 1), skips BolaWorkflow
+# Persistent disable (survives worker restart):
+#   psql $DATABASE_URL -c "UPDATE feature_flags SET enabled = false WHERE flag_name = 'bola_workflow';"
 
 # Scenario 2: obstacles field breaks SSE consumer (step 1 regression)
 git revert <commit-hash-for-step-1>
@@ -651,7 +658,7 @@ redis-cli DEL "engagement_state:{engagement_id}"
 | `AuthError` message may leak sensitive data | Resolved: obstacles store `error_class: "AuthError"` only, NOT `str(e)`. The `AuthError` exception's message can include response bodies, URLs, and form field names (`auth_manager.py:659, 744`). The obstacle's `type` field encodes the failure category. Diagnostic detail belongs in `logger.debug(...)`, not in structured state. |
 | Session FD leak across many engagements | Resolved: `BolaWorkflow.execute()` has a `finally` block that calls `session.close()` on `session_a` and `session_b`. Verified by `tests/test_bola_workflow_unit.py` that asserts sessions are closed after a workflow that raises. |
 | E2E test could flake (port collisions) | `tests/test_bola_workflow_integration.py` uses `responses` for unit tests. The one socket-based integration test binds to `127.0.0.1:0` (random port) and is marked `@pytest.mark.integration` — excluded from default CI per `pytest -m "not integration"`. |
-| Feature flag key collision | Key `"feature_flag:bola_workflow"` follows existing convention (see `feature_flags.py:140-141` `SELECT enabled FROM feature_flags WHERE flag_name = %s`). |
+| Feature flag name collision | Flag name `"bola_workflow"` follows existing convention (see `feature_flags.py:140-141` `SELECT enabled FROM feature_flags WHERE flag_name = %s`). Env var override: `ARGUS_FF_BOLA_WORKFLOW=0`. |
 | Redis TTL expiry mid-workflow | `_bump_version()` called every ~6s during the workflow (one per step). TTL (300s default) reset before expiry. |
 | `AuthManager` not having a captcha/2fa recovery | Out of scope. V1 is operator-supplied; the operator provides credentials that don't need captcha or 2fa. |
 | `target_unreachable` obstacle in catalog but no emitter | Resolved: `for_phase_execution()` sets `_last_request_succeeded = False` and the wrapped `_safe_request` flips it to `True` on any non-None response. Steps 2 and 3 check the flag and emit `target_unreachable` when no requests succeeded and no findings were produced. |
