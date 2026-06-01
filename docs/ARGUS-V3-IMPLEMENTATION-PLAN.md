@@ -737,6 +737,6 @@ redis-cli DEL "engagement_state:{engagement_id}"
 - [x] **MEDIUM FIX #5:** `BolaWorkflow.execute()` has `finally` block that closes `session_a` and `session_b` to prevent FD leaks
 - [x] **LOW FIX:** `AuthError` message NOT included in obstacle metadata — only `error_class` is stored
 - [x] Step self-reports obstacles — per-step specificity
-- [x] `responses` mocks + 1 socket integration — best coverage/effort ratio
+- [x] `responses` mocks + 2 socket integration tests (BOLA + BOPLA-after-failure) — best coverage/effort ratio
 - [x] Feature flag gated rollout — `is_enabled("bola_workflow", default=False)`
 - [x] V2 deferred items listed explicitly — no scope creep
