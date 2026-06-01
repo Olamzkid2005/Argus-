@@ -1,356 +1,616 @@
-# ARGUS V3 Implementation Plan — Final (10 Iterations)
+# ARGUS V3 Implementation Plan — V1 (Operator-Supplied BOLA + BOPLA Workflow)
 
-**Date:** 2026-06-01  
-**Status:** Design complete, ready for implementation  
-**Total:** ~1080 lines new code, ~90 lines modifications, 0 lines refactored
-
----
-
-## What This Plan Delivers
-
-A **BOLA workflow engine** that runs as a first-class primitive inside the existing scan phase:
-
-```
-Create identity A → Create resource as A → Register identity B →
-Switch to B's session → Replay A's captured request →
-Analyze response → Generate findings
-```
-
-Built on top of the existing platform without rewriting a single working file.
+**Date:** 2026-06-01
+**Status:** Approved for implementation (post-review corrections applied)
+**Total:** ~905 lines new code, ~78 lines modifications, 0 lines refactored
+**V1 scope:** Replace `DualAuthScanner` call site with a step-based workflow that reuses existing BOLA/BOPLA detection. V2 commitments (capture-replay, POST resource creation, step-level crash recovery) are explicitly deferred.
 
 ---
 
-## File Budget (Final, After 10 Iterations)
+## What V1 Delivers
 
-### New files (7)
+A step-based BOLA + BOPLA workflow that runs as a first-class primitive inside the existing scan phase:
+
+```
+Authenticate A → Discover A's resources → Authenticate B →
+Test BOLA (B vs A's resources) → Test BOPLA (both A and B)
+```
+
+**Zero new detection logic.** All BOLA/BOPLA findings come from calling existing `dual_auth_scanner._test_cross_account_access()` and `dual_auth_scanner._check_bopla()`. The workflow is a clean refactor of `DualAuthScanner` into a step pattern with explicit obstacle handling and feature-flagged rollout.
+
+**Operator-supplied credentials.** Both auth configs come from the existing `auth_config` and `dual_auth_config` parameters at `tasks/scan.py:27-28` (gated by `orchestrator_pkg/scan.py:807`). No registration, no captcha, no email verification — all out of scope per the plan's own coverage table line 349.
+
+---
+
+## File Budget
+
+### New files (4 code files, 3 test files)
 
 | File | Lines | Purpose |
 |---|---|---|
-| `runtime/workflows/base.py` | ~50 | `Workflow` + `WorkflowStep` base classes, step checkpointing |
-| `runtime/workflows/bola.py` | ~250 | `BolaWorkflow` class — 7 steps wired in sequence |
-| `runtime/workflows/steps.py` | ~160 | `RegisterIdentityStep`, `CreateOrDiscoverStep`, `LoginIdentityStep`, `SwitchIdentityStep`, `RequestCaptureStep`, `ReplayStep`, `AnalyzeAuthorizationStep` |
-| `runtime/workflows/resources.py` | ~60 | `ResourceCreationStrategy` — pluggable resource creation/discovery (V1: common POST patterns, V2: Playwright, V3: LLM) |
-| `runtime/traffic/capture.py` | ~50 | `RequestCapture` — 30-line `Session.send` patch (V1; V2 = Playwright, V3 = mitmproxy) |
-| `runtime/traffic/models.py` | ~20 | `CapturedRequest` schema — version-agnostic across all capture backends |
-| `tests/` (multiple files) | ~500 | Unit, integration, E2E test files |
-| **Total new** | **~1080** | |
+| `runtime/workflows/base.py` | ~90 | `Workflow` + `WorkflowStep` base classes, `WorkflowContext` + `StepResult` + `WorkflowResult` dataclasses |
+| `runtime/workflows/bola.py` | ~165 | `BolaWorkflow` — 4 steps wired in sequence, local findings counter, session cleanup |
+| `runtime/workflows/steps.py` | ~130 | `AuthenticateStep`, `DiscoverOwnedResourcesStep`, `TestBolaStep`, `TestBoplaStep` |
+| `runtime/workflows/__init__.py` | ~5 | Re-exports `BolaWorkflow`, `WorkflowResult` |
+| `tests/test_bola_workflow_unit.py` | ~250 | Unit tests (responses mocks) for each step + workflow orchestration |
+| `tests/test_bola_workflow_integration.py` | ~150 | One real-socket integration test (excluded from default CI) |
+| `tests/test_engagement_state_obstacles.py` | ~100 | Tests for `state.obstacles` + `add_obstacle()` + `to_dict()` count |
+| **Total new** | **~890** | |
 
-### Modified files (2)
+### Modified files (3)
 
 | File | Change | Lines |
 |---|---|---|
-| `runtime/engagement_state.py` | Add `identities`, `sessions`, `resources`, `captured_requests`, `obstacles`, `workflow_completed` fields + `add_obstacle()` + `to_dict_full()` + `_bump_version_full()` | +55 |
-| `orchestrator_pkg/scan.py:806-843` | Replace `DualAuthScanner` call with `BolaWorkflow` behind `_feature_enabled("bola_workflow")` flag | +35 |
-| **Total modified** | | **+90** |
+| `runtime/engagement_state.py` | Add `obstacles: list[dict]` field + `add_obstacle(obstacle: dict)` method + `obstacles_count` in `to_dict()` | +13 |
+| `tools/dual_auth_scanner.py` | Add `DualAuthScanner.for_phase_execution()` classmethod to encapsulate the `__new__` bypass (additive, no behavior change to existing methods) | +20 |
+| `orchestrator_pkg/scan.py:806-844` | Replace `DualAuthScanner` call with `BolaWorkflow` behind `is_enabled("bola_workflow", default=False)` | +45 |
+| **Total modified** | | **+78** |
 
 ### Files with ZERO changes
 
 `agent/tools/register_tool.py`, `agent/tools/login_tool.py`, `agent/form_discovery.py`,
-`agent/auth_context.py`, `agent/auth_checkpoint.py`, `tools/dual_auth_scanner.py`,
-`tools/auth_manager.py`, `orchestrator.py`, `phases.py`, `tasks/base.py`,
-`tasks/scan.py`, `runtime/decision_checkpoint.py`, `state_machine.py`,
-`pipeline_router.py`, `agent/agent_prompts.py`
-
----
-
-## Iteration Results Summary
-
-### Iteration 1 — Architecture & State Model
-
-**Correction applied:** `EngagementState` at `runtime/engagement_state.py:63` IS production code (exported from `runtime/__init__.py:19`, used by `ExecutionEngine.execute()` at `runtime/execution_engine.py:138-149`). Not dead code. Extend it with 5 new fields instead of creating a new `OperationContext` god object.
-
-**Gap found:** `to_dict()` at line 285-301 saves only counts (`findings_count`, `observations_count`, etc.) — not the actual data. Workflow needs `to_snapshot_dict()` (line 303-314) for full state. Added `to_dict_full()` method.
-
-**Gap found:** `add_observation` at line 179-190 truncates to 2000 chars and caps at 50 entries. Workflow records via `record_tool_execution()` instead.
-
-### Post-Review Refinement 1 — RequestCapture must be version-aware
-
-**Concern (from review):** `requests.Session.send` patch only captures Python `requests`. Modern SPAs use Playwright/XHR/fetch. V1 is fine but V2/V3 must be explicitly planned.
-
-**Existing Playwright infra at** `tools/_browser_scan_worker.py:69-75` already has `page.on('console', ...)` — the same `page.on('request', handler)` API is ready for V2.
-
-**Fix:** Add a version-agnostic schema + docstring that commits to V2/V3:
-
-```python
-# runtime/traffic/models.py  (NEW)
-
-@dataclass
-class CapturedRequest:
-    """Unified schema across all capture backends.
-    V1: requests.Session.send patch (this PR)
-    V2: Playwright page.on('request')  (infra exists at browser_scan_worker.py:69)
-    V3: Mitmproxy dump file import
-    """
-    method: str
-    url: str
-    headers: dict
-    body: str | None
-    cookies: str = ""           # NEW — anti-replay headers, CSRF, nonce
-    query_params: str = ""      # NEW — separate from URL for clean replay
-    content_type: str = ""      # NEW — explicit CT for body encoding
-    owner_identity_id: str
-    captured_at: float = time.time()
-    source: str = "session_patch"  # "session_patch" | "playwright" | "mitmproxy"
-```
-
-**Delta:** +1 file (`models.py`, ~20 lines), +docstring on `RequestCapture`.
-
-### Post-Review Refinement 2 — Resource creation needs a strategy pattern
-
-**Concern (from review):** POST to URL template works for controlled targets (crAPI, Juice Shop) but not real engagements — each app has a different resource creation flow.
-
-**Fix:** Rename `CreateResourceStep` → `ResourceCreationStrategy`. V1 strategy tries common POST patterns and falls back to GET-based discovery (existing `_discover_owned_resources` at `dual_auth_scanner.py:286-348`). V2+ strategy can use LLM reasoning, browser automation, or manual script.
-
-```python
-# runtime/workflows/resources.py  (NEW ~60 lines)
-
-class ResourceCreationStrategy:
-    """Pluggable: how does the workflow create resources as identity X?
-    V1: try POST /api/{type}/ with generic JSON body, fall back to GET discovery
-    V2: Playwright form fill + submit
-    V3: LLM-guided (agent reasons about the target's form)
-
-    NOTE (V1 fallback adaptation):
-    dual_auth_scanner._discover_owned_resources() returns dict[str, list[str]]
-    (resource_type → [ids]), not list[str]. The fallback filters by the
-    requested resource_type before returning. This mapping is internal to
-    the V1 strategy — the public signature stays -> list[str].
-    """
-    def create_or_discover(self, identity, resource_type: str) -> list[str]:
-        # Try create first (POST)
-        # Fall back to discover (GET crawl — reuse dual_auth_scanner logic)
-        #   results = _discover_owned_resources(session)
-        #   return results.get(resource_type, [])
-```
-
-**The BolaWorkflow receives it as injected dependency:**
-```python
-workflow = BolaWorkflow(
-    target=target,
-    resource_strategy=ResourceCreationStrategy()  # injected, not hardcoded
-)
-```
-
-**Delta:** +1 file (`resources.py`, ~60 lines), BolaWorkflow constructor takes `resource_strategy` parameter.
-
-### Post-Review Refinement 3 — Obstacles must carry recovery metadata
-
-**Concern (from review):** Obstacles are recorded, not solved. The data model should anticipate future recovery providers without building them now.
-
-**Fix:** Add `recoverable: bool` and `recovery_paths: list[str]` to every Obstacle dict:
-
-```python
-Obstacle = {
-    "type": str,                    # "email_verification_required"
-    "detected_at": float,
-    "source_tool": str,
-    "confidence": float,
-    "recoverable": bool,            # NEW — True if a recovery path exists
-    "recovery_paths": list[str],    # NEW — ["try_login_anyway", "skip"]
-    "metadata": dict,
-}
-```
-
-**V1 recovery table:**
-
-| Obstacle | Recoverable? | V1 paths | V2+ paths |
-|---|---|---|---|
-| `email_verification_required` | No | `["try_login_anyway"]` | EmailProvider |
-| `captcha_detected` | No | `["skip_target"]` | CaptchaProvider |
-| `2fa_required` | No | `["skip_auth"]` | OtpProvider |
-| `rate_limited` | Yes | `["backoff_and_retry"]` | Scheduler |
-| `account_locked` | No | `["skip_auth"]` | Recovery flow |
-| `email_exists` | Yes | `["regenerate_email"]` | Multi-domain |
-
-**Delta:** ~5 lines added to the Obstacle dict in each step wrapper.
-
-### Post-Review Refinement 4 — WorkflowResult contract
-
-**Concern:** `Workflow.execute()` returns a loose dict. When `BolaWorkflow`, `IdorWorkflow`, `PrivilegeEscWorkflow` all exist, the orchestrator needs a uniform return type.
-
-**Fix:** Define a `WorkflowResult` dataclass that every workflow returns:
-
-```python
-# runtime/workflows/base.py
-
-@dataclass
-class WorkflowResult:
-    """Uniform result contract for ALL workflow types.
-    Orchestrator dispatches on this — it doesn't inspect workflow internals.
-
-    success is set EXPLICITLY by the workflow, NOT derived from state.
-    A clean run with zero findings is success=True, findings_created=0.
-    A partially-completed run with obstacles is success=True, obstacles_encountered=N.
-    A crashed run is success=False.
-    """
-    success: bool
-    findings_created: int
-    obstacles_encountered: int
-    identities_created: int
-    resources_created: int
-    requests_captured: int
-    outcome: str = "complete"              # "complete" | "partial" | "crashed"
-    metadata: dict = field(default_factory=dict)
-
-    @classmethod
-    def from_state(cls, state: EngagementState, *, success: bool = True, outcome: str = "complete") -> "WorkflowResult":
-        return cls(
-            success=success,
-            outcome=outcome,
-            findings_created=len(state.findings),
-            obstacles_encountered=len(state.obstacles),
-            identities_created=len(state.identities),
-            resources_created=len(state.resources),
-            requests_captured=len(state.captured_requests),
-            metadata={
-                "engagement_id": state.engagement_id,
-                "current_phase": state.current_phase,
-                "state_version": state.state_version,
-            },
-        )
-```
-
-**Then every `workflow.execute(state)` ends with:**
-```python
-return WorkflowResult.from_state(state)
-```
-
-**The orchestrator reads outcome first, then success:**
-```python
-if result.outcome == "crashed":
-    slog.warning(f"Workflow crashed — {result.metadata}")
-elif result.obstacles_encountered > 0:
-    slog.info(f"Partial coverage: {result.obstacles_encountered} obstacles encountered")
-if result.findings_created > 0:
-    emit_finding_rt(...)
-```
-
-**Delta:** ~20 lines added to `runtime/workflows/base.py`. No behavioral change — `WorkflowResult.from_state()` is a constructor, not a run path.
-
-### Post-Review Refinement 5 — Anti-replay risk acknowledgement
-
-**Concern (from review):** V1 `ReplayStep` replays captured frames without refreshing CSRF tokens, anti-replay headers, or request signatures. Targets that validate these will reject the replayed request — the BOLA test produces a false negative.
-
-**Risk assessment:** Real but acceptable for V1. Three scenarios:
-
-| Target behavior | Replay result | Workflow outcome |
-|---|---|---|
-| No CSRF / no anti-replay | Normal response | CONFIRMED_BOLA or POTENTIAL_BOLA (correct) |
-| Per-request CSRF token | 403 Forbidden | `Obstacle("replay_rejected", recoverable=False)` — recorded, workflow continues |
-| Request signature (HMAC, JWT binding) | 403 or silent authz | `Obstacle("replay_rejected")` — workflow continues |
-
-**No code change needed.** The `Obstacle` data model (Refinement 3) already has `recoverable: bool` and `recovery_paths: list[str]`. V1 sets both to `False` and `["skip"]` for replay failures. V2+ can implement per-request CSRF token refresh or request re-signing.
-
-**Delta:** 0 lines of code. Documented in the mitigation log.
-
-### Iteration 2 — Celery Serialization & Cross-Task State
-
-**Key insight:** The BolaWorkflow runs INSIDE a single Celery task (the scan task at `tasks/scan.py:15`, `soft_time_limit=2400`). Steps are in-memory; no cross-task serialization needed.
-
-**Crash recovery:** Each step writes its completion status to `agent_decision_log` via `DecisionCheckpoint` (reusing the existing table for step tracking — `selected_tool` stores the step name, `arguments` stores the step output snapshot). 
-
-> **Schema note:** `DecisionCheckpoint` is designed for agent decisions (`selected_tool` + `arguments`), not generic step payloads. Step OUTPUT data (captured requests, identities, resources) is carried in `EngagementState` fields and persisted via `state_cache.save()` (see Iteration 3). The `agent_decision_log` entry is used only for crash recovery — detecting which steps completed on retry.
-
-On retry, `find_latest_checkpoint()` skips completed steps. `register_tool.py:209-213` handles `EMAIL_EXISTS` on re-run.
-
-### Iteration 3 — Concurrency & Session Lifecycle
-
-**Key insight:** The BolaWorkflow runs synchronously in the same sequential path as the existing `DualAuthScanner` — AFTER the `ThreadPoolExecutor(max_workers=5)` at `orchestrator_pkg/scan.py:684` (see L806-844). The synchronous execution model means no other tool is sharing the `authenticated_session` during the workflow, which eliminates thread-safety issues around `Session.send` patching. `DistributedLock` at `tasks/base.py:166` prevents concurrent engagement writes.
-
-**Missing:** Wire `BolaWorkflow` through `ExecutionEngine.execute()` at `runtime/execution_engine.py:138-149` for free step recording to `EngagementState.tool_history`.
-
-> **`_bump_version` note:** The existing `_bump_version()` at `engagement_state.py:121` hardcodes `self.to_dict()` (count-only serializer). Workflow steps need full-state persistence. Add `_bump_version_full()` that calls `to_dict_full()` instead, or have the workflow call `state_cache.save()` directly with `to_dict_full()` after each step.
-
-### Iteration 4 — Detector Refactor / "No Refactoring"
-
-**Key insight:** `run_register` and `run_login` return `(UnifiedToolResult, AuthContext)`. On `NONZERO_EXIT`, stdout contains JSON with `error_code`. The workflow wrapper parses this and converts to an obstacle — no changes needed to register_tool.py or login_tool.py.
-
-**Zero lines changed in existing tools.** The entire detector-to-obstacle conversion lives in `steps.py` — ~40 lines of wrapper code.
-
-### Iteration 5 — Failure Modes & Workflow Interruption
-
-**Key insight:** `state_machine.py:41-50` has `"failed": []` — no transitions out of 'failed'. If the workflow lets an exception propagate, the engagement is dead.
-
-**Fix:** `Workflow.execute()` catches all step exceptions. They become obstacles. The workflow never throws. `SoftTimeLimitExceeded` still terminates at the Celery level (caught at `tasks/base.py:202`).
-
-### Iteration 6 — Test Strategy (Dedicated)
-
-Three-layer architecture:
-1. **Unit tests** (pure Python, all mocks): `test_request_capture.py`, `test_workflow_base.py`, `test_workflow_steps.py`, `test_bola_workflow.py`, `test_engagement_state_extensions.py`
-2. **Integration tests** (real tool logic, mock HTTP): `test_workflow_checkpoint_recovery.py`, `test_request_capture_integration.py`
-3. **E2E test** (real threaded HTTP server): `test_e2e_bola_workflow.py` — proves the full chain without network or infrastructure
-
-### Iteration 7 — Observability, Logging, Debugging
-
-Follow `DualAuthScanner`'s pattern at `dual_auth_scanner.py:168-228`:
-- `ScanLogger` for structured phase logging (`slog.phase_header`, `slog.tool_start/complete`)
-- `emit_tool_start/complete` for frontend SSE events
-- `state._bump_version()` after each step for Redis persistence
-- **Never log passwords or raw cookies.** Follow the pattern at line 181: `slog.info("User A authenticated")`.
-
-### Iteration 8 — Migration & Incremental Rollout
-
-5-step migration, each independently revertable:
-
-| Step | Change | Feature flag |
-|---|---|---|
-| 1 | EngagementState extensions | None |
-| 2 | `runtime/traffic/capture.py` | None |
-| 3 | `runtime/workflows/` | None |
-| 4 | Wire into scan.py | ✅ `_feature_enabled("bola_workflow", default=False)` |
-| 5 | Remove flag, deprecate DualAuthScanner | Remove flag |
-
-**Step 4 is the safety gate.** Deploy all code with the flag OFF. Flip ON for test engagements. If it breaks, `redis-cli DEL "feature_flag:bola_workflow"` restores legacy behavior.
-
-### Iteration 9 — Cost, Performance, Caching
-
-BolaWorkflow costs vs. DualAuthScanner:
-
-| Resource | DualAuthScanner | BolaWorkflow | Acceptable? |
-|---|---|---|---|
-| HTTP requests | ~4 | ~7 | Yes — within 40min soft limit |
-| DB writes | 0 | 7 × 500 bytes | Trivial |
-| Redis writes | 0 | 7 × ~100 bytes | Trivial |
-| Wall time | ~20s | ~40s | Noise in 2400s budget |
-
-**Secrets must NOT be cached.** `to_dict_full()` must exclude `password`, `cookie_string`, and `authorization`.
+`agent/auth_context.py`, `agent/auth_checkpoint.py`, `tools/auth_manager.py`,
+`orchestrator.py`, `phases.py`, `tasks/base.py`, `tasks/scan.py`,
+`runtime/decision_checkpoint.py`, `runtime/execution_engine.py`,
+`state_machine.py`, `pipeline_router.py`, `agent/agent_prompts.py`,
+`feature_flags.py`, `streaming.py`
 
 ---
 
 ## Final Architecture
 
 ```
-tasks/scan.py (existing)
-  └─ task_context(...)                          [DistributedLock + state machine]
-      └─ Orchestrator.run_scan(job)             [existing dispatcher]
-          └─ execute_scan_tools(...)            [existing: orchestrator_pkg/scan.py]
-              ├─ [existing parallel tools]      [ThreadPoolExecutor]
-              └─ bola_workflow (NEW)            [if dual_auth_config provided]
-                  ├─ RegisterIdentityStep A     [wraps register_tool.run_register]
-                   ├─ CreateOrDiscoverStep      [ResourceCreationStrategy V1: POST common patterns → GET fallback]
-                  ├─ LoginIdentityStep B        [wraps login_tool.run_login]
-                  ├─ RequestCaptureStep         [Session.send patch]
-                  ├─ SwitchIdentityStep         [swap AuthContext]
-                  ├─ ReplayStep                 [re-issue captured frame under new identity]
-                  └─ AnalyzeAuthorizationStep   [reuses dual_auth_scanner BOLA logic]
-                  
-                  ↑ each step saves checkpoint to agent_decision_log
-                  ↑ each step calls state._bump_version_full() → Redis cache (uses to_dict_full(), not count-only to_dict())
-                  ↑   _bump_version_full() is net-new; existing _bump_version() persists to_dict() (counts only)
-                  ↑ step exceptions become obstacles, not terminations
+[existing] tasks/scan.py:run_scan (soft_time_limit=2400, time_limit=3600)
+  └─ [existing] task_context(self, engagement_id, "scan", ...)
+      └─ [existing] ctx.orchestrator.run_scan(ctx.job)
+          └─ [existing] orchestrator_pkg/scan.py:execute_scan_tools(target)
+              ├─ [existing] parallel tools (ThreadPoolExecutor, max_workers=5)
+              └─ [NEW] bola_workflow (gated by is_enabled("bola_workflow", default=False))
+                  └─ BolaWorkflow.execute(ctx, emit_finding_callback)
+                      ├─ Step 1: AuthenticateStep (A, then B)
+                      │     └─ on AuthError: state.add_obstacle({type: "auth_failed_a"|"auth_failed_b", ...})
+                      ├─ Step 2: DiscoverOwnedResourcesStep (A)
+                      │     └─ empty result: state.add_obstacle({type: "no_owned_resources", ...})
+                      ├─ Step 3: TestBolaStep (B vs A's resources)
+                      │     └─ reuses dual_auth_scanner._test_cross_account_access
+                      │     └─ findings emitted inline via emit_finding_callback
+                      └─ Step 4: TestBoplaStep (A and B)
+                            └─ reuses dual_auth_scanner._check_bopla
+                            └─ findings emitted inline via emit_finding_callback
+
+              ↑ each step self-reports obstacles via state.add_obstacle()
+              ↑ each step emits findings inline via FindingBuilder (matches DualAuthScanner's pattern)
+              ↑ BolaWorkflow.execute() tracks findings_created LOCALLY (sums step.findings_emitted)
+              ↑ WorkflowResult is constructed with explicit args, not via from_state()
+              ↑ BolaWorkflow never raises — all exceptions become obstacles
+              ↑ BolaWorkflow.execute() closes sessions in finally block (no FD leak)
+```
+
+**Concurrency note:** The workflow runs synchronously after the `ThreadPoolExecutor` block at `orchestrator_pkg/scan.py:684`. No other tool is sharing the authenticated sessions during the workflow. `DistributedLock` at `tasks/base.py:162` prevents concurrent engagement writes.
+
+---
+
+## Step Details
+
+### Step 1: `AuthenticateStep`
+
+```python
+class AuthenticateStep(WorkflowStep):
+    """Authenticate as User A and User B using operator-supplied configs."""
+    name = "authenticate"
+
+    def run(self, ctx: WorkflowContext) -> StepResult:
+        ctx.session_a = self._auth(ctx.auth_config_a, "user_a", ctx)
+        ctx.session_b = self._auth(ctx.auth_config_b, "user_b", ctx)
+        return StepResult(success=True)  # obstacles (if any) already recorded
+
+    def _auth(self, auth_config: dict, role: str, ctx) -> requests.Session | None:
+        from tools.auth_manager import AuthManager, AuthError
+        try:
+            mgr = AuthManager(auth_config)
+            session = mgr.authenticate(ctx.target)
+            ctx.slog.info(f"User {role} authenticated")
+            return session
+        except AuthError:
+            # SECURITY: do not include str(e) — AuthError messages may contain
+            # response bodies, URLs, or form field names (see auth_manager.py:659, 744).
+            # The error_class + type field is sufficient for ops triage.
+            ctx.state.add_obstacle({
+                "type": f"auth_failed_{role[-1]}",
+                "detected_at": time.time(),
+                "step": self.name,
+                "recoverable": False,
+                "recovery_paths": ["skip"] if role == "user_a" else ["skip_bola_only_bopla"],
+                "metadata": {"role": role, "error_class": "AuthError"},
+            })
+            return None
+```
+
+**Obstacles emitted:** `auth_failed_a`, `auth_failed_b`
+
+### Step 2: `DiscoverOwnedResourcesStep`
+
+```python
+class DiscoverOwnedResourcesStep(WorkflowStep):
+    """Discover resources owned by User A via GET-based crawl."""
+    name = "discover_resources"
+
+    def run(self, ctx: WorkflowContext) -> StepResult:
+        if not ctx.session_a:
+            return StepResult(success=True, skipped=True)  # Step 1 already emitted obstacle
+
+        from tools.dual_auth_scanner import DualAuthScanner
+        scanner = DualAuthScanner.for_phase_execution(
+            target=ctx.target,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding_callback,
+            source_tool="bola_workflow",
+            timeout=60,
+            rate_limit=0.3,
+            verify=True,
+        )
+        owned = scanner._discover_owned_resources(ctx.session_a)
+        ctx.owned_resources = owned
+
+        total = sum(len(v) for v in owned.values())
+        if total == 0:
+            # Distinguish "target is down" from "auth worked but no resources".
+            # _discover_owned_resources probes 5 endpoints; if all fail, the
+            # target is likely unreachable. Emit a separate obstacle.
+            if not scanner._last_request_succeeded:
+                ctx.state.add_obstacle({
+                    "type": "target_unreachable",
+                    "detected_at": time.time(),
+                    "step": self.name,
+                    "recoverable": False,
+                    "recovery_paths": ["skip"],
+                    "metadata": {"target": ctx.target, "probed_endpoints": 5},
+                })
+            else:
+                ctx.state.add_obstacle({
+                    "type": "no_owned_resources",
+                    "detected_at": time.time(),
+                    "step": self.name,
+                    "recoverable": False,
+                    "recovery_paths": ["skip_bola_run_bopla"],
+                    "metadata": {"target": ctx.target, "probed_endpoints": 5},
+                })
+            ctx.skip_bola = True
+
+        return StepResult(success=True)
+```
+
+**Obstacles emitted:** `no_owned_resources`, `target_unreachable`
+
+**Note:** The `_last_request_succeeded` flag is set inside `for_phase_execution`'s wrapped `_safe_request` (see classmethod spec below). It is reset to `False` at the start of the step and flipped to `True` on any non-None response.
+
+### Step 3: `TestBolaStep`
+
+```python
+class TestBolaStep(WorkflowStep):
+    """Test cross-account access: User B accessing User A's resources."""
+    name = "test_bola"
+
+    def run(self, ctx: WorkflowContext) -> StepResult:
+        if not ctx.session_b or ctx.skip_bola or not ctx.owned_resources:
+            return StepResult(success=True, skipped=True)
+
+        from tools.dual_auth_scanner import DualAuthScanner
+        scanner = DualAuthScanner.for_phase_execution(
+            target=ctx.target,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding_callback,
+            source_tool="bola_workflow",
+            timeout=60,
+            rate_limit=0.3,
+            verify=True,
+        )
+        # for_phase_execution sets scanner._builder = FindingBuilder(...) which
+        # routes all findings through validation + sanitization + SSE streaming.
+        # _test_cross_account_access calls self._emit_finding(f) → FindingBuilder.add()
+        # → emit_finding callback. No lambda injection needed.
+
+        findings = scanner._test_cross_account_access(ctx.session_b, ctx.owned_resources)
+        ctx.bola_findings = len(findings)
+
+        # If the step ran but no requests succeeded, surface the failure.
+        if not scanner._last_request_succeeded and len(findings) == 0:
+            ctx.state.add_obstacle({
+                "type": "target_unreachable",
+                "detected_at": time.time(),
+                "step": self.name,
+                "recoverable": False,
+                "recovery_paths": ["skip"],
+                "metadata": {"target": ctx.target, "phase": "bola_test"},
+            })
+
+        return StepResult(success=True, findings_emitted=len(findings))
+```
+
+**Obstacles emitted:** `target_unreachable` (only if every `_safe_request` call failed and no findings were produced)
+
+### Step 4: `TestBoplaStep`
+
+```python
+class TestBoplaStep(WorkflowStep):
+    """Check BOPLA on both sessions — sensitive field exposure."""
+    name = "test_bopla"
+
+    def run(self, ctx: WorkflowContext) -> StepResult:
+        from tools.dual_auth_scanner import DualAuthScanner
+        scanner = DualAuthScanner.for_phase_execution(
+            target=ctx.target,
+            engagement_id=ctx.engagement_id,
+            emit_finding=ctx.emit_finding_callback,
+            source_tool="bola_workflow",
+            timeout=60,
+            rate_limit=0.3,
+            verify=True,
+        )
+
+        emitted = 0
+        if ctx.session_a:
+            for f in scanner._check_bopla(ctx.session_a, "user_a"):
+                scanner._emit_finding(f)  # routed through FindingBuilder
+                emitted += 1
+        if ctx.session_b:
+            for f in scanner._check_bopla(ctx.session_b, "user_b"):
+                scanner._emit_finding(f)
+                emitted += 1
+
+        ctx.bopla_findings = emitted
+        return StepResult(success=True, findings_emitted=emitted)
+```
+
+**Obstacles emitted:** none in V1 (BOPLA failures surface as findings with lower confidence, not as obstacles)
+
+---
+
+## EngagementState Extension
+
+```python
+# runtime/engagement_state.py (additions only)
+
+class EngagementState:
+    def __init__(self, ...):
+        # ... existing fields ...
+        self.obstacles: list[dict] = []  # NEW — list of obstacle dicts (in-memory only)
+
+    def add_obstacle(self, obstacle: dict) -> None:
+        """Append an obstacle. Standard fields: type, detected_at, step, recoverable, recovery_paths, metadata.
+        Sets detected_at if not provided. Triggers _bump_version() to persist count to Redis cache.
+
+        NOTE: _bump_version() saves self.to_dict() (count-only summary) to Redis.
+        The full obstacles list is NOT persisted — it lives in memory until the worker exits.
+        This is acceptable per the V1 no-crash-recovery design decision. The obstacles_count
+        field in to_dict() makes the presence of obstacles visible to SSE consumers and the
+        state snapshot system without leaking the (potentially sensitive) content."""
+        obstacle.setdefault("detected_at", time.time())
+        self.obstacles.append(obstacle)
+        self._bump_version()
+
+    def to_dict(self) -> dict:
+        # ... existing fields ...
+        return {
+            # ... existing entries ...
+            "obstacles_count": len(self.obstacles),  # NEW — count visible in Redis snapshot
+        }
+```
+
+**No `to_dict_full()` or `_bump_version_full()` needed.** The full obstacles list stays in memory. The count is exposed via `to_dict()` so Redis consumers and post-scan snapshots know obstacles occurred. The `to_snapshot_dict()` (L303-314) is unchanged — it covers what the analysis phase reads (observations, tool_history, budget).
+
+---
+
+## WorkflowResult Contract
+
+```python
+# runtime/workflows/base.py
+
+@dataclass
+class WorkflowContext:
+    """Per-execution state shared across steps. Constructed by BolaWorkflow.execute(),
+    mutated by steps, read by WorkflowResult construction. Not persisted — lives only
+    in the Celery worker's memory for the duration of one workflow run."""
+    target: str
+    engagement_id: str
+    state: EngagementState
+    emit_finding_callback: Callable
+    slog: ScanLogger  # shared logger, instantiated once by orchestrator
+
+    # Auth configs (set by BolaWorkflow constructor, read by Step 1)
+    auth_config_a: dict
+    auth_config_b: dict
+
+    # Workflow-internal state (mutated by steps)
+    session_a: requests.Session | None = None
+    session_b: requests.Session | None = None
+    owned_resources: dict = field(default_factory=dict)
+    bola_findings: int = 0
+    bopla_findings: int = 0
+    skip_bola: bool = False
+
+
+@dataclass
+class StepResult:
+    """Per-step return value. The workflow sums findings_emitted across steps to get
+    the total findings_created for WorkflowResult. skipped=True means the step was a no-op
+    (e.g., session_a was None, obstacle already emitted by an earlier step)."""
+    success: bool
+    skipped: bool = False
+    findings_emitted: int = 0
+
+
+@dataclass
+class WorkflowResult:
+    """Uniform return type for all workflow classes (BolaWorkflow, future IdorWorkflow, etc.).
+    success is set EXPLICITLY by the workflow, not derived from state.
+    A clean run with zero findings is success=True, findings_created=0.
+    A partially-completed run with obstacles is success=True, outcome="partial".
+
+    CRITICAL: findings_created is the LOCAL count of findings emitted by the workflow
+    during this run. It is NOT len(state.findings) — that field is populated by the
+    orchestrator's _save_findings() AFTER the scan phase completes (see orchestrator.py:240).
+    Reading state.findings during the workflow would always return 0."""
+    success: bool
+    outcome: str  # "complete" | "partial"
+    findings_created: int        # local sum of step.findings_emitted
+    obstacles_encountered: int   # from len(ctx.state.obstacles) at execute() end
+    identities_created: int      # always 0 in V1
+    resources_created: int       # always 0 in V1
+    requests_captured: int       # always 0 in V1
+    metadata: dict = field(default_factory=dict)
+```
+
+**V1 simplification:** `identities_created`, `resources_created`, `requests_captured` are always 0 because V1 is operator-supplied with no creation or capture. The fields exist in the dataclass so V2 workflows can populate them without changing the contract.
+
+**No `WorkflowResult.from_state` constructor.** The plan originally proposed one, but it would read `state.findings` (always 0 mid-workflow) and produce wrong telemetry. The workflow constructs `WorkflowResult` directly from local counters in `BolaWorkflow.execute()`.
+
+---
+
+## DualAuthScanner.for_phase_execution() Classmethod
+
+To eliminate the brittle `__new__` + manual attribute set pattern, add a public classmethod to `tools/dual_auth_scanner.py` that encapsulates the bypass:
+
+```python
+# tools/dual_auth_scanner.py (additive — no behavior change to existing methods)
+
+@classmethod
+def for_phase_execution(
+    cls,
+    *,
+    target: str,
+    engagement_id: str,
+    emit_finding: Callable | None,
+    source_tool: str,
+    timeout: int = 60,
+    rate_limit: float = 0.3,
+    verify: bool = True,
+) -> "DualAuthScanner":
+    """Construct a DualAuthScanner instance for use as a step helper.
+
+    Bypasses __init__ to avoid the heavy auth_manager_a/b setup that the workflow
+    doesn't need (workflow has its own auth via AuthManager). Only the fields
+    required by the private methods (_discover_owned_resources,
+    _test_cross_account_access, _check_bopla, _safe_request) are set.
+
+    The resulting instance has:
+      - _builder = FindingBuilder(...) so all findings go through validation,
+        evidence sanitization, and SSE streaming via emit_finding callback
+      - _last_request_succeeded = False; flipped to True by the wrapped _safe_request
+        when any request returns a non-None response. The steps check this flag
+        to decide whether to emit a target_unreachable obstacle.
+
+    IMPORTANT: Any new attribute added to __init__ that is read by the private
+    methods MUST also be added here. Enforced by tests/test_dual_auth_scanner.py
+    which introspects both __init__ and for_phase_execution for matching attributes.
+    """
+    instance = cls.__new__(cls)
+    instance.auth_config_a = None
+    instance.auth_config_b = None
+    instance.auth_manager_a = None
+    instance.auth_manager_b = None
+    instance.timeout = timeout
+    instance.rate_limit = rate_limit
+    instance.verify = verify
+    instance.engagement_id = engagement_id
+    instance.emit_finding_callback = emit_finding
+    instance.findings = []
+    instance._last_request_time = 0.0
+    instance._rate_lock = threading.Lock()
+    instance._last_request_succeeded = False  # NEW — set True by wrapped _safe_request
+    instance.target_url = target.rstrip("/")
+
+    # CRITICAL: set _builder so _emit_finding routes through FindingBuilder.
+    # Without this, findings skip severity validation + evidence sanitization.
+    from tool_core.finding_builder import FindingBuilder
+    instance._builder = FindingBuilder(
+        source_tool=source_tool,
+        engagement_id=engagement_id,
+        emit_finding=emit_finding,
+    )
+
+    return instance
+```
+
+**Wrapped `_safe_request`:** The classmethod does NOT wrap `_safe_request` directly (that would require monkey-patching the bound method). Instead, the steps themselves track success: they set a flag on the instance BEFORE calling the private method, and the private method is unchanged. The flag-check pattern in Step 2/3 already references `scanner._last_request_succeeded`.
+
+**Wait — the private methods don't set this flag.** The flag needs to be set inside `_safe_request` itself, OR the steps need to wrap it. Cleanest: add a small monkey-patch in `for_phase_execution`:
+
+```python
+# (continued from above, inside for_phase_execution)
+original_safe_request = cls._safe_request
+def wrapped_safe_request(self, method, url, session, **kwargs):
+    result = original_safe_request(self, method, url, session, **kwargs)
+    if result is not None:
+        self._last_request_succeeded = True
+    return result
+instance._safe_request = wrapped_safe_request.__get__(instance, cls)
+```
+
+This adds 6 lines. The wrapped method calls the original and flips the flag on any non-None response. The original `_safe_request` is unchanged.
+
+**Why this is the right fix:** Steps that wrap the scanner instance with `for_phase_execution` get a fully-initialized object whose every private method is callable. The classmethod is the single source of truth for "what does it take to use DualAuthScanner as a step helper." Future `__init__` changes trigger a test failure in `test_dual_auth_scanner.py` that asserts the attribute sets match.
+
+---
+
+## BolaWorkflow.execute() Spec
+
+```python
+# runtime/workflows/bola.py
+
+class BolaWorkflow:
+    """Step-based BOLA + BOPLA workflow. Replaces DualAuthScanner.execute() with
+    an explicit step pipeline that emits structured obstacles and reuses existing
+    detection via DualAuthScanner.for_phase_execution()."""
+
+    def __init__(
+        self,
+        *,
+        target: str,
+        auth_config_a: dict,
+        auth_config_b: dict,
+        engagement_id: str,
+        state: EngagementState,
+        emit_finding_callback: Callable,
+        slog: ScanLogger,  # passed in by orchestrator — same instance for all steps
+    ):
+        self.ctx = WorkflowContext(
+            target=target,
+            engagement_id=engagement_id,
+            state=state,
+            emit_finding_callback=emit_finding_callback,
+            slog=slog,
+            auth_config_a=auth_config_a,
+            auth_config_b=auth_config_b,
+        )
+        self.steps: list[WorkflowStep] = [
+            AuthenticateStep(),
+            DiscoverOwnedResourcesStep(),
+            TestBolaStep(),
+            TestBoplaStep(),
+        ]
+
+    def execute(self) -> WorkflowResult:
+        """Run all 4 steps in sequence. Tracks findings_created locally. Closes
+        sessions in finally block to prevent connection-pool FD leaks."""
+        findings_total = 0
+        try:
+            for step in self.steps:
+                try:
+                    result = step.run(self.ctx)
+                    findings_total += result.findings_emitted
+                except Exception as e:
+                    # Defense in depth: a step's internal try/except should have
+                    # caught this. If it didn't, the workflow still doesn't raise
+                    # — it records a generic obstacle and continues.
+                    self.ctx.slog.error(f"Step {step.name} raised unexpectedly: {e}")
+                    self.ctx.state.add_obstacle({
+                        "type": f"step_failed:{step.name}",
+                        "detected_at": time.time(),
+                        "step": step.name,
+                        "recoverable": False,
+                        "recovery_paths": ["skip"],
+                        "metadata": {"error_class": type(e).__name__},
+                    })
+        finally:
+            # Always close sessions to prevent FD leaks across many engagements.
+            for session_attr in ("session_a", "session_b"):
+                session = getattr(self.ctx, session_attr)
+                if session is not None:
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+
+        outcome = "partial" if len(self.ctx.state.obstacles) > 0 else "complete"
+        return WorkflowResult(
+            success=True,
+            outcome=outcome,
+            findings_created=findings_total,
+            obstacles_encountered=len(self.ctx.state.obstacles),
+            identities_created=0,
+            resources_created=0,
+            requests_captured=0,
+            metadata={
+                "engagement_id": self.ctx.engagement_id,
+                "current_phase": self.ctx.state.current_phase,
+                "state_version": self.ctx.state.state_version,
+                "target": self.ctx.target,
+            },
+        )
 ```
 
 ---
 
-## The 5 Phase Goals — Coverage After 10 Iterations
+## Obstacle Catalog (V1)
 
-| Phase | Goal | Coverage | What's NOT covered |
-|---|---|---|---|
-| 1 | Tester 7/7 | **6/7** | Verify account — out of scope per codebase evidence (zero email adapters, zero IMAP, zero OTP solvers) |
-| 2 | OperationContext 7 fields | **7/7** | All 7 fields on `EngagementState`: `identities`, `sessions`, `resources`, `captured_requests`, `discovered_routes` (existing `recon_context`), `obstacles`, `findings` (existing) |
-| 3 | State manipulation 5/5 | **5/5** | CreateOrDiscover (ResourceCreationStrategy) + RequestCapture + Switch + Replay + Analyze — all built |
-| 4 | Obstacle reasoning | **6 obstacle types** | email_verification_required, captcha, 2fa, rate_limited, account_locked, email_exists — all detected, recorded, workflow continues |
-| 5 | Workflow execution | **BolaWorkflow** | Base `Workflow` class generic enough for IDOR, BFLA, horizontal/vertical privesc variants |
+| `type` | Detected when | `recoverable` | `recovery_paths` | V2+ recovery |
+|---|---|---|---|---|
+| `auth_failed_a` | `AuthManager.authenticate()` raises `AuthError` for A | `False` | `["skip"]` | (none planned) |
+| `auth_failed_b` | Same for B | `False` | `["skip_bola_only_bopla"]` | (none planned) |
+| `no_owned_resources` | `_discover_owned_resources` returns empty | `False` | `["skip_bola_run_bopla"]` | ResourceCreationStrategy (V2) |
+| `target_unreachable` | All `_safe_request` calls fail for a target | `False` | `["skip"]` | BackoffScheduler (V2) |
+
+**No `recoverable: True` obstacles in V1.** V2 will add `rate_limited` (backoff_and_retry) and `email_exists` (regenerate_email) when registration is in scope.
+
+---
+
+## Coverage After V1
+
+| Existing finding type | V1 source | Status |
+|---|---|---|
+| `CONFIRMED_BOLA` | `dual_auth_scanner._test_cross_account_access` (L415-437) | ✅ Reused |
+| `POTENTIAL_BOLA` | `dual_auth_scanner._test_cross_account_access` (L439-454) | ✅ Reused |
+| `BOPLA_SENSITIVE_FIELDS` | `dual_auth_scanner._check_bopla` (L488-499) | ✅ Reused |
+
+**Net coverage delta vs. `DualAuthScanner`:** Zero. V1 produces the same findings as today's scanner, with the same severity and confidence. The workflow is a refactor, not a feature.
+
+---
+
+## Migration & Rollout (5 steps, each independently revertable)
+
+| Step | Change | Feature flag |
+|---|---|---|
+| 1 | `engagement_state.py` — add `obstacles` field + `add_obstacle()` | None |
+| 2 | `runtime/workflows/` package (base + bola + steps) | None |
+| 3 | Tests (unit + 1 integration) | None |
+| 4 | Wire into `orchestrator_pkg/scan.py:806-844` | ✅ `is_enabled("bola_workflow", default=False)` |
+| 5 | Remove flag, deprecate `DualAuthScanner` | Remove flag (after 1 sprint of stable bola_workflow) |
+
+**Step 4 is the safety gate.** Deploy all code with the flag OFF. Flip ON for test engagements. If it breaks, `redis-cli SET "feature_flag:bola_workflow" 0` restores legacy behavior (the next scan task runs `DualAuthScanner`).
+
+**Wiring sketch (orchestrator_pkg/scan.py:806-844 replacement):**
+
+```python
+# BolaWorkflow — step-based BOLA/BOPLA when bola_workflow flag is enabled
+if dual_auth_config is not None and auth_config is not None:
+    if is_enabled("bola_workflow", default=False):
+        from utils.logging_utils import ScanLogger
+        bola_slog = ScanLogger("bola_workflow", engagement_id=ctx.engagement_id)
+        bola_slog.tool_start("bola_workflow", [target])
+        try:
+            from runtime.workflows import BolaWorkflow
+            workflow = BolaWorkflow(
+                target=target,
+                auth_config_a=auth_config,
+                auth_config_b=dual_auth_config,
+                engagement_id=ctx.engagement_id,
+                state=ctx.state,
+                emit_finding_callback=_stream_finding,
+                slog=bola_slog,
+            )
+            emit_tool_start(ctx.engagement_id, "bola_workflow", [target])
+            result = workflow.execute()
+            bola_slog.tool_complete("bola_workflow", success=result.success, findings=result.findings_created)
+            emit_tool_complete(ctx.engagement_id, "bola_workflow", result.success, 0,
+                               finding_count=result.findings_created)
+        except Exception as e:
+            bola_slog.tool_complete("bola_workflow", success=False)
+            logger.warning(f"BolaWorkflow failed for {target}: {e}")
+    else:
+        # Legacy DualAuthScanner path (unchanged)
+        # ... existing code at scan.py:807-844 ...
+```
 
 ---
 
@@ -361,38 +621,100 @@ tasks/scan.py (existing)
 redis-cli SET "feature_flag:bola_workflow" 0
 # → next scan task runs DualAuthScanner (legacy path)
 
-# Scenario 2: to_dict schema breaks SSE consumer (step 1 regression)
+# Scenario 2: obstacles field breaks SSE consumer (step 1 regression)
 git revert <commit-hash-for-step-1>
-# → new fields removed, backward compat restored
+# → obstacles field removed, state.add_obstacle() removed
 
-# Scenario 3: Need to revert all 5 steps
-git revert <step-1-hash>..<step-5-hash>
+# Scenario 3: full V1 revert
+git revert <step-1-hash>..<step-4-hash>
 # → entire V3 workflow reverted, codebase back to pre-V3 state
 
-# Scenario 4: EngagementState corrupted mid-engagement by workflow bug
-# Manual: delete the corrupt Redis cache key
+# Scenario 4: EngagementState corrupted mid-engagement
 redis-cli DEL "engagement_state:{engagement_id}"
 # → next task_context load skips Redis, reconstructs from Postgres
 ```
 
 ---
 
-## Mitigation Log
+## V1 Mitigation Log
 
-| Iteration | Shortcoming | Mitigation |
-|---|---|---|
-| 1 | `to_dict()` saves counts only, not data | Add `to_dict_full()` for workflow; use `to_snapshot_dict()` for Redis |
-| 1 | `add_observation` truncates aggressively | Workflow records via `record_tool_execution()` (no cap) |
-| 2 | `bump_version` saves summary, not full state | Use `DecisionCheckpoint` for per-step persistence (reuses existing `agent_decision_log` table) |
-| 3 | `EngagementState` has no mutex | Not needed — workflow runs single-threaded; `DistributedLock` prevents concurrent engagement writes |
-| 4 | Detector-to-obstacle conversion needs working code change | **Avoided entirely** — wrapper pattern in `steps.py` parses stdout JSON; `register_tool.py` and `login_tool.py` unchanged |
-| 5 | `SoftTimeLimitExceeded` kills engagement | Workflow catches step exceptions, records as obstacles. Only Celery-level timeouts propagate. |
-| 6 | E2E test could flake (port collisions, thread timing) | Exclude from CI, run manually: `pytest tests/ -k "not e2e"` |
-| 7 | Credential logging risk | Audit rule: never log identity['password'] or session.cookies. `to_dict_full()` explicitly excludes them. |
-| 8 | Feature flag key collision | Name key `"feature_flag:bola_workflow"` to match existing convention. |
-| 9 | Redis TTL expiry mid-workflow | `_bump_version()` called every ~6s — TTL reset before 300s expiry. No risk. |
-| PR-1 | `Session.send` patch only captures Python requests (not SPA traffic) | `CapturedRequest` schema with `source` field. Docstring commits to V2 (Playwright, infra at `browser_scan_worker.py:69`) and V3 (mitmproxy). Future backends drop in without schema changes. |
-| PR-2 | `CreateResourceStep` assumes uniform POST patterns for all targets | Renamed to `ResourceCreationStrategy`, injected into BolaWorkflow. V1: common POST patterns + GET-fallback. V2+: Playwright form-fill or LLM reasoning. |
-| PR-3 | Obstacles recorded but not solved; data model doesn't support future recovery | Obstacle dict gains `recoverable: bool` + `recovery_paths: list[str]`. V1 paths: `skip`, `backoff_and_retry`, `try_login_anyway`. V2 paths will wire to EmailProvider/CaptchaProvider/OtpProvider. |
-| PR-4 | No unified return contract across workflow types | `WorkflowResult` dataclass — all workflows return `success`, `findings_created`, `obstacles_encountered`, `identities_created`, `resources_created`, `requests_captured`, `metadata`. Orchestrator dispatches on this without inspecting internals. |
-| PR-5 | V1 ReplayStep doesn't refresh CSRF/anti-replay tokens — false negatives possible | Anti-replay risk accepted for V1. Replay rejections become `Obstacle("replay_rejected", recoverable=False)`. V2+ adds per-request token refresh. |
+| Concern | Resolution |
+|---|---|
+| `to_dict()` saves counts only | Partial fix — `state.obstacles_count` is added to `to_dict()` so Redis consumers see the count. The full obstacles list stays in memory (acceptable per the V1 no-crash-recovery design). |
+| `add_observation` truncates aggressively | Not used by the workflow. Steps call `state.add_obstacle()` which has no cap. |
+| `_bump_version` saves summary, not full state | Acceptable. The `to_dict()` count summary plus the new `obstacles_count` field are sufficient. Full state persistence is V2 (via `to_dict_full()` if needed). |
+| `WorkflowResult.findings_created` reading `state.findings` returns 0 | Resolved: `BolaWorkflow.execute()` tracks `findings_total` locally from `step.findings_emitted`. `WorkflowResult` is constructed with explicit args. `from_state` constructor removed. |
+| Findings emitted by workflow skip FindingBuilder validation | Resolved: `DualAuthScanner.for_phase_execution()` sets `scanner._builder = FindingBuilder(...)` so `_emit_finding` routes through validation, evidence sanitization, and SSE streaming. |
+| `DualAuthScanner.__new__` bypass is brittle | Resolved: `for_phase_execution()` classmethod encapsulates the bypass. New `__init__` attributes trigger a test failure in `test_dual_auth_scanner.py` that asserts the two attribute sets match. |
+| Step exceptions killing engagement | Each step has internal try/except. Exceptions become obstacles via `state.add_obstacle()`. `BolaWorkflow.execute()` has a defense-in-depth try/except around the step loop that emits a `step_failed:<name>` obstacle if a step's internal handler missed an exception. The workflow never raises. `SoftTimeLimitExceeded` at `tasks/base.py:202` is the only Celery-level exception that propagates. |
+| Credential logging risk | Audit rule: never log `auth_config.password`, `session.cookies`, or `auth_config.token`. The step implementations use `ctx.slog.info("User A authenticated")` (matches `dual_auth_scanner.py:181`). |
+| `AuthError` message may leak sensitive data | Resolved: obstacles store `error_class: "AuthError"` only, NOT `str(e)`. The `AuthError` exception's message can include response bodies, URLs, and form field names (`auth_manager.py:659, 744`). The obstacle's `type` field encodes the failure category. Diagnostic detail belongs in `logger.debug(...)`, not in structured state. |
+| Session FD leak across many engagements | Resolved: `BolaWorkflow.execute()` has a `finally` block that calls `session.close()` on `session_a` and `session_b`. Verified by `tests/test_bola_workflow_unit.py` that asserts sessions are closed after a workflow that raises. |
+| E2E test could flake (port collisions) | `tests/test_bola_workflow_integration.py` uses `responses` for unit tests. The one socket-based integration test binds to `127.0.0.1:0` (random port) and is marked `@pytest.mark.integration` — excluded from default CI per `pytest -m "not integration"`. |
+| Feature flag key collision | Key `"feature_flag:bola_workflow"` follows existing convention (see `feature_flags.py:140-141` `SELECT enabled FROM feature_flags WHERE flag_name = %s`). |
+| Redis TTL expiry mid-workflow | `_bump_version()` called every ~6s during the workflow (one per step). TTL (300s default) reset before expiry. |
+| `AuthManager` not having a captcha/2fa recovery | Out of scope. V1 is operator-supplied; the operator provides credentials that don't need captcha or 2fa. |
+| `target_unreachable` obstacle in catalog but no emitter | Resolved: `for_phase_execution()` sets `_last_request_succeeded = False` and the wrapped `_safe_request` flips it to `True` on any non-None response. Steps 2 and 3 check the flag and emit `target_unreachable` when no requests succeeded and no findings were produced. |
+| `slog` not in scope in step code | Resolved: `slog` is on `WorkflowContext`, instantiated once by the orchestrator wiring and passed to `BolaWorkflow.__init__`. All steps use `ctx.slog`. |
+
+---
+
+## Explicitly Deferred to V2 (Non-Goals for V1)
+
+1. **Capture-replay primitive** (`runtime/traffic/`) — V1 uses URL-template approach (`_test_cross_account_access` constructs URLs from `resource_urls` dict at `dual_auth_scanner.py:380-389`). V2 adds `Session.send` patch for cases where templates can't predict the request shape (GraphQL, signed payloads, complex nested resources).
+2. **ResourceCreationStrategy** (POST creation) — V1 uses GET-based discovery only. V2 adds pluggable strategies for apps that don't expose resources via simple GET endpoints.
+3. **Step-level crash recovery** via `DecisionCheckpoint` — V1 accepts that a worker crash restarts the workflow. The `agent_decision_log` table is designed for LLM decisions, not step payloads (see `decision_checkpoint.py:32-34`).
+4. **V2 recovery providers** — `EmailProvider` for email verification, `CaptchaProvider` for captcha, `OtpProvider` for 2fa, `BackoffScheduler` for rate limiting. All require registration, which V1 doesn't do.
+5. **Self-bootstrapping identity creation** — the plan's "Create identity A → Create resource as A → Register identity B" sequence. Deferred because the codebase has zero email adapters, zero IMAP, zero OTP solvers (plan's own coverage line 349).
+6. **IDOR / BFLA / PrivilegeEsc workflow variants** — the `Workflow` base class is generic enough to support them, but V1 only implements `BolaWorkflow`.
+7. **Anti-replay handling** (CSRF refresh, request re-signing) — V1 inherits `DualAuthScanner`'s behavior (URL-template based, no replay, so no CSRF problem). V2 capture-replay needs this.
+8. **`to_dict_full()` and `_bump_version_full()` methods** — V1 doesn't need them. Existing `to_dict()` count summary + `to_snapshot_dict()` (L303-314) cover the workflow's persistence needs.
+
+---
+
+## Performance Budget
+
+| Resource | `DualAuthScanner` (today) | `BolaWorkflow` (V1) | Acceptable? |
+|---|---|---|---|
+| HTTP requests | ~4 (2 auth + discovery + 1-2 tests) | ~4 (2 auth + discovery + 1-2 tests) | Same — no extra requests |
+| DB writes | 0 (findings only) | 0 (findings only) | Same |
+| Redis writes | 0 | ~4 × 100 bytes (one `_bump_version` per step) | Trivial |
+| Wall time | ~20s | ~22s (+2s for step orchestration overhead) | Within 2400s budget |
+| New code | 0 | ~890 lines + 78 lines modified = ~968 total | One-sprint PR |
+
+**Secrets are NOT cached.** `state.add_obstacle()`'s `metadata` field contains only error class names and short error messages, not credentials. The auth configs are passed by reference and not stored on `state`.
+
+---
+
+## Open Decisions for V1 Implementation
+
+1. **`_emit_finding` injection strategy:** Resolved — `DualAuthScanner.for_phase_execution()` sets `scanner._builder = FindingBuilder(...)` so the existing `_emit_finding` method (L104-126) routes through the builder. No lambda injection. No refactor of `_emit_finding`. The classmethod is the single point where the bypass is configured.
+2. **What to do if Step 3 emits 0 findings and 0 obstacles:** The workflow still succeeds with `outcome="complete"`, `findings_created=0`. The orchestrator's `_stream_finding` callback already handles this (no-op when no findings). **No change needed.**
+3. **Concurrent engagement state writes:** The `BolaWorkflow` mutates `ctx.state` (calls `add_obstacle`, which calls `_bump_version`). The `task_context` `DistributedLock` at `tasks/base.py:162` prevents concurrent engagements. Within a single engagement, the workflow runs synchronously after the parallel `ThreadPoolExecutor` block. **No additional locking needed.**
+4. **`_last_request_succeeded` flag lifecycle:** Set to `False` by `for_phase_execution()`. Flipped to `True` by the wrapped `_safe_request` on any non-None response. Steps 2 and 3 read it AFTER the private method returns, then reset to `False` if they call another private method. Test: `test_for_phase_execution_wraps_safe_request` asserts the flag flips on a 200 response and stays False on a 500 that returns None.
+
+---
+
+## Approval Checklist
+
+- [x] Operator-supplied identity bootstrapping (no registration) — matches `scan.py:807` gate
+- [x] One new EngagementState field (`obstacles`) — minimal surface area; `obstacles_count` in `to_dict()` for Redis visibility
+- [x] URL-template test primitive (reuses `_test_cross_account_access`) — zero new detection logic
+- [x] No crash recovery for V1 — YAGNI, matches existing scanner behavior
+- [x] No `ResourceCreationStrategy` — direct call to `_discover_owned_resources`
+- [x] No `runtime/traffic/` directory — deferred to V2
+- [x] Hybrid inline findings + WorkflowResult count — matches `DualAuthScanner` pattern
+- [x] **CRITICAL FIX:** `BolaWorkflow.execute()` tracks `findings_created` locally from `step.findings_emitted` — does NOT read `state.findings` (which is empty mid-workflow)
+- [x] **CRITICAL FIX:** `WorkflowResult.from_state` constructor REMOVED — no caller; the workflow constructs `WorkflowResult` directly with explicit args
+- [x] **HIGH FIX #1:** `DualAuthScanner.for_phase_execution()` sets `_builder = FindingBuilder(...)` so findings go through validation, sanitization, and SSE streaming
+- [x] **HIGH FIX #2:** `DualAuthScanner.for_phase_execution()` classmethod encapsulates the `__new__` bypass; future `__init__` changes trigger a test failure
+- [x] **MEDIUM FIX #1:** `slog` is on `WorkflowContext`, instantiated once by the orchestrator, passed to all steps via `ctx.slog`
+- [x] **MEDIUM FIX #2:** `base.py` budget bumped to ~90 lines to accommodate `WorkflowContext` + `StepResult` + `WorkflowResult` (5 dataclasses total)
+- [x] **MEDIUM FIX #3:** `target_unreachable` obstacle emitted by Steps 2 and 3 via `_last_request_succeeded` flag from wrapped `_safe_request`
+- [x] **MEDIUM FIX #4:** `obstacles_count` added to `to_dict()` for Redis visibility; full obstacles list stays in memory
+- [x] **MEDIUM FIX #5:** `BolaWorkflow.execute()` has `finally` block that closes `session_a` and `session_b` to prevent FD leaks
+- [x] **LOW FIX:** `AuthError` message NOT included in obstacle metadata — only `error_class` is stored
+- [x] Step self-reports obstacles — per-step specificity
+- [x] `responses` mocks + 1 socket integration — best coverage/effort ratio
+- [x] Feature flag gated rollout — `is_enabled("bola_workflow", default=False)`
+- [x] V2 deferred items listed explicitly — no scope creep
