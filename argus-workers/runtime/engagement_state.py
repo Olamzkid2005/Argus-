@@ -107,6 +107,7 @@ class EngagementState:
         self._bug_bounty_mode: bool = False
         self._agent_mode_enabled: bool = True
         self._last_agent_tried_tools: set[str] = set()
+        self.obstacles: list[dict] = []  # NEW — BolaWorkflow obstacles (in-memory only; count exposed via to_dict)
 
     # ── Versioned mutation ──
 
@@ -194,6 +195,28 @@ class EngagementState:
         recent = self.observations[-max_entries:]
         parts = [f"[{e['role']}]: {e['content']}" for e in recent]
         return "\n".join(parts)
+
+    # ── Obstacle tracking (BolaWorkflow / future workflow obstacles) ──
+
+    def add_obstacle(self, obstacle: dict) -> None:
+        """Append an obstacle to the obstacle list.
+
+        Standard fields: type, detected_at, step, recoverable, recovery_paths, metadata.
+        Sets detected_at if not provided. Triggers _bump_version() to persist
+        the obstacle COUNT to Redis (full list is in-memory only).
+
+        OBSERVABILITY: Each call site should ALSO log the obstacle via
+        slog.warning() with type and step, since the full dict is not persisted.
+
+        SECURITY: Obstacle metadata MUST NOT contain credentials (passwords,
+        cookie strings, tokens) or AuthError message strings. The AuthError
+        exception at auth_manager.py:659,744 can include response bodies, URLs,
+        and form field names in its message. Store only error_class: str(e) is
+        prohibited. See plan's mitigation log item "AuthError message leak."
+        """
+        obstacle.setdefault("detected_at", time.time())
+        self.obstacles.append(obstacle)
+        self._bump_version()
 
     # ── Tool execution tracking ──
 
@@ -289,6 +312,7 @@ class EngagementState:
             "current_state": self.current_state,
             "execution_iteration": self.execution_iteration,
             "state_version": self.state_version,
+            "obstacles_count": len(self.obstacles),  # count only; full list is in-memory
             "findings_count": len(self.findings),
             "observations_count": len(self.observations),
             "tool_history_count": len(self.tool_history),
