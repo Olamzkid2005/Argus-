@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-01  
 **Status:** Design complete, ready for implementation  
-**Total:** ~815 lines new code, ~65 lines modifications, 0 lines refactored
+**Total:** ~1080 lines new code, ~90 lines modifications, 0 lines refactored
 
 ---
 
@@ -28,20 +28,20 @@ Built on top of the existing platform without rewriting a single working file.
 |---|---|---|
 | `runtime/workflows/base.py` | ~50 | `Workflow` + `WorkflowStep` base classes, step checkpointing |
 | `runtime/workflows/bola.py` | ~250 | `BolaWorkflow` class — 7 steps wired in sequence |
-| `runtime/workflows/steps.py` | ~150 | `RegisterIdentityStep`, `CreateOrDiscoverStep`, `SwitchIdentityStep`, `RequestCaptureStep`, `ReplayStep`, `AnalyzeAuthorizationStep` |
+| `runtime/workflows/steps.py` | ~160 | `RegisterIdentityStep`, `CreateOrDiscoverStep`, `LoginIdentityStep`, `SwitchIdentityStep`, `RequestCaptureStep`, `ReplayStep`, `AnalyzeAuthorizationStep` |
 | `runtime/workflows/resources.py` | ~60 | `ResourceCreationStrategy` — pluggable resource creation/discovery (V1: common POST patterns, V2: Playwright, V3: LLM) |
 | `runtime/traffic/capture.py` | ~50 | `RequestCapture` — 30-line `Session.send` patch (V1; V2 = Playwright, V3 = mitmproxy) |
 | `runtime/traffic/models.py` | ~20 | `CapturedRequest` schema — version-agnostic across all capture backends |
-| `tests/` (multiple files) | ~300 | Unit, integration, E2E test files |
-| **Total new** | **~880** | |
+| `tests/` (multiple files) | ~500 | Unit, integration, E2E test files |
+| **Total new** | **~1080** | |
 
 ### Modified files (2)
 
 | File | Change | Lines |
 |---|---|---|
-| `runtime/engagement_state.py` | Add `identities`, `sessions`, `resources`, `captured_requests`, `obstacles` fields + `add_obstacle()` + `to_dict_full()` | +50 |
-| `orchestrator_pkg/scan.py:806-843` | Replace `DualAuthScanner` call with `BolaWorkflow` behind `_feature_enabled("bola_workflow")` flag | +15 |
-| **Total modified** | | **+65** |
+| `runtime/engagement_state.py` | Add `identities`, `sessions`, `resources`, `captured_requests`, `obstacles`, `workflow_completed` fields + `add_obstacle()` + `to_dict_full()` + `_bump_version_full()` | +55 |
+| `orchestrator_pkg/scan.py:806-843` | Replace `DualAuthScanner` call with `BolaWorkflow` behind `_feature_enabled("bola_workflow")` flag | +35 |
+| **Total modified** | | **+90** |
 
 ### Files with ZERO changes
 
@@ -109,10 +109,18 @@ class ResourceCreationStrategy:
     V1: try POST /api/{type}/ with generic JSON body, fall back to GET discovery
     V2: Playwright form fill + submit
     V3: LLM-guided (agent reasons about the target's form)
+
+    NOTE (V1 fallback adaptation):
+    dual_auth_scanner._discover_owned_resources() returns dict[str, list[str]]
+    (resource_type → [ids]), not list[str]. The fallback filters by the
+    requested resource_type before returning. This mapping is internal to
+    the V1 strategy — the public signature stays -> list[str].
     """
     def create_or_discover(self, identity, resource_type: str) -> list[str]:
         # Try create first (POST)
         # Fall back to discover (GET crawl — reuse dual_auth_scanner logic)
+        #   results = _discover_owned_resources(session)
+        #   return results.get(resource_type, [])
 ```
 
 **The BolaWorkflow receives it as injected dependency:**
@@ -169,6 +177,11 @@ Obstacle = {
 class WorkflowResult:
     """Uniform result contract for ALL workflow types.
     Orchestrator dispatches on this — it doesn't inspect workflow internals.
+
+    success is set EXPLICITLY by the workflow, NOT derived from state.
+    A clean run with zero findings is success=True, findings_created=0.
+    A partially-completed run with obstacles is success=True, obstacles_encountered=N.
+    A crashed run is success=False.
     """
     success: bool
     findings_created: int
@@ -176,12 +189,14 @@ class WorkflowResult:
     identities_created: int
     resources_created: int
     requests_captured: int
-    metadata: dict                         # workflow-specific (e.g. resource types tested)
+    outcome: str = "complete"              # "complete" | "partial" | "crashed"
+    metadata: dict = field(default_factory=dict)
 
     @classmethod
-    def from_state(cls, state: EngagementState) -> "WorkflowResult":
+    def from_state(cls, state: EngagementState, *, success: bool = True, outcome: str = "complete") -> "WorkflowResult":
         return cls(
-            success=len(state.findings) > 0,
+            success=success,
+            outcome=outcome,
             findings_created=len(state.findings),
             obstacles_encountered=len(state.obstacles),
             identities_created=len(state.identities),
@@ -200,12 +215,14 @@ class WorkflowResult:
 return WorkflowResult.from_state(state)
 ```
 
-**The orchestrator reads one field to decide what to do next:**
+**The orchestrator reads outcome first, then success:**
 ```python
-if result.success:
+if result.outcome == "crashed":
+    slog.warning(f"Workflow crashed — {result.metadata}")
+elif result.obstacles_encountered > 0:
+    slog.info(f"Partial coverage: {result.obstacles_encountered} obstacles encountered")
+if result.findings_created > 0:
     emit_finding_rt(...)
-else:
-    # result.obstacles_encountered > 0 — partial coverage, proceed anyway
 ```
 
 **Delta:** ~20 lines added to `runtime/workflows/base.py`. No behavioral change — `WorkflowResult.from_state()` is a constructor, not a run path.
@@ -230,13 +247,19 @@ else:
 
 **Key insight:** The BolaWorkflow runs INSIDE a single Celery task (the scan task at `tasks/scan.py:15`, `soft_time_limit=2400`). Steps are in-memory; no cross-task serialization needed.
 
-**Crash recovery:** Reuse existing `DecisionCheckpoint` at `runtime/decision_checkpoint.py:95-124` to checkpoint each step's result to `agent_decision_log`. On retry, `find_latest_checkpoint()` skips completed steps. `register_tool.py:209-213` handles `EMAIL_EXISTS` on re-run.
+**Crash recovery:** Each step writes its completion status to `agent_decision_log` via `DecisionCheckpoint` (reusing the existing table for step tracking — `selected_tool` stores the step name, `arguments` stores the step output snapshot). 
+
+> **Schema note:** `DecisionCheckpoint` is designed for agent decisions (`selected_tool` + `arguments`), not generic step payloads. Step OUTPUT data (captured requests, identities, resources) is carried in `EngagementState` fields and persisted via `state_cache.save()` (see Iteration 3). The `agent_decision_log` entry is used only for crash recovery — detecting which steps completed on retry.
+
+On retry, `find_latest_checkpoint()` skips completed steps. `register_tool.py:209-213` handles `EMAIL_EXISTS` on re-run.
 
 ### Iteration 3 — Concurrency & Session Lifecycle
 
-**Key insight:** The BolaWorkflow runs synchronously BEFORE the `ThreadPoolExecutor(max_workers=5)` at `orchestrator_pkg/scan.py:684`. `DistributedLock` at `tasks/base.py:166` prevents concurrent engagement writes. No thread-safety issues.
+**Key insight:** The BolaWorkflow runs synchronously in the same sequential path as the existing `DualAuthScanner` — AFTER the `ThreadPoolExecutor(max_workers=5)` at `orchestrator_pkg/scan.py:684` (see L806-844). The synchronous execution model means no other tool is sharing the `authenticated_session` during the workflow, which eliminates thread-safety issues around `Session.send` patching. `DistributedLock` at `tasks/base.py:166` prevents concurrent engagement writes.
 
 **Missing:** Wire `BolaWorkflow` through `ExecutionEngine.execute()` at `runtime/execution_engine.py:138-149` for free step recording to `EngagementState.tool_history`.
+
+> **`_bump_version` note:** The existing `_bump_version()` at `engagement_state.py:121` hardcodes `self.to_dict()` (count-only serializer). Workflow steps need full-state persistence. Add `_bump_version_full()` that calls `to_dict_full()` instead, or have the workflow call `state_cache.save()` directly with `to_dict_full()` after each step.
 
 ### Iteration 4 — Detector Refactor / "No Refactoring"
 
@@ -312,7 +335,8 @@ tasks/scan.py (existing)
                   └─ AnalyzeAuthorizationStep   [reuses dual_auth_scanner BOLA logic]
                   
                   ↑ each step saves checkpoint to agent_decision_log
-                  ↑ each step calls state._bump_version() → Redis cache
+                  ↑ each step calls state._bump_version_full() → Redis cache (uses to_dict_full(), not count-only to_dict())
+                  ↑   _bump_version_full() is net-new; existing _bump_version() persists to_dict() (counts only)
                   ↑ step exceptions become obstacles, not terminations
 ```
 
