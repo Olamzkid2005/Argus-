@@ -479,7 +479,7 @@ class WebScanner(AbstractTool):
 
         import concurrent.futures as _cf
         with ThreadPoolExecutor(max_workers=6) as pool:
-            futures = {pool.submit(check): check.__name__ for check in checks}
+            futures = {pool.submit(check): getattr(check, '__name__', str(check)) for check in checks}
             try:
                 for future in as_completed(futures, timeout=WEB_SCANNER_CHECK_TIMEOUT):
                     try:
@@ -576,6 +576,10 @@ class WebScanner(AbstractTool):
         Creates the builder lazily if needed (backward compat for direct
         ``scan()`` calls without ``execute()``). If an emit_finding_callback
         was provided, streaming is handled automatically by the builder.
+
+        The finding is also appended to ``self.findings`` so that direct
+        calls to individual check methods (e.g. ``check_graphql_introspection()``)
+        produce immediately visible results.
         """
         if self._builder is None:
             self._builder = FindingBuilder(
@@ -583,7 +587,8 @@ class WebScanner(AbstractTool):
                 engagement_id=self.engagement_id,
                 emit_finding=self.emit_finding_callback,
             )
-        self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+        finding = self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+        self.findings.append(finding)
 
     def _detect_framework(self, response) -> str:
         """

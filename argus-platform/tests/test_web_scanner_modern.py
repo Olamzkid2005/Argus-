@@ -124,10 +124,15 @@ class TestOpenAPIDiscovery:
 class TestScanIntegration:
     def test_new_checks_in_scan(self, scanner):
         """Test that new checks are called in main scan flow."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.text = "<html><body>OK</body></html>"
+
         with patch.object(scanner, "check_graphql_introspection") as mock_graphql, \
              patch.object(scanner, "check_jwt_algorithm_confusion") as mock_jwt, \
              patch.object(scanner, "check_openapi_discovery") as mock_openapi:
-            
+
             # Mock other checks to avoid side effects
             with patch.object(scanner, "check_security_headers"), \
                  patch.object(scanner, "check_csp"), \
@@ -145,8 +150,11 @@ class TestScanIntegration:
                  patch.object(scanner, "check_ssti"), \
                  patch.object(scanner, "check_lfi"), \
                  patch.object(scanner, "check_xxe"):
-                
-                scanner.scan("http://test.com")
-                mock_graphql.assert_called_once()
-                mock_jwt.assert_called_once()
-                mock_openapi.assert_called_once()
+
+                # Mock _safe_request + session.get so initial connection succeeds
+                with patch.object(scanner, "_safe_request", return_value=mock_resp), \
+                     patch.object(scanner.session, "get", return_value=mock_resp):
+                    scanner.scan("http://test.com")
+                    mock_graphql.assert_called_once()
+                    mock_jwt.assert_called_once()
+                    mock_openapi.assert_called_once()

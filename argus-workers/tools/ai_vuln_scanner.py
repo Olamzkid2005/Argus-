@@ -158,6 +158,7 @@ class AIVulnScanner(AbstractTool):
         self.verify = verify
         self.engagement_id = engagement_id
         self.emit_finding_callback = emit_finding_callback
+        self.findings: list[dict] = []
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
         self._detected_format = None  # Cached successful AI payload format
@@ -172,12 +173,15 @@ class AIVulnScanner(AbstractTool):
         finding is registered through ``FindingBuilder.add()`` for standardized
         creation and evidence sanitization.  Extra fields (e.g. ``"cwe"``) are
         passed through via ``**extra``.
+
+        The finding is also appended to ``self.findings`` so that direct
+        calls to individual check methods produce immediately visible results.
         """
         _STANDARD_KEYS = {"type", "severity", "endpoint", "evidence", "confidence"}
         extra = {k: v for k, v in finding.items() if k not in _STANDARD_KEYS}
 
         if self._builder:
-            self._builder.add(
+            finding = self._builder.add(
                 finding.get("type", "UNKNOWN"),
                 finding.get("severity", "INFO"),
                 finding.get("endpoint", ""),
@@ -185,6 +189,7 @@ class AIVulnScanner(AbstractTool):
                 confidence=finding.get("confidence", 0.8),
                 **extra,
             )
+            self.findings.append(finding)
         elif self.emit_finding_callback and self.engagement_id:
             try:
                 self.emit_finding_callback(

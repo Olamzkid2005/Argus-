@@ -258,13 +258,17 @@ class LegacyAPISecurityScanner(AbstractTool):
 
         Delegates to ``FindingBuilder`` for schema consistency.  Creates the
         builder lazily if ``execute()`` was not called (backward-compat path).
+
+        The finding is also appended to ``self.findings`` so that direct
+        calls to individual check methods produce immediately visible results.
         """
         if self._builder is None:
             self._builder = FindingBuilder(
                 source_tool=self.tool_name,
                 engagement_id=self.engagement_id,
             )
-        self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+        finding = self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+        self.findings.append(finding)
 
     def check_security_headers(self):
         """Check API security headers."""
