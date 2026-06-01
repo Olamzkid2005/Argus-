@@ -11,6 +11,7 @@ import logging
 import re
 import threading
 import time
+from typing import Callable
 from urllib.parse import urljoin
 
 import requests
@@ -100,6 +101,78 @@ class DualAuthScanner(AbstractTool):
         self._builder: FindingBuilder | None = None
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
+
+    @classmethod
+    def for_phase_execution(
+        cls,
+        *,
+        target: str,
+        engagement_id: str,
+        emit_finding: Callable | None,
+        source_tool: str,
+        timeout: int = 60,
+        rate_limit: float = 0.3,
+        verify: bool = True,
+    ) -> "DualAuthScanner":
+        """Construct a DualAuthScanner instance for use as a step helper.
+
+        Bypasses __init__ to avoid the heavy auth_manager_a/b setup that the workflow
+        doesn't need (workflow has its own auth via AuthManager). Only the fields
+        required by the private methods (_discover_owned_resources,
+        _test_cross_account_access, _check_bopla, _safe_request) are set.
+
+        The resulting instance has:
+          - _builder = FindingBuilder(...) so all findings go through validation,
+            evidence sanitization, and SSE streaming via emit_finding callback
+          - _last_response_received = False; flipped to True by the wrapped
+            _safe_request when any request returns a non-None response (ANY HTTP
+            response, including 4xx/5xx — because a TCP-level response means the
+            target IS reachable). Steps check this flag to decide whether to emit
+            a target_unreachable obstacle (all requests failed at the transport
+            level, not just returned errors).
+
+        IMPORTANT: Any new attribute added to __init__ that is read by the private
+        methods MUST also be added here. Enforced by tests that introspect both
+        __init__ and for_phase_execution for matching attributes.
+        """
+        instance = cls.__new__(cls)
+        instance.auth_config_a = None
+        instance.auth_config_b = None
+        instance.auth_manager_a = None
+        instance.auth_manager_b = None
+        instance.timeout = timeout
+        instance.rate_limit = rate_limit
+        instance.verify = verify
+        instance.engagement_id = engagement_id
+        instance.emit_finding_callback = emit_finding
+        instance.findings = []
+        instance._last_request_time = 0.0
+        instance._rate_lock = threading.Lock()
+        instance._last_response_received = False
+        instance.target_url = target.rstrip("/")
+
+        # CRITICAL: set _builder so _emit_finding routes through FindingBuilder.
+        # Without this, findings skip severity validation + evidence sanitization.
+        instance._builder = FindingBuilder(
+            source_tool=source_tool,
+            engagement_id=engagement_id,
+            emit_finding=emit_finding,
+        )
+
+        # Wrap _safe_request to track _last_response_received.
+        # ANY non-None response (including 4xx/5xx) means the target is reachable.
+        original_safe_request = cls._safe_request
+
+        def wrapped_safe_request(
+            self_: "DualAuthScanner", method: str, url: str, session: requests.Session, **kwargs: object
+        ) -> requests.Response | None:
+            result = original_safe_request(self_, method, url, session, **kwargs)
+            if result is not None:
+                self_._last_response_received = True
+            return result
+
+        instance._safe_request = wrapped_safe_request.__get__(instance, cls)  # type: ignore[method-assign]
+        return instance
 
     def _emit_finding(self, finding: dict) -> None:
         """Emit a finding in real-time if callback is configured.
