@@ -805,11 +805,9 @@ def execute_scan_tools(
 
     # DualAuthScanner / BolaWorkflow — cross-account BOLA/BOPLA testing when dual_auth_config is provided
     if dual_auth_config is not None and auth_config is not None:
-        if is_enabled("bola_workflow", default=False):
+        if _feature_enabled("bola_workflow", default=False):
             # BolaWorkflow — step-based BOLA/BOPLA (V1, operator-supplied credentials)
-            from utils.logging_utils import ScanLogger as _ScanLogger
-
-            bola_slog = _ScanLogger("bola_workflow", engagement_id=ctx.engagement_id)
+            bola_slog = ScanLogger("bola_workflow", engagement_id=ctx.engagement_id)
             bola_slog.tool_start("bola_workflow", [target])
             try:
                 from runtime.workflows import BolaWorkflow as _BolaWorkflow
