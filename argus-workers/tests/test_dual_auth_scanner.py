@@ -5,12 +5,14 @@ Uses mocked AuthManager and ``_safe_request`` to test scan logic without
 live authentication or HTTP requests.
 """
 
+import threading
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
 from tools.dual_auth_scanner import DualAuthScanner
 from tool_core.base import ToolContext
+from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus
 
 
@@ -429,3 +431,91 @@ class TestExecute:
             scanner.execute(ctx)
 
         assert scanner.timeout == 77
+
+
+class TestForPhaseExecution:
+    """Tests for DualAuthScanner.for_phase_execution() classmethod."""
+
+    @pytest.fixture
+    def phase_scanner(self):
+        """Create a for_phase_execution instance for testing."""
+        return DualAuthScanner.for_phase_execution(
+            target="https://example.com",
+            engagement_id="eng-test",
+            emit_finding=None,
+            source_tool="bola_workflow",
+        )
+
+    def test_all_init_attributes_set(self, phase_scanner):
+        """Verify for_phase_execution sets all attributes that __init__ sets.
+
+        This is the invariant test that catches semantic drift between the
+        normal constructor and the __new__ bypass path. If a new attribute
+        is added to __init__ without adding it to for_phase_execution,
+        this test fails.
+        """
+        sc = phase_scanner
+        # Auth configs are intentionally None (workflow provides its own)
+        assert sc.auth_config_a is None
+        assert sc.auth_config_b is None
+        assert sc.auth_manager_a is None
+        assert sc.auth_manager_b is None
+        # Core scan attributes
+        assert sc.timeout == 60
+        assert sc.rate_limit == 0.3
+        assert sc.verify is True
+        assert sc.engagement_id == "eng-test"
+        assert sc.emit_finding_callback is None
+        assert sc.findings == []
+        assert isinstance(sc._builder, FindingBuilder)
+        assert sc._last_request_time == 0.0
+        assert isinstance(sc._rate_lock, type(threading.Lock()))
+        # Workflow-specific attributes (not in __init__)
+        assert sc._last_response_received is False
+        assert sc.target_url == "https://example.com"
+        # Class-level attributes are inherited
+        assert sc.tool_name == "dual_auth_scanner"
+        assert "accounts" in sc.RESOURCE_PATTERNS
+        assert "GET" in sc.TEST_METHODS
+
+    def test_last_response_received_flipped_on_successful_request(self, phase_scanner):
+        """Verify wrapped _safe_request flips _last_response_received on 200."""
+        sc = phase_scanner
+        mock_session = Mock()
+        mock_response = Mock(status_code=200, text="ok")
+        mock_session.request.return_value = mock_response
+
+        with patch.object(sc, "timeout", 5):
+            sc._safe_request("GET", "https://example.com/api/test", session=mock_session)
+
+        assert sc._last_response_received is True
+
+    def test_last_response_received_stays_false_on_timeout(self, phase_scanner):
+        """Verify _last_response_received stays False when _safe_request returns None."""
+        from requests.exceptions import ConnectionError as RequestsConnectionError
+
+        sc = phase_scanner
+        mock_session = Mock()
+        mock_session.request.side_effect = RequestsConnectionError("Connection refused")
+
+        with patch.object(sc, "timeout", 5):
+            result = sc._safe_request("GET", "https://example.com/api/test", session=mock_session)
+
+        assert result is None
+        assert sc._last_response_received is False
+
+    def test_emit_finding_routes_through_builder(self, phase_scanner):
+        """Verify _emit_finding uses _builder when set (not None from __init__)."""
+        sc = phase_scanner
+        assert sc._builder is not None  # for_phase_execution always sets _builder
+        # _emit_finding should route through _builder.add()
+        with patch.object(sc._builder, "add", wraps=sc._builder.add) as mock_add:
+            sc._emit_finding({
+                "type": "CONFIRMED_BOLA",
+                "severity": "CRITICAL",
+                "endpoint": "/api/accounts/1",
+                "evidence": {},
+                "confidence": 0.9,
+            })
+            mock_add.assert_called_once()
+        assert len(sc.findings) == 1
