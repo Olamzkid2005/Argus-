@@ -232,22 +232,31 @@ Existing OpenCode commands (`/scan`, `/recon`, `/auth`, `/api`) map to direct MC
 
 ## 6. Implementation Tasks
 
+### Phase 0: Architecture Gaps (from Architecture Review — must do before Phase 1)
+- [ ] Task 0.1: Create `argus-workers/mcp_transport.py` — stdio JSON-RPC transport loop; wraps existing `MCPServer` class with stdin/stdout line-delimited JSON; solves the blocking issue that `mcp_server.py` is a class, not a runnable process
+- [ ] Task 0.2: Add child process lifecycle management to `WorkersBridge` — SIGTERM/SIGINT forwarding to Python subprocess, 3s graceful shutdown then SIGKILL, orphan prevention on Ctrl+C
+- [ ] Task 0.3: Define credential file format (`--creds`) and schema — JSON file with user array (username, password, role) + target config (login_url, selectors); when absent, browser verification is skipped
+- [ ] Task 0.4: Define error recovery matrix per phase — `ErrorRecovery` type (`fail_fast | skip_and_continue | retry_once_then_skip`) mapped to each phase (recon, vuln_scan, verification, reporting)
+- [ ] Task 0.5: Add Playwright browser installation check to `/doctor` + `package.json` postinstall script (`playwright install chromium`)
+- [ ] Task 0.6: Add `ARGUS_PYTHON` env var and cross-platform Python discovery logic to `WorkersBridge`
+- [ ] Task 0.7: Create 5 ADR documents in `docs/adr/` — ADR-001 (MCP transport), ADR-002 (evidence storage), ADR-003 (planner mode), ADR-004 (credential management), ADR-005 (error recovery)
+
 ### Phase 1: Foundation
 - [ ] Task 1.1: Clone OpenCode into `cli/`, verify `argus --help` works
 - [ ] Task 1.2: Rename package to `argus` in `package.json`, update all branding
 - [ ] Task 1.3: Create `ARCHITECTURE_BOUNDARIES.md`
 - [ ] Task 1.4: Set up GitHub Actions (lint → typecheck → unit tests)
-- [ ] Task 1.5: Write `src/argus/bridge/mcp-client.ts` — subprocess MCP connection
+- [ ] Task 1.5: Write `src/argus/bridge/mcp-client.ts` — subprocess MCP connection with lifecycle management from Task 0.2
 
 ### Phase 2: Core Modules
 - [ ] Task 2.1: Implement `src/argus/planner/` — types, strategy, planner, tests
-- [ ] Task 2.2: Implement `src/argus/evidence/` — types, collector, store, tests
+- [ ] Task 2.2: Implement `src/argus/evidence/` — types, collector (with file locking for concurrency safety), store, `/evidence prune --keep-last=N` cleanup, tests
 - [ ] Task 2.3: Implement `src/argus/reporting/` — generator, markdown output, tests
-- [ ] Task 2.4: Implement `src/argus/browser/` — engine, observer, verifiers, tests
+- [ ] Task 2.4: Implement `src/argus/browser/` — engine, observer, verifiers (with credential loading from Task 0.3 format), tests
 
 ### Phase 3: CLI Integration
-- [ ] Task 3.1: Wire `/assess` command — planner → bridge → verifier → evidence → report
-- [ ] Task 3.2: Wire `/doctor` command — health checks
+- [ ] Task 3.1: Wire `/assess` command — planner → bridge (with error recovery from Task 0.4) → verifier (with credential file from Task 0.3) → evidence → report
+- [ ] Task 3.2: Wire `/doctor` command — health checks including Playwright browser check (Task 0.5), Python discovery (Task 0.6)
 - [ ] Task 3.3: Wire `/verify`, `/report`, `/evidence` commands
 - [ ] Task 3.4: Implement deterministic fallback for `/assess` (no LLM, no MCP)
 
@@ -261,7 +270,23 @@ Existing OpenCode commands (`/scan`, `/recon`, `/auth`, `/api`) map to direct MC
 - [ ] Task 5.2: Update root `Makefile` and README for new CLI
 - [ ] Task 5.3: `npm publish` first v5 release
 
-## 7. Rollback Strategy
+## 7. Architecture Review Cross-Reference
+
+| Review Finding | Resolution |
+|----------------|------------|
+| MCP server not runnable (🔴 blocking) | Task 0.1 — `mcp_transport.py` |
+| Missing child process lifecycle (🔴 blocking) | Task 0.2 — SIGTERM/SIGINT forwarding |
+| Underspecified error recovery (🟡 major) | Task 0.4 — error recovery matrix |
+| Missing credential management (🟡 major) | Task 0.3 — `--creds` flag + JSON schema |
+| Playwright browser install (🟡 major) | Task 0.5 — postinstall + /doctor check |
+| Cross-platform Python (🔵 minor) | Task 0.6 — `ARGUS_PYTHON` env var |
+| Evidence cleanup policy (🔵 minor) | Task 2.2 — `/evidence prune` |
+| JSON index concurrency (🔵 minor) | Task 2.2 — file locking |
+| Missing ADRs | Task 0.7 — 5 ADR documents |
+
+Full review: `docs/superpowers/specs/2026-06-02-argus-v5-architecture-review.md`
+
+## 8. Rollback Strategy
 
 | Mechanism | How | When |
 |-----------|-----|------|
