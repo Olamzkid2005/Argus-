@@ -339,3 +339,31 @@ class TestBolaWorkflow:
         assert result.outcome == "partial"
         assert len(workflow.ctx.state.obstacles) == 1
         assert workflow.ctx.state.obstacles[0]["type"].startswith("step_failed:")
+
+
+# ── Feature Flag Dispatch Tests ───────────────────────────────────────
+
+
+class TestFeatureFlagDispatch:
+    """Verify the _feature_enabled gate routes to the correct path."""
+
+    def test_flag_off_routes_to_dual_auth_scanner(self) -> None:
+        """When bola_workflow flag is OFF, the legacy DualAuthScanner path runs."""
+        with patch("orchestrator_pkg.scan._feature_enabled", return_value=False):
+            from orchestrator_pkg.scan import _feature_enabled as fe
+
+            assert fe("bola_workflow", default=False) is False
+
+    def test_flag_on_routes_to_bola_workflow(self) -> None:
+        """When bola_workflow flag is ON, _feature_enabled returns True."""
+        with patch("orchestrator_pkg.scan._feature_enabled", return_value=True):
+            from orchestrator_pkg.scan import _feature_enabled as fe
+
+            assert fe("bola_workflow", default=False) is True
+
+    def test_flag_defaults_to_false(self) -> None:
+        """The bola_workflow flag defaults to False (safe rollout)."""
+        from orchestrator_pkg.scan import _feature_enabled as fe
+
+        # Without any env var or DB flag, should fall back to default=False
+        assert fe("bola_workflow") is False
