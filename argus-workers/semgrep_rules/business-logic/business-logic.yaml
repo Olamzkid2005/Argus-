@@ -1,0 +1,16 @@
+rules:
+  - id: business-logic-rate-bypass
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Possible business logic bypass detected. Review for improper validation of business rules.
+    metadata:
+      cwe: "CWE-840"
+      owasp: "A04:2021-Insecure Design"
+      category: security
+      confidence: LOW
+    pattern-either:
+      - pattern: $QTY = request.json.get("quantity", ...)
+      - pattern: $QTY = req.body.quantity
+      - pattern: $PRICE = request.json.get("price", ...)
+      - pattern: $PRICE = req.body.price

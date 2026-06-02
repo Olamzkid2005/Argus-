@@ -1,0 +1,193 @@
+rules:
+  - id: sql-injection-raw-query
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "SQL Injection - user input concatenated into raw SQL query"
+    metadata:
+      category: security
+      cwe: "CWE-89"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $QUERY = "SELECT * FROM " + $TABLE + " WHERE id = " + $USER_INPUT
+          - pattern: |
+              $QUERY = f"SELECT * FROM {$TABLE} WHERE id = {$USER_INPUT}"
+          - pattern: |
+              cursor.execute("SELECT * FROM users WHERE name = '%s'" % $USER_INPUT)
+          - pattern: |
+              db.query("SELECT * FROM users WHERE id = " + req.query.id)
+          - pattern: |
+              String.format("SELECT * FROM users WHERE name = '%s'", $USER_INPUT)
+      - pattern-not: |
+          cursor.execute("SELECT * FROM users WHERE name = %s", ($USER_INPUT,))
+
+  - id: nosql-injection
+    languages: [python, javascript, typescript, java, go, php, ruby]
+    severity: ERROR
+    message: "NoSQL Injection - user input used directly in query object"
+    metadata:
+      category: security
+      cwe: "CWE-943"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              db.collection.find({ $where: $USER_INPUT })
+          - pattern: |
+              db.collection.find({ name: req.body.name })
+          - pattern: |
+              db.users.findOne({ username: $USER_INPUT })
+      - pattern-not: |
+          db.users.findOne({ username: sanitize($USER_INPUT) })
+
+  - id: command-injection
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Command Injection - user input passed to system command execution"
+    metadata:
+      category: security
+      cwe: "CWE-78"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              os.system("..." + $USER_INPUT)
+          - pattern: |
+              subprocess.call("..." + $USER_INPUT, shell=True)
+          - pattern: |
+              exec("..." + $USER_INPUT)
+          - pattern: |
+              Runtime.getRuntime().exec("..." + $USER_INPUT)
+          - pattern: |
+              child_process.exec("..." + $USER_INPUT)
+          - pattern: |
+              `cat ${$USER_INPUT}`
+      - pattern-not: |
+          subprocess.call(["cmd", "arg1", $USER_INPUT], shell=False)
+
+  - id: ldap-injection
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "LDAP Injection - unsanitized user input in LDAP filter"
+    metadata:
+      category: security
+      cwe: "CWE-90"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              ldap.search($BASE, "(cn=" + $USER_INPUT + ")")
+          - pattern: |
+              ldap.search($BASE, `(&(objectClass=user)(cn=${$USER_INPUT}))`)
+          - pattern: |
+              new LDAPQuery("(uid=" + $USER_INPUT + ")")
+
+  - id: xpath-injection
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "XPath Injection - user input in XPath expression"
+    metadata:
+      category: security
+      cwe: "CWE-643"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              xpath.evaluate("//user[name='" + $USER_INPUT + "']", ...)
+          - pattern: |
+              $DOC.xpath("//user[name='" + $USER_INPUT + "']")
+          - pattern: |
+              new XPathExpression("//user[name='" + $USER_INPUT + "']")
+
+  - id: xml-external-entity
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "XML External Entity (XXE) - unsafe XML parser configuration"
+    metadata:
+      category: security
+      cwe: "CWE-611"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              xml.etree.ElementTree.parse($USER_INPUT)
+          - pattern: |
+              xml.dom.minidom.parseString($USER_INPUT)
+          - pattern: |
+              DocumentBuilderFactory.newInstance().parse($USER_INPUT)
+          - pattern: |
+              libxml2.parseDoc($USER_INPUT)
+      - pattern-not: |
+          parser = xml.sax.make_parser()
+          parser.setFeature(xml.sax.handler.feature_external_ges, False)
+
+  - id: template-injection-ssti
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: ERROR
+    message: "Server-Side Template Injection (SSTI) - user input in template string"
+    metadata:
+      category: security
+      cwe: "CWE-1336"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              template.render($USER_INPUT)
+          - pattern: |
+              Jinja2.Template($USER_INPUT).render()
+          - pattern: |
+              new Vue({ template: $USER_INPUT })
+          - pattern: |
+              renderToString($USER_INPUT)
+          - pattern: |
+              _.template($USER_INPUT)(...)
+      - pattern-not: |
+          template.render(sanitize($USER_INPUT))
+
+  - id: header-injection
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: WARNING
+    message: "HTTP Header Injection - user input in response headers"
+    metadata:
+      category: security
+      cwe: "CWE-113"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              res.setHeader("Location", $USER_INPUT)
+          - pattern: |
+              response.headers["Location"] = $USER_INPUT
+          - pattern: |
+              redirect($USER_INPUT)
+      - pattern-not: |
+          res.setHeader("Location", sanitize_url($USER_INPUT))
+
+  - id: log-injection
+    languages: [python, javascript, typescript, java, go, php, ruby, csharp]
+    severity: WARNING
+    message: "Log Injection - unsanitized user input in log message"
+    metadata:
+      category: security
+      cwe: "CWE-117"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+    patterns:
+      - pattern-either:
+          - pattern: |
+              logger.info("User action: " + $USER_INPUT)
+          - pattern: |
+              log.debug(f"Request: {$USER_INPUT}")
+          - pattern: |
+              System.out.println("Event: " + $USER_INPUT)
+      - pattern-not: |
+          logger.info("User action: %s", sanitize($USER_INPUT))

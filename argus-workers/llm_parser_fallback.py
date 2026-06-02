@@ -1,0 +1,235 @@
+"""
+LLM Parser Fallback — recovers findings when structured parsers return nothing.
+
+Only activates when:
+  - Feature flag "llm_parser_fallback" is enabled
+  - The primary parser returned zero findings
+  - Raw output is non-empty (length > 100 chars)
+
+Sends raw tool output to a lightweight LLM that extracts findings into
+standard JSON format. This recovers findings from:
+  - New output formats the parsers don't yet handle
+  - Tool version updates that change output structure
+  - Edge cases in otherwise valid output
+
+Cost-controlled: uses a cheap model, max 500 output tokens, and only
+fires on parser miss — zero cost for scans where parsers work correctly.
+"""
+
+import logging
+import os
+from contextlib import suppress
+
+logger = logging.getLogger(__name__)
+
+FALLBACK_SYSTEM_PROMPT = (
+    "You are a security tool output parser. Given raw output from a "
+    "penetration testing tool, determine if it contains any security "
+    "findings. If yes, extract them into a JSON array of finding objects.\n\n"
+    "Rules:\n"
+    "- Only extract findings that are clearly present in the output\n"
+    "- Do NOT invent or assume findings\n"
+    "- Each finding must have: type, severity, endpoint, and evidence\n"
+    "- severity must be one of: CRITICAL, HIGH, MEDIUM, LOW, INFO\n"
+    "- evidence should contain relevant payload, request, or response data\n"
+    "- If the output contains no findings, return an empty array []\n"
+    "- Return valid JSON only — no explanation, no markdown"
+)
+
+
+# Prompt injection patterns to redact from tool output before sending to LLM.
+# Prevents attacker-controlled target responses (which were scanned by security
+# tools) from injecting instructions into the LLM parser (H-v4-08).
+_FALLBACK_INJECTION_PATTERNS = [
+    r'(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions',
+    r'(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)',
+    r'(?i)override\s+(system|assistant)\s+(prompt|message)',
+    r'(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)',
+    r'(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)',
+    r'(?i)(subprocess|os\.system|eval|exec)\s*\(',
+    r'(?i)run\s+(the\s+following|this)\s+(command|tool)',
+    r'(?i)system\s+prompt\s*(=|\s+is\s*)',
+]
+
+
+def _sanitize_parser_input(text: str) -> str:
+    """Sanitize raw tool output before sending to LLM parser.
+
+    Strips control characters, backtick fences (which could break prompt
+    structure), and redacts known prompt injection patterns from
+    attacker-controlled data that may appear in tool output.
+
+    Args:
+        text: Raw tool output to sanitize
+
+    Returns:
+        Sanitized text safe to insert into LLM prompts
+    """
+    import re as _re
+    # Strip control characters (except newline/tab)
+    text = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    # Remove backtick fences that could break prompt structure
+    text = text.replace('```', '` ` `')
+    # Redact injection patterns
+    for pattern in _FALLBACK_INJECTION_PATTERNS:
+        text = _re.sub(pattern, '[REDACTED]', text)
+    return text
+
+
+class LLMParserFallback:
+    """LLM-powered fallback that extracts findings from raw tool output.
+
+    Only fired when structured parsers return zero findings.
+    Gated behind the "llm_parser_fallback" feature flag.
+    Uses a lightweight model to keep costs minimal.
+    """
+
+    FALLBACK_MODEL = os.getenv(
+        "LLM_PARSER_FALLBACK_MODEL",
+        "openai/gpt-4o-mini",
+    )
+
+    MIN_OUTPUT_LENGTH = 100
+
+    def __init__(self, llm_service=None):
+        """Initialize the fallback parser.
+
+        Args:
+            llm_service: Optional pre-configured LLMService instance.
+                         If not provided, creates its own lightweight client
+                         using the OpenRouter gpt-4o-mini model.
+        """
+        self._llm_service = llm_service
+        self._service_initialized = False
+
+    def _ensure_service(self):
+        """Lazy-init LLM service on first call — avoids cost if never used."""
+        if self._service_initialized:
+            return self._llm_service is not None
+        self._service_initialized = True
+
+        if self._llm_service is not None:
+            return True
+
+        try:
+            from llm_client import LLMClient
+
+            client = LLMClient(model=self.FALLBACK_MODEL)
+            if not client.is_available():
+                logger.debug("LLMParserFallback: LLM not available")
+                return False
+
+            from llm_service import LLMService
+
+            self._llm_service = LLMService(llm_client=client)
+            return True
+        except Exception as e:
+            logger.warning(
+                "LLMParserFallback: failed to initialize LLM service: %s", e
+            )
+            return False
+
+    def extract_findings(self, tool_name: str, raw_output: str) -> list[dict]:
+        """Attempt to extract findings from raw tool output using LLM.
+
+        Args:
+            tool_name: Name of the tool that produced the output
+            raw_output: Raw stdout/stderr from the tool
+
+        Returns:
+            List of finding dicts in standard format, or empty list
+        """
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("llm_parser_fallback")
+        slog.llm_start(tool_name, f"{len(raw_output)} chars")
+
+        if not self._ensure_service():
+            slog.llm_result("LLM service unavailable")
+            return []
+
+        is_available = False
+        with suppress(Exception):
+            is_available = self._llm_service.is_available()  # type: ignore[union-attr]
+
+        if not is_available:
+            slog.llm_result("LLM service not available")
+            return []
+
+        # Truncate raw output to keep the LLM call manageable.
+        # 10KB should be more than enough — parsers typically handle
+        # structured output that's much smaller.
+        max_input_len = 10000
+        truncated = raw_output[:max_input_len]
+        if len(raw_output) > max_input_len:
+            truncated += f"\n\n[output truncated — {len(raw_output)} chars total]"
+
+        # Sanitize the truncated output to prevent prompt injection from
+        # attacker-controlled data that may appear in tool output (H-v4-08).
+        sanitized_output = _sanitize_parser_input(truncated)
+        user_prompt = (
+            f"Tool: {tool_name}\n\n"
+            f"Raw output:\n```\n{sanitized_output}\n```\n\n"
+            f"Does this output contain any security findings? "
+            f"If yes, extract them as a JSON array."
+        )
+
+        try:
+            result = self._llm_service.chat_json(  # type: ignore[union-attr]
+                system_prompt=FALLBACK_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                max_tokens=500,
+                temperature=0.0,
+            )
+
+            if result.get("_fallback"):
+                slog.llm_result(f"LLM call failed for {tool_name}")
+                logger.debug(
+                    "LLMParserFallback: LLM call failed for %s", tool_name
+                )
+                return []
+
+            findings = result if isinstance(result, list) else []
+
+            validated_count = 0
+            for finding in findings:
+                if not isinstance(finding, dict):
+                    continue
+                # Mark as AI-generated so human reviewers know this came from an LLM
+                finding.setdefault("source_tool", tool_name)
+                finding.setdefault("parser_source", "llm_fallback")
+                finding["ai_generated"] = True
+                # Post-hoc validation: discard findings with empty type, missing endpoint,
+                # or severity outside the allowed set
+                valid_severities = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                ftype = str(finding.get("type", "")).strip()
+                fseverity = str(finding.get("severity", "")).strip().upper()
+                fendpoint = str(finding.get("endpoint", "")).strip()
+                if not ftype or fseverity not in valid_severities or not fendpoint:
+                    logger.debug(
+                        "LLMParserFallback: discarded hallucinated/invalid finding "
+                        "type=%r severity=%r endpoint=%r",
+                        ftype, fseverity, fendpoint,
+                    )
+                    continue
+                validated_count += 1
+
+            if validated_count < len(findings):
+                logger.warning(
+                    "LLMParserFallback: %d/%d findings discarded by post-validation for %s",
+                    len(findings) - validated_count, len(findings), tool_name,
+                )
+                findings = [f for f in findings if isinstance(f, dict) and f.get("ai_generated")
+                           and str(f.get("type", "")).strip()
+                           and str(f.get("severity", "")).strip().upper() in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                           and str(f.get("endpoint", "")).strip()]
+
+            slog.llm_complete(tool_name, tokens=len(raw_output) // 4)
+            slog.llm_result(f"Extracted {len(findings)} findings from {tool_name}")
+            return findings
+
+        except Exception as e:
+            slog.llm_result(f"Failed: {e}")
+            logger.warning(
+                "LLMParserFallback: extraction failed for %s: %s", tool_name, e
+            )
+            return []

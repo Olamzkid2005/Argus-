@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.title }}</title>
+    <style>
+        :root {
+            --bg-void: #000000;
+            --bg-surface: #0A0A0F;
+            --border-structural: rgba(255, 255, 255, 0.08);
+            --text-primary: #F0F0F5;
+            --text-secondary: #8A8A9E;
+            --prism-cream: #FFFDD0;
+            --prism-cyan: #E9FFFF;
+            --critical: #FF4444;
+            --high: #FF8800;
+            --medium: #FFFDD0;
+            --low: #8A8A9E;
+            --info: #E9FFFF;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 40px;
+        }
+        .header {
+            border-bottom: 1px solid var(--border-structural);
+            padding-bottom: 24px;
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+        .meta {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-family: 'SF Mono', monospace;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .summary-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-structural);
+            padding: 20px;
+            text-align: center;
+        }
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .summary-card .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+        .section {
+            margin-bottom: 32px;
+        }
+        .section h2 {
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+            color: var(--prism-cream);
+            border-left: 3px solid var(--prism-cream);
+            padding-left: 12px;
+        }
+        .category-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-structural);
+            margin-bottom: 8px;
+        }
+        .category-bar .name {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .category-bar .count {
+            font-family: 'SF Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--prism-cyan);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-structural);
+            color: var(--text-secondary);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-structural);
+            vertical-align: top;
+        }
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .severity {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border-structural);
+        }
+        .severity-critical { color: var(--critical); border-color: rgba(255,68,68,0.3); }
+        .severity-high { color: var(--high); border-color: rgba(255,136,0,0.3); }
+        .severity-medium { color: var(--medium); border-color: rgba(255,253,208,0.3); }
+        .severity-low { color: var(--low); border-color: rgba(138,138,158,0.3); }
+        .severity-info { color: var(--info); border-color: rgba(233,255,255,0.3); }
+        .compliance-ref {
+            font-family: 'SF Mono', monospace;
+            font-size: 11px;
+            color: var(--prism-cyan);
+            background: rgba(233, 255, 255, 0.05);
+            padding: 2px 6px;
+        }
+        .endpoint {
+            font-family: 'SF Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+        .status-open { color: var(--critical); }
+        .status-closed { color: #00FF88; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>OWASP Top 10 Compliance Report</h1>
+        <div class="meta">
+            Engagement: {{ report.engagement_id }} | Generated: {{ generated_at }}
+        </div>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="value" style="color: var(--critical)">{{ report.summary.critical_count }}</div>
+            <div class="label">Critical</div>
+        </div>
+        <div class="summary-card">
+            <div class="value" style="color: var(--high)">{{ report.summary.high_count }}</div>
+            <div class="label">High</div>
+        </div>
+        <div class="summary-card">
+            <div class="value" style="color: var(--medium)">{{ report.summary.medium_count }}</div>
+            <div class="label">Medium</div>
+        </div>
+        <div class="summary-card">
+            <div class="value" style="color: var(--text-primary)">{{ report.summary.total_findings }}</div>
+            <div class="label">Total</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Category Distribution</h2>
+        {% for category, count in report.summary.categories.items() %}
+        <div class="category-bar">
+            <span class="name">{{ category }}</span>
+            <span class="count">{{ count }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="section">
+        <h2>Findings Detail</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Severity</th>
+                    <th>Type</th>
+                    <th>OWASP Ref</th>
+                    <th>Endpoint</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for finding in report.findings %}
+                <tr>
+                    <td>{{ finding.finding_id[:8] }}</td>
+                    <td><span class="severity severity-{{ finding.severity.lower() }}">{{ finding.severity }}</span></td>
+                    <td>{{ finding.type }}</td>
+                    <td><span class="compliance-ref">{{ finding.compliance_ref }}</span></td>
+                    <td class="endpoint">{{ finding.endpoint }}</td>
+                    <td class="status-{{ finding.status }}">{{ finding.status.upper() }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

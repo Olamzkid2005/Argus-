@@ -1,0 +1,282 @@
+"""
+Scheduled Engagements — Celery Beat task for recurring scans.
+
+Runs every 5 minutes. Finds scheduled engagements that are due to run,
+creates real engagements for them, and dispatches recon tasks.
+
+Requirements: Scheduled engagements table (migration 032)
+"""
+
+import json
+import logging
+import os
+import uuid
+
+from celery_app import app
+from tasks.recon import run_recon
+
+
+def _build_budget_from_aggressiveness(aggressiveness: str) -> dict:
+    """
+    Build a budget dict from the scheduled engagement's aggressiveness setting.
+
+    This replaces the previous hardcoded budget={"max_cycles": 5, "max_depth": 3}
+    which ignored user-configured settings (issue 3.11).
+
+    Args:
+        aggressiveness: One of "gentle", "default", "aggressive", "exhaustive"
+
+    Returns:
+        Budget dict with max_cycles and max_depth keys
+    """
+    budget_map = {
+        "gentle": {"max_cycles": 2, "max_depth": 1},
+        "default": {"max_cycles": 5, "max_depth": 3},
+        "aggressive": {"max_cycles": 8, "max_depth": 5},
+        "exhaustive": {"max_cycles": 12, "max_depth": 7},
+    }
+    return budget_map.get(aggressiveness, budget_map["default"])
+
+logger = logging.getLogger(__name__)
+
+
+@app.task(
+    bind=True,
+    name="tasks.scheduled.run_due_scans",
+    soft_time_limit=120,
+    time_limit=300,
+)
+def run_due_scans(self):
+    """
+    Runs every 5 minutes via Celery Beat.
+    Finds scheduled engagements due to run and dispatches them as real engagements.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        logger.warning("DATABASE_URL not set, skipping scheduled scans check")
+        return {"status": "skipped", "reason": "no DATABASE_URL"}
+
+    from database.connection import connect
+
+    conn = None
+    cursor = None
+    try:
+        conn = connect(db_url)
+        cursor = conn.cursor()
+
+        # Find all enabled schedules that are due to run
+        cursor.execute(
+            """
+            SELECT id, org_id, target_url, authorized_scope, scan_type,
+                   aggressiveness, agent_mode, created_by
+            FROM scheduled_engagements
+            WHERE enabled = TRUE
+            AND next_run_at <= NOW()
+            FOR UPDATE SKIP LOCKED
+            """
+        )
+        due = cursor.fetchall()
+
+        spawned = 0
+        dispatch_queue = []
+        for row in due:
+            (
+                sched_id,
+                org_id,
+                target,
+                scope,
+                scan_type,
+                aggr,
+                agent_mode,
+                created_by,
+            ) = row
+
+            # Use savepoint so a single failure doesn't abort the entire
+            # transaction — PostgreSQL requires ROLLBACK before any new
+            # statement after an error.
+            try:
+                cursor.execute("SAVEPOINT spawn_schedule")
+                dispatch_info = _spawn_engagement(
+                    conn=conn,
+                    sched_id=sched_id,
+                    org_id=org_id,
+                    target=target,
+                    scope=scope,
+                    scan_type=scan_type,
+                    aggressiveness=aggr,
+                    agent_mode=agent_mode,
+                    created_by=created_by,
+                    db_url=db_url,
+                )
+                cursor.execute("RELEASE SAVEPOINT spawn_schedule")
+                if dispatch_info:
+                    dispatch_queue.append(dispatch_info)
+                spawned += 1
+            except Exception as e:
+                try:
+                    cursor.execute("ROLLBACK TO SAVEPOINT spawn_schedule")
+                except Exception:
+                    pass
+                logger.error("Failed to spawn scheduled engagement %s: %s", sched_id, e)
+                # Continue with next schedule — don't fail the batch
+
+        conn.commit()
+
+        # Dispatch Celery tasks AFTER commit so engagements exist in DB
+        for info in dispatch_queue:
+            # Build budget from scheduled engagement's config or aggressiveness setting
+            aggr = info.get("aggressiveness", "default")
+            budget = _build_budget_from_aggressiveness(aggr)
+            if info["scan_type"] == "repo":
+                from tasks.repo_scan import run_repo_scan
+                run_repo_scan.delay(
+                    engagement_id=info["engagement_id"],
+                    repo_url=info["target"],
+                    budget=budget,
+                    trace_id=info["trace_id"],
+                )
+            else:
+                run_recon.delay(
+                    engagement_id=info["engagement_id"],
+                    target=info["target"],
+                    budget=budget,
+                    trace_id=info["trace_id"],
+                    agent_mode=info["agent_mode"],
+                    prev_engagement_id=info["prev_engagement_id"],
+                )
+            logger.info(
+                "Spawned engagement %s (target=%s, type=%s)",
+                info["engagement_id"],
+                info["target"],
+                info["scan_type"],
+            )
+        logger.info("Spawned %d scheduled engagement(s)", spawned)
+        return {"status": "completed", "spawned": spawned}
+
+    except Exception as e:
+        conn.rollback()
+        logger.error("run_due_scans failed: %s", e)
+        return {"status": "failed", "error": str(e)}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def _spawn_engagement(
+    conn,
+    sched_id: str,
+    org_id: str,
+    target: str,
+    scope: dict,
+    scan_type: str,
+    aggressiveness: str,
+    agent_mode: bool,
+    created_by: str,
+    db_url: str,
+) -> dict:
+    """
+    Create a real engagement from a scheduled engagement record.
+    All DB operations use the provided connection for transactional consistency.
+    """
+    engagement_id = str(uuid.uuid4())
+    trace_id = str(uuid.uuid4())
+
+    # Create the engagement
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO engagements (
+                id, org_id, target_url, authorization_proof,
+                authorized_scope, status, created_by, scan_type,
+                scan_aggressiveness, agent_mode, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, 'created', %s, %s, %s, %s, NOW()
+            )
+            """,
+            (
+                engagement_id,
+                org_id,
+                target,
+                "scheduled",
+                json.dumps(scope) if isinstance(scope, dict) else scope,
+                created_by,
+                scan_type,
+                aggressiveness,
+                agent_mode,
+            ),
+        )
+
+        # Initialize loop budget from aggressiveness setting
+        budget = _build_budget_from_aggressiveness(aggressiveness or "default")
+        cursor.execute(
+            """
+            INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
+                                       current_cycles, current_depth, created_at)
+            VALUES (%s, %s, %s, %s, 0, 0, NOW())
+            """,
+            (str(uuid.uuid4()), engagement_id, budget["max_cycles"], budget["max_depth"]),
+        )
+
+        # Record initial state
+        cursor.execute(
+            """
+            INSERT INTO engagement_states (id, engagement_id, from_state, to_state,
+                                            reason, created_at)
+            VALUES (%s, %s, NULL, 'created', 'Scheduled engagement auto-created', NOW())
+            """,
+            (str(uuid.uuid4()), engagement_id),
+        )
+
+        # Look up previous engagement BEFORE updating last_engagement_id
+        # (otherwise the UPDATE below overwrites it and the SELECT would return
+        # the engagement we just created, defeating diff comparison).
+        prev_engagement_id = None
+        try:
+            cursor.execute(
+                "SELECT last_engagement_id FROM scheduled_engagements WHERE id = %s",
+                (sched_id,),
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                prev_engagement_id = str(row[0])
+        except (ValueError, OSError) as e:
+            logger.debug("Failed to look up previous engagement for scheduled %s: %s", sched_id, e)
+            prev_engagement_id = None
+
+        # Update scheduled engagement with next run and last engagement reference
+        cursor.execute(
+            """
+            UPDATE scheduled_engagements
+            SET last_run_at = NOW(),
+                next_run_at = CASE
+                    WHEN cron_expression = '0 2 * * *' THEN NOW() + INTERVAL '1 day'
+                    WHEN cron_expression = '0 2 * * 1' THEN NOW() + INTERVAL '7 days'
+                    WHEN cron_expression = '0 2 1 * *' THEN NOW() + INTERVAL '1 month'
+                    ELSE NOW() + INTERVAL '7 days'
+                END,
+                last_engagement_id = %s,
+                updated_at = NOW()
+            WHERE id = %s
+            """,
+            (engagement_id, sched_id),
+        )
+
+        cursor.close()
+
+    except Exception:
+        cursor.close()
+        raise
+
+    # Return dispatch info so caller can fire tasks after commit
+    return {
+        "engagement_id": engagement_id,
+        "target": target,
+        "scan_type": scan_type,
+        "trace_id": trace_id,
+        "agent_mode": agent_mode,
+        "prev_engagement_id": prev_engagement_id,
+        "aggressiveness": aggressiveness,
+    }

@@ -1,0 +1,385 @@
+"""
+Checkpoint Manager - Saves and recovers from checkpoints during long scans
+"""
+
+import logging
+import uuid
+from datetime import UTC, datetime, timedelta
+
+from psycopg2.extras import Json, RealDictCursor
+
+from database.connection import get_db
+
+logger = logging.getLogger(__name__)
+
+
+class CheckpointManager:
+    """
+    Manages checkpoints for engagement recovery after worker crashes
+    """
+
+    def __init__(self, db_connection_string: str = ""):
+        self.db_conn_string = db_connection_string
+
+    def save_checkpoint(self, engagement_id: str, phase: str, data: dict) -> str:
+        """
+        Save checkpoint after completing a phase
+
+        Args:
+            engagement_id: Engagement ID
+            phase: Phase name (recon, scan, analyze)
+            data: Partial results data
+
+        Returns:
+            Checkpoint ID
+        """
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            checkpoint_id = str(uuid.uuid4())
+
+            cursor.execute(
+                """
+                INSERT INTO checkpoints (
+                    id, engagement_id, phase, data, created_at
+                ) VALUES (
+                    %s, %s, %s, %s, NOW()
+                )
+                """,
+                (checkpoint_id, engagement_id, phase, Json(data)),
+            )
+
+            conn.commit()
+
+            return checkpoint_id
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error("Failed to save checkpoint for %s/%s: %s", engagement_id, phase, e)
+            raise RuntimeError(f"Failed to save checkpoint for {engagement_id}/{phase}: {e}") from e
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+    def load_checkpoint(self, engagement_id: str) -> dict | None:
+        """
+        Load last checkpoint for engagement
+
+        Args:
+            engagement_id: Engagement ID
+
+        Returns:
+            Checkpoint data or None if no checkpoint exists
+        """
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                SELECT id, engagement_id, phase, data, created_at
+                FROM checkpoints
+                WHERE engagement_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (engagement_id,),
+            )
+
+            row = cursor.fetchone()
+
+            if row:
+                return dict(row)
+
+            return None
+
+        except Exception as e:
+            logger.error("Failed to load checkpoint for %s: %s", engagement_id, e)
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+    def has_checkpoint(self, engagement_id: str) -> bool:
+        """
+        Check if checkpoint exists for engagement
+
+        Args:
+            engagement_id: Engagement ID
+
+        Returns:
+            True if checkpoint exists
+        """
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1 FROM checkpoints
+                WHERE engagement_id = %s
+                LIMIT 1
+                """,
+                (engagement_id,),
+            )
+
+            return cursor.fetchone() is not None
+
+        except Exception as e:
+            logger.error("Failed to check checkpoint existence for %s: %s", engagement_id, e)
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+    def list_checkpoints(self, engagement_id: str) -> list[dict]:
+        """
+        List all checkpoints for engagement
+
+        Args:
+            engagement_id: Engagement ID
+
+        Returns:
+            List of checkpoint metadata
+        """
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                SELECT id, engagement_id, phase, created_at
+                FROM checkpoints
+                WHERE engagement_id = %s
+                ORDER BY created_at DESC
+                """,
+                (engagement_id,),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
+
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+    def delete_checkpoints(self, engagement_id: str):
+        """
+        Delete all checkpoints for engagement
+
+        Args:
+            engagement_id: Engagement ID
+        """
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                DELETE FROM checkpoints
+                WHERE engagement_id = %s
+                """,
+                (engagement_id,),
+            )
+
+            conn.commit()
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error("Failed to delete checkpoints for %s: %s", engagement_id, e)
+            raise RuntimeError(f"Failed to delete checkpoints for {engagement_id}: {e}") from e
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+    def resume_from_checkpoint(self, engagement_id: str) -> dict | None:
+        """
+        Resume execution from last checkpoint
+
+        Args:
+            engagement_id: Engagement ID
+
+        Returns:
+            Resume data with phase and partial results, or None
+        """
+        checkpoint = self.load_checkpoint(engagement_id)
+
+        if not checkpoint:
+            return None
+
+        # Don't resume from terminal phases
+        if checkpoint["phase"] in ("complete", "failed"):
+            logger.info(
+                "Checkpoint for %s is in terminal phase '%s' — skipping resume",
+                engagement_id, checkpoint["phase"],
+            )
+            return None
+
+        return {
+            "engagement_id": engagement_id,
+            "resume_phase": checkpoint["phase"],
+            "partial_results": checkpoint["data"],
+            "checkpoint_timestamp": checkpoint["created_at"].isoformat()
+            if checkpoint["created_at"]
+            else None,
+        }
+
+    def get_resume_plan(self, engagement_id: str) -> dict | None:
+        """
+        Get a detailed resume plan from the last checkpoint.
+
+        Analyzes the checkpoint data and returns a plan for resuming
+        the scan from where it left off.
+
+        Args:
+            engagement_id: Engagement ID
+
+        Returns:
+            Resume plan with next steps, or None
+        """
+        checkpoint = self.load_checkpoint(engagement_id)
+
+        if not checkpoint:
+            return None
+
+        phase = checkpoint["phase"]
+        data = checkpoint["data"]
+
+        # Define phase ordering
+        phases = ["recon", "scan", "analyze", "report"]
+
+        if phase in phases:
+            current_idx = phases.index(phase)
+            next_phase = phases[current_idx + 1] if current_idx + 1 < len(phases) else None
+            remaining = phases[current_idx + 1:] if next_phase else []
+        else:
+            # Unknown phase — reset to beginning
+            return {
+                "engagement_id": engagement_id,
+                "completed_phase": None,
+                "next_phase": "scan",
+                "partial_results": data,
+                "remaining_phases": ["scan", "analyze", "report"],
+                "checkpoint_timestamp": checkpoint["created_at"].isoformat()
+                if checkpoint["created_at"] else None,
+                "can_resume": True,
+                "reason": f"Phase '{phase}' not recognized, starting from beginning",
+            }
+
+        return {
+            "engagement_id": engagement_id,
+            "completed_phase": phase,
+            "next_phase": next_phase,
+            "partial_results": data,
+            "remaining_phases": remaining,
+            "checkpoint_timestamp": checkpoint["created_at"].isoformat()
+            if checkpoint["created_at"]
+            else None,
+            "can_resume": next_phase is not None,
+        }
+
+    def cleanup_old_checkpoints(self, max_age_days: int = 7) -> int:
+        """
+        Delete checkpoints older than specified age.
+
+        Args:
+            max_age_days: Maximum age in days
+
+        Returns:
+            Number of checkpoints deleted
+        """
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+
+            cursor.execute(
+                """
+                DELETE FROM checkpoints
+                WHERE created_at < %s
+                """,
+                (cutoff,),
+            )
+
+            conn.commit()
+            return cursor.rowcount
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error("Failed to cleanup checkpoints: %s", e)
+            raise RuntimeError(f"Failed to cleanup checkpoints: {e}") from e
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+
+class CheckpointContext:
+    """
+    Context manager for automatic checkpoint saving
+    """
+
+    def __init__(
+        self, checkpoint_manager: CheckpointManager, engagement_id: str, phase: str
+    ):
+        """
+        Initialize checkpoint context
+
+        Args:
+            checkpoint_manager: CheckpointManager instance
+            engagement_id: Engagement ID
+            phase: Phase name
+        """
+        self.checkpoint_manager = checkpoint_manager
+        self.engagement_id = engagement_id
+        self.phase = phase
+        self.results = {}
+
+    def __enter__(self):
+        """Enter context"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Save checkpoint on exit if no exception and results are non-empty"""
+        if exc_type is None and self.results:
+            # No exception and there are actual results — save checkpoint
+            self.checkpoint_manager.save_checkpoint(
+                self.engagement_id, self.phase, self.results
+            )
+
+    def add_result(self, key: str, value):
+        """
+        Add result to checkpoint data
+
+        Args:
+            key: Result key
+            value: Result value
+        """
+        self.results[key] = value

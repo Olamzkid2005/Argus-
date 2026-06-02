@@ -1,0 +1,127 @@
+[tool.ruff]
+# Target Python version
+target-version = "py311"
+
+# Include all Python files in the workers directory
+include = ["*.py"]
+exclude = [
+    "venv",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "dist",
+    "build",
+    ".git",
+    ".tox",
+    "tool_assets",
+]
+
+[tool.ruff.lint]
+# Enable all recommended rules plus specific ones
+select = [
+    "E",   # pycodestyle errors
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "ARG001", # Unused function arguments (common in callbacks)
+    "ARG002", # Unused method arguments (common in test mocks)
+    "E402",  # Module-level import not at top (common in type-checking blocks)
+    "B023",  # Loop variable binding in function def (false positives with closures)
+    "B007",  # Loop control variable not used (common in tuple unpacking)
+    "B017",  # Assert blind exception in tests (intentional in test contexts)
+    "B904",  # raise ... from err (legacy pattern, not a bug)
+    "N806",  # Variable in function should be lowercase (allowed in tests)
+    "N817",  # Exception name without Error suffix (legacy naming)
+    "N818",  # Exception name without Error suffix (legacy naming)
+    "SIM105", # Use contextlib.suppress (false positive in complex paths)
+    "SIM108", # Use ternary operator (style preference)
+    "SIM114", # Combine if branches (readability preference)
+    "C405",  # Use set literal (false positive for type-checking patterns)
+    "SIM117", # Combine `with` statements (nested with for clarity)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["database", "tracing", "tools", "tasks"]
+
+[tool.ruff.format]
+# Use single quotes for strings
+quote-style = "double"
+
+# Indent with 4 spaces
+indent-style = "space"
+
+# Respect magic trailing commas
+skip-magic-trailing-comma = false
+
+# Automatically detect line ending
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+# Test discovery
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Skip tests that require optional dependencies
+# Use: pytest -m "not requires_db" to run only tests that don't need DB
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-ra",
+    "-p", "no:faulthandler",
+]
+
+# Markers for test categories
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
+    "requires_db: marks tests that require psycopg2 database connection",
+    "requires_redis: marks tests that require redis connection",
+]
+
+[tool.coverage.run]
+# What to measure
+source = ["."]
+omit = [
+    "venv/*",
+    ".venv/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "*__pycache__*",
+    "*.egg-info/*",
+]
+
+[tool.coverage.report]
+# Minimum coverage threshold
+fail_under = 70
+
+# Exclude lines from coverage
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+
+# Skip files with no executable code
+skip_empty = true

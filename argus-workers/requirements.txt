@@ -1,0 +1,50 @@
+# Argus Workers - Python Dependencies
+
+# Task Queue
+celery[redis]==5.4.0
+redis==5.2.1
+
+# Database
+# Use psycopg2 for production (requires libpq-dev). Use psycopg2-binary for dev only.
+# psycopg2-binary can segfault under libpq version mismatch and lags security patches.
+psycopg2>=2.9.10,<3
+sqlalchemy==2.0.36
+
+# HTTP Clients
+httpx==0.28.1
+requests==2.32.3
+
+# AI/LLM
+openai==1.59.5
+anthropic==0.42.0
+
+# Security Tools Integration
+python-nmap==0.7.1
+
+# Data Processing
+pydantic==2.10.4
+python-dotenv==1.0.1
+defusedxml==0.7.1
+
+# Templating (Compliance Reports)
+jinja2==3.1.5
+
+# Logging and Monitoring
+structlog==24.4.0
+
+# M-35: Test dependencies moved to requirements-dev.txt to avoid bloating
+# production images with ~400MB of browser binaries.
+# Install with: pip install -r requirements-dev.txt
+# pytest==8.3.4
+# pytest-asyncio==0.25.2
+# pytest-celery==1.1.2
+# pytest-cov==6.1.1
+# playwright>=1.59.0
+
+# HTML Parsing (form discovery for auth)
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# WebSocket scanning
+httpx>=0.28
+websockets>=12.0

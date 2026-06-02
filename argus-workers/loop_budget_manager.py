@@ -1,0 +1,178 @@
+"""
+Loop Budget Manager - Prevents infinite scanning loops
+"""
+
+
+class LoopBudgetManager:
+    """
+    Enforces maximum cycles and depth limits to prevent infinite loops
+    """
+
+    def __init__(self, engagement_id: str, config: dict | None = None):
+        """
+        Initialize Loop Budget Manager
+
+        Args:
+            engagement_id: Engagement ID
+            config: Configuration dictionary with max_cycles, max_depth
+        """
+        self.engagement_id = engagement_id
+
+        # Set defaults
+        config = config or {}
+        self.max_cycles = config.get("max_cycles", 5)
+        self.max_depth = config.get("max_depth", 3)
+        self.max_llm_reviews = config.get("max_llm_reviews", 50)
+
+        # Initialize current values
+        self.current_cycles = 0
+        self.current_depth = 0
+        self.current_llm_reviews = 0
+
+    def can_continue(self, action: dict) -> tuple[bool, str]:
+        """
+        Check if action is within budget
+
+        Args:
+            action: Action dictionary with type
+
+        Returns:
+            Tuple of (can_continue, reason)
+        """
+        action_type = action.get("type")
+
+        # Check cycles for recon_expand actions
+        if action_type == "recon_expand" and self.current_cycles >= self.max_cycles:
+            return False, "cycles_exceeded"
+
+        # Check depth for deep_scan and auth_focused_scan actions
+        if action_type in ("deep_scan", "auth_focused_scan") and self.current_depth >= self.max_depth:
+            return False, "depth_exceeded"
+
+        # Separate budget for LLM review — independent of intelligence engine cycles
+        if action_type == "llm_review" and self.current_llm_reviews >= self.max_llm_reviews:
+            return False, "llm_reviews_exceeded"
+
+        return True, "within_budget"
+
+    def consume(self, action: dict):
+        """
+        Consume budget for executed action
+
+        Args:
+            action: Action dictionary with type
+        """
+        action_type = action.get("type")
+
+        # Increment appropriate counter
+        if action_type == "recon_expand":
+            self.current_cycles += 1
+        elif action_type in ("deep_scan", "auth_focused_scan"):
+            self.current_depth += 1
+        elif action_type == "llm_review":
+            self.current_llm_reviews += 1
+
+    def get_status(self) -> dict:
+        """
+        Get current budget status
+
+        Returns:
+            Dictionary with current vs. maximum values
+        """
+        return {
+            "engagement_id": self.engagement_id,
+            "cycles": {
+                "current": self.current_cycles,
+                "max": self.max_cycles,
+                "remaining": self.max_cycles - self.current_cycles,
+            },
+            "depth": {
+                "current": self.current_depth,
+                "max": self.max_depth,
+                "remaining": self.max_depth - self.current_depth,
+            },
+            "llm_reviews": {
+                "current": self.current_llm_reviews,
+                "max": self.max_llm_reviews,
+                "remaining": self.max_llm_reviews - self.current_llm_reviews,
+            },
+        }
+
+    def persist_to_db(self):
+        """
+        Persist current budget state to the database.
+
+        Uses UPSERT (INSERT ... ON CONFLICT DO UPDATE) so the row is
+        auto-created for engagements without an existing loop_budgets row.
+        Must be called after consume() to ensure budget counters survive
+        across analysis → recon loop iterations.
+        """
+        try:
+            from database.connection import db_cursor
+            with db_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO loop_budgets (
+                        engagement_id, max_cycles, max_depth,
+                        current_cycles, current_depth,
+                        max_llm_reviews, current_llm_reviews
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (engagement_id) DO UPDATE SET
+                        max_cycles = EXCLUDED.max_cycles,
+                        max_depth = EXCLUDED.max_depth,
+                        current_cycles = EXCLUDED.current_cycles,
+                        current_depth = EXCLUDED.current_depth,
+                        max_llm_reviews = EXCLUDED.max_llm_reviews,
+                        current_llm_reviews = EXCLUDED.current_llm_reviews,
+                        updated_at = NOW()
+                    """,
+                    (
+                        self.engagement_id,
+                        self.max_cycles,
+                        self.max_depth,
+                        self.current_cycles,
+                        self.current_depth,
+                        self.max_llm_reviews,
+                        self.current_llm_reviews,
+                    ),
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to persist budget for engagement %s: %s",
+                self.engagement_id, e,
+            )
+
+    def reset(self):
+        """Reset current values to zero"""
+        self.current_cycles = 0
+        self.current_depth = 0
+        self.current_llm_reviews = 0
+
+    def load_from_db(self, db_data: dict):
+        """
+        Load current state from database
+
+        Args:
+            db_data: Database record with current values
+        """
+        self.current_cycles = db_data.get("current_cycles", 0)
+        self.current_depth = db_data.get("current_depth", 0)
+        self.current_llm_reviews = db_data.get("current_llm_reviews", 0)
+
+    def to_dict(self) -> dict:
+        """
+        Convert to dictionary for database storage
+
+        Returns:
+            Dictionary with all budget values
+        """
+        return {
+            "engagement_id": self.engagement_id,
+            "max_cycles": self.max_cycles,
+            "max_depth": self.max_depth,
+            "max_llm_reviews": self.max_llm_reviews,
+            "current_cycles": self.current_cycles,
+            "current_depth": self.current_depth,
+            "current_llm_reviews": self.current_llm_reviews,
+        }

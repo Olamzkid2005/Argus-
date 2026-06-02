@@ -1,0 +1,53 @@
+rules:
+  - id: php-session-cookie-httponly-missing
+    patterns:
+      - pattern: setcookie(...)
+      - pattern-not: setcookie(..., true)
+      - pattern-not: setcookie(..., ..., ..., ..., ..., true)
+    message: Session security risk - HttpOnly flag not set on cookie
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-1004"
+      owasp: "A2"
+
+  - id: php-session-cookie-secure-missing
+    patterns:
+      - pattern: setcookie(...)
+      - pattern-not: setcookie(..., ..., ..., ..., true, ...)
+      - pattern-not: setcookie(..., true, ...)
+    message: Session security risk - Secure flag not set on cookie (missing HTTPS-only)
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-614"
+      owasp: "A2"
+
+  - id: php-session-fixation-regenerate-missing
+    patterns:
+      - pattern: session_start()
+      - pattern-not: session_regenerate_id(...)
+    message: Session fixation risk - session_start without session_regenerate_id
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-384"
+      owasp: "A2"
+
+  - id: php-session-id-in-url
+    pattern: SID
+    message: Session hijacking risk - session ID exposed in URL via SID constant
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-200"
+      owasp: "A2"
+
+  - id: php-session-trans-sid-enabled
+    pattern: ini_set("session.use_trans_sid", ...)
+    message: Session hijacking risk - transparent session ID enabled, may leak in URLs
+    severity: WARNING
+    languages: [php]
+    metadata:
+      cwe: "CWE-200"
+      owasp: "A2"
