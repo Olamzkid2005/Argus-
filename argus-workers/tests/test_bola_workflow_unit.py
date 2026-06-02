@@ -367,3 +367,137 @@ class TestFeatureFlagDispatch:
 
         # Without any env var or DB flag, should fall back to default=False
         assert fe("bola_workflow") is False
+
+
+# ── Edge Case Tests ────────────────────────────────────────────────────
+
+
+class TestStepEdgeCases:
+    """Additional edge case tests for individual steps."""
+
+    def test_authenticate_both_users_fail(self, ctx):
+        """Both auth failures emit both obstacles and both sessions are None."""
+        from tools.auth_manager import AuthError
+        step = AuthenticateStep()
+
+        with patch(
+            "tools.auth_manager.AuthManager.authenticate",
+            side_effect=[AuthError("bad a"), AuthError("bad b")],
+        ):
+            result = step.run(ctx)
+
+        assert result.success is True
+        assert ctx.session_a is None
+        assert ctx.session_b is None
+        assert len(ctx.state.obstacles) == 2
+        assert ctx.state.obstacles[0]["type"] == "auth_failed_a"
+        assert ctx.state.obstacles[1]["type"] == "auth_failed_b"
+
+    def test_discover_empty_owned_dict(self, ctx):
+        """Empty dict from _discover_owned_resources triggers no_owned_resources."""
+        ctx.session_a = Mock()
+        step = DiscoverOwnedResourcesStep()
+
+        with patch(
+            "tools.dual_auth_scanner.DualAuthScanner.for_phase_execution"
+        ) as mock_factory:
+            mock_scanner = Mock()
+            mock_scanner._discover_owned_resources.return_value = {}
+            mock_scanner._last_response_received = True
+            mock_factory.return_value = mock_scanner
+
+            result = step.run(ctx)
+
+        assert result.success is True
+        assert ctx.skip_bola is True
+        assert any(o["type"] == "no_owned_resources" for o in ctx.state.obstacles)
+
+    def test_bola_mixed_findings(self, ctx):
+        """BOLA step handles mixed CONFIRMED_BOLA and POTENTIAL_BOLA findings."""
+        ctx.session_b = Mock()
+        ctx.owned_resources = {"accounts": ["1"]}
+        step = TestBolaStep()
+        raw_findings = [
+            {"type": "CONFIRMED_BOLA", "severity": "CRITICAL", "endpoint": "/a/1"},
+            {"type": "POTENTIAL_BOLA", "severity": "MEDIUM", "endpoint": "/a/1"},
+        ]
+
+        with patch(
+            "tools.dual_auth_scanner.DualAuthScanner.for_phase_execution"
+        ) as mock_factory:
+            mock_scanner = Mock()
+            mock_scanner._test_cross_account_access.return_value = raw_findings
+            mock_scanner._last_response_received = True
+            mock_factory.return_value = mock_scanner
+
+            result = step.run(ctx)
+
+        assert result.success is True
+        assert result.findings_emitted == 2
+        assert ctx.bola_findings == 2
+        assert mock_scanner._emit_finding.call_count == 2
+
+    def test_bopla_no_findings(self, ctx):
+        """BOPLA step returns 0 findings when no sensitive fields exposed."""
+        ctx.session_a = Mock()
+        ctx.session_b = Mock()
+        step = TestBoplaStep()
+
+        with patch(
+            "tools.dual_auth_scanner.DualAuthScanner.for_phase_execution"
+        ) as mock_factory:
+            mock_scanner = Mock()
+            mock_scanner._check_bopla.return_value = []
+            mock_factory.return_value = mock_scanner
+
+            result = step.run(ctx)
+
+        assert result.success is True
+        assert result.findings_emitted == 0
+        assert ctx.bopla_findings == 0
+
+    def test_bola_skipped_when_only_session_b_missing(self, ctx):
+        """BOLA skipped when session_b is None but session_a exists."""
+        ctx.session_a = Mock()
+        ctx.session_b = None
+        ctx.owned_resources = {"accounts": ["1"]}
+        step = TestBolaStep()
+        result = step.run(ctx)
+        assert result.skipped is True
+
+    def test_bola_skipped_when_skip_bola_flag_set(self, ctx):
+        """BOLA skipped when skip_bola is True (set by discovery step)."""
+        ctx.session_a = Mock()
+        ctx.session_b = Mock()
+        ctx.skip_bola = True
+        ctx.owned_resources = {"accounts": ["1"]}
+        step = TestBolaStep()
+        result = step.run(ctx)
+        assert result.skipped is True
+
+class TestWorkflowResultEdgeCases:
+    """Edge case tests for WorkflowResult."""
+
+    def test_merge_metadata_updates_dict(self):
+        """merge_metadata adds and updates metadata key-value pairs."""
+        result = WorkflowResult(
+            success=True, outcome="complete",
+            findings_created=0, obstacles_encountered=0,
+            identities_created=0, resources_created=0, requests_captured=0,
+        )
+        assert result.metadata == {}
+        result.merge_metadata(target="http://example.com", version=1)
+        assert result.metadata["target"] == "http://example.com"
+        assert result.metadata["version"] == 1
+
+    def test_merge_metadata_does_not_clear_existing(self):
+        """merge_metadata preserves existing metadata entries."""
+        result = WorkflowResult(
+            success=True, outcome="complete",
+            findings_created=0, obstacles_encountered=0,
+            identities_created=0, resources_created=0, requests_captured=0,
+            metadata={"engagement_id": "eng-1"},
+        )
+        result.merge_metadata(target="http://example.com")
+        assert result.metadata["engagement_id"] == "eng-1"
+        assert result.metadata["target"] == "http://example.com"
