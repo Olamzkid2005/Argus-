@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from runtime.workflows.base import WorkflowContext, WorkflowResult
 from runtime.workflows.steps import (

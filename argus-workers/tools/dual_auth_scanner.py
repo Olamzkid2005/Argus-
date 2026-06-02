@@ -11,7 +11,7 @@ import logging
 import re
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 from urllib.parse import urljoin
 
 import requests
@@ -231,7 +231,8 @@ class DualAuthScanner(AbstractTool):
 
         # Read auth configs from ToolContext (canonical path)
         if ctx.dual_auth:
-            from tools.auth_manager import AuthConfig as _AuthCfg, AuthManager as _AuthMgr
+            from tools.auth_manager import AuthConfig as _AuthCfg
+            from tools.auth_manager import AuthManager as _AuthMgr
             self.auth_config_a = _AuthCfg(**ctx.dual_auth.auth_a)
             self.auth_config_b = _AuthCfg(**ctx.dual_auth.auth_b)
             self.auth_manager_a = _AuthMgr(self.auth_config_a)
