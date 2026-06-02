@@ -7,8 +7,13 @@ Two test scenarios:
      session lifecycle.
   2. BOPLA-after-auth-failure: User B auth fails → BOPLA still runs on User A.
 
-These tests are excluded from default CI. Run manually:
-    ARGUS_FF_BOLA_WORKFLOW=1 python -m pytest tests/test_bola_workflow_integration.py -v
+These tests are excluded from default CI (``@pytest.mark.integration``).
+Run manually:
+    python -m pytest tests/test_bola_workflow_integration.py -v
+
+Note: These tests construct ``BolaWorkflow`` directly — they don't require
+the ``bola_workflow`` feature flag to be enabled (that flag gates the
+``scan.py`` wiring, not the workflow class itself).
 """
 
 from __future__ import annotations
@@ -39,9 +44,8 @@ class BolaTestServerHandler(BaseHTTPRequestHandler):
       GET  /api/profile       → returns user profile with sensitive fields (BOPLA)
     """
 
-    sessions: dict[str, dict] = {}  # token → user data
-    accounts: dict[str, list[dict]] = {"user_a": [{"id": 1, "owner": "user_a", "balance": 100}]}
-    next_account_id: int = 2
+    # Shared state across requests (handler is re-instantiated per request).
+    sessions: dict[str, dict] = {}  # token → user data (populated by POST /api/login)
 
     def do_POST(self) -> None:
         if self.path == "/api/login":
