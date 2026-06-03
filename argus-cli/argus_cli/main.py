@@ -17,8 +17,10 @@ from pathlib import Path
 import click
 
 from argus_cli import __app_name__, __tagline__, __version__
+from argus_cli.commands.registry import CommandRegistry
 from argus_cli.config.settings import Config
 from argus_cli.core.banner import print_banner
+from argus_cli.core.runner import SecurityRunner
 from argus_cli.tui.argus_app import ArgusTUI
 
 
@@ -140,8 +142,6 @@ def main(
 
 def _run_immediate_scan(target: str, config: Config, no_tui: bool) -> None:
     """Run a scan immediately without entering interactive mode."""
-    from argus_cli.core.runner import SecurityRunner
-
     if no_tui:
         print_banner()
 
@@ -155,8 +155,6 @@ def _run_immediate_scan(target: str, config: Config, no_tui: bool) -> None:
 
 def _run_repl(config: Config) -> None:
     """Run a simple read-eval-print loop (plain CLI mode)."""
-    from argus_cli.commands.registry import CommandRegistry
-
     print_banner()
     registry = CommandRegistry(config)
 

@@ -61,7 +61,7 @@ class TestConfig:
             config.temperature = 0.5
 
             config.save()
-            assert config_file.exists()
+            assert config.config_file.exists()
 
             loaded = Config.load(config.config_file)
             assert loaded.model == "gpt-5"

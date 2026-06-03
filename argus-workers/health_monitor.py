@@ -7,6 +7,7 @@ Also tracks per-tool health from the tool_metrics table.
 
 import logging
 import os
+import platform as _platform
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -61,7 +62,11 @@ class WorkerHealthMonitor:
 
     def __init__(self, worker_id: str | None = None, redis_url: str = None):
         self.worker_id = worker_id or f"worker-{os.getpid()}"
-        self.hostname = os.uname().nodename
+        try:
+            self.hostname = os.uname().nodename
+        except AttributeError:
+            # Windows compatibility: os.uname() is Unix-only
+            self.hostname = _platform.node() or "localhost"
         self.pid = os.getpid()
         self.redis_url = redis_url or REDIS_URL
         self._redis = None

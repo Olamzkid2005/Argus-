@@ -5,6 +5,8 @@ Tests the full repo scan path including git clone, Semgrep execution,
 finding normalization, and state machine transitions.
 
 Use unittest.mock to avoid needing real Git or Semgrep binaries.
+
+Note: Tests that require Redis are skipped when REDIS_URL is not set.
 """
 
 import os
@@ -13,7 +15,16 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+
+# Skip tests that require Redis connection
+_redis_skip = pytest.mark.skipif(
+    not os.getenv("REDIS_URL"),
+    reason="REDIS_URL not set — Redis not available",
+)
 
 
 class TestRepoScan:
@@ -21,6 +32,7 @@ class TestRepoScan:
 
     # ── Test 1: Successful repo scan end-to-end ──
 
+    @_redis_skip
     @patch("subprocess.run")
     def test_repo_scan_completes_successfully(self, mock_subprocess):
         """Verify a complete repo scan returns findings with correct structure."""
@@ -63,6 +75,7 @@ class TestRepoScan:
 
     # ── Test 2: Git clone failure ──
 
+    @_redis_skip
     @patch("subprocess.run")
     def test_repo_scan_git_clone_failure(self, mock_subprocess):
         """Verify the orchestrator handles git clone failure gracefully."""
@@ -127,6 +140,7 @@ class TestRepoScan:
 
     # ── Test 4: State machine transitions for repo scan ──
 
+    @_redis_skip
     @patch("tasks.recon.run_recon.delay")
     def test_repo_scan_chain_dispatches_correctly(self, _mock_run_recon):
         """Verify the task chain dispatches correctly after repo scan."""
@@ -161,6 +175,7 @@ class TestRepoScan:
 
     # ── Test 5: Repo scan with zero findings ──
 
+    @_redis_skip
     def test_repo_scan_zero_findings_returns_cleanly(self):
         """Verify a clean scan with no vulnerabilities completes normally."""
         from orchestrator_pkg import Orchestrator

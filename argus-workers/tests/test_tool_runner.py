@@ -4,12 +4,20 @@ Tests for Tool Runner
 
 # ruff: noqa: S108  # test sandbox uses tempfile, not hardcoded /tmp/
 
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from tools.tool_runner import SecurityError, ToolRunner
+
+
+# Skip tests that require Unix commands (echo, sleep) on Windows
+_windows_skip = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="Test requires Unix commands (echo/sleep) not available on Windows",
+)
 
 
 class TestToolRunner:
@@ -43,6 +51,7 @@ class TestToolRunner:
         with pytest.raises(SecurityError):
             self.runner.run("rm", ["-rf", "/"])
 
+    @_windows_skip
     def test_run_executes_safe_command(self):
         """Test that safe commands execute successfully"""
         result = self.runner.run("echo", ["test"])
@@ -51,6 +60,7 @@ class TestToolRunner:
         assert "test" in result.stdout
         assert result.returncode == 0
 
+    @_windows_skip
     def test_run_captures_stderr(self):
         """Test that stderr is captured"""
         result = self.runner.run("ls", ["/nonexistent"])
@@ -59,6 +69,7 @@ class TestToolRunner:
         assert result.returncode != 0
         assert len(result.stderr) > 0
 
+    @_windows_skip
     def test_run_enforces_timeout(self):
         """Test that timeout is enforced"""
         result = self.runner.run("sleep", ["10"], timeout=1)

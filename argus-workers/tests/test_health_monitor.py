@@ -29,7 +29,7 @@ class TestWorkerHealthMonitor:
         with (
             patch("health_monitor.redis.from_url", return_value=mock_redis),
             patch("os.getpid", return_value=12345),
-            patch("os.uname") as mock_uname,
+            patch("os.uname", create=True) as mock_uname,
         ):
             mock_uname.return_value = Mock(nodename="testhost")
             m = WorkerHealthMonitor(worker_id="worker-1", redis_url="redis://mock:6379")
@@ -310,11 +310,30 @@ class TestSingleton:
 
     def test_get_health_monitor_returns_same_instance(self):
         """Test get_health_monitor returns a singleton"""
-        hm1 = get_health_monitor()
-        hm2 = get_health_monitor()
-        assert hm1 is hm2
+        import health_monitor as hm_mod
+
+        # Save original and reset for clean test
+        old = hm_mod._health_monitor
+        hm_mod._health_monitor = None
+        try:
+            with patch("os.uname", create=True) as mock_uname:
+                mock_uname.return_value = Mock(nodename="testhost")
+                hm1 = get_health_monitor()
+                hm2 = get_health_monitor()
+                assert hm1 is hm2
+        finally:
+            hm_mod._health_monitor = old
 
     def test_get_health_monitor_returns_monitor(self):
         """Test get_health_monitor returns correct type"""
-        hm = get_health_monitor()
-        assert isinstance(hm, WorkerHealthMonitor)
+        import health_monitor as hm_mod
+
+        old = hm_mod._health_monitor
+        hm_mod._health_monitor = None
+        try:
+            with patch("os.uname", create=True) as mock_uname:
+                mock_uname.return_value = Mock(nodename="testhost")
+                hm = get_health_monitor()
+                assert isinstance(hm, WorkerHealthMonitor)
+        finally:
+            hm_mod._health_monitor = old

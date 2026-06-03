@@ -9,6 +9,7 @@ import logging
 import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable
 from types import SimpleNamespace
 
 from config.constants import (
@@ -292,7 +293,7 @@ def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
 
 
 def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list,
-                   on_line: callable | None = None,
+                   on_line: Callable | None = None,
                    line_buffer: list | None = None) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 

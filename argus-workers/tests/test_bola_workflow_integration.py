@@ -19,12 +19,20 @@ the ``bola_workflow`` feature flag to be enabled (that flag gates the
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
+
+
+# Skip on Windows — tests require local HTTP server with threading
+pytestmark = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="Integration test requires Unix-compatible HTTP server behavior",
+)
 
 from runtime.engagement_state import EngagementState
 from runtime.workflows.base import StepResult

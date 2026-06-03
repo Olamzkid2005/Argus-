@@ -11,12 +11,20 @@ These tests are excluded from default CI. Run manually:
 
 from __future__ import annotations
 
+import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
+
+
+# Skip on Windows — tests require local HTTP server with threading
+pytestmark = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="Integration test requires Unix-compatible HTTP server behavior",
+)
 
 from runtime.engagement_state import EngagementState
 from runtime.workflows.bola import BolaWorkflow

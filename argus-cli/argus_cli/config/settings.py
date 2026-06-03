@@ -25,7 +25,6 @@ from argus_cli.core.constants import (
     DEFAULT_FEATURES,
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
-    FEATURE_FLAGS_FILE,
     SESSIONS_DB,
 )
 
@@ -68,11 +67,15 @@ class Config:
         """Load configuration from file, with env var overrides."""
         config = cls()
 
+        if path is not None:
+            config.config_dir = path.parent
+            config.config_file = path
+
         # Ensure config directory exists
         config.config_dir.mkdir(parents=True, exist_ok=True)
 
         # Load from TOML file
-        config_file = path or config.config_file
+        config_file = config.config_file
         if config_file.exists():
             try:
                 data = toml.load(config_file)
@@ -179,11 +182,16 @@ class Config:
 
                 setattr(self, attr, value)
 
+    def _feature_flags_path(self) -> Path:
+        """Return the path to the feature flags file."""
+        return self.config_dir / "features.yaml"
+
     def _load_feature_flags(self) -> None:
         """Load feature flags from YAML file."""
-        if FEATURE_FLAGS_FILE.exists():
+        flag_file = self._feature_flags_path()
+        if flag_file.exists():
             try:
-                with open(FEATURE_FLAGS_FILE) as f:
+                with open(flag_file) as f:
                     flags = yaml.safe_load(f)
                 if flags and isinstance(flags, dict):
                     self.features.update(flags)
@@ -194,7 +202,7 @@ class Config:
         """Save feature flags to YAML file."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
         try:
-            with open(FEATURE_FLAGS_FILE, "w") as f:
+            with open(self._feature_flags_path(), "w") as f:
                 yaml.dump(self.features, f, default_flow_style=False)
         except Exception as e:
             logger.warning("Failed to save feature flags: %s", e)

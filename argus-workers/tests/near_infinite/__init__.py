@@ -1,1 +1,1 @@
-"""Near-infinite E2E test package for Argus platform."""
+"""This test package has been deprecated — see argus-cli/tests/test_cli_e2e.py"""

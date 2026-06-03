@@ -17,11 +17,19 @@ Usage:
 import asyncio
 import logging
 import os
+import sys
 import threading
 import time
 from unittest.mock import patch
 
 import pytest
+
+
+# Skip on Windows — tests require websockets library and local echo server
+pytestmark = pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="Integration test requires WebSocket server (websockets library)",
+)
 
 # Enable the scanner for all tests in this module
 os.environ.setdefault("ARGUS_FF_WS_SCANNER", "true")

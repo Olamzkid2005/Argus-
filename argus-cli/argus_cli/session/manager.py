@@ -211,6 +211,16 @@ class SessionManager:
             for row in reversed(rows)
         ]
 
+    def close(self) -> None:
+        """Release SQLite file handles for cleanup on Windows.
+
+        On Windows, SQLite can keep file handles open even after
+        connections are closed. Call this when done to ensure the
+        database file can be deleted (e.g. during temp directory cleanup).
+        """
+        import gc
+        gc.collect()
+
     def clear_all(self) -> None:
         """Clear all sessions and messages."""
         with sqlite3.connect(self.db_path) as conn:
