@@ -9,7 +9,7 @@ import uuid
 
 import psycopg2
 
-from database.connection import connect, get_db
+from database.connection import DatabaseConnectionError, get_db
 from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -62,11 +62,18 @@ class EngagementStateMachine:
         """
         # Validate UUID format to prevent PostgreSQL errors
         self.engagement_id = validate_uuid(engagement_id, "engagement_id")
-        self._db_conn_string = db_connection_string
         self._external_conn = connection
         self.current_state = None  # Will be set properly after None-handling below
         # WebSocket publisher removed (M-07 consolidation).
         # All events go through SSE via StreamManager.
+
+        # Deprecation warning for raw connection string — always use pool
+        if db_connection_string is not None:
+            logger.warning(
+                "db_connection_string is deprecated for engagement %s — "
+                "connection pooling is preferred. Remove this parameter.",
+                engagement_id,
+            )
 
         # Handle None — defer resolution to first transition() call
         # where it will be queried under the FOR UPDATE lock, avoiding
@@ -102,6 +109,12 @@ class EngagementStateMachine:
             row = c.fetchone()
             c.close()
             resolved = row[0] if row else "created"
+        except (psycopg2.Error, DatabaseConnectionError) as e:
+            logger.error(
+                "Database error resolving state for engagement %s: %s",
+                self.engagement_id, e,
+            )
+            raise  # Re-raise DB outages — don't silently mask them
         except Exception as e:
             logger.warning(
                 "Could not query state for engagement %s, defaulting to 'created': %s",
@@ -120,23 +133,25 @@ class EngagementStateMachine:
         self.current_state = resolved
 
     def _get_connection(self):
-        """Get a database connection (external or from pool)"""
+        """Get a database connection (external or from pool).
+
+        Always uses the connection pool. The deprecated _db_conn_string
+        raw-connection path has been removed — all connections must go
+        through the pool to prevent connection leaks.
+        """
         if self._external_conn:
             return self._external_conn
-        if self._db_conn_string:
-            return connect(self._db_conn_string)
         return get_db().get_connection()
 
     def _release_connection(self, conn):
-        """Release connection back to pool or close raw connections.
+        """Release connection back to pool.
 
         Never releases an external connection — the caller owns its lifecycle.
+        Always returns connections to the pool (the deprecated raw-connection
+        close() path has been removed).
         """
         if conn and not self._external_conn:
-            if self._db_conn_string:
-                conn.close()
-            else:
-                get_db().release_connection(conn)
+            get_db().release_connection(conn)
 
     def transition(self, new_state: str, reason: str | None = None, trace_id: str | None = None):
         """

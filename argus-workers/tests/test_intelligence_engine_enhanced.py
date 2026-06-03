@@ -9,6 +9,20 @@ import pytest
 from intelligence_engine import IntelligenceEngine
 
 
+@pytest.fixture(autouse=True)
+def _no_cache():
+    """Bypass the NVD/EPSS cache for all tests in this module.
+
+    The caching layer (Redis + in-memory dict) can cause test isolation
+    issues because a successful fetch in one test pollutes the cache
+    for a later test that expects an API failure or different results.
+    No tests in this module are testing the caching behavior itself.
+    """
+    with patch.object(IntelligenceEngine, '_cache_get', return_value=None), \
+         patch.object(IntelligenceEngine, '_cache_set'):
+        yield
+
+
 class TestCVEEnrichment:
     """Test suite for CVE enrichment parsing"""
 
