@@ -33,7 +33,7 @@ export async function assessCommand(target: string, options?: {
   await bridge.connect()
 
   const confidenceEngine = new ConfidenceEngine()
-  const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine)
+  const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
 
   const store = new EngagementStore()
   const engagement = store.createEngagement(target, "assessment")
@@ -48,6 +48,7 @@ export async function assessCommand(target: string, options?: {
   }
 
   const plan = await planner.plan(target, undefined, { useLLM: options?.useLLM })
+  executor.loadGates(plan.workflow)
   for (const phase of plan.phases) {
     if (defaultCreds) phase.config.credentials = defaultCreds
   }

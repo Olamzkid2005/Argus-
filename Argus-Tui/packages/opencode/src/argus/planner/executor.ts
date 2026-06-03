@@ -2,19 +2,48 @@ import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding } f
 import { ToolRegistry } from "../workflows/tool-registry"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { ConfidenceEngine } from "../engagement/confidence"
+import { ApprovalService } from "../workflows/approval"
+import type { ApprovalGate } from "../workflows/types"
+import { WorkflowRegistry } from "../workflows/registry"
 
 export interface PhaseExecutor {
   execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult>
 }
 
 export class InProcessExecutor implements PhaseExecutor {
+  private approvalService: ApprovalService
+  private requiredGates: ApprovalGate[] = []
+
   constructor(
     private toolRegistry: ToolRegistry,
     private bridge: WorkersBridge,
     private confidenceEngine: ConfidenceEngine,
-  ) {}
+    private workflowRegistry?: WorkflowRegistry,
+  ) {
+    this.approvalService = new ApprovalService()
+  }
+
+  loadGates(workflowName: string): void {
+    const workflow = this.workflowRegistry?.getWorkflow(workflowName)
+    this.requiredGates = this.approvalService.getRequiredGates(workflow?.approval_required)
+  }
 
   async execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
+    const gate = this.approvalService.needsApproval(phase, this.requiredGates)
+    if (gate) {
+      const result = await this.approvalService.requestApproval(gate, phase.phaseId, phase.target)
+      if (!result.approved) {
+        return {
+          phaseId: phase.phaseId,
+          status: "skipped",
+          findings: [],
+          artifacts: [],
+          errors: [result.reason ?? "Skipped by user"],
+          durationMs: 0,
+        }
+      }
+    }
+
     const startTime = Date.now()
     const findings: NormalizedFinding[] = []
     const errors: string[] = []
