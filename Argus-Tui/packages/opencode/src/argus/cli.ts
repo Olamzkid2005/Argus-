@@ -24,10 +24,16 @@ export const ArgusDoctorCommand = {
   describe: "Run comprehensive health checks on the Argus runtime",
   handler: async () => {
     const results = await doctorCommand()
+    let passes = 0, warns = 0, fails = 0
     for (const r of results) {
       const icon = r.status === "PASS" ? "✓" : r.status === "WARN" ? "⚠" : "✗"
       process.stdout.write(`${icon} [${r.name}] ${r.message}\n`)
+      if (r.status === "PASS") passes++
+      else if (r.status === "WARN") warns++
+      else fails++
     }
+    process.stdout.write(`\n${passes} passed, ${warns} warnings, ${fails} failed\n`)
+    if (fails > 0) process.exitCode = 1
   },
 }
 
