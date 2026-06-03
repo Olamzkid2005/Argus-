@@ -253,7 +253,8 @@ describe("Normalizer edge cases", () => {
 
 describe("isAccessDenied edge cases", () => {
   test("Text with '403' in a word (not status code)", () => {
-    expect(isAccessDenied("The error code 403rd times the charm")).toBe(true)
+    // Fixed: word-boundary regex means "403rd" no longer matches
+    expect(isAccessDenied("The error code 403rd times the charm")).toBe(false)
   })
 
   test("HTML content with error messages in comments", () => {
@@ -404,6 +405,7 @@ describe("ApprovalService edge cases", () => {
       phaseId: "test", workflowName: "test", target: "https://example.com",
       requiredCapabilities: [Capability.AUTH_DETECTION, Capability.AUTH_DETECTION],
       config: {}, previousPhaseResults: [],
+      approvalGateName: "auth_testing",
     }
     const gates = service.getRequiredGates({ auth_testing: true })
     const result = service.needsApproval(phase, gates)
@@ -416,10 +418,12 @@ describe("ApprovalService edge cases", () => {
       phaseId: "test", workflowName: "test", target: "https://example.com",
       requiredCapabilities: [Capability.VULNERABILITY_SCANNING, Capability.AUTH_DETECTION, Capability.BROWSER_VERIFICATION],
       config: {}, previousPhaseResults: [],
+      approvalGateName: "destructive_tools",
     }
     const gates = service.getRequiredGates({ destructive_tools: true, auth_testing: true, privilege_escalation: true })
     const result = service.needsApproval(phase, gates)
     expect(result).not.toBeNull()
+    expect(result!.name).toBe("destructive_tools")
   })
 })
 

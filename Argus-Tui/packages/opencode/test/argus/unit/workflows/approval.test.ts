@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, beforeAll, afterAll } from "bun:test"
 import { ApprovalService } from "../../../../src/argus/workflows/approval"
 import { Capability } from "../../../../src/argus/planner/capabilities"
 import type { PhaseExecutionRequest } from "../../../../src/argus/planner/types"
 
-function makePhase(caps: Capability[]): PhaseExecutionRequest {
+function makePhase(caps: Capability[], gateName?: string): PhaseExecutionRequest {
   return {
     phaseId: "test-phase",
     workflowName: "test-workflow",
@@ -11,8 +11,16 @@ function makePhase(caps: Capability[]): PhaseExecutionRequest {
     requiredCapabilities: caps,
     config: {},
     previousPhaseResults: [],
+    approvalGateName: gateName,
   }
 }
+
+beforeAll(() => {
+  ;(process.stdin as any).isTTY = true
+})
+afterAll(() => {
+  ;(process.stdin as any).isTTY = false
+})
 
 describe("ApprovalService", () => {
   describe("getRequiredGates", () => {
@@ -43,37 +51,37 @@ describe("ApprovalService", () => {
   })
 
   describe("needsApproval", () => {
-    test("Returns destructive gate when phase has VULNERABILITY_SCANNING and gate is destructive", () => {
+    test("Returns destructive gate when phase has destructive_tools approvalGateName", () => {
       const service = new ApprovalService()
       const gates = service.getRequiredGates({ destructive_tools: true })
-      const phase = makePhase([Capability.VULNERABILITY_SCANNING])
+      const phase = makePhase([Capability.VULNERABILITY_SCANNING], "destructive_tools")
       const result = service.needsApproval(phase, gates)
       expect(result).not.toBeNull()
       expect(result!.name).toBe("destructive_tools")
     })
 
-    test("Returns auth_testing gate when phase has AUTH_DETECTION and gate is auth testing", () => {
+    test("Returns auth_testing gate when phase has auth_testing approvalGateName", () => {
       const service = new ApprovalService()
       const gates = service.getRequiredGates({ auth_testing: true })
-      const phase = makePhase([Capability.AUTH_DETECTION])
+      const phase = makePhase([Capability.AUTH_DETECTION], "auth_testing")
       const result = service.needsApproval(phase, gates)
       expect(result).not.toBeNull()
       expect(result!.name).toBe("auth_testing")
     })
 
-    test("Returns auth_testing gate when phase has CREDENTIAL_ANALYSIS and gate is auth testing", () => {
+    test("Returns auth_testing gate when phase has auth_testing approvalGateName with CREDENTIAL_ANALYSIS", () => {
       const service = new ApprovalService()
       const gates = service.getRequiredGates({ auth_testing: true })
-      const phase = makePhase([Capability.CREDENTIAL_ANALYSIS])
+      const phase = makePhase([Capability.CREDENTIAL_ANALYSIS], "auth_testing")
       const result = service.needsApproval(phase, gates)
       expect(result).not.toBeNull()
       expect(result!.name).toBe("auth_testing")
     })
 
-    test("Returns priv-esc gate when phase has BROWSER_VERIFICATION and gate is privilege_escalation", () => {
+    test("Returns priv-esc gate when phase has privilege_escalation approvalGateName", () => {
       const service = new ApprovalService()
       const gates = service.getRequiredGates({ privilege_escalation: true })
-      const phase = makePhase([Capability.BROWSER_VERIFICATION])
+      const phase = makePhase([Capability.BROWSER_VERIFICATION], "privilege_escalation")
       const result = service.needsApproval(phase, gates)
       expect(result).not.toBeNull()
       expect(result!.name).toBe("privilege_escalation")
@@ -113,6 +121,8 @@ describe("ApprovalService", () => {
       const mockStdin = {
         resume: () => {},
         pause: () => {},
+        isTTY: true,
+        removeAllListeners: () => {},
         once: (event: string, cb: (data: Buffer) => void) => {
           if (event === "data") dataCallbacks.push(cb)
         },

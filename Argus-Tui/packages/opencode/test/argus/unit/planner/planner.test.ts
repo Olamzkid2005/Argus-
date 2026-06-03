@@ -164,7 +164,8 @@ describe("WorkflowPlanner", () => {
       })
       planner.replan(ctx)
 
-      expect(ctx.replanCount).toBe(1)
+      // replan no longer mutates context.replanCount — uses local counter
+      expect(ctx.replanCount).toBe(0)
     })
 
     test("returns null when all new capabilities are already executed", () => {

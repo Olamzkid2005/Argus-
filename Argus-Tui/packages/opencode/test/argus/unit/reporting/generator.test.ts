@@ -183,6 +183,7 @@ describe("ReportGenerator", () => {
       findings,
       "eng-1",
       "https://example.com",
+      "full_assessment",
     )
     const parsed = JSON.parse(sarif)
     expect(parsed.$schema).toContain("sarif-schema-2.1.0")
@@ -197,6 +198,7 @@ describe("ReportGenerator", () => {
       [makeFinding()],
       "eng-1",
       "target",
+      "full_assessment",
     )
     const parsed = JSON.parse(sarif)
     expect(parsed.runs[0].tool.driver.name).toBe("Argus")
@@ -225,13 +227,15 @@ describe("ReportGenerator", () => {
       findings,
       "eng-1",
       "target",
+      "full_assessment",
     )
     const parsed = JSON.parse(sarif)
     const results = parsed.runs[0].results
-    expect(results[0].ruleId).toBe("CWE-200")
+    // ruleId now uses finding.id (stable) instead of cwe/array-index
+    expect(results[0].ruleId).toBe("1")
     expect(results[0].level).toBe("error")
     expect(results[0].message.text).toBe("High Issue")
-    expect(results[1].ruleId).toBe("ARGUS-1")
+    expect(results[1].ruleId).toBe("2")
     expect(results[1].level).toBe("note")
     expect(results[1].message.text).toBe("Info Issue")
   })
