@@ -1,7 +1,7 @@
 import { existsSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
-import { spawn } from "child_process"
+import { spawn, execFileSync } from "child_process"
 import { EngagementStore } from "../engagement/store"
 import { WorkersBridge } from "../bridge/mcp-client"
 
@@ -100,7 +100,6 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
 
 async function playwrightCheck(): Promise<CheckResult> {
   try {
-    const { execFileSync } = await import("child_process")
     execFileSync("npx", ["playwright", "--version"], { stdio: "pipe", timeout: 10000 })
     return {
       name: "Playwright",
@@ -178,15 +177,20 @@ async function resolvePython(): Promise<string> {
   return "python3"
 }
 
-function execCapture(cmd: string, args: string[]): Promise<string> {
+function execCapture(cmd: string, args: string[], timeoutMs = 5000): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] })
+    const timer = setTimeout(() => {
+      child.kill()
+      reject(new Error(`Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(" ")}`))
+    }, timeoutMs)
     let stdout = ""
     let stderr = ""
     child.stdout.on("data", (d: Buffer) => { stdout += d.toString() })
     child.stderr.on("data", (d: Buffer) => { stderr += d.toString() })
-    child.on("error", reject)
+    child.on("error", (err) => { clearTimeout(timer); reject(err) })
     child.on("close", (code) => {
+      clearTimeout(timer)
       if (code === 0) resolve(stdout || stderr)
       else reject(new Error(`exit code ${code}: ${stderr.trim()}`))
     })

@@ -1,6 +1,7 @@
-import { PlaywrightEngine } from "../engine"
+import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../planner/types"
+import { loginIfFormPresent } from "../login"
 
 const XSS_MARKERS = [
   "<img src=x onerror=",
@@ -19,7 +20,7 @@ export class StoredXSSVerifier implements VerificationScenario {
   private payloadExecuted = false
 
   constructor(
-    private engine: PlaywrightEngine,
+    private engine: BrowserEngine,
     private injectUrl: string,
     private victimViewUrl: string,
     private payload: string,
@@ -34,8 +35,11 @@ export class StoredXSSVerifier implements VerificationScenario {
   async execute(): Promise<void> {
     const injectPage = await this.engine.navigate(this.injectUrl)
     await injectPage.waitForLoadState("networkidle")
+    await loginIfFormPresent(injectPage, { username: "", password: "" })
 
-    const inputFields = await injectPage.locator("input[type=text], textarea, input:not([type]), [contenteditable=true]").all()
+    const inputFields = await injectPage.locator(
+      "input[type=text], textarea, input:not([type]), [contenteditable=true]",
+    ).all()
 
     if (inputFields.length === 0) {
       this.logs.push("No input fields found to inject payload")
@@ -43,7 +47,7 @@ export class StoredXSSVerifier implements VerificationScenario {
       for (const field of inputFields) {
         if (await field.isVisible()) {
           await field.fill(this.payload)
-          this.logs.push(`Injected payload into field`)
+          this.logs.push("Injected payload into field")
         }
       }
       const submitBtn = injectPage.locator("button[type=submit], input[type=submit]").first()
@@ -54,8 +58,6 @@ export class StoredXSSVerifier implements VerificationScenario {
       }
     }
     await injectPage.close()
-
-    await injectPage.waitForTimeout(500)
 
     const victimPage = await this.engine.navigate(this.victimViewUrl)
     await victimPage.waitForLoadState("networkidle")
@@ -85,11 +87,7 @@ export class StoredXSSVerifier implements VerificationScenario {
 
   async collectEvidence(): Promise<EvidencePackage> {
     return {
-      packageId: "",
-      findingId: "",
-      screenshots: [],
-      requests: [],
-      responses: [],
+      packageId: "", findingId: "", screenshots: [], requests: [], responses: [],
       logs: this.logs,
       createdAt: new Date().toISOString(),
     }

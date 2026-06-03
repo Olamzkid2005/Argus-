@@ -1,7 +1,16 @@
 import type { Browser, BrowserContext, Page } from "playwright"
 import type { Observation } from "./types"
 
-export class PlaywrightEngine {
+export interface BrowserEngine {
+  launch(headless?: boolean): Promise<void>
+  createContext(): Promise<BrowserContext>
+  navigate(url: string): Promise<Page>
+  observe(page: Page): Promise<Observation>
+  captureScreenshot(page: Page): Promise<Buffer>
+  close(): Promise<void>
+}
+
+export class PlaywrightEngine implements BrowserEngine {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
 

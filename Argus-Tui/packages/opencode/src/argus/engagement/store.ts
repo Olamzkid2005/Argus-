@@ -15,6 +15,37 @@ import type { NormalizedFinding } from "../planner/types"
 
 const DEFAULT_DB_PATH = join(homedir(), ".argus", "argus.db")
 
+const TABLE_SQL = [
+  sql`CREATE TABLE IF NOT EXISTS engagements (
+    id TEXT PRIMARY KEY, target TEXT NOT NULL, workflow TEXT NOT NULL,
+    workflow_version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'CREATED',
+    schema_version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  )`,
+  sql`CREATE TABLE IF NOT EXISTS findings (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+    title TEXT NOT NULL, severity INTEGER NOT NULL, confidence INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING', description TEXT, subtype TEXT, cve TEXT, cwe TEXT,
+    owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL, finalized_at INTEGER
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)`,
+  sql`CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)`,
+  sql`CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)`,
+  sql`CREATE TABLE IF NOT EXISTS phases (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+    name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING', capabilities TEXT DEFAULT '[]',
+    execution_mode TEXT, started_at INTEGER, completed_at INTEGER, error TEXT,
+    replan_cycle INTEGER NOT NULL DEFAULT 0
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_phases_engagement ON phases(engagement_id)`,
+  sql`CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+    event_type TEXT NOT NULL, message TEXT NOT NULL, metadata TEXT DEFAULT '{}',
+    created_at INTEGER NOT NULL
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_audit_log_engagement ON audit_log(engagement_id)`,
+]
+
 function toEngagementState(row: typeof engagements.$inferSelect): EngagementState {
   return {
     id: row.id,
@@ -86,14 +117,15 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
 
 export class EngagementStore {
   private db: ReturnType<typeof drizzle>
+  readonly dbPath: string
 
   constructor(dbPath?: string) {
-    const path = dbPath ?? DEFAULT_DB_PATH
-    const dir = join(path, "..")
+    this.dbPath = dbPath ?? DEFAULT_DB_PATH
+    const dir = join(this.dbPath, "..")
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
-    const sqlite = new Database(path)
+    const sqlite = new Database(this.dbPath)
     sqlite.exec("PRAGMA journal_mode = WAL")
     sqlite.exec("PRAGMA foreign_keys = ON")
     this.db = drizzle({ client: sqlite })
@@ -101,78 +133,9 @@ export class EngagementStore {
   }
 
   private ensureTables(): void {
-    this.db.run(sql`
-      CREATE TABLE IF NOT EXISTS engagements (
-        id TEXT PRIMARY KEY,
-        target TEXT NOT NULL,
-        workflow TEXT NOT NULL,
-        workflow_version INTEGER NOT NULL DEFAULT 1,
-        status TEXT NOT NULL DEFAULT 'CREATED',
-        schema_version INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
-    `)
-    this.db.run(sql`
-      CREATE TABLE IF NOT EXISTS findings (
-        id TEXT PRIMARY KEY,
-        engagement_id TEXT NOT NULL REFERENCES engagements(id),
-        title TEXT NOT NULL,
-        severity INTEGER NOT NULL,
-        confidence INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'PENDING',
-        description TEXT,
-        subtype TEXT,
-        cve TEXT,
-        cwe TEXT,
-        owasp TEXT,
-        remediation TEXT,
-        tool TEXT,
-        phase TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        finalized_at INTEGER
-      )
-    `)
-    this.db.run(sql`
-      CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)
-    `)
-    this.db.run(sql`
-      CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)
-    `)
-    this.db.run(sql`
-      CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)
-    `)
-    this.db.run(sql`
-      CREATE TABLE IF NOT EXISTS phases (
-        id TEXT PRIMARY KEY,
-        engagement_id TEXT NOT NULL REFERENCES engagements(id),
-        name TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'PENDING',
-        capabilities TEXT DEFAULT '[]',
-        execution_mode TEXT,
-        started_at INTEGER,
-        completed_at INTEGER,
-        error TEXT,
-        replan_cycle INTEGER NOT NULL DEFAULT 0
-      )
-    `)
-    this.db.run(sql`
-      CREATE INDEX IF NOT EXISTS idx_phases_engagement ON phases(engagement_id)
-    `)
-    this.db.run(sql`
-      CREATE TABLE IF NOT EXISTS audit_log (
-        id TEXT PRIMARY KEY,
-        engagement_id TEXT NOT NULL REFERENCES engagements(id),
-        event_type TEXT NOT NULL,
-        message TEXT NOT NULL,
-        metadata TEXT DEFAULT '{}',
-        created_at INTEGER NOT NULL
-      )
-    `)
-    this.db.run(sql`
-      CREATE INDEX IF NOT EXISTS idx_audit_log_engagement ON audit_log(engagement_id)
-    `)
+    for (const stmt of TABLE_SQL) {
+      this.db.run(stmt)
+    }
   }
 
   createEngagement(target: string, workflow: string): EngagementState {
@@ -180,14 +143,9 @@ export class EngagementStore {
     const now = Date.now()
 
     this.db.insert(engagements).values({
-      id,
-      target,
-      workflow,
-      workflow_version: 1,
-      status: "CREATED",
-      schema_version: 1,
-      created_at: now,
-      updated_at: now,
+      id, target, workflow,
+      workflow_version: 1, status: "CREATED", schema_version: 1,
+      created_at: now, updated_at: now,
     }).run()
 
     return this.getEngagement(id)!
@@ -226,21 +184,31 @@ export class EngagementStore {
   }
 
   savePhases(id: string, records: PhaseRecord[]): void {
-    this.db.delete(phasesTable).where(eq(phasesTable.engagement_id, id)).run()
-    for (const record of records) {
-      this.db.insert(phasesTable).values({
-        id: record.id,
-        engagement_id: id,
-        name: record.name,
-        status: record.status,
-        capabilities: record.capabilities,
-        execution_mode: record.executionMode,
+    this.db.transaction((tx) => {
+      tx.delete(phasesTable).where(eq(phasesTable.engagement_id, id)).run()
+      for (const record of records) {
+        tx.insert(phasesTable).values({
+          id: record.id, engagement_id: id, name: record.name, status: record.status,
+          capabilities: record.capabilities, execution_mode: record.executionMode,
+          started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
+          completed_at: record.completedAt ? new Date(record.completedAt).getTime() : null,
+          error: record.error ?? null, replan_cycle: record.replanCycle ? 1 : 0,
+        }).run()
+      }
+    })
+  }
+
+  savePhase(id: string, record: PhaseRecord): void {
+    this.db.transaction((tx) => {
+      tx.delete(phasesTable).where(eq(phasesTable.id, record.id)).run()
+      tx.insert(phasesTable).values({
+        id: record.id, engagement_id: id, name: record.name, status: record.status,
+        capabilities: record.capabilities, execution_mode: record.executionMode,
         started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
         completed_at: record.completedAt ? new Date(record.completedAt).getTime() : null,
-        error: record.error ?? null,
-        replan_cycle: record.replanCycle ? 1 : 0,
+        error: record.error ?? null, replan_cycle: record.replanCycle ? 1 : 0,
       }).run()
-    }
+    })
   }
 
   getPhases(id: string): PhaseRecord[] {
@@ -249,10 +217,12 @@ export class EngagementStore {
   }
 
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
-    this.db.delete(findingsTable).where(eq(findingsTable.engagement_id, engagementId)).run()
-    for (const record of records) {
-      this.db.insert(findingsTable).values(toFindingRow(record, engagementId)).run()
-    }
+    this.db.transaction((tx) => {
+      tx.delete(findingsTable).where(eq(findingsTable.engagement_id, engagementId)).run()
+      for (const record of records) {
+        tx.insert(findingsTable).values(toFindingRow(record, engagementId)).run()
+      }
+    })
   }
 
   getFindings(engagementId: string): NormalizedFinding[] {
@@ -272,9 +242,5 @@ export class EngagementStore {
       metadata: metadata ?? {},
       created_at: Date.now(),
     }).run()
-  }
-
-  getDbPath(): string {
-    return DEFAULT_DB_PATH
   }
 }

@@ -59,7 +59,7 @@ export async function assessCommand(target: string, options?: {
     const phase = plan.phases[i]
     phaseRecords[i].status = "RUNNING"
     phaseRecords[i].startedAt = new Date().toISOString()
-    store.savePhases(engagement.id, phaseRecords)
+    store.savePhase(engagement.id, phaseRecords[i])
 
     const result = await executor.execute(phase)
 
@@ -72,7 +72,7 @@ export async function assessCommand(target: string, options?: {
     phaseRecords[i].status = result.status === "failed" ? "FAILED" : "COMPLETED"
     phaseRecords[i].completedAt = new Date().toISOString()
     if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")
-    store.savePhases(engagement.id, phaseRecords)
+    store.savePhase(engagement.id, phaseRecords[i])
   }
 
   store.saveFindings(engagement.id, allFindings)
