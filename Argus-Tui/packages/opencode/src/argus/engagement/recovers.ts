@@ -1,4 +1,4 @@
-import { EngagementState } from "./types"
+import type { EngagementState } from "./types"
 
 export function validateWorkflowVersion(engagement: EngagementState, currentVersion: number): boolean {
   return engagement.workflowVersion === currentVersion

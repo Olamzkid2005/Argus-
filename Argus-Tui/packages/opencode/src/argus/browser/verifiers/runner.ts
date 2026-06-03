@@ -1,4 +1,4 @@
-import { VerificationScenario, VerifierResult } from "../types"
+import type { VerificationScenario, VerifierResult } from "../types"
 
 export class VerificationRunner {
   async run(scenario: VerificationScenario): Promise<VerifierResult> {

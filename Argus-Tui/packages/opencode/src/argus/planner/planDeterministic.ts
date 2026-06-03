@@ -1,4 +1,4 @@
-import { TargetType, AssessmentPlan, PhaseExecutionRequest, ErrorRecovery } from "./types"
+import type { TargetType, AssessmentPlan, PhaseExecutionRequest, ErrorRecovery } from "./types"
 import { Capability } from "./capabilities"
 import { detectTargetType } from "./strategy"
 

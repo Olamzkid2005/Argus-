@@ -1,6 +1,6 @@
 import { join } from "path"
 import { loadAllWorkflows, loadWorkflowYaml } from "./loader"
-import { WorkflowDefinition } from "./types"
+import type { WorkflowDefinition } from "./types"
 import { Capability } from "../planner/capabilities"
 
 export class WorkflowRegistry {

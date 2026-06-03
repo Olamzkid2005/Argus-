@@ -1,4 +1,4 @@
-import { TargetType, AuthState } from "./types"
+import type { TargetType, AuthState } from "./types"
 import { Capability } from "./capabilities"
 
 export function detectTargetType(url: string, techStack?: string[]): TargetType {

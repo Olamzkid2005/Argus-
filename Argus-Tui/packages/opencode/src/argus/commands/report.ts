@@ -9,14 +9,15 @@ export async function reportCommand(engagementId: string, format: "markdown" | "
     return `Engagement not found: ${engagementId}`
   }
 
+  const findings = store.getFindings(engagementId)
   const generator = new ReportGenerator()
 
   switch (format) {
     case "json":
-      return generator.generateJSON([], engagementId, engagement.target, engagement.workflow)
+      return generator.generateJSON(findings, engagementId, engagement.target, engagement.workflow)
     case "sarif":
-      return generator.generateSARIF([], engagementId, engagement.target)
+      return generator.generateSARIF(findings, engagementId, engagement.target)
     default:
-      return generator.generateMarkdown([], engagementId, engagement.target, engagement.workflow)
+      return generator.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow)
   }
 }

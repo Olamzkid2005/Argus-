@@ -1,4 +1,4 @@
-import { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding } from "./types"
+import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding } from "./types"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { ConfidenceEngine } from "../engagement/confidence"

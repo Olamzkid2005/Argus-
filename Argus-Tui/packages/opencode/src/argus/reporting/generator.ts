@@ -1,5 +1,6 @@
-import { NormalizedFinding, Severity, Confidence } from "../planner/types"
-import { Report, ReportFormat, ReportSummary } from "./types"
+import type { NormalizedFinding } from "../planner/types"
+import { Severity, Confidence } from "../planner/types"
+import type { Report, ReportFormat, ReportSummary } from "./types"
 
 export class ReportGenerator {
   generate(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): Report {

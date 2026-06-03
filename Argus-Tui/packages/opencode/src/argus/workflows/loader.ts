@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "fs"
 import { join, extname } from "path"
 import YAML from "yaml"
-import { WorkflowDefinition } from "./types"
+import type { WorkflowDefinition } from "./types"
 import { Capability } from "../planner/capabilities"
 
 export function loadWorkflowYaml(path: string): WorkflowDefinition {

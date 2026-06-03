@@ -1,5 +1,5 @@
-import { Page } from "playwright"
-import { Observation, DiffResult } from "./types"
+import type { Page } from "playwright"
+import type { Observation, DiffResult } from "./types"
 
 export async function observeUrl(page: Page, url: string): Promise<Observation> {
   await page.goto(url, { waitUntil: "networkidle" })

@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from "playwright"
-import { Observation } from "./types"
+import type { Observation } from "./types"
 
 export class PlaywrightEngine {
   private browser: Browser | null = null

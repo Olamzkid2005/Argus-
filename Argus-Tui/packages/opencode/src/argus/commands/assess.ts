@@ -2,6 +2,7 @@ import { WorkflowRegistry } from "../workflows/registry"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { WorkflowPlanner } from "../planner/planner"
 import { InProcessExecutor } from "../planner/executor"
+import type { NormalizedFinding } from "../planner/types"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { EngagementStore } from "../engagement/store"
 import { ConfidenceEngine } from "../engagement/confidence"
@@ -38,19 +39,23 @@ export async function assessCommand(target: string, options?: {
 
   const plan = await planner.plan(target, undefined, { useLLM: options?.useLLM })
 
+  const allFindings: NormalizedFinding[] = []
+
   for (const phase of plan.phases) {
     const result = await executor.execute(phase)
 
     for (const finding of result.findings) {
       const promoted = confidenceEngine.promote(finding)
       finding.confidence = promoted
+      allFindings.push(finding)
     }
   }
 
+  store.saveFindings(engagement.id, allFindings)
   store.updateStatus(engagement.id, "COMPLETED")
 
   const reportGen = new ReportGenerator()
-  const report = reportGen.generateMarkdown([], engagement.id, target, "assessment")
+  const report = reportGen.generateMarkdown(allFindings, engagement.id, target, "assessment")
   process.stdout.write(report + "\n")
 
   await bridge.disconnect()

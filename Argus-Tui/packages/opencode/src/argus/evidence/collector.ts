@@ -2,7 +2,7 @@ import { mkdir, writeFile, readFile } from "fs/promises"
 import { existsSync, mkdirSync } from "fs"
 import { join } from "path"
 import { createHash } from "crypto"
-import { EvidenceManifest, ArtifactEntry } from "./types"
+import type { EvidenceManifest, ArtifactEntry } from "./types"
 import { Confidence } from "../planner/types"
 
 interface CollectorConfig {

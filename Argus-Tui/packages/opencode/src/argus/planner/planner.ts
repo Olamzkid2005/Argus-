@@ -1,4 +1,4 @@
-import { PlannerContext, AssessmentPlan, PhaseExecutionRequest } from "./types"
+import type { PlannerContext, AssessmentPlan, PhaseExecutionRequest } from "./types"
 import { Capability } from "./capabilities"
 import { WorkflowRegistry } from "../workflows/registry"
 import { ToolRegistry } from "../workflows/tool-registry"

@@ -1,4 +1,4 @@
-import { NormalizedFinding } from "../planner/types"
+import type { NormalizedFinding } from "../planner/types"
 
 export type ReportFormat = "markdown" | "html" | "sarif" | "json"
 

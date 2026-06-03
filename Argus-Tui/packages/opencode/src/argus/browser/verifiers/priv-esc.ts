@@ -1,5 +1,5 @@
 import { PlaywrightEngine } from "../engine"
-import { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
+import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../planner/types"
 
 export class PrivilegeEscalationVerifier implements VerificationScenario {

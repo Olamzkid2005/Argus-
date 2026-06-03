@@ -1,4 +1,5 @@
-import { NormalizedFinding, Severity, Confidence } from "../planner/types"
+import type { NormalizedFinding } from "../planner/types"
+import { Severity, Confidence } from "../planner/types"
 
 export function normalizeFinding(raw: unknown): NormalizedFinding {
   const input = raw as Record<string, unknown>

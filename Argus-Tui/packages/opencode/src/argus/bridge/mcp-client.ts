@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from "child_process"
 import { createInterface } from "readline"
-import { ToolDefinition, ToolResult, MCPError, DriftReport } from "./types"
+import type { ToolDefinition, ToolResult, MCPError, DriftReport } from "./types"
 import { WorkerSupervisor } from "./supervisor"
 
 interface PendingRequest {

@@ -1,4 +1,4 @@
-import { PlannerContext, NormalizedFinding } from "./types"
+import type { PlannerContext, NormalizedFinding } from "./types"
 import { Capability } from "./capabilities"
 
 const REPLAN_INSERTABLE: Record<string, Capability> = {

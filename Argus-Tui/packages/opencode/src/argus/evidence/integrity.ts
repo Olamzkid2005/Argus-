@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import { createHash } from "crypto"
-import { EvidenceManifest, IntegrityReport } from "./types"
+import type { EvidenceManifest, IntegrityReport } from "./types"
 
 export function verifyPackage(baseDir: string, packageId: string): IntegrityReport {
   const manifestPath = join(baseDir, "artifacts", packageId, "manifest.json")

@@ -1,5 +1,5 @@
 import { Capability } from "../planner/capabilities"
-import { ExecutionMode, ErrorRecovery } from "../planner/types"
+import type { ExecutionMode, ErrorRecovery } from "../planner/types"
 
 export interface WorkflowDefinition {
   name: string

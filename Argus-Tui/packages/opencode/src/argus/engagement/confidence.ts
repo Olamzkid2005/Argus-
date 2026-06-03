@@ -1,4 +1,5 @@
-import { Confidence, NormalizedFinding } from "../planner/types"
+import { Confidence } from "../planner/types"
+import type { NormalizedFinding } from "../planner/types"
 
 const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (finding: NormalizedFinding) => boolean }> = [
   {
