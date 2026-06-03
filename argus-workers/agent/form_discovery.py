@@ -193,7 +193,10 @@ def _extract_form_fields(html: str, form_type: str = "register") -> dict[str, st
     fields: dict[str, str] = {}
 
     try:
-        soup = BeautifulSoup(html, "lxml")
+        try:
+            soup = BeautifulSoup(html, "lxml")
+        except Exception:
+            soup = BeautifulSoup(html, "html.parser")
 
         # Find the most likely form — prefer one with a password field
         form = None

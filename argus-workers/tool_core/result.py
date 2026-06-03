@@ -59,7 +59,7 @@ class ToolStatus(StrEnum):
 
     @property
     def is_ok(self) -> bool:
-        return self in {self.SUCCESS, self.SUCCESS_EMPTY, self.SKIPPED}
+        return self in {self.SUCCESS, self.SUCCESS_EMPTY}
 
 
 @dataclass

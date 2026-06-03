@@ -558,6 +558,13 @@ class ReActAgent:
                         tool_name, {"target": task}, f"Phase tool: {tool_name}"
                     )
 
+        for tool_meta in self.registry.list_tools():
+            tool_name = tool_meta.get("name", "")
+            if tool_name not in tried_tools and tool_name not in phase_tools:
+                return AgentAction(
+                    tool_name, {"target": task}, f"Registered tool: {tool_name}"
+                )
+
         return None
 
     def _validate_arguments(self, action: AgentAction) -> bool:
