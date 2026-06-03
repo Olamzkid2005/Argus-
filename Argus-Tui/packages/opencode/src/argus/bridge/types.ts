@@ -20,6 +20,7 @@ export interface MCPError {
   data?: unknown
 }
 
+// TODO: LLMUnavailableError is currently unused. Remove if still dead after integration pass.
 export class LLMUnavailableError extends Error {
   constructor(
     public status: "DEGRADED" | "UNAVAILABLE",

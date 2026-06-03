@@ -8,53 +8,68 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   description = "Privilege Escalation — verifies access controls on high-privilege endpoints"
 
   private logs: string[] = []
-  private highPrivAccessible = false
-  private httpStatus = 0
+  private accessibleEndpoints: { endpoint: string; status: number; accessible: boolean }[] = []
 
   constructor(
     private engine: BrowserEngine,
     private targetUrl: string,
-    private highPrivEndpoint: string,
+    private highPrivEndpoints: string[],
     private lowPrivCreds: { username: string; password: string },
   ) {}
 
   async setup(): Promise<void> {
+    if (!this.lowPrivCreds.username || !this.lowPrivCreds.password) {
+      this.logs.push("WARNING: Low-privilege credentials are empty — authentication may fail")
+    }
     await this.engine.launch()
     await this.engine.createContext()
     this.logs.push("Privilege escalation verifier setup complete")
   }
 
+  async cleanup(): Promise<void> {
+    await this.engine.close()
+  }
+
   async execute(): Promise<void> {
-    const endpointUrl = `${this.targetUrl.replace(/\/+$/, "")}/${this.highPrivEndpoint.replace(/^\//, "")}`
+    for (const ep of this.highPrivEndpoints) {
+      const endpointUrl = `${this.targetUrl.replace(/\/+$/, "")}/${ep.replace(/^\//, "")}`
+      const page = await this.engine.navigate(this.targetUrl)
+      await loginIfFormPresent(page, this.lowPrivCreds)
+      if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
 
-    const page = await this.engine.navigate(this.targetUrl)
-    await loginIfFormPresent(page, this.lowPrivCreds)
-    if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
+      const response = await page.goto(endpointUrl, { waitUntil: "networkidle" })
+      const httpStatus = response?.status() ?? 0
 
-    const response = await page.goto(endpointUrl, { waitUntil: "networkidle" })
-    this.httpStatus = response?.status() ?? 0
+      let accessible: boolean
+      try {
+        const bodyText = await page.locator("body").innerText()
+        accessible = !isAccessDenied(bodyText) && httpStatus !== 403 && httpStatus !== 401
+      } catch {
+        accessible = false
+      }
 
-    try {
-      const bodyText = await page.locator("body").innerText()
-      this.highPrivAccessible = !isAccessDenied(bodyText) && this.httpStatus !== 403 && this.httpStatus !== 401
-    } catch {
-      this.highPrivAccessible = false
+      this.accessibleEndpoints.push({ endpoint: ep, status: httpStatus, accessible })
+      this.logs.push(`High-priv endpoint ${endpointUrl}: HTTP ${httpStatus}, accessible: ${accessible}`)
+
+      await page.close()
     }
 
-    this.logs.push(`High-priv endpoint ${endpointUrl}: HTTP ${this.httpStatus}, accessible: ${this.highPrivAccessible}`)
-    this.logs.push(`Privilege escalation ${this.highPrivAccessible ? "POSSIBLE" : "not detected"}`)
-
-    await page.close()
+    const anyAccessible = this.accessibleEndpoints.some(e => e.accessible)
+    this.logs.push(`Privilege escalation ${anyAccessible ? "POSSIBLE" : "not detected"}`)
   }
 
   async verify(): Promise<VerifierResult> {
+    const anyAccessible = this.accessibleEndpoints.some(e => e.accessible)
+    const some200 = this.accessibleEndpoints.some(e => e.status === 200 && e.accessible)
+    const summary = anyAccessible
+      ? `Privilege escalation: low-priv user accessed ${this.accessibleEndpoints.filter(e => e.accessible).map(e => e.endpoint).join(", ")}`
+      : `Access control enforced for all ${this.highPrivEndpoints.length} endpoint(s)`
+
     return {
-      passed: this.highPrivAccessible,
-      confidence: this.highPrivAccessible && this.httpStatus === 200 ? Confidence.HIGH : Confidence.LOW,
+      passed: anyAccessible,
+      confidence: anyAccessible && some200 ? Confidence.HIGH : Confidence.LOW,
       evidence: [],
-      summary: this.highPrivAccessible
-        ? `Privilege escalation: low-priv user accessed ${this.highPrivEndpoint} (HTTP ${this.httpStatus})`
-        : `Access control enforced for ${this.highPrivEndpoint} (HTTP ${this.httpStatus})`,
+      summary,
     }
   }
 

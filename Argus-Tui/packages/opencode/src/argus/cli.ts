@@ -17,6 +17,7 @@ export const ArgusAssessCommand = {
     const target = argv.target as string
     process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
     await assessCommand(target, { useLLM: !argv.deterministic, credsPath: argv.creds as string | undefined })
+      .catch((e: Error) => process.stderr.write(`[Argus] assess error: ${e.message}\n`))
   },
 }
 
@@ -24,7 +25,10 @@ export const ArgusDoctorCommand = {
   command: "doctor",
   describe: "Run comprehensive health checks on the Argus runtime",
   handler: async () => {
-    const results = await doctorCommand()
+    const results = await doctorCommand().catch((e: Error) => {
+      process.stderr.write(`[Argus] doctor error: ${e.message}\n`)
+      return []
+    })
     let passes = 0, warns = 0, fails = 0
     for (const r of results) {
       const icon = r.status === "PASS" ? "✓" : r.status === "WARN" ? "⚠" : "✗"
@@ -48,8 +52,12 @@ export const ArgusReportCommand = {
   handler: async (argv: Record<string, unknown>) => {
     const id = argv.engagementId as string
     const format = argv.format as "markdown" | "json" | "sarif"
-    const output = await reportCommand(id, format)
-    process.stdout.write(output + "\n")
+    try {
+      const output = await reportCommand(id, format)
+      process.stdout.write(output + "\n")
+    } catch (e) {
+      process.stderr.write(`[Argus] report error: ${(e as Error).message}\n`)
+    }
   },
 }
 
@@ -60,7 +68,11 @@ export const ArgusResumeCommand = {
     yargs.positional("engagement-id", { describe: "Engagement ID", type: "string", demandOption: true }),
   handler: async (argv: Record<string, unknown>) => {
     const id = argv.engagementId as string
-    const result = await resumeCommand(id)
-    process.stdout.write(result + "\n")
+    try {
+      const result = await resumeCommand(id)
+      process.stdout.write(result + "\n")
+    } catch (e) {
+      process.stderr.write(`[Argus] resume error: ${(e as Error).message}\n`)
+    }
   },
 }

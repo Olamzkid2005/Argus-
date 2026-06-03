@@ -24,13 +24,13 @@ export async function loginIfFormPresent(page: Page, creds: Credentials): Promis
     await submitButton.click()
   }
 
-  await page.waitForTimeout(1000)
+  await page.waitForLoadState("networkidle")
   return true
 }
 
 export function isAccessDenied(bodyText: string): boolean {
   const lower = bodyText.toLowerCase()
-  return lower.includes("403") || lower.includes("401") ||
+  return /\b403\b/.test(lower) || /\b401\b/.test(lower) ||
     lower.includes("forbidden") || lower.includes("access denied") ||
     lower.includes("unauthorized") || lower.includes("not authorized") ||
     lower.includes("insufficient permissions")

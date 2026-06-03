@@ -46,6 +46,7 @@ export async function assessCommand(target: string, options?: {
   if (defaultCreds) {
     store.appendAuditLog(engagement.id, "CREDS_LOADED", `Loaded credentials for roles: ${credStore.listRoles().join(", ")}`)
   }
+  credStore.clear()
 
   const plan = await planner.plan(target, undefined, { useLLM: options?.useLLM })
   executor.loadGates(plan.workflow)
@@ -67,34 +68,46 @@ export async function assessCommand(target: string, options?: {
   store.appendAuditLog(engagement.id, "ASSESS_START", `Assessment started against ${target} with workflow ${plan.workflow}`)
 
   const allFindings: NormalizedFinding[] = []
+  let executionError: Error | null = null
 
-  for (let i = 0; i < plan.phases.length; i++) {
-    const phase = plan.phases[i]
-    phaseRecords[i].status = "RUNNING"
-    phaseRecords[i].startedAt = new Date().toISOString()
-    store.savePhase(engagement.id, phaseRecords[i])
+  try {
+    for (let i = 0; i < plan.phases.length; i++) {
+      const phase = plan.phases[i]
+      phaseRecords[i].status = "RUNNING"
+      phaseRecords[i].startedAt = new Date().toISOString()
+      store.savePhase(engagement.id, phaseRecords[i])
 
-    const result = await executor.execute(phase)
+      const result = await executor.execute(phase)
 
-    for (const finding of result.findings) {
-      const promoted = confidenceEngine.promote(finding)
-      finding.confidence = promoted
-      allFindings.push(finding)
+      for (const finding of result.findings) {
+        const promoted = confidenceEngine.promote(finding)
+        finding.confidence = promoted
+        allFindings.push(finding)
+      }
+
+      phaseRecords[i].status = result.status === "failed" ? "FAILED" : "COMPLETED"
+      phaseRecords[i].completedAt = new Date().toISOString()
+      if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")
+      store.savePhase(engagement.id, phaseRecords[i])
     }
-
-    phaseRecords[i].status = result.status === "failed" ? "FAILED" : "COMPLETED"
-    phaseRecords[i].completedAt = new Date().toISOString()
-    if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")
-    store.savePhase(engagement.id, phaseRecords[i])
+  } catch (error) {
+    executionError = error as Error
+    store.appendAuditLog(engagement.id, "ASSESS_ERROR", `Assessment error: ${(error as Error).message}`)
+  } finally {
+    const allPhasesCompleted = phaseRecords.every(p => p.status === "COMPLETED")
+    store.updateStatus(engagement.id, executionError ? "FAILED" : allPhasesCompleted ? "COMPLETED" : "FAILED")
+    store.saveFindings(engagement.id, allFindings)
+    store.appendAuditLog(engagement.id, "ASSESS_COMPLETE",
+      executionError
+        ? `Assessment failed: ${executionError.message}`
+        : `Assessment completed — ${allFindings.length} finding(s)`
+    )
+    await bridge.disconnect()
   }
 
-  store.saveFindings(engagement.id, allFindings)
-  store.appendAuditLog(engagement.id, "ASSESS_COMPLETE", `Assessment completed — ${allFindings.length} finding(s)`)
-  store.updateStatus(engagement.id, allFindings.length > 0 ? "COMPLETED" : "FAILED")
-
-  const reportGen = new ReportGenerator()
-  const report = reportGen.generateMarkdown(allFindings, engagement.id, target, "assessment")
-  process.stdout.write(report + "\n")
-
-  await bridge.disconnect()
+  if (!executionError) {
+    const reportGen = new ReportGenerator()
+    const report = reportGen.generateMarkdown(allFindings, engagement.id, target, "assessment")
+    process.stdout.write(report + "\n")
+  }
 }

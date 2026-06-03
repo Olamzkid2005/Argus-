@@ -29,12 +29,19 @@ export class InProcessExecutor implements PhaseExecutor {
     this.approvalService = new ApprovalService()
   }
 
+  private gatesLoaded = false
+
   loadGates(workflowName: string): void {
     const workflow = this.workflowRegistry?.getWorkflow(workflowName)
     this.requiredGates = this.approvalService.getRequiredGates(workflow?.approval_required)
+    this.gatesLoaded = true
   }
 
   async execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
+    if (!this.gatesLoaded) {
+      throw new Error("loadGates must be called before execute")
+    }
+
     const gate = this.approvalService.needsApproval(phase, this.requiredGates)
     if (gate) {
       const result = await this.approvalService.requestApproval(gate, phase.phaseId, phase.target)
@@ -53,6 +60,7 @@ export class InProcessExecutor implements PhaseExecutor {
     const startTime = Date.now()
     const findings: NormalizedFinding[] = []
     const errors: string[] = []
+    const calledTools = new Set<string>()
 
     for (const cap of phase.requiredCapabilities) {
       const tools = this.toolRegistry.getToolsByCapability(cap)
@@ -62,6 +70,9 @@ export class InProcessExecutor implements PhaseExecutor {
       }
 
       for (const tool of tools) {
+        if (calledTools.has(tool.name)) continue
+        calledTools.add(tool.name)
+
         const errorRecovery = this.resolveErrorRecovery(phase, tool.name)
         let lastError: Error | null = null
         let success = false
@@ -75,17 +86,37 @@ export class InProcessExecutor implements PhaseExecutor {
             })
 
             if (result.success && result.data) {
-              const normalized = result.data as NormalizedFinding[]
-              for (const finding of normalized) {
-                const promoted = this.confidenceEngine.promote(finding)
-                finding.confidence = promoted
-                findings.push(finding)
+              const data = result.data
+              if (!Array.isArray(data)) {
+                errors.push(`Tool ${tool.name} returned non-array result`)
+              } else {
+                for (const finding of data) {
+                  const promoted = this.confidenceEngine.promote(finding)
+                  findings.push({ ...finding, confidence: promoted })
+                }
+                success = true
+                break
               }
-              success = true
-              break
             }
 
             lastError = new Error(result.error ?? "Tool returned unsuccessful result")
+            if (errorRecovery === "fail_fast") {
+              errors.push(`Tool ${tool.name} failed (fail_fast): ${lastError.message}`)
+              return {
+                phaseId: phase.phaseId,
+                status: "failed",
+                findings,
+                artifacts: [],
+                errors,
+                durationMs: Date.now() - startTime,
+              }
+            }
+
+            if (errorRecovery === "retry_once_then_skip" && attempt === 1) {
+              continue
+            }
+
+            break
           } catch (error) {
             lastError = error as Error
             if (errorRecovery === "fail_fast") {
@@ -116,7 +147,7 @@ export class InProcessExecutor implements PhaseExecutor {
 
     return {
       phaseId: phase.phaseId,
-      status: errors.length > 0 && findings.length === 0 ? "failed" : findings.length > 0 ? "completed" : "partial",
+      status: errors.length > 0 && findings.length > 0 ? "partial" : errors.length > 0 && findings.length === 0 ? "failed" : findings.length > 0 ? "completed" : "partial",
       findings,
       artifacts: [],
       errors,

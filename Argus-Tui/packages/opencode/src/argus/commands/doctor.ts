@@ -1,7 +1,7 @@
 import { existsSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
-import { spawn, execFileSync } from "child_process"
+import { spawn, execFile } from "child_process"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
@@ -50,7 +50,9 @@ async function pythonCheck(pythonPath?: string): Promise<CheckResult> {
           message: `${version.trim()} (via ${py})`,
         }
       }
-    } catch {}
+    } catch (error) {
+      process.stderr.write(`[doctor] python check failed for ${py}: ${(error as Error).message}\n`)
+    }
   }
 
   return {
@@ -102,13 +104,14 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
 
 async function playwrightCheck(): Promise<CheckResult> {
   try {
-    execFileSync("npx", ["playwright", "--version"], { stdio: "pipe", timeout: 10000 })
+    await execCapture("npx", ["playwright", "--version"])
     return {
       name: "Playwright",
       status: "PASS",
       message: "Playwright CLI available",
     }
-  } catch {
+  } catch (error) {
+    process.stderr.write(`[doctor] playwright check failed: ${(error as Error).message}\n`)
     return {
       name: "Playwright",
       status: "WARN",

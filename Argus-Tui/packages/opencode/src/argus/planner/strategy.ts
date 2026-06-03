@@ -20,6 +20,14 @@ export function detectTargetType(url: string, techStack?: string[]): TargetType 
   return "unknown"
 }
 
+/**
+ * Detects auth state from URL alone.
+ *
+ * NOTE: URL-only detection is unreliable — it may miss auth mechanisms that
+ * don't appear in the URL (e.g., header-based, cookie-based, form-based auth).
+ * This is a best-effort heuristic and should be supplemented with actual page
+ * analysis when accuracy is critical.
+ */
 export function detectAuthState(url: string): AuthState {
   const lowerUrl = url.toLowerCase()
   if (lowerUrl.includes("oauth") || lowerUrl.includes("auth")) return "oauth"

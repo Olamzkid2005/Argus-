@@ -33,6 +33,15 @@ export class WorkflowPlanner {
       techStack: context?.techStack,
     }
 
+    const techFromFindings = plannerContext.findings
+      .filter((f) => f.subtype === "technology" || f.subtype === "framework" || f.subtype === "language")
+      .map((f) => f.title)
+    if (techFromFindings.length > 0) {
+      plannerContext.techStack = [
+        ...new Set([...(plannerContext.techStack ?? []), ...techFromFindings]),
+      ]
+    }
+
     if (options?.useLLM === false) {
       return planDeterministic(target)
     }
@@ -49,8 +58,11 @@ export class WorkflowPlanner {
       const def = workflow.phases[i]
       const tools = this.toolRegistry.findBestTools(def.required_capabilities, targetType)
 
-      if (tools.length === 0 && def.error_recovery !== "fail_fast") {
-        continue
+      if (tools.length === 0) {
+        if (def.error_recovery !== "fail_fast") {
+          continue
+        }
+        process.stderr.write(`Warning: Adding fail_fast phase "${def.name}" with zero available tools\n`)
       }
 
       phases.push({
@@ -60,6 +72,7 @@ export class WorkflowPlanner {
         requiredCapabilities: def.required_capabilities,
         config: {},
         previousPhaseResults: [],
+        approvalGateName: def.approval_gate,
       })
     }
 
@@ -67,7 +80,7 @@ export class WorkflowPlanner {
       workflow: workflow.name,
       phases,
       errorRecovery: Object.fromEntries(
-        workflow.phases.map((p) => [`phase-${workflow.phases.indexOf(p)}-${p.name}`, p.error_recovery]),
+        workflow.phases.map((p, i) => [`phase-${i}-${p.name}`, p.error_recovery]),
       ),
       planCreatedAt: new Date().toISOString(),
     }
@@ -83,10 +96,10 @@ export class WorkflowPlanner {
 
     if (unhandled.length === 0) return null
 
-    context.replanCount++
+    const nextReplanCount = context.replanCount + 1
 
-    return unhandled.map((cap, i) => ({
-      phaseId: `replan-${context.replanCount}-${cap}`,
+    return unhandled.map((cap) => ({
+      phaseId: `replan-${nextReplanCount}-${cap}`,
       workflowName: "replan",
       target: context.target,
       requiredCapabilities: [cap],

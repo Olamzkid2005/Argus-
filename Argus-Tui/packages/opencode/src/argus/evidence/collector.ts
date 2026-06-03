@@ -1,5 +1,4 @@
-import { mkdir, writeFile, readFile } from "fs/promises"
-import { existsSync, mkdirSync } from "fs"
+import { mkdir, writeFile } from "fs/promises"
 import { join } from "path"
 import { createHash } from "crypto"
 import type { EvidenceManifest, ArtifactEntry } from "./types"
@@ -32,17 +31,16 @@ export class EvidenceCollector {
   }
 
   private async ensureDir(path: string): Promise<void> {
-    if (!existsSync(path)) {
-      await mkdir(path, { recursive: true })
-    }
+    await mkdir(path, { recursive: true })
   }
 
-  private async hashFile(filePath: string): Promise<string> {
-    const content = await readFile(filePath)
-    return createHash("sha256").update(content).digest("hex")
+  private validateId(id: string, label: string): void {
+    if (!/^[\w-]+$/.test(id)) throw new Error(`Invalid ${label}: ${id}`)
   }
 
   async saveRequest(engagementId: string, findingId: string, request: string): Promise<ArtifactEntry> {
+    this.validateId(engagementId, "engagementId")
+    this.validateId(findingId, "findingId")
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "requests")
     await this.ensureDir(dir)
     const fileName = `request-${Date.now()}.txt`
@@ -51,13 +49,15 @@ export class EvidenceCollector {
 
     return {
       path: join("requests", fileName),
-      hash: await this.hashFile(filePath),
+      hash: createHash("sha256").update(request).digest("hex"),
       type: "request" as const,
       size_bytes: Buffer.byteLength(request),
     }
   }
 
   async saveResponse(engagementId: string, findingId: string, response: string): Promise<ArtifactEntry> {
+    this.validateId(engagementId, "engagementId")
+    this.validateId(findingId, "findingId")
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "responses")
     await this.ensureDir(dir)
     const fileName = `response-${Date.now()}.txt`
@@ -66,13 +66,15 @@ export class EvidenceCollector {
 
     return {
       path: join("responses", fileName),
-      hash: await this.hashFile(filePath),
+      hash: createHash("sha256").update(response).digest("hex"),
       type: "response" as const,
       size_bytes: Buffer.byteLength(response),
     }
   }
 
   async captureScreenshot(engagementId: string, findingId: string, screenshotBuffer: Buffer): Promise<ArtifactEntry> {
+    this.validateId(engagementId, "engagementId")
+    this.validateId(findingId, "findingId")
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "screenshots")
     await this.ensureDir(dir)
     const fileName = `screenshot-${Date.now()}.png`
@@ -88,6 +90,8 @@ export class EvidenceCollector {
   }
 
   async createPackage(engagementId: string, findingId: string, artifacts: ArtifactEntry[]): Promise<EvidenceManifest> {
+    this.validateId(engagementId, "engagementId")
+    this.validateId(findingId, "findingId")
     const manifest: EvidenceManifest = {
       package_id: findingId,
       engagement_id: engagementId,

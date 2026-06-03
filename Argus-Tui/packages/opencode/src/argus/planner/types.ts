@@ -34,6 +34,8 @@ export interface PhaseExecutionRequest {
   credentials?: CredentialRef[]
   config: Record<string, unknown>
   previousPhaseResults: PhaseExecutionResult[]
+  /** Name of the approval gate that gates this phase, if any. Set from PhaseDefinition.approval_gate. */
+  approvalGateName?: string
 }
 
 export interface PhaseExecutionResult {
@@ -59,6 +61,7 @@ export interface PlannerContext {
   techStack?: string[]
   findings: NormalizedFinding[]
   executedCapabilities: Set<Capability>
+  /** Preserved for external consumers (e.g., audit logging). Currently unused by the planner itself. */
   insertedPhases: Set<string>
   replanCount: number
 }
@@ -116,8 +119,4 @@ export enum Confidence {
   CONFIRMED = 5,
 }
 
-export interface ErrorRecoveryPolicy {
-  maxRetries: number
-  backoffMs: number
-  fallbackBehavior: "skip" | "degrade" | "abort"
-}
+

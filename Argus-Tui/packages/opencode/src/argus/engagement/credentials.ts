@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs"
+import { readFileSync, writeFileSync, chmodSync, existsSync, mkdirSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 
@@ -54,11 +54,17 @@ export class CredentialStore {
     return null
   }
 
+  /** Future: migrate to OS keychain integration */
+  clear(): void {
+    this.data = { roles: {} }
+  }
+
   save(data: CredentialFile, filePath?: string): void {
     const resolved = filePath ?? this.path ?? DEFAULT_CREDS_PATH
     const dir = join(resolved, "..")
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     writeFileSync(resolved, JSON.stringify(data, null, 2))
+    chmodSync(resolved, 0o600)
     this.data = data
   }
 

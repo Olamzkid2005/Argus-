@@ -5,7 +5,7 @@ export const engagements = sqliteTable("engagements", {
   target: text().notNull(),
   workflow: text().notNull(),
   workflow_version: integer().notNull().default(1),
-  status: text().notNull().default("running"),
+  status: text().notNull().default("CREATED"),
   schema_version: integer().notNull().default(1),
   created_at: integer().notNull().$default(() => Date.now()),
   updated_at: integer().notNull().$onUpdate(() => Date.now()),
@@ -13,7 +13,7 @@ export const engagements = sqliteTable("engagements", {
 
 export const findings = sqliteTable("findings", {
   id: text().primaryKey(),
-  engagement_id: text().notNull().references(() => engagements.id),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
   title: text().notNull(),
   severity: integer().notNull(),
   confidence: integer().notNull(),
@@ -33,11 +33,12 @@ export const findings = sqliteTable("findings", {
   index("idx_findings_engagement").on(table.engagement_id),
   index("idx_findings_status").on(table.status),
   index("idx_findings_severity").on(table.severity),
+  index("idx_findings_engagement_status_severity").on(table.engagement_id, table.status, table.severity),
 ])
 
 export const evidence_packages = sqliteTable("evidence_packages", {
   id: text().primaryKey(),
-  finding_id: text().notNull().references(() => findings.id),
+  finding_id: text().notNull().references(() => findings.id, { onDelete: "cascade" }),
   package_hash: text().notNull(),
   created_at: integer().notNull().$default(() => Date.now()),
 }, (table) => [
@@ -46,7 +47,7 @@ export const evidence_packages = sqliteTable("evidence_packages", {
 
 export const artifacts = sqliteTable("artifacts", {
   id: text().primaryKey(),
-  package_id: text().notNull().references(() => evidence_packages.id),
+  package_id: text().notNull().references(() => evidence_packages.id, { onDelete: "cascade" }),
   path: text().notNull(),
   sha256: text().notNull(),
   size_bytes: integer().notNull(),
@@ -57,7 +58,7 @@ export const artifacts = sqliteTable("artifacts", {
 
 export const workflow_snapshots = sqliteTable("workflow_snapshots", {
   id: text().primaryKey(),
-  engagement_id: text().notNull().references(() => engagements.id),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
   workflow_name: text().notNull(),
   workflow_version: integer().notNull(),
   workflow_yaml: text().notNull(),
@@ -68,7 +69,7 @@ export const workflow_snapshots = sqliteTable("workflow_snapshots", {
 
 export const phases = sqliteTable("phases", {
   id: text().primaryKey(),
-  engagement_id: text().notNull().references(() => engagements.id),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
   name: text().notNull(),
   status: text().notNull().default("PENDING"),
   capabilities: text({ mode: "json" }).$type<string[]>(),
@@ -83,10 +84,10 @@ export const phases = sqliteTable("phases", {
 
 export const audit_log = sqliteTable("audit_log", {
   id: text().primaryKey(),
-  engagement_id: text().notNull().references(() => engagements.id),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
   event_type: text().notNull(),
   message: text().notNull(),
-  metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+  metadata: text({ mode: "json" }).$type<Record<string, unknown>>().default({}),
   created_at: integer().notNull().$default(() => Date.now()),
 }, (table) => [
   index("idx_audit_log_engagement").on(table.engagement_id),

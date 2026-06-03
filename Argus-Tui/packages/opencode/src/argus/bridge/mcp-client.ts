@@ -36,12 +36,14 @@ export class WorkersBridge {
   private _llmStatus: LLMStatus = "AVAILABLE"
   private statusListeners: Array<(status: string) => void> = []
 
+  private pendingCount = 0
+  private readonly maxPending = 10
+
   constructor(
     private workersPath: string,
     private pythonPath: string = "python3",
   ) {
     this.supervisor = new WorkerSupervisor({
-      restartWorker: () => this.restartWorker(),
       killChild: () => this.killChild(),
       connect: () => this.connect(),
       isHealthy: () => this.isHealthy(),
@@ -83,6 +85,8 @@ export class WorkersBridge {
       clearTimeout(timer)
     }
     this.pending.clear()
+    this.pendingCount = 0
+    this.process = null
   }
 
   private async spawnChild(): Promise<void> {
@@ -113,9 +117,14 @@ export class WorkersBridge {
     })
 
     this.process.on("exit", (code) => {
-      if (code !== 0) {
-        this.setLLMStatus("UNAVAILABLE")
+      this.setLLMStatus(code !== 0 ? "UNAVAILABLE" : "AVAILABLE")
+      // Reject all pending requests — process is gone
+      for (const [id, pending] of this.pending) {
+        clearTimeout(pending.timer)
+        pending.reject(new Error(`Process exited with code ${code}`))
       }
+      this.pending.clear()
+      this.pendingCount = 0
     })
 
     this.process.stderr?.on("data", (data: Buffer) => {
@@ -153,14 +162,21 @@ export class WorkersBridge {
 
   private async waitForReady(timeoutMs = 10000): Promise<void> {
     const start = Date.now()
+    let delay = 200
     while (Date.now() - start < timeoutMs) {
       if (await this.isHealthy()) return
-      await new Promise((r) => setTimeout(r, 200))
+      await new Promise((r) => setTimeout(r, delay))
+      delay = Math.min(delay * 2, 1600)
     }
     throw new Error("MCP worker failed to become ready")
   }
 
   private async sendRequest(method: string, params?: unknown): Promise<unknown> {
+    if (this.pendingCount >= this.maxPending) {
+      throw new Error(`Too many pending requests (max ${this.maxPending})`)
+    }
+    this.pendingCount++
+
     const id = String(++this.requestId)
     const request: RPCRequest = {
       jsonrpc: "2.0",
@@ -169,15 +185,26 @@ export class WorkersBridge {
       params,
     }
 
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id)
-        reject(new Error(`Request ${method} timed out`))
-      }, 30000)
+    try {
+      return await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pending.delete(id)
+          reject(new Error(`Request ${method} timed out`))
+        }, 30000)
 
-      this.pending.set(id, { resolve, reject, timer })
-      this.process?.stdin?.write(JSON.stringify(request) + "\n")
-    })
+        this.pending.set(id, { resolve, reject, timer })
+
+        if (!this.process || this.process.exitCode !== null || this.process.killed) {
+          clearTimeout(timer)
+          this.pending.delete(id)
+          reject(new Error("Process not running"))
+          return
+        }
+        this.process.stdin!.write(JSON.stringify(request) + "\n")
+      })
+    } finally {
+      this.pendingCount--
+    }
   }
 
   async callTool(name: string, args: unknown): Promise<ToolResult> {
@@ -215,8 +242,7 @@ export class WorkersBridge {
   }
 
   async disconnect(): Promise<void> {
-    this.cleanup()
     this.killChild()
-    this.process = null
+    this.cleanup()
   }
 }

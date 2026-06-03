@@ -10,7 +10,7 @@ const XSS_MARKERS = [
   "alert(",
   "onload=",
   "javascript:",
-]
+].map(m => m.toLowerCase())
 
 export class StoredXSSVerifier implements VerificationScenario {
   name = "stored-xss"
@@ -32,39 +32,41 @@ export class StoredXSSVerifier implements VerificationScenario {
     this.logs.push(`Stored XSS verifier setup complete — payload: ${this.payload}`)
   }
 
+  async cleanup(): Promise<void> {
+    await this.engine.close()
+  }
+
   async execute(): Promise<void> {
     const injectPage = await this.engine.navigate(this.injectUrl)
     await injectPage.waitForLoadState("networkidle")
-    await loginIfFormPresent(injectPage, { username: "", password: "" })
 
-    const inputFields = await injectPage.locator(
-      "input[type=text], textarea, input:not([type]), [contenteditable=true]",
-    ).all()
-
-    if (inputFields.length === 0) {
-      this.logs.push("No input fields found to inject payload")
-    } else {
+    // Scope injection to fields inside <form> elements only
+    const forms = await injectPage.locator("form").all()
+    for (const form of forms) {
+      const inputFields = await form.locator(
+        "input[type=text], textarea, input:not([type]), [contenteditable=true]",
+      ).all()
       for (const field of inputFields) {
         if (await field.isVisible()) {
           await field.fill(this.payload)
-          this.logs.push("Injected payload into field")
+          this.logs.push("Injected payload into field inside <form>")
         }
       }
-      const submitBtn = injectPage.locator("button[type=submit], input[type=submit]").first()
-      if (await submitBtn.isVisible()) {
-        await submitBtn.click()
-        await injectPage.waitForTimeout(1500)
-        this.logs.push("Submitted form with XSS payload")
-      }
+    }
+    const submitBtn = injectPage.locator("button[type=submit], input[type=submit]").first()
+    if (await submitBtn.isVisible()) {
+      await submitBtn.click()
+      await injectPage.waitForTimeout(1500)
+      this.logs.push("Submitted form with XSS payload")
     }
     await injectPage.close()
 
     const victimPage = await this.engine.navigate(this.victimViewUrl)
     await victimPage.waitForLoadState("networkidle")
 
-    const pageContent = await victimPage.content()
+    const pageContent = (await victimPage.content()).toLowerCase()
     const markersFound = XSS_MARKERS.filter(m => pageContent.includes(m))
-    const payloadInDom = pageContent.includes(this.payload)
+    const payloadInDom = pageContent.includes(this.payload.toLowerCase())
     this.payloadExecuted = markersFound.length > 0 || payloadInDom
 
     this.logs.push(`XSS markers found in DOM: ${markersFound.length > 0 ? markersFound.join(", ") : "none"}`)

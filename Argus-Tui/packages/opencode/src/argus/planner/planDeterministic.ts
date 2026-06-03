@@ -11,27 +11,29 @@ const PHASE_ERROR_POLICY: Record<string, ErrorRecovery> = {
   reporting: "fail_fast",
 }
 
-const TARGET_PLANS: Record<TargetType, PhaseExecutionRequest[]> = {
-  web_app: [
-    createPhase("recon", [Capability.WEB_RECON, Capability.PORT_SCANNING, Capability.TECHNOLOGY_DETECTION], "parallel", 0),
-    createPhase("vuln_scan", [Capability.VULNERABILITY_SCANNING, Capability.TEMPLATE_SCANNING], "parallel", 1),
-    createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 2),
-  ],
-  api: [
-    createPhase("recon", [Capability.WEB_RECON, Capability.TECHNOLOGY_DETECTION], "parallel", 0),
-    createPhase("api_discovery", [Capability.API_PROBING, Capability.CONTENT_DISCOVERY], "parallel", 1),
-    createPhase("vuln_scan", [Capability.VULNERABILITY_SCANNING], "parallel", 2),
-    createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 3),
-  ],
-  spa: [
-    createPhase("recon", [Capability.WEB_RECON, Capability.TECHNOLOGY_DETECTION], "parallel", 0),
-    createPhase("vuln_scan", [Capability.VULNERABILITY_SCANNING], "parallel", 1),
-    createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 2),
-  ],
-  unknown: [
-    createPhase("recon", [Capability.WEB_RECON, Capability.PORT_SCANNING], "parallel", 0),
-    createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 1),
-  ],
+function getTargetPlans(target: string): Record<TargetType, PhaseExecutionRequest[]> {
+  return {
+    web_app: [
+      createPhase("recon", [Capability.WEB_RECON, Capability.PORT_SCANNING, Capability.TECHNOLOGY_DETECTION], "parallel", 0, target),
+      createPhase("vuln_scan", [Capability.VULNERABILITY_SCANNING, Capability.TEMPLATE_SCANNING], "parallel", 1, target),
+      createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 2, target),
+    ],
+    api: [
+      createPhase("recon", [Capability.WEB_RECON, Capability.TECHNOLOGY_DETECTION], "parallel", 0, target),
+      createPhase("api_discovery", [Capability.API_PROBING, Capability.CONTENT_DISCOVERY], "parallel", 1, target),
+      createPhase("vuln_scan", [Capability.VULNERABILITY_SCANNING], "parallel", 2, target),
+      createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 3, target),
+    ],
+    spa: [
+      createPhase("recon", [Capability.WEB_RECON, Capability.TECHNOLOGY_DETECTION], "parallel", 0, target),
+      createPhase("vuln_scan", [Capability.VULNERABILITY_SCANNING], "parallel", 1, target),
+      createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 2, target),
+    ],
+    unknown: [
+      createPhase("recon", [Capability.WEB_RECON, Capability.PORT_SCANNING], "parallel", 0, target),
+      createPhase("reporting", [Capability.REPORT_GENERATION], "sequential", 1, target),
+    ],
+  }
 }
 
 function createPhase(
@@ -39,11 +41,12 @@ function createPhase(
   capabilities: Capability[],
   execution: "parallel" | "sequential",
   phaseIndex: number,
+  target: string,
 ): PhaseExecutionRequest {
   return {
     phaseId: `phase-${phaseIndex}-${name}`,
     workflowName: "deterministic",
-    target: "",
+    target,
     requiredCapabilities: capabilities,
     config: {},
     previousPhaseResults: [],
@@ -52,11 +55,11 @@ function createPhase(
 
 export function planDeterministic(target: string): AssessmentPlan {
   const targetType = detectTargetType(target)
-  const phases = TARGET_PLANS[targetType]
+  const phases = getTargetPlans(target)[targetType]
   const errorRecovery: Record<string, ErrorRecovery> = {}
 
   for (const phase of phases) {
-    errorRecovery[phase.phaseId] = PHASE_ERROR_POLICY[phase.phaseId.split("-")[2]] ?? "skip_and_continue"
+    errorRecovery[phase.phaseId] = PHASE_ERROR_POLICY[phase.phaseId.split("-").slice(2).join("-")] ?? "skip_and_continue"
   }
 
   return {

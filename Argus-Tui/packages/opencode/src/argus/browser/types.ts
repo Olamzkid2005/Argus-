@@ -7,6 +7,7 @@ export interface VerificationScenario {
   execute(): Promise<void>
   verify(): Promise<VerifierResult>
   collectEvidence(): Promise<EvidencePackage>
+  cleanup?(): Promise<void>
 }
 
 export interface VerifierResult {

@@ -1,4 +1,5 @@
 import type { VerificationScenario, VerifierResult } from "../types"
+import { Confidence } from "../../planner/types"
 
 export class VerificationRunner {
   async run(scenario: VerificationScenario): Promise<VerifierResult> {
@@ -15,10 +16,12 @@ export class VerificationRunner {
     } catch (error) {
       return {
         passed: false,
-        confidence: 0,
+        confidence: Confidence.INFORMATIONAL,
         evidence: [],
         summary: `Verification failed: ${(error as Error).message}`,
       }
+    } finally {
+      await scenario.cleanup?.()
     }
   }
 }

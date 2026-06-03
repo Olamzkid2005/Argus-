@@ -20,9 +20,21 @@ export class BOLAVerifier implements VerificationScenario {
   ) {}
 
   async setup(): Promise<void> {
+    if (!this.userACreds.username || !this.userACreds.password) {
+      this.logs.push("WARNING: User A credentials are empty — authentication may fail")
+    }
+    if (!this.userBCreds.username || !this.userBCreds.password) {
+      this.logs.push("WARNING: User B credentials are empty — authentication may fail")
+    }
+    if (this.resourcePath === this.targetUrl.replace(/\/+$/, "")) {
+      this.logs.push("WARNING: resourcePath and targetUrl are identical — BOLA check will be ineffective")
+    }
     await this.engine.launch()
-    await this.engine.createContext()
     this.logs.push("BOLA verifier setup complete")
+  }
+
+  async cleanup(): Promise<void> {
+    await this.engine.close()
   }
 
   async execute(): Promise<void> {
@@ -56,19 +68,25 @@ export class BOLAVerifier implements VerificationScenario {
 
   private async checkAccess(resourceUrl: string, creds: { username: string; password: string }, label: string): Promise<boolean> {
     this.logs.push(`Attempting to access ${resourceUrl} as ${label} (${creds.username})`)
-    const page = await this.engine.navigate(this.targetUrl)
-    await loginIfFormPresent(page, creds)
-    await page.goto(resourceUrl, { waitUntil: "networkidle" })
-
-    let accessible: boolean
+    const context = await this.engine.createContext()
+    const page = await context.newPage()
     try {
-      const body = await page.locator("body").innerText()
-      accessible = page.url() === resourceUrl || !isAccessDenied(body)
-    } catch {
-      accessible = false
-    }
+      await page.goto(this.targetUrl, { waitUntil: "networkidle" })
+      await loginIfFormPresent(page, creds)
+      await page.goto(resourceUrl, { waitUntil: "networkidle" })
 
-    await page.close()
-    return accessible
+      let accessible: boolean
+      try {
+        const body = await page.locator("body").innerText()
+        accessible = page.url() === resourceUrl || !isAccessDenied(body)
+      } catch {
+        accessible = false
+      }
+
+      return accessible
+    } finally {
+      await page.close()
+      await context.close()
+    }
   }
 }

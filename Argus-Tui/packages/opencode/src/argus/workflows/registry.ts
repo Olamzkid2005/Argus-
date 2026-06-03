@@ -8,10 +8,13 @@ export class WorkflowRegistry {
   private workflowsDir: string
 
   constructor(workflowsDir?: string) {
+    // __dirname is stable in Bun and this codebase targets Bun. For Node ESM use fileURLToPath(import.meta.url).
     this.workflowsDir = workflowsDir ?? join(__dirname, ".")
   }
 
   loadAll(): WorkflowDefinition[] {
+    // Clear stale entries so repeated calls don't accumulate orphaned workflows
+    this.workflows.clear()
     const loaded = loadAllWorkflows(this.workflowsDir)
     for (const wf of loaded) {
       this.workflows.set(wf.name, wf)
@@ -41,6 +44,8 @@ export class WorkflowRegistry {
       }
     }
 
+    // Intentional: returns best match even if score is 0 (e.g. empty phases),
+    // or null if there are no workflows at all. The caller distinguishes these cases.
     return bestMatch
   }
 

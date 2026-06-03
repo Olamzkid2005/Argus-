@@ -29,6 +29,10 @@ export class ToolRegistry {
     const content = readFileSync(definitionsPath, "utf-8")
     const parsed: ToolDefsFile = YAML.parse(content)
 
+    if (!parsed?.tools || !Array.isArray(parsed.tools)) {
+      throw new Error(`Tool definitions file ${definitionsPath} is missing the 'tools' key or it is not an array`)
+    }
+
     for (const tool of parsed.tools) {
       this.toolsByName.set(tool.name, tool)
 
@@ -40,6 +44,7 @@ export class ToolRegistry {
         if (!this.toolsByCapability.has(c)) {
           this.toolsByCapability.set(c, [])
         }
+        // Safe: .set(c, []) called 2 lines above ensures the entry exists
         this.toolsByCapability.get(c)!.push(tool)
       }
     }
@@ -61,7 +66,7 @@ export class ToolRegistry {
     return Array.from(this.toolsByName.values())
   }
 
-  findBestTools(capabilities: Capability[], targetType: string): ToolDef[] {
+  findBestTools(capabilities: Capability[], _targetType: string): ToolDef[] {
     const candidates = new Map<string, { tool: ToolDef; score: number }>()
 
     for (const cap of capabilities) {

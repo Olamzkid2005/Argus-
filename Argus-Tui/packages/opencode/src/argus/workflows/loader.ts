@@ -25,7 +25,7 @@ export function loadWorkflowYaml(path: string): WorkflowDefinition {
       }
     }
 
-    if (phase.execution && !["parallel", "sequential"].includes(phase.execution)) {
+    if (!phase.execution || !["parallel", "sequential"].includes(phase.execution)) {
       throw new Error(`Invalid execution mode '${phase.execution}' in phase '${phase.name}'`)
     }
 
@@ -39,7 +39,14 @@ export function loadWorkflowYaml(path: string): WorkflowDefinition {
 
 export function loadAllWorkflows(workflowsDir: string): WorkflowDefinition[] {
   const workflows: WorkflowDefinition[] = []
-  const files = readdirSync(workflowsDir)
+  let files: string[]
+
+  try {
+    files = readdirSync(workflowsDir)
+  } catch {
+    process.stderr.write(`Warning: workflows directory not found at '${workflowsDir}'\n`)
+    return workflows
+  }
 
   for (const file of files) {
     if (extname(file) === ".yaml" || extname(file) === ".yml") {

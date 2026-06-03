@@ -2,14 +2,14 @@ import type { Page } from "playwright"
 import type { Observation, DiffResult } from "./types"
 
 export async function observeUrl(page: Page, url: string): Promise<Observation> {
-  await page.goto(url, { waitUntil: "networkidle" })
+  const response = await page.goto(url, { waitUntil: "networkidle" })
   const domSnapshot = await page.content()
 
   return {
     url,
     domSnapshot,
     responseHeaders: {},
-    statusCode: 200,
+    statusCode: response?.status() ?? 0,
     timestamp: new Date().toISOString(),
   }
 }

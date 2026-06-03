@@ -2,8 +2,7 @@ export class WorkerSupervisor {
   private attempts = 0
   private readonly maxRestarts = 3
 
-  constructor(private bridge: {
-    restartWorker: () => Promise<void>
+  constructor(private callbacks: {
     killChild: () => void
     connect: () => Promise<void>
     isHealthy: () => Promise<boolean>
@@ -14,12 +13,14 @@ export class WorkerSupervisor {
       throw new Error("Worker crashed too many times — falling back to deterministic mode")
     }
     this.attempts++
-    this.bridge.killChild()
-    await this.bridge.connect()
+    this.callbacks.killChild()
+    // Exponential backoff: 1s, 2s, 4s
+    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, this.attempts - 1)))
+    await this.callbacks.connect()
   }
 
   isHealthy(): Promise<boolean> {
-    return this.bridge.isHealthy()
+    return this.callbacks.isHealthy()
   }
 
   resetAttempts(): void {

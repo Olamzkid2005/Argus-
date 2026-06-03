@@ -1,13 +1,8 @@
 import { Capability } from "../planner/capabilities"
 import type { ExecutionMode, ErrorRecovery } from "../planner/types"
 
-export interface WorkflowDefinition {
-  name: string
-  label: string
-  version: number
-  phases: PhaseDefinition[]
-  approval_required?: Record<string, boolean>
-}
+// WorkflowDefinition is shared with the planner — import it from there to avoid duplication
+export type { WorkflowDefinition } from "../planner/types"
 
 export interface PhaseDefinition {
   name: string

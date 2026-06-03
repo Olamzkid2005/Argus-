@@ -4,8 +4,9 @@ import type { Observation } from "./types"
 export interface BrowserEngine {
   launch(headless?: boolean): Promise<void>
   createContext(): Promise<BrowserContext>
+  closeContext(): Promise<void>
   navigate(url: string): Promise<Page>
-  observe(page: Page): Promise<Observation>
+  observe(page: Page, statusCode?: number): Promise<Observation>
   captureScreenshot(page: Page): Promise<Buffer>
   close(): Promise<void>
 }
@@ -25,6 +26,13 @@ export class PlaywrightEngine implements BrowserEngine {
     return this.context
   }
 
+  async closeContext(): Promise<void> {
+    if (this.context) {
+      await this.context.close()
+      this.context = null
+    }
+  }
+
   async navigate(url: string): Promise<Page> {
     if (!this.context) throw new Error("No browser context")
     const page = await this.context.newPage()
@@ -32,14 +40,14 @@ export class PlaywrightEngine implements BrowserEngine {
     return page
   }
 
-  async observe(page: Page): Promise<Observation> {
+  async observe(page: Page, statusCode?: number): Promise<Observation> {
     const domSnapshot = await page.content()
 
     return {
       url: page.url(),
       domSnapshot,
       responseHeaders: {},
-      statusCode: 200,
+      statusCode: statusCode ?? 200,
       timestamp: new Date().toISOString(),
     }
   }
@@ -49,7 +57,11 @@ export class PlaywrightEngine implements BrowserEngine {
   }
 
   async close(): Promise<void> {
-    if (this.context) await this.context.close()
-    if (this.browser) await this.browser.close()
+    await Promise.allSettled([
+      this.context ? this.context.close() : Promise.resolve(),
+      this.browser ? this.browser.close() : Promise.resolve(),
+    ])
+    this.context = null
+    this.browser = null
   }
 }

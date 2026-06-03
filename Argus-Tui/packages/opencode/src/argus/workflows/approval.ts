@@ -57,15 +57,9 @@ export class ApprovalService {
   }
 
   needsApproval(phase: PhaseExecutionRequest, requiredGates: ApprovalGate[]): ApprovalGate | null {
-    const caps = new Set(phase.requiredCapabilities.map((c) => c.toString()))
-
-    for (const gate of requiredGates) {
-      if (gate.destructive && caps.has("vulnerability_scanning")) return gate
-      if (gate.auth_testing && (caps.has("auth_detection") || caps.has("credential_analysis"))) return gate
-      if (gate.privilege_escalation && caps.has("browser_verification")) return gate
-    }
-
-    return null
+    // Match gates by name using the approval_gate field from the phase definition
+    if (!phase.approvalGateName) return null
+    return requiredGates.find((g) => g.name === phase.approvalGateName) ?? null
   }
 
   async requestApproval(gate: ApprovalGate, phaseName: string, target: string): Promise<ApprovalResult> {
@@ -77,20 +71,39 @@ export class ApprovalService {
     process.stderr.write(`   This operation may be destructive or modify the target state.\n`)
     process.stderr.write(`   Proceed? [y/N] `)
 
+    // Non-TTY stdin: auto-skip instead of hanging forever
+    if (!process.stdin.isTTY) {
+      process.stderr.write(" (non-TTY stdin — skipping)\n\n")
+      return { approved: false, reason: "Non-TTY stdin" }
+    }
+
     return new Promise((resolve) => {
       const stdin = process.stdin
       stdin.resume()
-      stdin.once("data", (data: Buffer) => {
+
+      const done = (result: ApprovalResult): void => {
         stdin.pause()
+        stdin.removeAllListeners("data")
+        clearTimeout(timer)
+        resolve(result)
+      }
+
+      stdin.once("data", (data: Buffer) => {
         const input = data.toString().trim().toLowerCase()
         if (input === "y" || input === "yes") {
           process.stderr.write("\n")
-          resolve({ approved: true })
+          done({ approved: true })
         } else {
           process.stderr.write("   Skipping phase.\n\n")
-          resolve({ approved: false, reason: "User declined approval" })
+          done({ approved: false, reason: "User declined approval" })
         }
       })
+
+      // Timeout after 30 seconds
+      const timer = setTimeout(() => {
+        process.stderr.write("\n   Approval timed out.\n\n")
+        done({ approved: false, reason: "Approval timed out" })
+      }, 30000)
     })
   }
 }

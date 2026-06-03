@@ -1,6 +1,6 @@
 import type { NormalizedFinding } from "../planner/types"
 
-export type ReportFormat = "markdown" | "html" | "sarif" | "json"
+export type ReportFormat = "markdown" | "sarif" | "json"
 
 export interface Report {
   engagementId: string

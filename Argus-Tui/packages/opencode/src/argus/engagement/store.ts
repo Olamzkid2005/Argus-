@@ -4,16 +4,22 @@ import { eq, desc, sql } from "drizzle-orm"
 import { join } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync } from "fs"
+import { randomUUID } from "crypto"
 import {
   engagements,
   findings as findingsTable,
   phases as phasesTable,
   audit_log,
+  evidence_packages,
+  artifacts,
+  workflow_snapshots,
 } from "./schema.sql"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus } from "./types"
 import type { NormalizedFinding } from "../planner/types"
 
-const DEFAULT_DB_PATH = join(homedir(), ".argus", "argus.db")
+function defaultDbPath(): string {
+  return join(homedir(), ".argus", "argus.db")
+}
 
 const TABLE_SQL = [
   sql`CREATE TABLE IF NOT EXISTS engagements (
@@ -44,6 +50,22 @@ const TABLE_SQL = [
     created_at INTEGER NOT NULL
   )`,
   sql`CREATE INDEX IF NOT EXISTS idx_audit_log_engagement ON audit_log(engagement_id)`,
+  sql`CREATE TABLE IF NOT EXISTS evidence_packages (
+    id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
+    package_hash TEXT NOT NULL, created_at INTEGER NOT NULL
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_evidence_packages_finding ON evidence_packages(finding_id)`,
+  sql`CREATE TABLE IF NOT EXISTS artifacts (
+    id TEXT PRIMARY KEY, package_id TEXT NOT NULL REFERENCES evidence_packages(id),
+    path TEXT NOT NULL, sha256 TEXT NOT NULL, size_bytes INTEGER NOT NULL, type TEXT NOT NULL
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_artifacts_package ON artifacts(package_id)`,
+  sql`CREATE TABLE IF NOT EXISTS workflow_snapshots (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+    workflow_name TEXT NOT NULL, workflow_version INTEGER NOT NULL,
+    workflow_yaml TEXT NOT NULL, created_at INTEGER NOT NULL
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_workflow_snapshots_engagement ON workflow_snapshots(engagement_id)`,
 ]
 
 function toEngagementState(row: typeof engagements.$inferSelect): EngagementState {
@@ -65,6 +87,7 @@ function toPhaseRecord(row: typeof phasesTable.$inferSelect): PhaseRecord {
     engagementId: row.engagement_id,
     name: row.name,
     status: row.status as PhaseStatus,
+    // NOTE: null coalesces to [] — original null vs empty distinction is lost
     capabilities: row.capabilities ?? [],
     executionMode: row.execution_mode ?? "",
     startedAt: row.started_at ? new Date(row.started_at).toISOString() : undefined,
@@ -90,6 +113,7 @@ function toFindingRow(finding: NormalizedFinding, engagementId: string): typeof 
     remediation: finding.remediation,
     tool: finding.tool,
     phase: finding.phase,
+    created_at: finding.created_at ? new Date(finding.created_at).getTime() : Date.now(),
     finalized_at: finding.finalized_at ? new Date(finding.finalized_at).getTime() : null,
   }
 }
@@ -120,7 +144,7 @@ export class EngagementStore {
   readonly dbPath: string
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath ?? DEFAULT_DB_PATH
+    this.dbPath = dbPath ?? defaultDbPath()
     const dir = join(this.dbPath, "..")
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
@@ -139,7 +163,7 @@ export class EngagementStore {
   }
 
   createEngagement(target: string, workflow: string): EngagementState {
-    const id = `ENG-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    const id = `ENG-${Date.now().toString(36)}-${randomUUID().split("-")[0]}`
     const now = Date.now()
 
     this.db.insert(engagements).values({
@@ -183,6 +207,7 @@ export class EngagementStore {
     return rows.map(toEngagementState)
   }
 
+  // FIXME: delete-then-insert is not atomic under concurrent access. Use per-row upsert for safety.
   savePhases(id: string, records: PhaseRecord[]): void {
     this.db.transaction((tx) => {
       tx.delete(phasesTable).where(eq(phasesTable.engagement_id, id)).run()
@@ -198,17 +223,27 @@ export class EngagementStore {
     })
   }
 
-  savePhase(id: string, record: PhaseRecord): void {
-    this.db.transaction((tx) => {
-      tx.delete(phasesTable).where(eq(phasesTable.id, record.id)).run()
-      tx.insert(phasesTable).values({
-        id: record.id, engagement_id: id, name: record.name, status: record.status,
-        capabilities: record.capabilities, execution_mode: record.executionMode,
+  savePhase(engagementId: string, record: PhaseRecord): void {
+    this.db.insert(phasesTable).values({
+      id: record.id, engagement_id: engagementId, name: record.name, status: record.status,
+      capabilities: record.capabilities, execution_mode: record.executionMode,
+      started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
+      completed_at: record.completedAt ? new Date(record.completedAt).getTime() : null,
+      error: record.error ?? null, replan_cycle: record.replanCycle ? 1 : 0,
+    }).onConflictDoUpdate({
+      target: phasesTable.id,
+      set: {
+        engagement_id: engagementId,
+        name: record.name,
+        status: record.status,
+        capabilities: record.capabilities,
+        execution_mode: record.executionMode,
         started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
         completed_at: record.completedAt ? new Date(record.completedAt).getTime() : null,
-        error: record.error ?? null, replan_cycle: record.replanCycle ? 1 : 0,
-      }).run()
-    })
+        error: record.error ?? null,
+        replan_cycle: record.replanCycle ? 1 : 0,
+      },
+    }).run()
   }
 
   getPhases(id: string): PhaseRecord[] {
@@ -216,6 +251,7 @@ export class EngagementStore {
     return rows.map(toPhaseRecord)
   }
 
+  // FIXME: delete-then-insert is not atomic under concurrent access. Use per-row upsert for safety.
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
     this.db.transaction((tx) => {
       tx.delete(findingsTable).where(eq(findingsTable.engagement_id, engagementId)).run()
@@ -242,5 +278,63 @@ export class EngagementStore {
       metadata: metadata ?? {},
       created_at: Date.now(),
     }).run()
+  }
+
+  saveEvidencePackage(id: string, findingId: string, packageHash: string): void {
+    this.db.insert(evidence_packages).values({
+      id,
+      finding_id: findingId,
+      package_hash: packageHash,
+      created_at: Date.now(),
+    }).run()
+  }
+
+  getEvidencePackages(findingId: string): Array<{ id: string; packageHash: string; createdAt: number }> {
+    const rows = this.db.select().from(evidence_packages)
+      .where(eq(evidence_packages.finding_id, findingId))
+      .all()
+    return rows.map((r) => ({ id: r.id, packageHash: r.package_hash, createdAt: r.created_at }))
+  }
+
+  saveArtifact(id: string, packageId: string, path: string, sha256: string, sizeBytes: number, type: string): void {
+    this.db.insert(artifacts).values({
+      id,
+      package_id: packageId,
+      path,
+      sha256,
+      size_bytes: sizeBytes,
+      type,
+    }).run()
+  }
+
+  getArtifacts(packageId: string): Array<{ id: string; path: string; sha256: string; sizeBytes: number; type: string }> {
+    const rows = this.db.select().from(artifacts)
+      .where(eq(artifacts.package_id, packageId))
+      .all()
+    return rows.map((r) => ({ id: r.id, path: r.path, sha256: r.sha256, sizeBytes: r.size_bytes, type: r.type }))
+  }
+
+  saveWorkflowSnapshot(id: string, engagementId: string, workflowName: string, workflowVersion: number, workflowYaml: string): void {
+    this.db.insert(workflow_snapshots).values({
+      id,
+      engagement_id: engagementId,
+      workflow_name: workflowName,
+      workflow_version: workflowVersion,
+      workflow_yaml: workflowYaml,
+      created_at: Date.now(),
+    }).run()
+  }
+
+  getWorkflowSnapshots(engagementId: string): Array<{ id: string; workflowName: string; workflowVersion: number; workflowYaml: string; createdAt: number }> {
+    const rows = this.db.select().from(workflow_snapshots)
+      .where(eq(workflow_snapshots.engagement_id, engagementId))
+      .all()
+    return rows.map((r) => ({
+      id: r.id,
+      workflowName: r.workflow_name,
+      workflowVersion: r.workflow_version,
+      workflowYaml: r.workflow_yaml,
+      createdAt: r.created_at,
+    }))
   }
 }

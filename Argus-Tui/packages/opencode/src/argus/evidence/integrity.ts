@@ -4,6 +4,10 @@ import { createHash } from "crypto"
 import type { EvidenceManifest, IntegrityReport } from "./types"
 
 export function verifyPackage(baseDir: string, packageId: string): IntegrityReport {
+  if (!/^[\w-]+$/.test(packageId)) {
+    return { valid: false, packageId, manifestHash: "", computedHash: "", errors: ["Invalid package ID"] }
+  }
+
   const manifestPath = join(baseDir, "artifacts", packageId, "manifest.json")
 
   if (!existsSync(manifestPath)) {
@@ -16,10 +20,22 @@ export function verifyPackage(baseDir: string, packageId: string): IntegrityRepo
     }
   }
 
-  const manifest: EvidenceManifest = JSON.parse(readFileSync(manifestPath, "utf-8"))
+  let manifest: EvidenceManifest
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf-8"))
+  } catch (err) {
+    return {
+      valid: false,
+      packageId,
+      manifestHash: "",
+      computedHash: "",
+      errors: [`Corrupt manifest JSON: ${(err as Error).message}`],
+    }
+  }
 
   const errors: string[] = []
 
+  // FIXME: reads the entire artifact into memory — stream for files > 100MB
   for (const artifact of manifest.artifacts) {
     const artifactPath = join(baseDir, "artifacts", packageId, artifact.path)
     if (!existsSync(artifactPath)) {
