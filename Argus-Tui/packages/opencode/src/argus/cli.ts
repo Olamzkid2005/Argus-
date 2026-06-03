@@ -1,0 +1,59 @@
+import type { Argv } from "yargs"
+import { assessCommand } from "./commands/assess"
+import { doctorCommand } from "./commands/doctor"
+import { reportCommand } from "./commands/report"
+import { resumeCommand } from "./commands/resume"
+
+export const ArgusAssessCommand = {
+  command: "assess <target>",
+  describe: "Run a full autonomous security assessment against a target",
+  builder: (yargs: Argv) =>
+    yargs
+      .positional("target", { describe: "Target URL to assess", type: "string", demandOption: true })
+      .option("workers-path", { describe: "Path to the MCP worker script" })
+      .option("deterministic", { describe: "Use deterministic mode only (no LLM)", type: "boolean", default: false }),
+  handler: async (argv: Record<string, unknown>) => {
+    const target = argv.target as string
+    process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
+    await assessCommand(target, { useLLM: !argv.deterministic })
+  },
+}
+
+export const ArgusDoctorCommand = {
+  command: "doctor",
+  describe: "Run comprehensive health checks on the Argus runtime",
+  handler: async () => {
+    const results = await doctorCommand()
+    for (const r of results) {
+      const icon = r.status === "PASS" ? "✓" : r.status === "WARN" ? "⚠" : "✗"
+      process.stdout.write(`${icon} [${r.name}] ${r.message}\n`)
+    }
+  },
+}
+
+export const ArgusReportCommand = {
+  command: "report <engagement-id>",
+  describe: "Generate a report for a completed engagement",
+  builder: (yargs: Argv) =>
+    yargs
+      .positional("engagement-id", { describe: "Engagement ID", type: "string", demandOption: true })
+      .option("format", { describe: "Output format", choices: ["markdown", "json", "sarif"] as const, default: "markdown" }),
+  handler: async (argv: Record<string, unknown>) => {
+    const id = argv.engagementId as string
+    const format = argv.format as "markdown" | "json" | "sarif"
+    const output = await reportCommand(id, format)
+    process.stdout.write(output + "\n")
+  },
+}
+
+export const ArgusResumeCommand = {
+  command: "resume <engagement-id>",
+  describe: "Resume a paused or running engagement",
+  builder: (yargs: Argv) =>
+    yargs.positional("engagement-id", { describe: "Engagement ID", type: "string", demandOption: true }),
+  handler: async (argv: Record<string, unknown>) => {
+    const id = argv.engagementId as string
+    const result = await resumeCommand(id)
+    process.stdout.write(result + "\n")
+  },
+}

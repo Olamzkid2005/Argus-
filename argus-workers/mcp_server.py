@@ -332,3 +332,35 @@ def get_mcp_server() -> MCPServer:
             if _mcp_server is None:
                 _mcp_server = MCPServer()
     return _mcp_server
+
+
+def main():
+    """Entry point for stdio JSON-RPC transport mode."""
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr,
+                        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    from mcp_transport import MCPTransport, create_ping_handler
+
+    server = get_mcp_server()
+    transport = MCPTransport()
+
+    transport.register("ping", create_ping_handler())
+
+    def handle_list_tools(params: dict) -> list[dict]:
+        return server.get_tools()
+
+    def handle_call_tool(params: dict) -> dict:
+        name = params.get("name", "")
+        arguments = params.get("arguments", {})
+        timeout = params.get("timeout")
+        return server.call_tool(name, arguments, timeout)
+
+    transport.register("list_tools", handle_list_tools)
+    transport.register("call_tool", handle_call_tool)
+
+    logger.info("MCP stdio transport starting")
+    transport.run()
+
+
+if __name__ == "__main__":
+    main()

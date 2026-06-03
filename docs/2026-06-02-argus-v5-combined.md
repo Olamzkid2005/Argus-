@@ -333,6 +333,11 @@ interface PlannerContext {
   insertedPhases: Set<string>;                  // Phase names added by replan — prevents duplicates
   replanCount: number;                          // Incremented on every replan call
 }
+
+> **Serialization boundary:** `PlannerContext` is an **in-memory runtime object only** — it is never serialized directly. `Set<Capability>` and `Set<string>` fields are not JSON-safe by design, which is intentional: they are transient runtime constructs. On engagement resume, `PlannerContext` is reconstructed from SQLite rows: `executedCapabilities` is built from `SELECT DISTINCT capability FROM completed_phases WHERE engagement_id = ?`, `findings` from `SELECT * FROM findings WHERE engagement_id = ?`, and `replanCount` from `SELECT COUNT(*) FROM phase_results WHERE engagement_id = ? AND replan_cycle = true`. The persistent SQLite representation uses `string[]` arrays; the runtime representation uses `Set` for O(1) membership checks. These two representations are cleanly separated by the load/save boundary in `EngagementStore`.
+
+**Replan cycle prevention:**
+}
 ```
 
 **Replan cycle prevention:**
@@ -398,6 +403,24 @@ function determineNewCapabilities(context: PlannerContext): Set<Capability> {
   return result;
 }
 ```
+
+> **Capability classification:** Not all `Capability` enum members are candidates for dynamic insertion. The table below documents which capabilities appear in the initial plan only and which can be inserted via replan. An empty replan-insertable set means the capability is always determined at initial workflow selection time and never added mid-assessment.
+>
+> | Capability | Initial plan | Replan-insertable | Trigger |
+> |---|---|---|---|
+> | `WEB_RECON`, `PORT_SCANNING`, `TECHNOLOGY_DETECTION`, `CONTENT_DISCOVERY` | Yes | No | Always in initial recon phase |
+> | `API_PROBING`, `AUTH_DETECTION`, `CREDENTIAL_ANALYSIS` | Yes | No | Always in initial auth/detection phase |
+> | `VULNERABILITY_SCANNING`, `TEMPLATE_SCANNING`, `HTTP_PROBE` | Yes | No | Always in initial vuln scan phase |
+> | `BROWSER_VERIFICATION` | Yes | No | Always in initial verification phase |
+> | `REPORT_GENERATION` | Yes | No | Always final phase |
+> | `GRAPHQL_ASSESSMENT` | No | Yes | finding.subtype === "graphql" |
+> | `EXPRESS_CVE_SCAN` | No | Yes | finding.subtype === "expressjs" |
+> | `API_DOCS_ANALYSIS` | No | Yes | finding.subtype === "swagger" or "openapi" |
+> | `JWT_ANALYSIS` | No | Yes | finding.subtype === "jwt" |
+> | `SSRF_CHECK` | No | Yes | finding.subtype === "ssrf_parameters" |
+> | `SQLI_DETECTION`, `DATABASE_EXFILTRATION` | No | Yes | finding.subtype === "sqli_reflective" or "sqli_blind" |
+>
+> This classification ensures that the `determineNewCapabilities()` switch statement is intentionally incomplete: only replan-insertable capabilities need cases. All others are guaranteed to never appear from replan logic. If a new capability is added to the enum, it must be added to one of these two groups — there is no third option.
 
 **Three independent termination safeguards:**
 

@@ -115,9 +115,9 @@ class EngagementStateMachine:
                 self.engagement_id, e,
             )
             raise  # Re-raise DB outages — don't silently mask them
-        except Exception as e:
+        except (IndexError, TypeError) as e:
             logger.warning(
-                "Could not query state for engagement %s, defaulting to 'created': %s",
+                "Unexpected row format for engagement %s, defaulting to 'created': %s",
                 self.engagement_id, e,
             )
             resolved = "created"
@@ -355,6 +355,8 @@ class EngagementStateMachine:
             return history
 
         finally:
+            if cursor:
+                cursor.close()
             if not self._external_conn:
                 self._release_connection(conn)
 

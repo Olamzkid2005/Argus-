@@ -1,0 +1,94 @@
+tools:
+  - name: nuclei
+    label: Nuclei Vulnerability Scanner
+    capabilities:
+      - vuln_scan
+      - template_scan
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+
+  - name: nikto
+    label: Nikto Web Scanner
+    capabilities:
+      - web_recon
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 70
+      coverage_score: 60
+
+  - name: nmap
+    label: Nmap Port Scanner
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+
+  - name: whatweb
+    label: WhatWeb Technology Detector
+    capabilities:
+      - technology_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 75
+
+  - name: ffuf
+    label: FFUF Content Discovery
+    capabilities:
+      - content_discovery
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 80
+      coverage_score: 85
+
+  - name: httpx
+    label: HTTPX Probe
+    capabilities:
+      - http_probe
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 90
+      coverage_score: 80
+
+  - name: subfinder
+    label: Subfinder Subdomain Discovery
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
