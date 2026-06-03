@@ -6,6 +6,7 @@ import type { NormalizedFinding } from "../planner/types"
 import type { PhaseRecord } from "../engagement/types"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { EngagementStore } from "../engagement/store"
+import { CredentialStore } from "../engagement/credentials"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ReportGenerator } from "../reporting/generator"
 import { join } from "path"
@@ -15,6 +16,7 @@ export async function assessCommand(target: string, options?: {
   workflowsPath?: string
   toolsPath?: string
   useLLM?: boolean
+  credsPath?: string
 }): Promise<void> {
   const workflowsDir = options?.workflowsPath ?? join(__dirname, "../workflows")
   const toolsPath = options?.toolsPath ?? join(workflowsDir, "tool-definitions.yaml")
@@ -38,7 +40,17 @@ export async function assessCommand(target: string, options?: {
 
   store.updateStatus(engagement.id, "RUNNING")
 
+  const credStore = new CredentialStore()
+  const creds = options?.credsPath ? credStore.load(options.credsPath) : credStore.load()
+  const defaultCreds = credStore.getDefaultCredentials()
+  if (defaultCreds) {
+    store.appendAuditLog(engagement.id, "CREDS_LOADED", `Loaded credentials for roles: ${credStore.listRoles().join(", ")}`)
+  }
+
   const plan = await planner.plan(target, undefined, { useLLM: options?.useLLM })
+  for (const phase of plan.phases) {
+    if (defaultCreds) phase.config.credentials = defaultCreds
+  }
 
   const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({
     id: p.phaseId,

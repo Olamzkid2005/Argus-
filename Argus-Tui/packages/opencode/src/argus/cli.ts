@@ -11,11 +11,12 @@ export const ArgusAssessCommand = {
     yargs
       .positional("target", { describe: "Target URL to assess", type: "string", demandOption: true })
       .option("workers-path", { describe: "Path to the MCP worker script" })
+      .option("creds", { describe: "Path to credentials JSON file (see credentials.json.example)", type: "string" })
       .option("deterministic", { describe: "Use deterministic mode only (no LLM)", type: "boolean", default: false }),
   handler: async (argv: Record<string, unknown>) => {
     const target = argv.target as string
     process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
-    await assessCommand(target, { useLLM: !argv.deterministic })
+    await assessCommand(target, { useLLM: !argv.deterministic, credsPath: argv.creds as string | undefined })
   },
 }
 

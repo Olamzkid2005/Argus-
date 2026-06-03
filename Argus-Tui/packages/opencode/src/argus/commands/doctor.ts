@@ -3,6 +3,7 @@ import { join } from "path"
 import { homedir } from "os"
 import { spawn, execFileSync } from "child_process"
 import { EngagementStore } from "../engagement/store"
+import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
 
 interface CheckResult {
@@ -22,6 +23,7 @@ export async function doctorCommand(options?: {
   results.push(await mcpCheck(options?.workersPath, options?.pythonPath))
   results.push(await playwrightCheck())
   results.push(dbCheck())
+  results.push(credCheck())
   results.push(envCheck())
 
   return results
@@ -175,6 +177,26 @@ async function resolvePython(): Promise<string> {
     } catch {}
   }
   return "python3"
+}
+
+function credCheck(): CheckResult {
+  const credStore = new CredentialStore()
+  credStore.load()
+  const roles = credStore.listRoles()
+
+  if (roles.length > 0) {
+    return {
+      name: "Credentials",
+      status: "PASS",
+      message: `${roles.length} role(s) loaded: ${roles.join(", ")}`,
+    }
+  }
+
+  return {
+    name: "Credentials",
+    status: "WARN",
+    message: "No credentials file found at " + CredentialStore.defaultPath() + ". Browser verifiers may fail for authenticated targets.",
+  }
 }
 
 function execCapture(cmd: string, args: string[], timeoutMs = 5000): Promise<string> {
