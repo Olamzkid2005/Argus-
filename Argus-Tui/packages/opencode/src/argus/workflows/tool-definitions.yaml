@@ -2,8 +2,8 @@ tools:
   - name: nuclei
     label: Nuclei Vulnerability Scanner
     capabilities:
-      - vuln_scan
-      - template_scan
+      - vulnerability_scanning
+      - template_scanning
     requires_auth: false
     destructive: false
     supports_api: true
