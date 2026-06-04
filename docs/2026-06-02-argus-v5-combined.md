@@ -1790,6 +1790,7 @@ _Last updated: 2026-06-04_
 | 2026-06-04 | **B.07**: Made `GIT_HOST_ALLOWLIST` configurable via `ARGUS_ALLOWED_GIT_HOSTS` env var — organizations can add self-hosted GitLab without patching source |
 | 2026-06-04 | **B.09**: Extracted CWE/OWASP mappings from `normalizer.py` to `config/cwe_owasp_mappings.yaml` — hot-reloadable without code changes |
 | 2026-06-04 | **B.12**: Refactored `constants.py` from 101 flat module-level constants into 13 grouped `@dataclass` config objects with backward-compat aliases |
+| 2026-06-04 | **B.08**: Added `argus_cli/crypto.py` — machine-local Fernet key at `~/.argus/.key`, encrypts `api_key`/`api_url` in TOML config and session `metadata` in SQLite. Pre-encryption data still readable (backward compat) |
 | 2026-06-04 | Added 19 new tests (executor, resume, evidence, config, verify commands) — 280 total, 0 failures |
 
 ### Remaining High-Impact Items
