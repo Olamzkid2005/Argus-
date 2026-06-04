@@ -1,4 +1,4 @@
-import { Confidence } from "../planner/types"
+import { Confidence } from "../shared/types"
 
 export interface VerificationScenario {
   name: string

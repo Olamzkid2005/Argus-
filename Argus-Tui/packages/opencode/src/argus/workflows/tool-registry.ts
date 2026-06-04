@@ -1,6 +1,6 @@
 import { readFileSync } from "fs"
 import YAML from "yaml"
-import { Capability } from "../planner/capabilities"
+import { Capability } from "../shared/capabilities"
 
 interface ToolDef {
   name: string

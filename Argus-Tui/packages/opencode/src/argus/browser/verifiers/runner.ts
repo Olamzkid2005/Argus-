@@ -1,5 +1,5 @@
 import type { VerificationScenario, VerifierResult } from "../types"
-import { Confidence } from "../../planner/types"
+import { Confidence } from "../../shared/types"
 
 export class VerificationRunner {
   async run(scenario: VerificationScenario): Promise<VerifierResult> {

@@ -3,7 +3,7 @@ import { join, extname } from "path"
 import { existsSync } from "fs"
 import { createHash } from "crypto"
 import type { EvidenceManifest, ArtifactEntry } from "./types"
-import { Confidence } from "../planner/types"
+import { Confidence } from "../shared/types"
 
 interface CollectorConfig {
   retention_days: number

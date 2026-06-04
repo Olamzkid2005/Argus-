@@ -176,7 +176,9 @@ export class WorkersBridge {
           clearTimeout(pending.timer)
           this.pending.delete(response.id)
           if (response.error) {
-            pending.reject(new Error(response.error.message))
+            const err = new Error(response.error.message);
+            (err as any).code = response.error.code
+            pending.reject(err)
           } else {
             pending.resolve(response.result)
           }
@@ -295,8 +297,7 @@ export class WorkersBridge {
       }
       return result as ToolResult
     } catch (error) {
-      const llmError = error as Error
-      const isLLMError = llmError.message.includes("LLM") || llmError.message.includes("timeout") || llmError.message.includes("unavailable")
+      const isLLMError = (error as any)?.code === -32000 || (error as Error).message.includes("LLM is not available")
 
       if (isLLMError) {
         this.circuitFailures++

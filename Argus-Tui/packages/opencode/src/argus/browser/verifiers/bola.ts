@@ -1,6 +1,6 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
-import { Confidence } from "../../planner/types"
+import { Confidence } from "../../shared/types"
 import { loginIfFormPresent, isAccessDenied } from "../login"
 
 export class BOLAVerifier implements VerificationScenario {

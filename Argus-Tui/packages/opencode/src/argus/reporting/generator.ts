@@ -1,7 +1,7 @@
 import { readFileSync } from "fs"
 import { join } from "path"
-import type { NormalizedFinding } from "../planner/types"
-import { Severity, Confidence } from "../planner/types"
+import type { NormalizedFinding } from "../shared/types"
+import { Severity, Confidence } from "../shared/types"
 import type { Report, ReportFormat, ReportSummary } from "./types"
 import { EngagementStore } from "../engagement/store"
 

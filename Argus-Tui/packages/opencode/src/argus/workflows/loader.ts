@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "fs"
 import { join, extname } from "path"
 import YAML from "yaml"
 import type { WorkflowDefinition } from "./types"
-import { Capability } from "../planner/capabilities"
+import { Capability } from "../shared/capabilities"
 
 export function loadWorkflowYaml(path: string): WorkflowDefinition {
   const content = readFileSync(path, "utf-8")

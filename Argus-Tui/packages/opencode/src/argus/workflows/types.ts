@@ -1,5 +1,5 @@
-import { Capability } from "../planner/capabilities"
-import type { ExecutionMode, ErrorRecovery } from "../planner/types"
+import { Capability } from "../shared/capabilities"
+import type { ExecutionMode, ErrorRecovery } from "../shared/types"
 
 // WorkflowDefinition is shared with the planner — import it from there to avoid duplication
 export type { WorkflowDefinition } from "../planner/types"

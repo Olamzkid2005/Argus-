@@ -1,7 +1,7 @@
 import { join } from "path"
 import { loadAllWorkflows, loadWorkflowYaml } from "./loader"
 import type { WorkflowDefinition } from "./types"
-import { Capability } from "../planner/capabilities"
+import { Capability } from "../shared/capabilities"
 
 export class WorkflowRegistry {
   private workflows = new Map<string, WorkflowDefinition>()
@@ -38,14 +38,12 @@ export class WorkflowRegistry {
       const wfCaps = new Set(wf.phases.flatMap((p) => p.required_capabilities))
       const score = required.filter((c) => wfCaps.has(c)).length
 
-      if (score > bestScore) {
+      if (score > bestScore && score > 0) {
         bestScore = score
         bestMatch = wf
       }
     }
 
-    // Intentional: returns best match even if score is 0 (e.g. empty phases),
-    // or null if there are no workflows at all. The caller distinguishes these cases.
     return bestMatch
   }
 

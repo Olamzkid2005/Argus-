@@ -16,6 +16,7 @@ import { homedir } from "os"
 import { join } from "path"
 import { readFileSync } from "fs"
 import { parse as YAML } from "yaml"
+import type { IFeatureFlags } from "../../opencode-runtime"
 
 export enum Feature {
   BROWSER_VERIFICATION = "browser_verification",
@@ -33,7 +34,7 @@ const DEFAULT_FEATURES: Record<Feature, boolean> = {
   [Feature.APPROVAL_GATES]: false,
 }
 
-export class FeatureFlags {
+export class FeatureFlags implements IFeatureFlags {
   private flags: Map<Feature, boolean> = new Map()
   private sources: Map<Feature, string> = new Map()
 

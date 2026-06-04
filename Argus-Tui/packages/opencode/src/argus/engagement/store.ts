@@ -15,7 +15,7 @@ import {
   workflow_snapshots,
 } from "./schema.sql"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus } from "./types"
-import type { NormalizedFinding } from "../planner/types"
+import type { NormalizedFinding } from "../shared/types"
 
 function defaultDbPath(): string {
   return join(homedir(), ".argus", "argus.db")

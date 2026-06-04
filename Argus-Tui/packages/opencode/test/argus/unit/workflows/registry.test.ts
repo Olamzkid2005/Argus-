@@ -131,15 +131,14 @@ describe("WorkflowRegistry", () => {
       }
     })
 
-    test("returns workflow with lowest score when no capabilities match (score 0 > -1)", () => {
+    test("returns null when no capabilities match any workflow (score must be > 0)", () => {
       const dir = makeTempDir()
       try {
         writeFileSync(join(dir, "quick_scan.yaml"), workflow1Yaml, "utf-8")
         const registry = new WorkflowRegistry(dir)
         registry.loadAll()
         const result = registry.findByCapabilities([Capability.SQLI_DETECTION, Capability.API_PROBING])
-        expect(result).not.toBeNull()
-        expect(result!.name).toBe("quick_scan")
+        expect(result).toBeNull()
       } finally {
         rmSync(dir, { recursive: true, force: true })
       }

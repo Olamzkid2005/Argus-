@@ -11,7 +11,7 @@ import { PlaywrightEngine } from "../browser/engine"
 import { ReportGenerator } from "../reporting/generator"
 import { canResume, canRetryPhase } from "../engagement/recovers"
 import type { PhaseRecord } from "../engagement/types"
-import type { NormalizedFinding } from "../planner/types"
+import type { NormalizedFinding } from "../shared/types"
 import { homedir } from "os"
 import { join } from "path"
 

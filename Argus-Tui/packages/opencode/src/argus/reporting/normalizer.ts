@@ -1,5 +1,5 @@
-import type { NormalizedFinding, EvidencePackage } from "../planner/types"
-import { Severity, Confidence } from "../planner/types"
+import type { NormalizedFinding, EvidencePackage } from "../shared/types"
+import { Severity, Confidence } from "../shared/types"
 
 function enumValue<T extends Record<string, number | string>>(e: T, v: unknown, fallback: T[keyof T]): T[keyof T] {
   const num = Number(v)
