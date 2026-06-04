@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from argus_cli.config.settings import Config
+from argus_cli.crypto import encrypt_value, decrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class SessionManager:
                     session.findings_count,
                     session.created_at,
                     session.updated_at,
-                    json.dumps(session.metadata),
+                    encrypt_value(json.dumps(session.metadata)),  # B.08: encrypt metadata
                 ),
             )
 
@@ -173,7 +174,7 @@ class SessionManager:
         with sqlite3.connect(self.db_path) as conn:
             for key, value in updates.items():
                 if key == "metadata":
-                    value = json.dumps(value)
+                    value = encrypt_value(json.dumps(value))  # B.08: encrypt on update
                 conn.execute(
                     f"UPDATE sessions SET {key} = ? WHERE id = ?",
                     (value, session_id),
@@ -228,7 +229,20 @@ class SessionManager:
             conn.execute("DELETE FROM sessions")
 
     def _row_to_session(self, row: sqlite3.Row) -> Session:
-        """Convert a database row to a Session object."""
+        """Convert a database row to a Session object.
+
+        B.08: Decrypts metadata if it was stored encrypted.
+        """
+        raw_meta = row[8] if row[8] else "{}"
+        try:
+            # Try plain JSON first (backward compat with pre-encryption data)
+            meta = json.loads(raw_meta)
+        except (json.JSONDecodeError, TypeError):
+            # Not plain JSON — attempt decryption
+            try:
+                meta = json.loads(decrypt_value(raw_meta))
+            except (json.JSONDecodeError, Exception):
+                meta = {}
         return Session(
             id=row[0],
             target=row[1],
@@ -238,5 +252,5 @@ class SessionManager:
             findings_count=row[5],
             created_at=row[6],
             updated_at=row[7],
-            metadata=json.loads(row[8]) if row[8] else {},
+            metadata=meta,
         )

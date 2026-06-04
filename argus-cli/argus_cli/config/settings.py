@@ -27,6 +27,7 @@ from argus_cli.core.constants import (
     DEFAULT_PROVIDER,
     SESSIONS_DB,
 )
+from argus_cli.crypto import encrypt_value, decrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,10 @@ class Config:
         return config
 
     def save(self) -> None:
-        """Save current configuration to file."""
+        """Save current configuration to file.
+
+        B.08: API keys are encrypted with a machine-local key before writing.
+        """
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         data = {
@@ -110,6 +114,12 @@ class Config:
             "features": self.features,
         }
 
+        # B.08: Encrypt api_key before writing to disk
+        if self.api_key:
+            data["api_key_encrypted"] = encrypt_value(self.api_key)
+        if self.api_url:
+            data["api_url_encrypted"] = encrypt_value(self.api_url)
+
         try:
             with open(self.config_file, "w") as f:
                 toml.dump(data, f)
@@ -117,14 +127,23 @@ class Config:
             logger.warning("Failed to save config to %s: %s", self.config_file, e)
 
     def _apply_dict(self, data: dict[str, Any]) -> None:
-        """Apply configuration from a dictionary."""
+        """Apply configuration from a dictionary.
+
+        B.08: Supports both plaintext and encrypted api_key fields.
+        Encrypted fields (api_key_encrypted) take priority over plaintext.
+        """
         if "provider" in data:
             self.provider = data["provider"]
         if "model" in data:
             self.model = data["model"]
-        if "api_key" in data:
+        # B.08: Decrypt if stored encrypted; fall back to plaintext for backward compat
+        if "api_key_encrypted" in data:
+            self.api_key = decrypt_value(data["api_key_encrypted"])
+        elif "api_key" in data:
             self.api_key = data["api_key"]
-        if "api_url" in data:
+        if "api_url_encrypted" in data:
+            self.api_url = decrypt_value(data["api_url_encrypted"])
+        elif "api_url" in data:
             self.api_url = data["api_url"]
         if "temperature" in data:
             self.temperature = data["temperature"]
