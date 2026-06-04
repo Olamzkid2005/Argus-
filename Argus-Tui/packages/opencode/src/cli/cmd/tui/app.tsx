@@ -79,6 +79,7 @@ import {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { ArgusCommandRegistry } from "@/argus/tui-command-registry"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -231,6 +232,7 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
         fallback={(error, reset) => <ErrorComponent error={error} reset={reset} exit={input.exit} mode={mode} />}
       >
         <OpencodeKeymapProvider keymap={input.keymap}>
+          <ArgusCommandRegistry />
           <ArgsProvider {...input.args}>
             <ExitProvider exit={input.exit}>
               <KVProvider>
