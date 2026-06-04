@@ -19,51 +19,46 @@ jobs:
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Argus-Tui/packages/opencode
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Install dependencies
+        working-directory: Argus-Tui
         run: bun install --frozen-lockfile
 
       - name: TypeScript type check
+        working-directory: Argus-Tui/packages/opencode
         run: bun typecheck
 
   argus-unit:
     name: unit (linux)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Argus-Tui/packages/opencode
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Install dependencies
+        working-directory: Argus-Tui
         run: bun install --frozen-lockfile
 
       - name: Create artifacts directory
+        working-directory: Argus-Tui/packages/opencode
         run: mkdir -p .artifacts/unit
 
       - name: Run argus unit tests
+        working-directory: Argus-Tui/packages/opencode
         run: bun test --timeout 30000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
 
       - name: Publish unit reports
         if: always()
-        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386
         with:
           report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
           check_name: "unit results (linux)"
@@ -84,29 +79,29 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: Argus-Tui/packages/opencode
         shell: bash
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Install dependencies
+        working-directory: Argus-Tui
         run: bun install --frozen-lockfile
 
       - name: Create artifacts directory
+        working-directory: Argus-Tui/packages/opencode
         run: mkdir -p .artifacts/unit
 
       - name: Run argus unit tests
+        working-directory: Argus-Tui/packages/opencode
         run: bun test --timeout 60000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
 
       - name: Publish unit reports
         if: always()
-        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386
         with:
           report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
           check_name: "unit results (windows)"
@@ -126,26 +121,24 @@ jobs:
     name: e2e (linux)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Install dependencies
-        working-directory: Argus-Tui/packages/opencode
+        working-directory: Argus-Tui
         run: bun install --frozen-lockfile
 
-      - name: Spin up test targets (Juice Shop, DVWA)
+      - name: Spin up test targets
         run: docker compose --profile e2e up -d juice-shop dvwa
 
       - name: Wait for Juice Shop
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3001 > /dev/null 2>&1; then
-              echo "Juice Shop ready on :3001"; break
+              echo "Juice Shop ready"; break
             fi
             if [ "$i" -eq 30 ]; then echo "Juice Shop did not start"; exit 1; fi
             sleep 2
@@ -155,7 +148,7 @@ jobs:
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3002 > /dev/null 2>&1; then
-              echo "DVWA ready on :3002"; break
+              echo "DVWA ready"; break
             fi
             if [ "$i" -eq 30 ]; then echo "DVWA did not start"; exit 1; fi
             sleep 2
@@ -180,16 +173,14 @@ jobs:
       run:
         working-directory: argus-workers
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff -q
 
       - name: Lint with ruff
         run: ruff check . --output-format=github
@@ -198,8 +189,7 @@ jobs:
     name: YAML validation
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Validate YAML files
         run: |
