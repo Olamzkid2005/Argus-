@@ -1,140 +1,166 @@
-# Argus CLI
-
-Terminal-first AI Security Agent — an OpenCode-style CLI for autonomous security testing, vulnerability scanning, and AI-powered penetration testing.
+# Argus
 
 ```
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║     ARGUS v5  —  Security AI Agent                       ║
-║                                                           ║
-║     TypeScript CLI · OpenCode Fork · Security Automation  ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
+    █████╗ ██████╗  ██████╗ ██╗   ██╗███████╗
+   ██╔══██╗██╔══██╗██╔════╝ ██║   ██║██╔════╝
+   ███████║██████╔╝██║  ███╗██║   ██║███████╗
+   ██╔══██║██╔══██╗██║   ██║██║   ██║╚════██║
+   ██║  ██║██║  ██║╚██████╔╝╚██████╔╝███████║
+   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝
 ```
 
-## Quick Start (V5 TypeScript CLI)
+Autonomous Security Assessment Platform.
+
+Terminal-first security agent for autonomous vulnerability discovery, reconnaissance, and AI-powered penetration testing. Built on OpenCode's TUI infrastructure with a custom security assessment engine.
+
+## Quick Start
 
 ```bash
 # Install dependencies
 cd Argus-Tui && bun install
 
+# Run the interactive TUI
+bun dev
+
 # Run health checks
-make doctor-v5
+argus doctor
 
 # Run an assessment
-make assess-v5 TARGET=https://example.com
+argus assess https://example.com
 
-# With browser verification (opt-in via feature flags)
-cd Argus-Tui/packages/opencode && bun run src/argus/index.ts assess https://example.com --enable-browser --creds ./creds.json
-
-# Run tests (290+ tests, 0 failures expected)
+# Run tests
 make test-v5
-
-# Available commands
-cd Argus-Tui/packages/opencode && bun run src/argus/index.ts --help
 ```
 
-## V5 CLI Commands
+## Usage
+
+### CLI Mode
 
 | Command | Description |
 |---------|-------------|
-| `assess <target>` | Full autonomous security assessment (planner → MCP bridge → verifiers → evidence → report) |
-| `doctor [--online]` | Health checks: runtime, Python, MCP worker, Playwright, DB, credentials, toolchain, LLM provider |
-| `verify <finding-id>` | Re-run browser verification for a specific finding |
-| `report <engagement-id> [--format]` | Generate markdown/JSON/SARIF/HTML report from stored findings |
-| `evidence <action> [args]` | Browse (`list`), inspect (`show`), prune old (`prune`), or verify integrity (`verify-package`) |
-| `resume <engagement-id>` | Resume a paused/running engagement from the last incomplete phase |
-| `config [filter]` | Show effective configuration with source annotations |
+| `argus` | Launch interactive TUI |
+| `argus doctor` | Health checks: runtime, Python, MCP worker, toolchain, LLM |
+| `argus assess <target>` | Full autonomous security assessment |
+| `argus report <id>` | Generate report from stored findings |
+| `argus resume <id>` | Resume a paused engagement |
+| `argus verify <finding-id>` | Re-run browser verification |
+| `argus evidence <action>` | Browse and manage evidence |
+| `argus config` | Show configuration |
 
-### Feature Flags (all opt-in by default)
+### TUI Slash Commands
 
-| Flag | Env Var | Description |
-|------|---------|-------------|
-| `--enable-browser` | `ARGUS_FEATURE_BROWSER_VERIFICATION` | Browser-based verification (BOLA, XSS, PrivEsc) |
-| `--enable-workflow-registry` | `ARGUS_FEATURE_WORKFLOW_REGISTRY` | Capability-based workflow planning |
-| `--enable-engagement-store` | `ARGUS_FEATURE_ENGAGEMENT_STORE` | SQLite engagement persistence |
-| `--enable-approval-gates` | `ARGUS_FEATURE_APPROVAL_GATES` | Interactive approval prompts for destructive actions |
+Inside the interactive TUI (launched with `argus` or `bun dev`):
 
-### Example: Full Assessment with All Features
+| Command | Description |
+|---------|-------------|
+| `/assess <target>` | Run full assessment |
+| `/recon <target>` | Run reconnaissance only |
+| `/doctor` | Run health checks |
+| `/status` | Show system status |
+| `/findings` | Browse assessment findings |
+| `/engagements` | List saved engagements |
+| `/report <id>` | Generate report |
+| `/tools` | Show registered MCP tools |
+| `/workflows` | Show workflow definitions |
+| `/config` | Show configuration |
+| `/help` | Show all commands |
 
-```bash
-bun run src/argus/index.ts assess https://juice-shop.example.com \
-  --enable-browser \
-  --enable-approval-gates \
-  --creds ./creds.json \
-  --format html
-```
+Natural language also works — type `"assess https://example.com"` or `"find vulnerabilities in example.com"`.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   argus-cli                          │
-│                                                      │
-│  ┌─────────┐  ┌──────────┐  ┌──────────┐           │
-│  │   TUI   │  │ Commands │  │ Session  │           │
-│  │ Textual │  │ Registry │  │ Manager  │           │
-│  └────┬────┘  └────┬─────┘  └────┬─────┘           │
-│       └──────────────┼──────────────┘                │
-│                      │                                │
-│  ┌───────────────────┴───────────────────┐           │
-│  │         Security Runner                │           │
-│  │  (Integrates with argus-workers)       │           │
-│  └───────────────────┬───────────────────┘           │
-└──────────────────────┼────────────────────────────────┘
-                       │
-┌──────────────────────┼────────────────────────────────┐
-│       argus-workers (Backend Engine)                   │
-│                      │                                 │
-│  ┌──────────┐  ┌────┴────┐  ┌───────────┐            │
-│  │Orchestrator│  │ReActAgent│  │ Intelligence│         │
-│  └──────────┘  └─────────┘  │   Engine    │           │
-│  ┌──────────┐  ┌──────────┐  └───────────┘            │
-│  │State Mach.│  │Tool Reg. │  ┌───────────┐           │
-│  └──────────┘  └──────────┘  │LLM Client  │           │
-│  ┌──────────┐  ┌──────────┐  ├───────────┤           │
-│  │ Streaming│  │MCP Server│  │CVSS/Report│            │
-│  └──────────┘  └──────────┘  └───────────┘            │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-              ┌────────▼────────┐
-              │     Redis       │
-              │   (Queue + Cache)│
-              └─────────────────┘
+argus                         # CLI + TUI entry point
+  │
+  ├── argus doctor            # Health checks
+  ├── argus assess <target>   # Assessment mode
+  └── (no args)               # Interactive TUI
+        │
+        ├── ArgusIntentClassifier
+        │   ├── slash command? → route to handler
+        │   └── natural language? → classify intent
+        │
+        ├── WorkflowRunner        # Assessment execution
+        │   ├── Planner            # Capability-based workflow planning
+        │   ├── WorkersBridge      # MCP client → Python workers
+        │   ├── InProcessExecutor  # Phase execution engine
+        │   └── ConfidenceEngine   # Finding confidence promotion
+        │
+        └── TUI Routes
+            ├── Home (dashboard)
+            ├── Scan (live progress)
+            └── Findings (browser)
+
+argus-workers/               # Python MCP server
+  ├── mcp_server.py           # MCP protocol server
+  ├── tools/definitions/      # 45 YAML tool definitions
+  │   ├── nuclei.yaml         #  with capabilities,
+  │   ├── sqlmap.yaml         #  signal_quality,
+  │   ├── nmap.yaml           #  requires gates,
+  │   └── ...                 #  priority, cost
+  └── tool_definitions.py     # Legacy Python registry
 ```
 
 ## Project Structure
 
 ```
-argus/
-├── Argus-Tui/              # TypeScript CLI (OpenCode fork)
-│   └── packages/opencode/  # V5 security assessment engine
+├── Argus-Tui/
+│   └── packages/opencode/
 │       ├── src/
-│       │   ├── argus/      # Argus-specific modules
-│       │   │   ├── planner/      # Workflow planning
-│       │   │   ├── browser/      # Playwright verification
-│       │   │   ├── evidence/     # Evidence capture
-│       │   │   ├── reporting/    # Report generation
-│       │   │   ├── bridge/       # MCP client → Python workers
-│       │   │   ├── workflows/    # YAML workflow definitions
-│       │   │   ├── engagement/   # State store
-│       │   │   └── commands/     # Security CLI commands
-│       │   └── ...               # OpenCode runtime
+│       │   ├── argus/           # Argus security platform
+│       │   │   ├── agent.ts          # Agent facade
+│       │   │   ├── intent-classifier.ts  # NL intent detection
+│       │   │   ├── workflow-runner.ts    # Assessment execution
+│       │   │   ├── tui-commands.ts       # Slash command defs
+│       │   │   ├── tui/                  # TUI routes
+│       │   │   │   ├── routes/scan.tsx       # Scan dashboard
+│       │   │   │   ├── routes/findings.tsx   # Findings viewer
+│       │   │   │   └── navigator.ts          # Route navigation
+│       │   │   ├── planner/            # Workflow planning
+│       │   │   ├── bridge/             # MCP client
+│       │   │   ├── commands/           # CLI commands
+│       │   │   ├── engagement/         # State store
+│       │   │   ├── evidence/           # Evidence capture
+│       │   │   ├── reporting/          # Report generation
+│       │   │   ├── browser/            # Playwright verification
+│       │   │   └── workflows/          # YAML workflow defs
+│       │   ├── cli/                # OpenCode runtime (internal)
+│       │   └── index.ts            # OpenCode TUI entry (internal)
 │       └── package.json
 │
-├── argus-workers/          # Python security engine
-│   ├── mcp_server.py       # MCP protocol server
-│   ├── orchestrator_pkg/   # Orchestrator execution
-│   ├── tools/              # Security tool wrappers
-│   └── ...
+├── argus-workers/            # Python MCP server
+│   ├── mcp_server.py              # Tool execution server
+│   └── tools/definitions/         # 45 tool YAML definitions
 │
-├── docs/                    # Architecture docs & ADRs
-├── .env.example
-├── docker-compose.yml
-├── Makefile
-├── start-argus.sh
-└── stop-argus.sh
+├── start-argus.sh             # Test suite launcher
+├── stop-argus.sh              # Cleanup script
+├── Makefile                   # Build/test targets
+└── .github/workflows/lint.yml  # CI: typecheck, tests, lint
 ```
+
+## Development
+
+```bash
+# Run all Argus tests (335+ tests)
+make test-v5
+
+# Type check
+make typecheck-v5
+
+# Run specific test file
+cd Argus-Tui/packages/opencode
+bun test test/argus/unit/commands/doctor.test.ts
+
+# Lint Python workers
+cd argus-workers && ruff check .
+```
+
+## Requirements
+
+- **Bun** 1.x — TypeScript runtime
+- **Python** 3.11+ — MCP worker
+- **Security tools** — nuclei, nmap, nikto, httpx, subfinder, etc.
+- **Playwright** — Browser verification (`npx playwright install chromium`)
 
 ## License
 
