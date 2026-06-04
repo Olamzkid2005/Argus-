@@ -1,0 +1,38 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["../../opencode/*", "../opencode/*"],
+            "message": "Argus modules must import from @opencode/runtime, not from internal opencode paths. See ARCHITECTURE_BOUNDARIES.md."
+          },
+          {
+            "group": ["**/opencode/providers/*"],
+            "message": "Import providers through @opencode/runtime (IProviderManager interface), not directly."
+          },
+          {
+            "group": ["**/opencode/sessions/*"],
+            "message": "Import sessions through @opencode/runtime (ISessionStore interface), not directly."
+          },
+          {
+            "group": ["**/opencode/tui/*"],
+            "message": "Import TUI through @opencode/runtime (IRuntimeEvents interface), not directly."
+          },
+          {
+            "group": ["**/opencode/agent/*"],
+            "message": "Import agent through @opencode/runtime, not directly."
+          },
+          {
+            "group": ["**/opencode/streaming/*"],
+            "message": "Import streaming through @opencode/runtime, not directly."
+          }
+        ]
+      }
+    ]
+  }
+}

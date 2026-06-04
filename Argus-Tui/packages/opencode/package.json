@@ -21,7 +21,8 @@
     "argus": "./bin/argus"
   },
   "exports": {
-    "./*": "./src/*.ts"
+    "./*": "./src/*.ts",
+    "./runtime": "./src/opencode-runtime.ts"
   },
   "imports": {
     "#db": {
