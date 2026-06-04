@@ -1,0 +1,88 @@
+name: lint
+
+on:
+  push:
+    branches: [dev, Argus-cli]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  eslint:
+    name: ESLint + Prettier
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Argus-Tui/packages/opencode
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript type check
+        run: bun typecheck
+
+      - name: Check for unused exports (tsgo)
+        run: bun run tsgo --noEmit || true
+
+  argus-cli-lint:
+    name: Python CLI (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-cli
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint with ruff
+        run: ruff check argus_cli/ --output-format=github
+
+  argus-workers-lint:
+    name: Python Workers (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint with ruff
+        run: ruff check . --output-format=github
+
+  yaml-lint:
+    name: YAML validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate YAML files
+        run: |
+          for f in $(find . -name "*.yaml" -o -name "*.yml" | grep -v node_modules | grep -v .semgrep_cache); do
+            python3 -c "import yaml; yaml.safe_load(open('$f')); print(f'  OK: $f')" 2>&1 || echo "  FAIL: $f"
+          done

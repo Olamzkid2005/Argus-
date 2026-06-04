@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from "child_process"
 import { createInterface } from "readline"
 import type { ToolDefinition, ToolResult, MCPError, DriftReport } from "./types"
+import { LLMUnavailableError } from "./types"
 import { WorkerSupervisor } from "./supervisor"
 
 interface PendingRequest {
@@ -38,6 +39,12 @@ export class WorkersBridge {
 
   private pendingCount = 0
   private readonly maxPending = 10
+
+  // Circuit breaker state
+  private circuitFailures = 0
+  private readonly circuitThreshold = 3
+  private circuitOpenUntil = 0
+  private readonly circuitCooldown = 300_000 // 5 minutes
 
   // Signal forwarding state
   private signalHandlers: Array<{ signal: NodeJS.Signals; handler: () => void }> = []
@@ -244,13 +251,34 @@ export class WorkersBridge {
   }
 
   async callTool(name: string, args: unknown): Promise<ToolResult> {
+    // Circuit breaker check
+    const now = Date.now()
+    if (this.circuitOpenUntil > now) {
+      const retryAfter = Math.ceil((this.circuitOpenUntil - now) / 1000)
+      throw new LLMUnavailableError("UNAVAILABLE", retryAfter)
+    }
+
     try {
       const result = await this.sendRequest("call_tool", { name, arguments: args })
+      // Success — reset circuit breaker
+      if (this.circuitFailures > 0) {
+        this.circuitFailures = 0
+        this.setLLMStatus("AVAILABLE")
+      }
       return result as ToolResult
     } catch (error) {
       const llmError = error as Error
-      if (llmError.message.includes("LLM")) {
+      const isLLMError = llmError.message.includes("LLM") || llmError.message.includes("timeout") || llmError.message.includes("unavailable")
+
+      if (isLLMError) {
+        this.circuitFailures++
+        if (this.circuitFailures >= this.circuitThreshold) {
+          this.circuitOpenUntil = now + this.circuitCooldown
+          this.setLLMStatus("UNAVAILABLE")
+          throw new LLMUnavailableError("UNAVAILABLE", Math.ceil(this.circuitCooldown / 1000))
+        }
         this.setLLMStatus("DEGRADED")
+        throw new LLMUnavailableError("DEGRADED", 30)
       }
       throw error
     }
@@ -263,6 +291,13 @@ export class WorkersBridge {
     } catch {
       return this.toolsCache
     }
+  }
+
+  /** Reset circuit breaker — called after cooldown or manual recovery */
+  resetCircuitBreaker(): void {
+    this.circuitFailures = 0
+    this.circuitOpenUntil = 0
+    this.setLLMStatus("AVAILABLE")
   }
 
   async detectDrift(): Promise<DriftReport> {

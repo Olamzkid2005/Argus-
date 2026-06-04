@@ -1,0 +1,18 @@
+# Argus V5 Project Configuration
+# Per-repo config that can be committed to version control.
+# Precedence: CLI flags > Environment > Project config > User config > Defaults
+# Feature flags all default to false — enable explicitly.
+
+features:
+  browser_verification: false
+  workflow_registry: false
+  engagement_store: false
+  approval_gates: false
+
+evidence:
+  retention_days: 30
+  max_engagement_size_mb: 500
+  capture_threshold: HIGH
+
+security:
+  allowed_git_hosts: []
