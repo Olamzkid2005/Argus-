@@ -54,8 +54,10 @@ export function loadAllWorkflows(workflowsDir: string): WorkflowDefinition[] {
       try {
         const workflow = loadWorkflowYaml(fullPath)
         workflows.push(workflow)
-      } catch (error) {
-        process.stderr.write(`Failed to load workflow ${file}: ${(error as Error).message}\n`)
+      } catch {
+        // Not all YAMLs in the workflows dir are workflows —
+        // tool-definitions.yaml and approval-policies.yaml use different schemas.
+        // Skip silently — this is expected.
       }
     }
   }

@@ -34,7 +34,8 @@ export async function assessCommand(target: string, options?: {
 
   const planner = new WorkflowPlanner(workflowRegistry, toolRegistry)
 
-  const bridge = new WorkersBridge(options?.workersPath ?? "../argus-workers/mcp_server.py")
+  const defaultWorkersPath = join(__dirname, "../../../../../../argus-workers/mcp_server.py")
+  const bridge = new WorkersBridge(options?.workersPath ?? defaultWorkersPath)
   await bridge.connect()
 
   const confidenceEngine = new ConfidenceEngine()
