@@ -4,6 +4,7 @@ Analyzes findings and generates recommended actions
 
 Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2, 18.1, 18.2, 18.3, 18.4
 """
+import asyncio
 import json
 import logging
 import os
@@ -797,6 +798,152 @@ class IntelligenceEngine:
 
         # Deduplicate
         return list(set(cve_ids))[:5]  # Limit to 5 CVEs
+
+    async def enrich_findings_with_threat_intel_async(self, findings: list[dict]) -> list[dict]:
+        """
+        Async enrichment of findings with CVE data, EPSS scores, and threat intel.
+
+        Uses httpx.AsyncClient and asyncio.gather for parallel I/O instead of
+        ThreadPoolExecutor. Drop-in async replacement for
+        enrich_findings_with_threat_intel() with identical return structure.
+
+        Args:
+            findings: List of findings to enrich
+
+        Returns:
+            Enriched findings with threat intel metadata
+        """
+        async def _enrich_one(finding: dict) -> dict:
+            enriched_finding = finding.copy()
+            threat_intel = {}
+
+            cve_ids = self._extract_cve_ids(finding)
+            if cve_ids:
+                threat_intel["cve_ids"] = cve_ids
+                nvd_data = await self._fetch_nvd_cve_data_async(cve_ids)
+                threat_intel["cve_details"] = nvd_data
+                epss_scores = await self._fetch_epss_scores_async(cve_ids)
+                threat_intel["epss_scores"] = epss_scores
+
+            threat_intel["threat_feed_hits"] = self._check_threat_feeds(finding)
+            threat_intel["fp_assessment"] = self._detect_false_positive(finding)
+
+            enriched_finding["threat_intel"] = threat_intel
+            return enriched_finding
+
+        tasks = [_enrich_one(f) for f in findings]
+        enriched = await asyncio.gather(*tasks)
+        return enriched
+
+    async def _fetch_nvd_cve_data_async(self, cve_ids: list[str]) -> dict[str, dict]:
+        """
+        Async fetch CVE details from NVD API using httpx.AsyncClient.
+
+        Args:
+            cve_ids: List of CVE IDs
+
+        Returns:
+            Dictionary mapping CVE ID to details
+        """
+        results = {}
+        if not cve_ids:
+            return results
+
+        sorted_ids = sorted(set(cve_ids))
+        cache_key = f"threat_intel:nvd:{','.join(sorted_ids)}"
+
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        async def _fetch_single(client: httpx.AsyncClient, cve_id: str) -> tuple[str, dict | None]:
+            try:
+                response = await client.get(
+                    f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
+                    headers={"User-Agent": "Argus-Platform/1.0"},
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    vulnerabilities = data.get("vulnerabilities", [])
+                    if vulnerabilities:
+                        vuln = vulnerabilities[0].get("cve", {})
+                        metrics = vuln.get("metrics", {})
+                        cvss_data = None
+                        if "cvssMetricV31" in metrics:
+                            cvss_data = metrics["cvssMetricV31"][0].get("cvssData", {})
+                        elif "cvssMetricV30" in metrics:
+                            cvss_data = metrics["cvssMetricV30"][0].get("cvssData", {})
+                        elif "cvssMetricV2" in metrics:
+                            cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
+
+                        return cve_id, {
+                            "description": vuln.get("descriptions", [{}])[0].get("value", ""),
+                            "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
+                            "severity": cvss_data.get("baseSeverity") if cvss_data else None,
+                            "published": vuln.get("published", ""),
+                            "last_modified": vuln.get("lastModified", ""),
+                            "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
+                        }
+            except Exception as e:
+                logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
+            return cve_id, None
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                tasks = [_fetch_single(client, cve_id) for cve_id in cve_ids]
+                for coro in asyncio.as_completed(tasks):
+                    cve_id, result = await coro
+                    if result:
+                        results[cve_id] = result
+        except Exception as e:
+            logger.warning(f"NVD API async fetch failed: {e}")
+
+        self._cache_set(cache_key, results)
+        return results
+
+    async def _fetch_epss_scores_async(self, cve_ids: list[str]) -> dict[str, float]:
+        """
+        Async fetch EPSS scores using httpx.AsyncClient.
+
+        Args:
+            cve_ids: List of CVE IDs
+
+        Returns:
+            Dictionary mapping CVE ID to EPSS score (0.0-1.0)
+        """
+        scores = {}
+        if not cve_ids:
+            return scores
+
+        sorted_ids = sorted(set(cve_ids))
+        cache_key = f"threat_intel:epss:{','.join(sorted_ids)}"
+
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                cve_param = ",".join(cve_ids)
+                response = await client.get(
+                    f"https://api.first.org/data/v1/epss?cve={cve_param}",
+                    headers={"User-Agent": "Argus-Platform/1.0"},
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    for item in data.get("data", []):
+                        cve = item.get("cve", "").upper()
+                        epss_score = item.get("epss")
+                        if cve and epss_score is not None:
+                            try:
+                                scores[cve] = float(epss_score)
+                            except (ValueError, TypeError):
+                                continue
+        except Exception as e:
+            logger.warning(f"EPSS API async fetch failed: {e}")
+
+        self._cache_set(cache_key, scores)
+        return scores
 
     def _cache_get(self, key: str) -> Any | None:
         """

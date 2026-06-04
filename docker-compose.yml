@@ -1,4 +1,19 @@
 services:
+  # ── E2E Test Targets (Task 4.3) ──
+  juice-shop:
+    image: bkimminich/juice-shop:v17.1.1
+    ports:
+      - "127.0.0.1:3001:3000"
+    profiles: ["e2e"]
+    restart: unless-stopped
+
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    ports:
+      - "127.0.0.1:3002:80"
+    profiles: ["e2e"]
+    restart: unless-stopped
+
   # PostgreSQL 16 with pgvector for similarity search
   postgres:
     image: pgvector/pgvector:0.7.4-pg16@sha256:3b5425af5eb30e2753a40a3c2cf1e22a7b4a20335a80b0e24b05bfca01b290ef

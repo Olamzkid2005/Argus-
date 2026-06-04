@@ -32,6 +32,11 @@ jinja2==3.1.5
 # Logging and Monitoring
 structlog==24.4.0
 
+# OpenTelemetry
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+
 # M-35: Test dependencies moved to requirements-dev.txt to avoid bloating
 # production images with ~400MB of browser binaries.
 # Install with: pip install -r requirements-dev.txt

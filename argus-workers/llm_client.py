@@ -8,6 +8,7 @@ API key resolution order (first found wins):
 3. LLM_API_KEY environment variable
 4. Redis key settings:*:openrouter_api_key (configured via UI Settings page)
 """
+import asyncio
 import logging
 import os
 import threading
@@ -322,6 +323,49 @@ class LLMClient:
                     time.sleep(sleep_time)
             self._request_timestamps.append(now)
 
+    async def _check_rate_limit_async(self):
+        """Async rate limiter: sleeps with asyncio.sleep instead of time.sleep."""
+        now = time.time()
+        window_start = now - self._rate_limit_window
+
+        # Try Redis-based rate limiter first for cross-worker coordination
+        if self._redis_url:
+            try:
+                import uuid
+
+                import redis as redis_module
+
+                r = redis_module.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)
+                rate_key = f"llm_rate:{self.provider}"
+
+                r.zremrangebyscore(rate_key, 0, window_start)
+                count = r.zcount(rate_key, window_start, now)
+
+                if count >= self._rate_limit_max:
+                    earliest = r.zrange(rate_key, 0, 0, withscores=True)
+                    if earliest:
+                        sleep_time = earliest[0][1] + self._rate_limit_window - now
+                        if sleep_time > 0:
+                            logger.warning("LLM rate limit hit (cross-worker) — sleeping %.1fs", sleep_time)
+                            await asyncio.sleep(sleep_time)
+
+                member = f"{uuid.uuid4()}:{now}"
+                r.zadd(rate_key, {member: now})
+                r.expire(rate_key, int(self._rate_limit_window) + 10)
+                return
+            except (ConnectionError, OSError, ValueError) as e:
+                logger.debug("Redis rate limiter unavailable — falling back to in-process: %s", e)
+
+        # Fallback: in-process rate limiter
+        with self._rate_lock:
+            self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
+            if len(self._request_timestamps) >= self._rate_limit_max:
+                sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
+                if sleep_time > 0:
+                    logger.warning("LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time)
+                    await asyncio.sleep(sleep_time)
+            self._request_timestamps.append(now)
+
     async def chat(
         self,
         messages: list[dict],
@@ -585,6 +629,146 @@ class LLMClient:
 
         raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
 
+    async def chat_async(
+        self,
+        messages: list[dict],
+        temperature: float = 0.3,
+        max_tokens: int = 500,
+        response_format: dict | None = None,
+        timeout: int | None = None,
+    ) -> LLMResponse:
+        """
+        Send chat completion request (async). Async equivalent of chat_sync.
+
+        Same parameters as chat_sync, returns LLMResponse.
+        Uses httpx.AsyncClient for HTTP calls.
+        """
+        slog = ScanLogger("llm_client")
+        action_desc = messages[0].get("content", "")[:60] if messages else "chat_async"
+        slog.llm_start(self.model, action_desc)
+        start = time.time()
+
+        if not self.is_available():
+            raise LLMUnavailableError("LLM client not configured (no API key)")
+
+        # Circuit breaker: skip if too many recent failures
+        with self._circuit_lock:
+            if self._circuit_failures >= self._circuit_threshold:
+                if time.time() < self._circuit_open_until:
+                    raise LLMUnavailableError(
+                        f"LLM circuit breaker open — skipping call for "
+                        f"{self._circuit_open_until - time.time():.0f}s "
+                        f"({self._circuit_failures} consecutive failures)"
+                    )
+                self._circuit_failures = 0
+
+        # Rate limit: ensure we don't exceed 60 req/min per worker
+        await self._check_rate_limit_async()
+
+        req_timeout = timeout or 30
+        last_error = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                if self.provider == "openai" and self._get_openai_client():
+                    kwargs = {
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "timeout": req_timeout,
+                    }
+                    if response_format:
+                        kwargs["response_format"] = response_format
+
+                    response = await asyncio.wait_for(
+                        self._async_openai_client.chat.completions.create(**kwargs),
+                        timeout=req_timeout,
+                    )
+                    self._circuit_failures = 0
+                    usage = response.usage
+                    input_tokens = usage.prompt_tokens if usage else 0
+                    output_tokens = usage.completion_tokens if usage else 0
+                    cost = (
+                        (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
+                        + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                    )
+                    duration_ms = int((time.time() - start) * 1000)
+                    slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
+                    return LLMResponse(
+                        text=response.choices[0].message.content,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cost_usd=cost,
+                    )
+                else:
+                    import certifi
+                    import httpx
+                    async with httpx.AsyncClient(timeout=req_timeout, verify=certifi.where()) as client:
+                        payload = {
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        }
+                        if response_format:
+                            payload["response_format"] = response_format
+
+                        headers = {"Content-Type": "application/json"}
+                        if self.api_key:
+                            headers["Authorization"] = f"Bearer {self.api_key}"
+
+                        resp = await client.post(self.api_url, json=payload, headers=headers)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        self._circuit_failures = 0
+
+                        input_tokens = 0
+                        output_tokens = 0
+                        if "usage" in data:
+                            input_tokens = data["usage"].get("prompt_tokens", 0)
+                            output_tokens = data["usage"].get("completion_tokens", 0)
+                        cost = (
+                            (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
+                            + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                        )
+                        duration_ms = int((time.time() - start) * 1000)
+                        slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
+
+                        if "choices" in data and len(data["choices"]) > 0:
+                            text = data["choices"][0]["message"]["content"]
+                        elif "content" in data:
+                            text = data["content"]
+                        else:
+                            text = str(data)
+
+                        return LLMResponse(
+                            text=text,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            cost_usd=cost,
+                        )
+
+            except LLMUnavailableError:
+                raise
+            except Exception as e:
+                last_error = e
+                with self._circuit_lock:
+                    self._circuit_failures += 1
+                    if self._circuit_failures >= self._circuit_threshold:
+                        self._circuit_open_until = time.time() + self._circuit_cooldown
+                        logger.warning(
+                            "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
+                            self._circuit_failures, self._circuit_cooldown,
+                        )
+                logger.warning(f"LLM chat_async attempt {attempt + 1} failed: {e}")
+                if attempt < self.max_retries:
+                    if self._circuit_open_until and time.time() < self._circuit_open_until:
+                        logger.warning("Circuit breaker still open — aborting retries")
+                        break
+                    await asyncio.sleep(2 ** attempt)
+
+        raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
+
     def is_available(self) -> bool:
         """Check if the LLM client is configured and potentially reachable.
 
@@ -600,6 +784,10 @@ class LLMClient:
                 # Cooldown expired — reset so next call can try again
                 self._circuit_failures = 0
         return True
+
+    async def is_available_async(self) -> bool:
+        """Async version of is_available. Same logic, awaitable."""
+        return self.is_available()
 
 
 class LLMUnavailableError(Exception):

@@ -12,6 +12,9 @@ import sys
 
 from celery import Celery
 from dotenv import load_dotenv
+from tracing import setup_tracing
+
+tracer = setup_tracing()
 
 # Load environment variables
 load_dotenv()

@@ -11,6 +11,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tracing import setup_tracing
+
+tracer = setup_tracing()
+
 logger = logging.getLogger(__name__)
 
 

@@ -992,5 +992,20 @@ def execute_scan_tools(
         except Exception:
             logger.debug("Failed to clean up temp file: %s", _tmp_path)
 
+    # B.10: Optional async enrichment after scan — runs threat intel lookups
+    # (CVE/EPSS) in parallel via asyncio.gather. Only fires when environment
+    # has a DATABASE_URL configured (intelligence_engine constructs from it).
+    try:
+        db_conn = _os.environ.get("DATABASE_URL")
+        if db_conn and all_findings:
+            from intelligence_engine import IntelligenceEngine
+            engine = IntelligenceEngine(db_conn)
+            slog.info(f"Enriching {len(all_findings)} findings with threat intel (async)")
+            enriched = _run_async(engine.enrich_findings_with_threat_intel_async(all_findings))
+            if enriched:
+                all_findings[:] = enriched
+    except Exception:
+        logger.debug("Async enrichment skipped (non-fatal)", exc_info=True)
+
     slog.info(f"Scan pipeline complete: {len(all_findings)} total findings across {len(targets)} targets")
     return all_findings

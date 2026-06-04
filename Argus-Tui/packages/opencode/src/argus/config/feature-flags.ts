@@ -86,7 +86,7 @@ export class FeatureFlags implements IFeatureFlags {
     const path = configPath ?? join(homedir(), ".argus", "config.yaml")
     try {
       const content = readFileSync(path, "utf-8")
-      const parsed = YAML.parse(content) as { features?: Record<string, boolean> } | undefined
+      const parsed = YAML(content) as { features?: Record<string, boolean> } | undefined
       if (parsed?.features) {
         this.loadFromConfig(parsed.features)
         for (const key of Object.keys(parsed.features)) {

@@ -58,6 +58,15 @@ build: ## Build Next.js for production
 
 # ── Docker ──
 
+e2e-up: ## Start E2E test targets (Juice Shop, DVWA)
+	docker compose --profile e2e up -d juice-shop dvwa
+
+e2e-down: ## Stop E2E test targets
+	docker compose --profile e2e down
+
+e2e: ## Run full E2E test suite
+	./scripts/e2e-test.sh
+
 docker-up: ## Start all services with Docker Compose
 	docker-compose up -d --build
 
