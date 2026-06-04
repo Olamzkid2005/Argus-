@@ -58,7 +58,7 @@ export function logo(pad?: string) {
       result.push(EOL)
     }
     if (pad) result.push(pad)
-    result.push("ARGUS v5 — Autonomous Security Platform")
+    result.push("ARGUS")
     return result.join("").trimEnd()
   }
 
@@ -107,7 +107,7 @@ export function logo(pad?: string) {
     result.push(EOL)
   })
   if (pad) result.push(pad)
-  result.push(Style.TEXT_DIM + "ARGUS v5 — Autonomous Security Platform" + Style.TEXT_NORMAL + EOL)
+  result.push(Style.TEXT_DIM + "ARGUS" + Style.TEXT_NORMAL + EOL)
   return result.join("").trimEnd()
 }
 

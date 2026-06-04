@@ -161,9 +161,6 @@ export function Home() {
         <box alignItems="center" paddingTop={1}>
           <text fg={theme.text} size="large" font="mono">Autonomous Security Assessment Platform</text>
         </box>
-        <box alignItems="center" paddingTop={0.5}>
-          <text fg={theme.textMuted} font="mono">Version 5.0</text>
-        </box>
         <box alignItems="center" paddingTop={1}>
           <text fg={theme.primary as any} font="mono">
             <text font="mono" bg={theme.primary as any} fg={theme.background as any}> ● </text>
@@ -289,7 +286,7 @@ export function Home() {
       {/* Footer */}
       <box width="100%" flexShrink={0} paddingX={2} paddingY={1}>
         <text fg={theme.textMuted} font="mono">
-          Argus Security Assessment Platform v5.0 — Planner • Workflow • MCP • Evidence
+          Argus — Planner • Workflow • MCP • Evidence
         </text>
       </box>
     </>
