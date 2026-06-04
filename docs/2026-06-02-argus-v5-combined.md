@@ -1766,8 +1766,8 @@ _Last updated: 2026-06-04_
 | **Phase 1: Foundation** | 5 tasks | ✅ Mostly done | ~80% |
 | **Phase 2: Core Modules** | 6 tasks | ✅ Nearly complete | ~95% |
 | **Phase 3: CLI Integration** | 6 tasks | ✅ Nearly complete | ~95% |
-| **Phase 4: Safety & Rollback** | 3 tasks | ❌ Mostly not started | ~30% |
-| **Phase 5: Polish** | 3 tasks | ❌ Not started | ~0% |
+| **Phase 4: Safety & Rollback** | 3 tasks | ⚠️ Partially done | ~65% |
+| **Phase 5: Polish** | 3 tasks | ⚠️ Partially done | ~30% |
 
 ### Notable Changes Since Initial Design
 
@@ -1795,16 +1795,19 @@ _Last updated: 2026-06-04_
 | 2026-06-04 | **Task 2.2**: `EvidenceCollector.checkStorageLimit()` enforces `max_engagement_size_mb`; `pruneEngagement()` deletes files older than `retention_days`; `/evidence prune` calls it per-engagement |
 | 2026-06-04 | **Task 2.3**: Added `templates/report.html` with responsive CSS; `generateHTML()` loads/substitutes template data; `generateFromEngagement()` queries SQLite directly; report command accepts `html` format |
 | 2026-06-04 | Added 19 new tests (executor, resume, evidence, config, verify commands) — 280 total, 0 failures |
+| 2026-06-04 | **Task 4.1**: Added `FeatureFlags` system with 5 flags (all default `false` opt-in). Precedence: CLI > Env > Config > Defaults. CLI flags `--enable-browser`, `--enable-workflow-registry`, `--enable-engagement-store`, `--enable-approval-gates`. Env vars `ARGUS_FEATURE_*`. 10 tests. |
+| 2026-06-04 | **Task 5.2**: Updated root `Makefile` with V5 CLI targets (`install-v5`, `test-v5`, `assess-v5`, `doctor-v5`, etc.). Rewrote `README.md` with V5 commands, feature flag table, quick start, and full assessment example. |
 
 ### Remaining High-Impact Items
 
 | Priority | Item | Phase | Effort |
 |----------|------|-------|--------|
-| 🔴 High | Feature flag system in TypeScript CLI (all V5 features opt-in) | 4 | Medium |
 | 🟡 Medium | Async I/O for LLM client and parser hot paths (B.10) | B | Medium |
 | 🟡 Medium | OpenTelemetry integration replacing custom `ExecutionSpan` (B.06) | B | Medium |
 | 🟡 Medium | ESLint `no-restricted-imports` rule for fork boundary enforcement | 0 | Small |
 | 🟡 Medium | `./argus.config.yaml` project config + `~/.argus/config.yaml` user config | 0 | Medium |
 | 🟢 Low | E2E tests against Juice Shop, crAPI, DVWA, VAmPI | 4 | Large |
+| 🟢 Low | Remove Python argus-cli (after V5 CLI is stable) | 5 | Medium |
+| 🟢 Low | npm publish first v5 release | 5 | Medium |
 | 🟢 Low | Git tags for rollback (`v5-phase-1-complete`, etc.) | — | Trivial |
 | 🟢 Low | Drizzle Kit migration files | 2 | Small |
