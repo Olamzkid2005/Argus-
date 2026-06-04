@@ -27,8 +27,10 @@ export const ArgusAssessCommand = {
 export const ArgusDoctorCommand = {
   command: "doctor",
   describe: "Run comprehensive health checks on the Argus runtime",
-  handler: async () => {
-    const results = await doctorCommand().catch((e: Error) => {
+  builder: (yargs: Argv) =>
+    yargs.option("online", { describe: "Run network-dependent checks (LLM provider)", type: "boolean", default: false }),
+  handler: async (argv: Record<string, unknown>) => {
+    const results = await doctorCommand({ online: argv.online as boolean }).catch((e: Error) => {
       process.stderr.write(`[Argus] doctor error: ${e.message}\n`)
       return []
     })

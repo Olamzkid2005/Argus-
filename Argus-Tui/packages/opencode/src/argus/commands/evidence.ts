@@ -64,24 +64,16 @@ export async function evidenceCommand(
     }
 
     case "prune": {
-      const keepLast = parseInt(args[0] ?? "30", 10)
+      const retentionDays = parseInt(args[0] ?? "30", 10)
       const engagements = store.listEngagements()
-      let pruned = 0
+      let totalPruned = 0
       for (const eng of engagements) {
-        const findings = store.getFindings(eng.id)
-        // Keep only the last N findings per engagement
-        if (findings.length > keepLast) {
-          const toRemove = findings.slice(0, findings.length - keepLast)
-          for (const f of toRemove) {
-            const packages = store.getEvidencePackages(f.id)
-            for (const pkg of packages) {
-              const artifacts = store.getArtifacts(pkg.id)
-              pruned += artifacts.length
-            }
-          }
-        }
+        const collector = new EvidenceCollector(evidenceBaseDir)
+        const pruned = await collector.pruneEngagement(eng.id, retentionDays)
+        totalPruned += pruned
+        store.appendAuditLog(eng.id, "EVIDENCE_PRUNE", `Pruned ${pruned} artifact(s) older than ${retentionDays} days`)
       }
-      lines.push(`Pruned ${pruned} artifact(s) older than the last ${keepLast} findings`)
+      lines.push(`Pruned ${totalPruned} artifact(s) older than ${retentionDays} days across ${engagements.length} engagement(s)`)
       break
     }
 

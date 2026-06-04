@@ -15,6 +15,7 @@ interface CheckResult {
 export async function doctorCommand(options?: {
   workersPath?: string
   pythonPath?: string
+  online?: boolean
 }): Promise<CheckResult[]> {
   const results: CheckResult[] = []
 
@@ -25,6 +26,12 @@ export async function doctorCommand(options?: {
   results.push(dbCheck())
   results.push(credCheck())
   results.push(envCheck())
+  results.push(toolchainCheck())
+
+  // --online flag: runs LLM provider connectivity check
+  if (options?.online) {
+    results.push(await llmProviderCheck())
+  }
 
   return results
 }
@@ -220,6 +227,59 @@ function credCheck(): CheckResult {
     name: "Credentials",
     status: "WARN",
     message: "No credentials file found at " + CredentialStore.defaultPath() + ". Browser verifiers may fail for authenticated targets.",
+  }
+}
+
+/** Toolchain check: verify security tool binaries exist on PATH */
+function toolchainCheck(): CheckResult {
+  const requiredTools = ["nuclei", "nmap", "whatweb"]
+  const optionalTools = ["nikto", "ffuf", "httpx", "subfinder"]
+  const { execFileSync } = require("child_process") as typeof import("child_process")
+
+  const missing: string[] = []
+  const found: string[] = []
+
+  for (const tool of [...requiredTools, ...optionalTools]) {
+    try {
+      execFileSync("which", [tool], { stdio: "ignore" })
+      found.push(tool)
+    } catch {
+      if (requiredTools.includes(tool)) missing.push(tool)
+    }
+  }
+
+  const messages: string[] = []
+  if (found.length > 0) messages.push(`${found.length} tool(s) found: ${found.join(", ")}`)
+  if (missing.length > 0) messages.push(`MISSING: ${missing.join(", ")} (required for ${missing.length > 1 ? "some" : "a"} capability)`)
+
+  if (missing.length > 0) {
+    return { name: "Toolchain", status: "WARN", message: messages.join("; ") }
+  }
+  return { name: "Toolchain", status: "PASS", message: messages.join("; ") || "No tools defined" }
+}
+
+/** LLM provider check: tests LLM connectivity with a minimal ping */
+async function llmProviderCheck(): Promise<CheckResult> {
+  const key = process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY
+  if (!key) {
+    return { name: "LLM Provider", status: "WARN", message: "No API key configured. Set LLM_API_KEY." }
+  }
+
+  // Try a minimal ping to the configured provider
+  const provider = process.env.LLM_PROVIDER || "openai"
+  const apiUrl = process.env.LLM_API_URL || "https://api.openai.com/v1/models"
+
+  try {
+    const resp = await fetch(apiUrl, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (resp.ok) {
+      return { name: "LLM Provider", status: "PASS", message: `${provider} endpoint reachable (HTTP ${resp.status})` }
+    }
+    return { name: "LLM Provider", status: "WARN", message: `${provider} returned HTTP ${resp.status} — check API key and endpoint` }
+  } catch (error) {
+    return { name: "LLM Provider", status: "WARN", message: `${provider} unreachable: ${(error as Error).cause ?? (error as Error).message}` }
   }
 }
 

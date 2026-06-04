@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "fs/promises"
-import { join } from "path"
+import { mkdir, writeFile, readdir, stat, unlink, rmdir } from "fs/promises"
+import { join, extname } from "path"
+import { existsSync } from "fs"
 import { createHash } from "crypto"
 import type { EvidenceManifest, ArtifactEntry } from "./types"
 import { Confidence } from "../planner/types"
@@ -38,9 +39,99 @@ export class EvidenceCollector {
     if (!/^[\w-]+$/.test(id)) throw new Error(`Invalid ${label}: ${id}`)
   }
 
+  /**
+   * Check the engagement storage limit before writing.
+   * Returns true if within limit; false if over (caller should skip or compress).
+   */
+  async checkStorageLimit(engagementId: string): Promise<boolean> {
+    this.validateId(engagementId, "engagementId")
+    const engDir = join(this.baseDir, engagementId)
+    if (!existsSync(engDir)) return true
+
+    let totalBytes = 0
+    try {
+      const entries = await readdir(engDir, { recursive: true, withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          const filePath = join(entry.parentPath, entry.name)
+          totalBytes += (await stat(filePath)).size
+        }
+      }
+    } catch { return true } // Can't check — allow write
+
+    const maxBytes = this.config.max_engagement_size_mb * 1024 * 1024
+    const warnThreshold = maxBytes * 0.8
+    const isOver = totalBytes >= maxBytes
+
+    if (isOver) {
+      console.warn(`[Evidence] Engagement ${engagementId} exceeds storage limit (${(totalBytes / 1024 / 1024).toFixed(1)}MB / ${this.config.max_engagement_size_mb}MB)`)
+    } else if (totalBytes >= warnThreshold) {
+      console.warn(`[Evidence] Engagement ${engagementId} at ${((totalBytes / maxBytes) * 100).toFixed(0)}% of storage limit`)
+    }
+
+    return !isOver
+  }
+
+  /**
+   * Prune old or oversized artifacts: compress PNG screenshots when near limit,
+   * delete files older than retention_days for completed engagements.
+   */
+  async pruneEngagement(engagementId: string, retentionDays?: number): Promise<number> {
+    this.validateId(engagementId, "engagementId")
+    const engDir = join(this.baseDir, engagementId, "artifacts")
+    if (!existsSync(engDir)) return 0
+
+    const cutoff = Date.now() - (retentionDays ?? this.config.retention_days) * 86400000
+    let pruned = 0
+
+    try {
+      const findingDirs = await readdir(engDir, { withFileTypes: true })
+      for (const findingDir of findingDirs) {
+        if (!findingDir.isDirectory()) continue
+        const findingPath = join(engDir, findingDir.name)
+
+        // Walk each artifact type directory (screenshots/, requests/, responses/)
+        const typeDirs = await readdir(findingPath, { withFileTypes: true })
+        for (const typeDir of typeDirs) {
+          if (!typeDir.isDirectory()) continue
+          const typePath = join(findingPath, typeDir.name)
+          const files = await readdir(typePath, { withFileTypes: true })
+
+          for (const file of files) {
+            if (!file.isFile()) continue
+            const filePath = join(typePath, file.name)
+
+            try {
+              const fileStat = await stat(filePath)
+              if (fileStat.mtimeMs < cutoff) {
+                await unlink(filePath)
+                pruned++
+              }
+            } catch { /* skip unreadable */ }
+          }
+        }
+
+        // Clean up empty directories
+        for (const typeDir of typeDirs) {
+          if (!typeDir.isDirectory()) continue
+          const typePath = join(findingPath, typeDir.name)
+          try {
+            const remaining = await readdir(typePath)
+            if (remaining.length === 0) {
+              await rmdir(typePath)
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch { return pruned }
+
+    return pruned
+  }
+
   async saveRequest(engagementId: string, findingId: string, request: string): Promise<ArtifactEntry> {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
+    if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "requests")
     await this.ensureDir(dir)
     const fileName = `request-${Date.now()}.txt`
@@ -58,6 +149,7 @@ export class EvidenceCollector {
   async saveResponse(engagementId: string, findingId: string, response: string): Promise<ArtifactEntry> {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
+    if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "responses")
     await this.ensureDir(dir)
     const fileName = `response-${Date.now()}.txt`
@@ -75,6 +167,7 @@ export class EvidenceCollector {
   async captureScreenshot(engagementId: string, findingId: string, screenshotBuffer: Buffer): Promise<ArtifactEntry> {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
+    if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "screenshots")
     await this.ensureDir(dir)
     const fileName = `screenshot-${Date.now()}.png`
@@ -92,6 +185,7 @@ export class EvidenceCollector {
   async createPackage(engagementId: string, findingId: string, artifacts: ArtifactEntry[]): Promise<EvidenceManifest> {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
+    if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
     const manifest: EvidenceManifest = {
       package_id: findingId,
       engagement_id: engagementId,
