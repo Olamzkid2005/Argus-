@@ -4,11 +4,12 @@
 # Launches the V5 TypeScript CLI directly without Redis/Celery overhead.
 #
 # Usage:
-#   ./start-argus.sh                  # Interactive TUI (OpenCode runtime)
+#   ./start-argus.sh                  # Show argus commands
 #   ./start-argus.sh doctor           # Health check
 #   ./start-argus.sh assess <target>  # Full assessment
 #   ./start-argus.sh test             # Run unit tests
-#   ./start-argus.sh --help           # All argus commands
+#   ./start-argus.sh <command>        # Any argus command
+#   ./start-argus.sh --help           # All available commands
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -75,10 +76,6 @@ case "${1:-}" in
         echo ""
         echo -e "${YELLOW}━━━ Assessment ━━━${NC}"
         bun run src/argus/main.ts assess "$@"
-        ;;
-    ""|tui)
-        log_info "Starting Argus TUI..."
-        bun run src/index.ts
         ;;
     *)
         # Pass through to argus CLI
