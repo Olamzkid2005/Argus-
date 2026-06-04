@@ -1,0 +1,20 @@
+name: nikto
+command: nikto
+description: "Nikto web server scanner"
+args:
+  - "-Format"
+  - "json"
+  - "-Tuning"
+  - "123456"
+  - "-timeout"
+  - "10"
+  - "-max-time"
+  - "60"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or host"
+    required: true
+    flag: "-h"
+enabled: true
+timeout: 120

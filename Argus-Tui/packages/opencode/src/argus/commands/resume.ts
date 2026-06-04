@@ -13,7 +13,10 @@ import { canResume, canRetryPhase } from "../engagement/recovery"
 import type { PhaseRecord } from "../engagement/types"
 import type { NormalizedFinding } from "../shared/types"
 import { homedir } from "os"
-import { join } from "path"
+import { join, resolve } from "path"
+
+// Project root resolved once from __dirname to avoid brittle relative-path chains.
+const projectRoot = resolve(__dirname, "../../../../../../")
 
 export async function resumeCommand(
   engagementId: string,
@@ -49,7 +52,7 @@ export async function resumeCommand(
   const plan = await planner.plan(engagement.target, undefined, { useLLM: options?.useLLM ?? true })
 
   // Re-connect bridge
-  const bridge = new WorkersBridge(options?.workersPath ?? "../argus-workers/mcp_server.py")
+  const bridge = new WorkersBridge(options?.workersPath ?? join(projectRoot, "argus-workers/mcp_server.py"))
   await bridge.connect()
 
   const confidenceEngine = new ConfidenceEngine()

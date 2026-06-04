@@ -1,0 +1,14 @@
+name: httpx
+command: httpx
+description: "HTTPX probe for HTTP server discovery and technology detection"
+args:
+  - "-json"
+  - "-silent"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or host to probe"
+    required: true
+    flag: "-u"
+enabled: true
+timeout: 120

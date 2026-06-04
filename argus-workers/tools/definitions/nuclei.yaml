@@ -1,0 +1,22 @@
+name: nuclei
+command: nuclei
+description: "Nuclei vulnerability scanner using customizable templates"
+args:
+  - "-json"
+  - "-silent"
+  - "-timeout"
+  - "10"
+  - "-retries"
+  - "1"
+  - "-bulk-size"
+  - "25"
+  - "-concurrency"
+  - "10"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or host to scan"
+    required: true
+    flag: "-u"
+enabled: true
+timeout: 120

@@ -1,10 +1,14 @@
 import { existsSync } from "fs"
-import { join } from "path"
+import { join, resolve } from "path"
 import { homedir } from "os"
 import { spawn, execFile } from "child_process"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
+
+// Project root resolved once from __dirname to avoid brittle relative-path chains.
+// __dirname = .../packages/opencode/src/argus/commands/ => up 6 levels to repo root.
+const projectRoot = resolve(__dirname, "../../../../../../")
 
 interface CheckResult {
   name: string
@@ -70,7 +74,7 @@ async function pythonCheck(pythonPath?: string): Promise<CheckResult> {
 }
 
 async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<CheckResult> {
-  const wp = workersPath ?? join(__dirname, "../../../../argus-workers/mcp_server.py")
+  const wp = workersPath ?? join(projectRoot, "argus-workers/mcp_server.py")
 
   if (!existsSync(wp)) {
     const alt = join(homedir(), "argus-workers", "mcp_server.py")
@@ -162,7 +166,7 @@ function dbCheck(): CheckResult {
 
 function envCheck(): CheckResult {
   const envPath = join(homedir(), ".argus", ".env")
-  const localEnv = join(__dirname, "../../../../.env")
+  const localEnv = join(projectRoot, ".env")
 
   if (existsSync(envPath) || existsSync(localEnv)) {
     const hasKey = !!(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
@@ -313,7 +317,7 @@ function toolchainCheck(): CheckResult {
         try {
           const cmd = versionDef.version_cmd
           const cmdParts = cmd.split(/\s+/)
-          const output = execSync(cmd, { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] })
+          const output = execSync(cmd + " 2>&1", { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] })
           const match = output.match(new RegExp(versionDef.version_regex))
           if (match) {
             const version = match[0]

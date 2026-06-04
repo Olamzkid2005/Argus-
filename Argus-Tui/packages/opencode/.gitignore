@@ -8,3 +8,6 @@ temporary-*.md
 .artifacts
 # Test-generated screenshots from browser verifiers
 *.png
+
+# Scan output artifacts
+nikto_*.json

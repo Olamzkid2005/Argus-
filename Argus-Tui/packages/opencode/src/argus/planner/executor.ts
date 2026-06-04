@@ -134,13 +134,31 @@ export class InProcessExecutor implements PhaseExecutor {
 
             if (result.success && result.data) {
               const data = result.data
-              if (!Array.isArray(data)) {
-                errors.push(`Tool ${tool.name} returned non-array result`)
-              } else {
+              if (Array.isArray(data)) {
+                // Structured findings from tool (expected format)
                 for (const finding of data) {
                   const promoted = this.confidenceEngine.promote(finding)
                   findings.push({ ...finding, confidence: promoted })
                 }
+                success = true
+                break
+              } else if (typeof data === "string" && data.length > 0) {
+                // Raw text output — create a basic finding from the tool output
+                const truncated = data.length > 500 ? data.substring(0, 500) + "..." : data
+                const finding: NormalizedFinding = {
+                  id: `find-${tool.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  title: `${tool.name} scan against ${phase.target}`,
+                  severity: 2,
+                  confidence: 0.5,
+                  status: "PENDING",
+                  description: truncated,
+                  tool: tool.name,
+                  phase: phase.phaseId,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+                const promoted = this.confidenceEngine.promote(finding)
+                findings.push({ ...finding, confidence: promoted })
                 success = true
                 break
               }

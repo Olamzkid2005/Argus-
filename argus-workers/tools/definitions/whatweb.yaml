@@ -1,0 +1,12 @@
+name: whatweb
+command: whatweb
+description: "WhatWeb technology detection and fingerprinting"
+args:
+  - "--color=never"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL to fingerprint"
+    required: true
+enabled: true
+timeout: 120

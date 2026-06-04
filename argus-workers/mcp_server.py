@@ -271,7 +271,12 @@ class MCPServer:
                 _env.pop(_key, None)
             # Add venv to PATH so pip-installed tools are findable
             _venv_bin = str(Path(sys.executable).parent)
-            _env["PATH"] = f"{_venv_bin}:/usr/local/bin:/usr/bin:/bin"
+            _go_bin = os.path.expanduser("~/go/bin")
+            _homebrew_bin = "/opt/homebrew/bin"
+            _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
+            # Preserve any existing PATH customizations (e.g. from start-argus.sh)
+            _existing_path = _env.get("PATH", "")
+            _env["PATH"] = f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()

@@ -1,0 +1,13 @@
+name: subfinder
+command: subfinder
+description: "Subfinder subdomain discovery tool"
+args:
+  - "-silent"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain to enumerate subdomains for"
+    required: true
+    flag: "-d"
+enabled: true
+timeout: 120

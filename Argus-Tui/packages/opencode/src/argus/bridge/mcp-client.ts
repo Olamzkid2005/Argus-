@@ -244,7 +244,7 @@ export class WorkersBridge {
     throw new Error("MCP worker failed to become ready")
   }
 
-  private async sendRequest(method: string, params?: unknown): Promise<unknown> {
+  private async sendRequest(method: string, params?: unknown, timeoutMs = 30000): Promise<unknown> {
     if (this.pendingCount >= this.maxPending) {
       throw new Error(`Too many pending requests (max ${this.maxPending})`)
     }
@@ -262,8 +262,8 @@ export class WorkersBridge {
       return await new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           this.pending.delete(id)
-          reject(new Error(`Request ${method} timed out`))
-        }, 30000)
+          reject(new Error(`Request ${method} timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
 
         this.pending.set(id, { resolve, reject, timer })
 
@@ -280,7 +280,7 @@ export class WorkersBridge {
     }
   }
 
-  async callTool(name: string, args: unknown): Promise<ToolResult> {
+  async callTool(name: string, args: unknown, timeoutMs?: number): Promise<ToolResult> {
     // Circuit breaker check
     const now = Date.now()
     if (this.circuitOpenUntil > now) {
@@ -289,13 +289,29 @@ export class WorkersBridge {
     }
 
     try {
-      const result = await this.sendRequest("call_tool", { name, arguments: args })
+      const raw = await this.sendRequest("call_tool", { name, arguments: args }, timeoutMs ?? 600000) // default 10min for security tools
       // Success — reset circuit breaker
       if (this.circuitFailures > 0) {
         this.circuitFailures = 0
         this.setLLMStatus("AVAILABLE")
       }
-      return result as ToolResult
+
+      // Transform MCP response format to ToolResult format
+      // Python MCP server returns: { content: [...], isError: bool, meta: { success, duration_ms, tool } }
+      // Executor expects:        { success: bool, data: unknown, error?: string, durationMs: number }
+      const mcpResponse = raw as {
+        content?: Array<{ type: string; text: string }>
+        isError?: boolean
+        meta?: { success?: boolean; duration_ms?: number; tool?: string }
+      }
+      const text = mcpResponse.content?.[0]?.text ?? ""
+      const result: ToolResult = {
+        success: mcpResponse.meta?.success ?? !mcpResponse.isError,
+        data: text,
+        error: mcpResponse.isError ? text : undefined,
+        durationMs: mcpResponse.meta?.duration_ms ?? 0,
+      }
+      return result
     } catch (error) {
       const isLLMError = (error as any)?.code === -32000 || (error as Error).message.includes("LLM is not available")
 
