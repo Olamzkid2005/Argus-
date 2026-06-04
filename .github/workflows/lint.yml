@@ -7,9 +7,17 @@ on:
     branches: [dev]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
 jobs:
-  eslint:
-    name: ESLint + Prettier
+  typecheck:
+    name: typecheck
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,29 +37,90 @@ jobs:
       - name: TypeScript type check
         run: bun typecheck
 
-      - name: Check for unused exports (tsgo)
-        run: bun run tsgo --noEmit || true
-
-  argus-cli-lint:
-    name: Python CLI (ruff)
+  argus-unit:
+    name: unit (linux)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: argus-cli
+        working-directory: Argus-Tui/packages/opencode
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          python-version: "3.11"
+          bun-version: latest
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - name: Lint with ruff
-        run: ruff check argus_cli/ --output-format=github
+      - name: Create artifacts directory
+        run: mkdir -p .artifacts/unit
+
+      - name: Run argus unit tests
+        run: bun test --timeout 30000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
+
+      - name: Publish unit reports
+        if: always()
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
+        with:
+          report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+          check_name: "unit results (linux)"
+          detailed_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-linux-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+
+  argus-unit-windows:
+    name: unit (windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Argus-Tui/packages/opencode
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Create artifacts directory
+        run: mkdir -p .artifacts/unit
+
+      - name: Run argus unit tests
+        run: bun test --timeout 60000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
+
+      - name: Publish unit reports
+        if: always()
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
+        with:
+          report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+          check_name: "unit results (windows)"
+          detailed_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-windows-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
 
   argus-workers-lint:
     name: Python Workers (ruff)
