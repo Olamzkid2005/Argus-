@@ -11,6 +11,7 @@ import { ConfidenceEngine } from "../engagement/confidence"
 import { EvidenceCollector } from "../evidence/collector"
 import { ReportGenerator } from "../reporting/generator"
 import { PlaywrightEngine } from "../browser/engine"
+import { FeatureFlags, Feature } from "../config/feature-flags"
 import { homedir } from "os"
 import { join } from "path"
 
@@ -20,6 +21,7 @@ export async function assessCommand(target: string, options?: {
   toolsPath?: string
   useLLM?: boolean
   credsPath?: string
+  features?: Partial<Record<Feature, boolean>>
 }): Promise<void> {
   const workflowsDir = options?.workflowsPath ?? join(__dirname, "../workflows")
   const toolsPath = options?.toolsPath ?? join(workflowsDir, "tool-definitions.yaml")
@@ -37,6 +39,11 @@ export async function assessCommand(target: string, options?: {
 
   const confidenceEngine = new ConfidenceEngine()
   const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
+
+  // Task 4.1: Initialize feature flags (all opt-in by default)
+  const featureFlags = new FeatureFlags(options?.features)
+  featureFlags.loadFromEnv()
+  executor.setFeatureFlags(featureFlags)
 
   const store = new EngagementStore()
   const engagement = store.createEngagement(target, "assessment")

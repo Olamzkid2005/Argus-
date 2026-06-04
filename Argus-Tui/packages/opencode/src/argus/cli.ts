@@ -6,6 +6,7 @@ import { resumeCommand } from "./commands/resume"
 import { verifyCommand } from "./commands/verify"
 import { evidenceCommand } from "./commands/evidence"
 import { configCommand } from "./commands/config"
+import { Feature } from "./config/feature-flags"
 
 export const ArgusAssessCommand = {
   command: "assess <target>",
@@ -15,12 +16,36 @@ export const ArgusAssessCommand = {
       .positional("target", { describe: "Target URL to assess", type: "string", demandOption: true })
       .option("workers-path", { describe: "Path to the MCP worker script" })
       .option("creds", { describe: "Path to credentials JSON file (see credentials.json.example)", type: "string" })
-      .option("deterministic", { describe: "Use deterministic mode only (no LLM)", type: "boolean", default: false }),
+      .option("deterministic", { describe: "Use deterministic mode only (no LLM)", type: "boolean", default: false })
+      // Task 4.1: Feature flags — all opt-in
+      .option("enable-browser", { describe: "Enable browser-based verification (BOLA, XSS, PrivEsc)", type: "boolean", default: undefined })
+      .option("enable-workflow-registry", { describe: "Enable workflow registry for capability-based planning", type: "boolean", default: undefined })
+      .option("enable-engagement-store", { describe: "Enable SQLite engagement persistence", type: "boolean", default: undefined })
+      .option("enable-approval-gates", { describe: "Enable interactive approval prompts for destructive actions", type: "boolean", default: undefined }),
   handler: async (argv: Record<string, unknown>) => {
     const target = argv.target as string
     process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
-    await assessCommand(target, { useLLM: !argv.deterministic, credsPath: argv.creds as string | undefined })
-      .catch((e: Error) => process.stderr.write(`[Argus] assess error: ${e.message}\n`))
+
+    // Build feature flag overrides from CLI
+    const featureOverrides: Partial<Record<Feature, boolean>> = {}
+    const cliFeatureMap: Record<string, Feature> = {
+      "enable-browser": Feature.BROWSER_VERIFICATION,
+      "enable-workflow-registry": Feature.WORKFLOW_REGISTRY,
+      "enable-engagement-store": Feature.ENGAGEMENT_STORE,
+      "enable-approval-gates": Feature.APPROVAL_GATES,
+    }
+    for (const [cliKey, feature] of Object.entries(cliFeatureMap)) {
+      const val = argv[cliKey]
+      if (typeof val === "boolean") {
+        featureOverrides[feature] = val
+      }
+    }
+
+    await assessCommand(target, {
+      useLLM: !argv.deterministic,
+      credsPath: argv.creds as string | undefined,
+      features: featureOverrides,
+    }).catch((e: Error) => process.stderr.write(`[Argus] assess error: ${e.message}\n`))
   },
 }
 

@@ -8,6 +8,7 @@ import type { ApprovalGate } from "../workflows/types"
 import { WorkflowRegistry } from "../workflows/registry"
 import type { EvidenceCollector } from "../evidence/collector"
 import type { BrowserEngine } from "../browser/engine"
+import { Feature, type FeatureFlags } from "../config/feature-flags"
 
 export interface PhaseExecutor {
   execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult>
@@ -30,6 +31,7 @@ export class InProcessExecutor implements PhaseExecutor {
   private approvalService: ApprovalService
   private requiredGates: ApprovalGate[] = []
   private browserDeps: BrowserVerifierDeps | null = null
+  private featureFlags: FeatureFlags | null = null
 
   constructor(
     private toolRegistry: ToolRegistry,
@@ -42,6 +44,15 @@ export class InProcessExecutor implements PhaseExecutor {
 
   setBrowserVerifierDeps(deps: BrowserVerifierDeps): void {
     this.browserDeps = deps
+  }
+
+  setFeatureFlags(flags: FeatureFlags): void {
+    this.featureFlags = flags
+  }
+
+  /** Check whether a feature is enabled (defaults true if no flag system attached) */
+  private isFeatureEnabled(feature: Feature): boolean {
+    return this.featureFlags?.isEnabled(feature) ?? true
   }
 
   private gatesLoaded = false
@@ -57,7 +68,9 @@ export class InProcessExecutor implements PhaseExecutor {
       throw new Error("loadGates must be called before execute")
     }
 
-    const gate = this.approvalService.needsApproval(phase, this.requiredGates)
+    const gate = this.isFeatureEnabled(Feature.APPROVAL_GATES)
+      ? this.approvalService.needsApproval(phase, this.requiredGates)
+      : null
     if (gate) {
       const result = await this.approvalService.requestApproval(gate, phase.phaseId, phase.target)
       if (!result.approved) {
@@ -161,8 +174,10 @@ export class InProcessExecutor implements PhaseExecutor {
     }
 
     // Run browser verifiers if phase requires BROWSER_VERIFICATION capability
+    // Task 4.1: Feature flag gate — BROWSER_VERIFICATION must be enabled
     if (
       this.browserDeps &&
+      this.isFeatureEnabled(Feature.BROWSER_VERIFICATION) &&
       phase.requiredCapabilities.includes(Capability.BROWSER_VERIFICATION)
     ) {
       try {
