@@ -228,31 +228,38 @@ export class InProcessExecutor implements PhaseExecutor {
         const result = runner.run(verifier)
         const vResult = await result
 
-        // Capture evidence
+        // Capture evidence after verifier runs (engine still alive at this point)
         const evidencePkg = await verifier.collectEvidence()
+        const findingId = `find-${roleName}-${Date.now()}`
         const artifacts: import("../evidence/types").ArtifactEntry[] = []
-        for (const screenshotPath of evidencePkg.screenshots) {
-          try {
-            const buf = await Bun.file(screenshotPath).arrayBuffer()
-            const entry = await evidenceCollector.captureScreenshot(target, `${roleName}-${Date.now()}`, Buffer.from(buf))
-            artifacts.push(entry)
-          } catch { /* skip missing screenshot */ }
-        }
+
+        // Take a final evidence screenshot of the target
+        try {
+          const ctx = await engine.createContext()
+          const page = await ctx.newPage()
+          await page.goto(targetUrl, { waitUntil: "networkidle" })
+          const shot = await engine.captureScreenshot(page)
+          const entry = await evidenceCollector.captureScreenshot(target, findingId, shot)
+          artifacts.push(entry)
+          await page.close()
+          await ctx.close()
+        } catch { /* evidence screenshot best-effort */ }
+
         if (artifacts.length > 0) {
-          await evidenceCollector.createPackage(target, `${roleName}-${Date.now()}`, artifacts)
+          await evidenceCollector.createPackage(target, findingId, artifacts)
         }
 
         if (vResult.passed) {
           const finding: NormalizedFinding = {
-            id: `find-${roleName}-${Date.now()}`,
+            id: findingId,
             title: `${verifier.name}: ${vResult.summary}`,
             severity: 3, // HIGH
             confidence: vResult.confidence,
             status: "CONFIRMED",
             description: vResult.summary,
             evidence: [{
-              packageId: evidencePkg.packageId || `pkg-${roleName}-${Date.now()}`,
-              findingId: evidencePkg.findingId || `find-${roleName}-${Date.now()}`,
+              packageId: `pkg-${roleName}-${Date.now()}`,
+              findingId,
               artifacts: artifacts.map(a => ({ path: a.path, type: a.type })),
               packageHash: "",
               createdAt: evidencePkg.createdAt,

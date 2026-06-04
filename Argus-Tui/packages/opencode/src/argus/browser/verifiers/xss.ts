@@ -18,6 +18,10 @@ export class StoredXSSVerifier implements VerificationScenario {
 
   private logs: string[] = []
   private payloadExecuted = false
+  private capturedScreenshots: { data: Buffer; label: string }[] = []
+  private capturedResponses: string[] = []
+  private capturedRequests: string[] = []
+  private domOnVictim = ""
 
   constructor(
     private engine: BrowserEngine,
@@ -40,6 +44,8 @@ export class StoredXSSVerifier implements VerificationScenario {
     const injectPage = await this.engine.navigate(this.injectUrl)
     await injectPage.waitForLoadState("networkidle")
 
+    this.capturedRequests.push(`GET ${this.injectUrl} [injection page]`)
+
     // Scope injection to fields inside <form> elements only
     const forms = await injectPage.locator("form").all()
     for (const form of forms) {
@@ -59,15 +65,31 @@ export class StoredXSSVerifier implements VerificationScenario {
       await injectPage.waitForTimeout(1500)
       this.logs.push("Submitted form with XSS payload")
     }
+
+    try {
+      const injectShot = await this.engine.captureScreenshot(injectPage)
+      this.capturedScreenshots.push({ data: injectShot, label: "injection" })
+    } catch { /* screenshot best-effort */ }
+
+    this.capturedResponses.push(`Injection page: ${injectPage.url()}`)
     await injectPage.close()
 
     const victimPage = await this.engine.navigate(this.victimViewUrl)
     await victimPage.waitForLoadState("networkidle")
 
+    this.capturedRequests.push(`GET ${this.victimViewUrl} [victim view]`)
+    this.capturedResponses.push(`Victim page: ${victimPage.url()}`)
+
     const pageContent = (await victimPage.content()).toLowerCase()
+    this.domOnVictim = pageContent
     const markersFound = XSS_MARKERS.filter(m => pageContent.includes(m))
     const payloadInDom = pageContent.includes(this.payload.toLowerCase())
     this.payloadExecuted = markersFound.length > 0 || payloadInDom
+
+    try {
+      const victimShot = await this.engine.captureScreenshot(victimPage)
+      this.capturedScreenshots.push({ data: victimShot, label: "victim-view" })
+    } catch { /* screenshot best-effort */ }
 
     this.logs.push(`XSS markers found in DOM: ${markersFound.length > 0 ? markersFound.join(", ") : "none"}`)
     this.logs.push(`Payload string in DOM: ${payloadInDom}`)
@@ -88,8 +110,16 @@ export class StoredXSSVerifier implements VerificationScenario {
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
+    const screenshots: string[] = []
+    for (const shot of this.capturedScreenshots) {
+      const filename = `xss-${shot.label}.png`
+      await Bun.write(filename, shot.data)
+      screenshots.push(filename)
+    }
     return {
-      packageId: "", findingId: "", screenshots: [], requests: [], responses: [],
+      packageId: "", findingId: "", screenshots,
+      requests: this.capturedRequests,
+      responses: this.capturedResponses,
       logs: this.logs,
       createdAt: new Date().toISOString(),
     }

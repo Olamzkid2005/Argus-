@@ -9,6 +9,9 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
 
   private logs: string[] = []
   private accessibleEndpoints: { endpoint: string; status: number; accessible: boolean }[] = []
+  private capturedScreenshots: { data: Buffer; label: string }[] = []
+  private capturedResponses: string[] = []
+  private capturedRequests: string[] = []
 
   constructor(
     private engine: BrowserEngine,
@@ -37,8 +40,16 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
       await loginIfFormPresent(page, this.lowPrivCreds)
       if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
 
+      this.capturedRequests.push(`GET ${endpointUrl} [low-priv as ${this.lowPrivCreds.username}]`)
+
       const response = await page.goto(endpointUrl, { waitUntil: "networkidle" })
       const httpStatus = response?.status() ?? 0
+      this.capturedResponses.push(`Endpoint ${ep}: HTTP ${httpStatus}`)
+
+      try {
+        const shot = await this.engine.captureScreenshot(page)
+        this.capturedScreenshots.push({ data: shot, label: `endpoint-${ep.replace(/[^a-zA-Z0-9]/g, "-")}` })
+      } catch { /* screenshot best-effort */ }
 
       let accessible: boolean
       try {
@@ -74,8 +85,16 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
+    const screenshots: string[] = []
+    for (const shot of this.capturedScreenshots) {
+      const filename = `priv-esc-${shot.label}.png`
+      await Bun.write(filename, shot.data)
+      screenshots.push(filename)
+    }
     return {
-      packageId: "", findingId: "", screenshots: [], requests: [], responses: [],
+      packageId: "", findingId: "", screenshots,
+      requests: this.capturedRequests,
+      responses: this.capturedResponses,
       logs: this.logs,
       createdAt: new Date().toISOString(),
     }

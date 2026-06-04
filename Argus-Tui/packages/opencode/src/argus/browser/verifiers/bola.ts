@@ -10,6 +10,10 @@ export class BOLAVerifier implements VerificationScenario {
   private logs: string[] = []
   private userAResourceAccessible = false
   private userBResourceAccessible = false
+  private capturedScreenshots: { data: Buffer; label: string }[] = []
+  private capturedResponses: string[] = []
+  private capturedRequests: string[] = []
+  private resourceUrl = ""
 
   constructor(
     private engine: BrowserEngine,
@@ -29,6 +33,7 @@ export class BOLAVerifier implements VerificationScenario {
     if (this.resourcePath === this.targetUrl.replace(/\/+$/, "")) {
       this.logs.push("WARNING: resourcePath and targetUrl are identical — BOLA check will be ineffective")
     }
+    this.resourceUrl = `${this.targetUrl.replace(/\/+$/, "")}/${this.resourcePath.replace(/^\//, "")}`
     await this.engine.launch()
     this.logs.push("BOLA verifier setup complete")
   }
@@ -38,10 +43,8 @@ export class BOLAVerifier implements VerificationScenario {
   }
 
   async execute(): Promise<void> {
-    const resourceUrl = `${this.targetUrl.replace(/\/+$/, "")}/${this.resourcePath.replace(/^\//, "")}`
-
-    this.userAResourceAccessible = await this.checkAccess(resourceUrl, this.userACreds, "User A")
-    this.userBResourceAccessible = await this.checkAccess(resourceUrl, this.userBCreds, "User B")
+    this.userAResourceAccessible = await this.checkAccess(this.resourceUrl, this.userACreds, "User A")
+    this.userBResourceAccessible = await this.checkAccess(this.resourceUrl, this.userBCreds, "User B")
     this.logs.push(`User A access: ${this.userAResourceAccessible}, User B access: ${this.userBResourceAccessible}`)
   }
 
@@ -60,10 +63,18 @@ export class BOLAVerifier implements VerificationScenario {
 
   async collectEvidence(): Promise<EvidencePackage> {
     return {
-      packageId: "", findingId: "", screenshots: [], requests: [], responses: [],
+      packageId: "", findingId: "",
+      screenshots: this.capturedScreenshots.map(s => s.label),
+      requests: this.capturedRequests,
+      responses: this.capturedResponses,
       logs: this.logs,
       createdAt: new Date().toISOString(),
     }
+  }
+
+  /** Expose captured screenshot buffers for EvidenceCollector persistence */
+  getScreenshotBuffers(): { label: string; data: Buffer }[] {
+    return this.capturedScreenshots
   }
 
   private async checkAccess(resourceUrl: string, creds: { username: string; password: string }, label: string): Promise<boolean> {
@@ -72,8 +83,21 @@ export class BOLAVerifier implements VerificationScenario {
     const page = await context.newPage()
     try {
       await page.goto(this.targetUrl, { waitUntil: "networkidle" })
+      this.capturedRequests.push(`GET ${this.targetUrl} [${label} login]`)
+
       await loginIfFormPresent(page, creds)
-      await page.goto(resourceUrl, { waitUntil: "networkidle" })
+
+      const loginResponse = await page.goto(this.targetUrl, { waitUntil: "networkidle" })
+      this.capturedResponses.push(`[${label}] Login page status: ${loginResponse?.status() ?? "unknown"}`)
+
+      const resourceResponse = await page.goto(resourceUrl, { waitUntil: "networkidle" })
+      this.capturedRequests.push(`GET ${resourceUrl} [${label}]`)
+      this.capturedResponses.push(`[${label}] Resource page status: ${resourceResponse?.status() ?? "unknown"}`)
+
+      try {
+        const shot = await this.engine.captureScreenshot(page)
+        this.capturedScreenshots.push({ data: shot, label: `${label}-resource` })
+      } catch { /* screenshot best-effort */ }
 
       let accessible: boolean
       try {
