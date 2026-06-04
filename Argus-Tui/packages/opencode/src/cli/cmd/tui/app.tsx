@@ -46,6 +46,8 @@ import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { ScanDashboard } from "@/argus/tui/routes/scan"
+import { FindingsViewer } from "@/argus/tui/routes/findings"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -80,6 +82,7 @@ import {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { ArgusCommandRegistry } from "@/argus/tui-command-registry"
+import { setNavigateHandler } from "@/argus/tui/navigator"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -372,6 +375,16 @@ async function waitUntilDone(ready: Promise<void>, exited: Promise<void>) {
 function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const tuiConfig = useTuiConfig()
   const route = useRoute()
+  // Subscribe to Argus navigation requests
+  onMount(() => {
+    setNavigateHandler((r) => {
+      if (r.type === "scan") {
+        route.navigate({ type: "scan", target: r.target, engagementId: r.engagementId })
+      } else if (r.type === "findings") {
+        route.navigate({ type: "findings", engagementId: r.engagementId })
+      }
+    })
+  })
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
   const dialog = useDialog()
@@ -1091,6 +1104,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
               <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
                 {(_) => <Session />}
               </Show>
+            </Match>
+            <Match when={route.data.type === "scan"}>
+              <ScanDashboard />
+            </Match>
+            <Match when={route.data.type === "findings"}>
+              <FindingsViewer />
             </Match>
           </Switch>
           {plugin()}

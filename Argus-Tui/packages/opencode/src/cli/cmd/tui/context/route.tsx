@@ -19,7 +19,18 @@ export type PluginRoute = {
   data?: Record<string, unknown>
 }
 
-export type Route = HomeRoute | SessionRoute | PluginRoute
+export type ScanRoute = {
+  type: "scan"
+  target: string
+  engagementId: string
+}
+
+export type FindingsRoute = {
+  type: "findings"
+  engagementId?: string
+}
+
+export type Route = HomeRoute | SessionRoute | PluginRoute | ScanRoute | FindingsRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

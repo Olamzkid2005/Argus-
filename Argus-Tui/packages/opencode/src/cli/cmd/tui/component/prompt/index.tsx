@@ -1199,6 +1199,16 @@ export function Prompt(props: PromptProps) {
         if (argusCmd) {
           argusHandled = true
           const arg = firstLine.slice(firstWord.length).trim()
+          // Navigate to scan dashboard for assess/recon commands
+          if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
+            try {
+              const { navigateTo } = await import("@/argus/tui/navigator")
+              const { EngagementStore } = await import("@/argus/engagement/store")
+              const store = new EngagementStore()
+              const eng = store.createEngagement(arg, "assessment")
+              navigateTo({ type: "scan", target: arg, engagementId: eng.id })
+            } catch {}
+          }
           void (async () => {
             try {
               let output: string
@@ -1274,6 +1284,14 @@ export function Prompt(props: PromptProps) {
         const intent = classify(inputText)
         if (intent.type === "assessment") {
           argusHandled = true
+          // Navigate to scan dashboard
+          try {
+            const { navigateTo } = await import("@/argus/tui/navigator")
+            const { EngagementStore } = await import("@/argus/engagement/store")
+            const store = new EngagementStore()
+            const eng = store.createEngagement(intent.target, "assessment")
+            navigateTo({ type: "scan", target: intent.target, engagementId: eng.id })
+          } catch {}
           void (async () => {
             void sdk.client.session.prompt({
               sessionID,
