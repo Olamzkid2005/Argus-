@@ -1625,7 +1625,7 @@ The Python backend has a well-thought-out architecture with strong fundamentals 
 
 ### Phase 5: Polish
 
-- [ ] **Task 5.1:** Remove Python `argus-cli/` (after verifying TypeScript CLI is stable)
+- [x] **Task 5.1:** Remove Python `argus-cli/` (after verifying TypeScript CLI is stable)
 - [ ] **Task 5.2:** Update root `Makefile` and README for new CLI
 - [ ] **Task 5.3:** `npm publish` first v5 release
 

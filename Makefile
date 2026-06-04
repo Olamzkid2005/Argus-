@@ -99,29 +99,6 @@ install-frontend: ## Install frontend dependencies
 install-backend: ## Install backend dependencies
 	cd argus-workers && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 
-# ── Python CLI (Legacy v4) ──
-
-install-cli: ## Install Python CLI dependencies
-	cd argus-cli && pip install -e .
-
-dev-cli: ## Run Python CLI in development mode (no TUI)
-	cd argus-cli && PYTHONPATH=".:../argus-workers:$$PYTHONPATH" python -m argus_cli --no-tui
-
-tui-cli: ## Launch Python CLI TUI
-	cd argus-cli && PYTHONPATH=".:../argus-workers:$$PYTHONPATH" python -m argus_cli
-
-test-cli: ## Run Python CLI tests
-	cd argus-cli && PYTHONPATH=".:$$PYTHONPATH" python -m pytest tests/ -v --tb=short
-
-lint-cli: ## Lint Python CLI code
-	cd argus-cli && ruff check argus_cli/ --fix 2>/dev/null || echo "Install ruff: pip install ruff"
-
-build-cli: ## Build Python CLI package
-	cd argus-cli && python -m build
-
-clean-cli: ## Clean Python CLI build artifacts
-	cd argus-cli && rm -rf build dist *.egg-info __pycache__ .pytest_cache
-
 # ── V5 TypeScript CLI ──
 
 install-v5: ## Install V5 CLI dependencies

@@ -42,6 +42,19 @@ export async function assessCommand(target: string, options?: {
 
   // Task 4.1: Initialize feature flags (all opt-in by default)
   const featureFlags = new FeatureFlags(options?.features)
+
+  // Task A: Load project config (./argus.config.yaml) — lowest priority, overridden by env/CLI
+  try {
+    const { readFileSync } = await import("fs")
+    const { parse: YAML } = await import("yaml")
+    const configPath = join(process.cwd(), "argus.config.yaml")
+    const raw = readFileSync(configPath, "utf-8")
+    const parsed = YAML(raw) as { features?: Record<string, boolean> } | undefined
+    if (parsed?.features) {
+      featureFlags.loadFromConfig(parsed.features)
+    }
+  } catch { /* config file missing or invalid — use defaults */ }
+
   featureFlags.loadFromEnv()
   executor.setFeatureFlags(featureFlags)
 

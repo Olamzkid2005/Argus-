@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.15.13",
-  "name": "opencode",
+  "version": "5.0.0",
+  "name": "argus",
   "type": "module",
   "license": "MIT",
   "private": true,
