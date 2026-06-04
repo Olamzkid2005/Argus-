@@ -1187,26 +1187,151 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          messageID,
-          agent: agent.name,
-          model: selectedModel,
-          variant,
-          parts: [
-            ...editorParts,
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map(assign),
-          ],
-        })
-        .catch(() => {})
-      if (editorParts.length > 0) editor.markSelectionSent()
+      // Check for Argus slash commands first
+      const firstLine = inputText.split("\n")[0]
+      const firstWord = firstLine.split(" ")[0]
+      const isArgusSlash = inputText.startsWith("/") && firstWord.length > 1
+      let argusHandled = false
+
+      if (isArgusSlash) {
+        const cmdName = firstWord.slice(1).toLowerCase()
+        const argusCmd = findArgusTuiCommand(cmdName)
+        if (argusCmd) {
+          argusHandled = true
+          const arg = firstLine.slice(firstWord.length).trim()
+          // Run the command and send its output as a chat message
+          const { WorkflowRunner } = await import("@/argus/workflow-runner")
+          void (async () => {
+            try {
+              let output: string
+              if (cmdName === "assess" || cmdName === "scan") {
+                const runner = new WorkflowRunner()
+                const result = await runner.run({ target: arg, useLLM: true })
+                output = [
+                  `**Assessment Complete: ${arg}**`,
+                  `Engagement: \`${result.engagementId}\``,
+                  `Findings: ${result.findings} total`,
+                  `  Critical: ${result.critical}  |  High: ${result.high}  |  Medium: ${result.medium}  |  Low: ${result.low}`,
+                  `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
+                  `\nRun \`/report ${result.engagementId}\` for the full report.`,
+                ].join("\n")
+              } else if (cmdName === "recon") {
+                const runner = new WorkflowRunner()
+                const result = await runner.run({ target: arg, useLLM: false })
+                output = [
+                  `**Recon Complete: ${arg}**`,
+                  `Engagement: \`${result.engagementId}\``,
+                  `Findings: ${result.findings} total`,
+                  `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
+                ].join("\n")
+              } else {
+                output = await argusCmd.handler(arg)
+              }
+              void sdk.client.session.prompt({
+                sessionID,
+                ...selectedModel,
+                messageID: MessageID.ascending(),
+                agent: agent.name,
+                model: selectedModel,
+                variant,
+                parts: [{ id: PartID.ascending(), type: "text" as const, text: output }],
+              })
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err)
+              void sdk.client.session.prompt({
+                sessionID,
+                ...selectedModel,
+                messageID: MessageID.ascending(),
+                agent: agent.name,
+                model: selectedModel,
+                variant,
+                parts: [{ id: PartID.ascending(), type: "text" as const, text: `**Error:** ${errMsg}` }],
+              })
+            }
+          })()
+        }
+      }
+
+      // Check for natural language assessment intent
+      if (!argusHandled) {
+        const { classify } = await import("@/argus/intent-classifier")
+        const intent = classify(inputText)
+        if (intent.type === "assessment") {
+          argusHandled = true
+          const { WorkflowRunner } = await import("@/argus/workflow-runner")
+          void (async () => {
+            void sdk.client.session.prompt({
+              sessionID,
+              ...selectedModel,
+              messageID: MessageID.ascending(),
+              agent: agent.name,
+              model: selectedModel,
+              variant,
+              parts: [{
+                id: PartID.ascending(),
+                type: "text" as const,
+                text: `Starting assessment against ${intent.target}...`,
+              }],
+            })
+            try {
+              const runner = new WorkflowRunner()
+              const result = await runner.run({ target: intent.target, useLLM: intent.useLLM })
+              const output = [
+                `**Assessment Complete: ${intent.target}**`,
+                `Engagement: \`${result.engagementId}\``,
+                `Findings: ${result.findings} total`,
+                `  Critical: ${result.critical}  |  High: ${result.high}  |  Medium: ${result.medium}  |  Low: ${result.low}`,
+                `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
+                `\nRun \`/report ${result.engagementId}\` for the full report.`,
+              ].join("\n")
+              void sdk.client.session.prompt({
+                sessionID,
+                ...selectedModel,
+                messageID: MessageID.ascending(),
+                agent: agent.name,
+                model: selectedModel,
+                variant,
+                parts: [{ id: PartID.ascending(), type: "text" as const, text: output }],
+              })
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err)
+              void sdk.client.session.prompt({
+                sessionID,
+                ...selectedModel,
+                messageID: MessageID.ascending(),
+                agent: agent.name,
+                model: selectedModel,
+                variant,
+                parts: [{ id: PartID.ascending(), type: "text" as const, text: `**Assessment Error:** ${errMsg}` }],
+              })
+            }
+          })()
+        }
+      }
+
+      // Fall through to LLM if not handled by Argus
+      if (!argusHandled) {
+        sdk.client.session
+          .prompt({
+            sessionID,
+            ...selectedModel,
+            messageID,
+            agent: agent.name,
+            model: selectedModel,
+            variant,
+            parts: [
+              ...editorParts,
+              {
+                id: PartID.ascending(),
+                type: "text",
+                text: inputText,
+              },
+              ...nonTextParts.map(assign),
+            ],
+          })
+          .catch(() => {})
+        if (editorParts.length > 0) editor.markSelectionSent()
+      }
     }
     history.append({
       ...store.prompt,

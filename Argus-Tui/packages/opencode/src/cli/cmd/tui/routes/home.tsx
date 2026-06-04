@@ -11,11 +11,18 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
+import { logo as argusLogo } from "@/argus/logo"
+import { findArgusTuiCommand } from "@/argus/tui-commands"
 
 let once = false
 const placeholder = {
-  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
+  normal: [
+    "/assess https://example.com",
+    "/recon https://testphp.vulnweb.com",
+    "/doctor — run health checks",
+    "/status — system status",
+  ],
+  shell: ["argus doctor", "argus status", "argus --help"],
 }
 
 export function Home() {
@@ -72,7 +79,7 @@ export function Home() {
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_logo" mode="replace">
-            <Logo />
+            <Logo shape={argusLogo} idle />
           </TuiPluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
