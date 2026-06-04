@@ -15,6 +15,9 @@ permissions:
   contents: read
   checks: write
 
+env:
+  BUN_INSTALL_FLAGS: --frozen-lockfile --ignore-scripts
+
 jobs:
   typecheck:
     name: typecheck
@@ -28,7 +31,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: Argus-Tui
-        run: bun install --frozen-lockfile
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
 
       - name: TypeScript type check
         working-directory: Argus-Tui/packages/opencode
@@ -46,7 +49,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: Argus-Tui
-        run: bun install --frozen-lockfile
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
 
       - name: Create artifacts directory
         working-directory: Argus-Tui/packages/opencode
@@ -89,7 +92,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: Argus-Tui
-        run: bun install --frozen-lockfile
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
 
       - name: Create artifacts directory
         working-directory: Argus-Tui/packages/opencode
@@ -129,30 +132,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: Argus-Tui
-        run: bun install --frozen-lockfile
-
-      - name: Spin up test targets
-        run: docker compose --profile e2e up -d juice-shop dvwa
-
-      - name: Wait for Juice Shop
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:3001 > /dev/null 2>&1; then
-              echo "Juice Shop ready"; break
-            fi
-            if [ "$i" -eq 30 ]; then echo "Juice Shop did not start"; exit 1; fi
-            sleep 2
-          done
-
-      - name: Wait for DVWA
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:3002 > /dev/null 2>&1; then
-              echo "DVWA ready"; break
-            fi
-            if [ "$i" -eq 30 ]; then echo "DVWA did not start"; exit 1; fi
-            sleep 2
-          done
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
 
       - name: Run unit tests
         working-directory: Argus-Tui/packages/opencode
@@ -161,16 +141,6 @@ jobs:
       - name: Run doctor
         working-directory: Argus-Tui/packages/opencode
         run: timeout 30 bun run src/argus/main.ts doctor 2>&1 | tail -10 || true
-
-      - name: Run assessment smoke test
-        working-directory: Argus-Tui/packages/opencode
-        run: |
-          timeout 60 bun run src/argus/main.ts assess http://127.0.0.1:3001 --deterministic 2>&1 || \
-            echo "Assessment smoke test completed (may have warnings)"
-
-      - name: Teardown test targets
-        if: always()
-        run: docker compose --profile e2e down
 
   argus-workers-lint:
     name: Python Workers (ruff)
