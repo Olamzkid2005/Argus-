@@ -1,8 +1,18 @@
 import { readFileSync } from "fs"
 import YAML from "yaml"
 import { Capability } from "../shared/capabilities"
+import type { SignalQuality } from "../bridge/types"
 
-interface ToolDef {
+export interface RequiresGate {
+  /** Tool only runs if the target tech stack contains one of these strings */
+  tech_contains?: string[]
+  /** Tool only runs if recon has published these signals */
+  recon_signals?: string[]
+  /** Tool only runs if the target URL scheme matches one of these */
+  target_scheme?: string[]
+}
+
+export interface ToolDef {
   name: string
   label: string
   capabilities: string[]
@@ -15,10 +25,23 @@ interface ToolDef {
     confidence_score: number
     coverage_score: number
   }
+  /** Planner intelligence — these are read from the MCP tool definitions at runtime */
+  signal_quality?: SignalQuality
+  requires?: RequiresGate
+  priority?: number
+  cost?: "low" | "medium" | "high"
 }
 
 interface ToolDefsFile {
   tools: ToolDef[]
+}
+
+/** Filter context used by requires gates when selecting tools. */
+export interface GateContext {
+  /** Tech stack detected from recon findings (e.g. ["python", "react", "graphql"]) */
+  techStack?: string[]
+  /** Target URL scheme (e.g. "http" or "https") */
+  targetScheme?: string
 }
 
 export class ToolRegistry {
@@ -44,7 +67,6 @@ export class ToolRegistry {
         if (!this.toolsByCapability.has(c)) {
           this.toolsByCapability.set(c, [])
         }
-        // Safe: .set(c, []) called 2 lines above ensures the entry exists
         this.toolsByCapability.get(c)!.push(tool)
       }
     }
@@ -67,16 +89,28 @@ export class ToolRegistry {
   }
 
   /** @deprecated Use selectBest() instead */
-  findBestTools(capabilities: Capability[], _targetType: string): ToolDef[] {
-    return this.selectBest(capabilities, _targetType)
+  findBestTools(capabilities: Capability[], targetType: string): ToolDef[] {
+    return this.selectBest(capabilities, targetType)
   }
 
-  selectBest(capabilities: Capability[], _targetType?: string): ToolDef[] {
+  /**
+   * Select the best tools for the given capabilities, optionally filtered
+   * by requires gates (tech_contains, target_scheme).
+   *
+   * Tools with unmet requires gates are filtered out. Remaining tools are
+   * ranked by scoring (confidence + coverage), then by priority.
+   */
+  selectBest(capabilities: Capability[], _targetType?: string, gateContext?: GateContext): ToolDef[] {
     const candidates = new Map<string, { tool: ToolDef; score: number }>()
 
     for (const cap of capabilities) {
       const tools = this.getToolsByCapability(cap)
       for (const tool of tools) {
+        // Apply requires gates if context is available
+        if (gateContext && !this.passesGates(tool, gateContext)) {
+          continue
+        }
+
         const current = candidates.get(tool.name)
         const score = (tool.scoring?.confidence_score ?? 50) + (tool.scoring?.coverage_score ?? 50)
 
@@ -87,7 +121,40 @@ export class ToolRegistry {
     }
 
     return Array.from(candidates.values())
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => {
+        // Sort by score desc, then by priority desc as tiebreaker
+        if (b.score !== a.score) return b.score - a.score
+        return (b.tool.priority ?? 50) - (a.tool.priority ?? 50)
+      })
       .map((c) => c.tool)
+  }
+
+  /**
+   * Check whether a tool passes its requires gates given the current context.
+   * All declared gates must pass (AND logic). Undeclared gates are skipped.
+   */
+  private passesGates(tool: ToolDef, context: GateContext): boolean {
+    const requires = tool.requires
+    if (!requires) return true
+
+    // tech_contains: tool only runs if target tech stack contains at least one match
+    if (requires.tech_contains && requires.tech_contains.length > 0) {
+      const stack = context.techStack ?? []
+      const hasMatch = requires.tech_contains.some((t) =>
+        stack.some((s) => s.toLowerCase().includes(t.toLowerCase())),
+      )
+      if (!hasMatch) return false
+    }
+
+    // target_scheme: tool only runs if target URL scheme matches
+    if (requires.target_scheme && requires.target_scheme.length > 0) {
+      const scheme = context.targetScheme ?? "https"
+      if (!requires.target_scheme.includes(scheme)) return false
+    }
+
+    // recon_signals: requires the planner to pass them explicitly — skip here
+    // (the planner is responsible for setting recon_signals in the context)
+
+    return true
   }
 }

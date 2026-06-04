@@ -1,0 +1,15 @@
+name: waybackurls
+command: waybackurls
+description: "Fetch URLs from Wayback Machine archive"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain"
+    required: true
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 35
+cost: low
+enabled: true
+timeout: 120

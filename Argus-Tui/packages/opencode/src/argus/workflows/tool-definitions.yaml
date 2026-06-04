@@ -95,3 +95,240 @@ tools:
     scoring:
       confidence_score: 85
       coverage_score: 80
+
+  - name: katana
+    label: Katana Web Crawler
+    capabilities:
+      - content_discovery
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 80
+
+  - name: gau
+    label: GetAllURLs Archive Crawler
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 50
+      coverage_score: 70
+
+  - name: waybackurls
+    label: Wayback Machine URL Fetcher
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 50
+      coverage_score: 65
+
+  - name: amass
+    label: Amass Subdomain Enumeration
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 85
+
+  - name: naabu
+    label: Naabu Port Scanner
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+
+  - name: gospider
+    label: GoSpider Web Spider
+    capabilities:
+      - content_discovery
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 70
+      coverage_score: 75
+
+  - name: dalfox
+    label: Dalfox XSS Scanner
+    capabilities:
+      - sqli_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: sqlmap
+    label: SQLMap SQL Injection Scanner
+    capabilities:
+      - sqli_detection
+      - database_exfiltration
+    requires_auth: false
+    destructive: true
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+
+  - name: arjun
+    label: Arjun HTTP Parameter Discovery
+    capabilities:
+      - api_probing
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 60
+      coverage_score: 70
+
+  - name: jwt_tool
+    label: JWT Security Toolkit
+    capabilities:
+      - jwt_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 60
+
+  - name: commix
+    label: Commix Command Injection Scanner
+    capabilities:
+      - ssrf_check
+    requires_auth: false
+    destructive: true
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 65
+
+  - name: testssl
+    label: TestSSL TLS Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+
+  - name: wafw00f
+    label: WAF Fingerprinter
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+
+  - name: semgrep
+    label: Semgrep Static Analysis
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+
+  - name: gitleaks
+    label: Gitleaks Secret Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+
+  - name: trivy
+    label: Trivy Vulnerability Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+
+  - name: bandit
+    label: Bandit Python Linter
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: pip-audit
+    label: PIP Audit Dependency Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 70
+      coverage_score: 65

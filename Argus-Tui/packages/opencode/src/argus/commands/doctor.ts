@@ -1,7 +1,8 @@
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import { join, resolve } from "path"
 import { homedir } from "os"
 import { spawn, execFile } from "child_process"
+import { xdgData } from "xdg-basedir"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
@@ -9,6 +10,43 @@ import { WorkersBridge } from "../bridge/mcp-client"
 // Project root resolved once from __dirname to avoid brittle relative-path chains.
 // __dirname = .../packages/opencode/src/argus/commands/ => up 6 levels to repo root.
 const projectRoot = resolve(__dirname, "../../../../../../")
+
+/**
+ * Read provider credentials from OpenCode's own auth.json (stored in XDG data dir).
+ * This is the canonical source of provider config when users configure providers
+ * through the OpenCode TUI or `opencode providers set` — not through .env files.
+ */
+interface OpenCodeAuthEntry {
+  type: "api" | "oauth" | "wellknown"
+  key?: string
+  access?: string
+  token?: string
+  [key: string]: unknown
+}
+
+function readOpenCodeProviders(): Record<string, OpenCodeAuthEntry> {
+  const dataDir = xdgData ?? join(homedir(), ".local", "share")
+  const authPath = join(dataDir, "opencode", "auth.json")
+  try {
+    return JSON.parse(readFileSync(authPath, "utf-8"))
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Extract usable API keys from OpenCode's provider registry.
+ * Returns the first key found (api.type.key, oauth.access, or wellknown.key/token).
+ */
+function findOpenCodeApiKey(): string | undefined {
+  const providers = readOpenCodeProviders()
+  for (const [_id, entry] of Object.entries(providers)) {
+    if (entry.type === "api" && entry.key) return entry.key
+    if (entry.type === "oauth" && entry.access) return entry.access
+    if (entry.type === "wellknown" && (entry.key || entry.token)) return entry.key ?? entry.token
+  }
+  return undefined
+}
 
 interface CheckResult {
   name: string
@@ -167,11 +205,16 @@ function dbCheck(): CheckResult {
 function envCheck(): CheckResult {
   const envPath = join(homedir(), ".argus", ".env")
   const localEnv = join(projectRoot, ".env")
+  const envKeyFound = !!(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
+
+  // Check OpenCode's own provider registry as well
+  const openCodeKey = findOpenCodeApiKey()
+  const providers = readOpenCodeProviders()
+  const providerCount = Object.keys(providers).length
+  const providerNames = Object.keys(providers).join(", ")
 
   if (existsSync(envPath) || existsSync(localEnv)) {
-    const hasKey = !!(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
-
-    if (hasKey) {
+    if (envKeyFound) {
       return {
         name: "Configuration",
         status: "PASS",
@@ -181,15 +224,33 @@ function envCheck(): CheckResult {
 
     return {
       name: "Configuration",
-      status: "WARN",
-      message: "Environment file found but no LLM API key detected. Set LLM_API_KEY for LLM-powered assessments.",
+      status: openCodeKey ? "PASS" : "WARN",
+      message: openCodeKey
+        ? `.env file found (no keys), but ${providerCount} provider(s) configured in OpenCode registry: ${providerNames}`
+        : "Environment file found but no LLM API key detected. Set LLM_API_KEY for LLM-powered assessments.",
+    }
+  }
+
+  if (openCodeKey) {
+    return {
+      name: "Configuration",
+      status: "PASS",
+      message: `${providerCount} provider(s) configured via OpenCode registry: ${providerNames}`,
+    }
+  }
+
+  if (envKeyFound) {
+    return {
+      name: "Configuration",
+      status: "PASS",
+      message: "API key found in environment variables",
     }
   }
 
   return {
     name: "Configuration",
     status: "WARN",
-    message: "No .env file found. Copy .env.example to .env and configure. Deterministic mode will still work.",
+    message: "No .env file, OpenCode provider registry, or env var API key found. Deterministic mode will still work.",
   }
 }
 
@@ -350,28 +411,103 @@ function toolchainCheck(): CheckResult {
   return { name: "Toolchain", status: "PASS", message: messages.join("; ") || "No tools defined" }
 }
 
+/** Known endpoint URLs for common providers used in connectivity pings */
+const PROVIDER_ENDPOINTS: Record<string, string> = {
+  openai: "https://api.openai.com/v1/models",
+  anthropic: "https://api.anthropic.com/v1/messages",
+  google: "https://generativelanguage.googleapis.com/v1beta/models",
+  groq: "https://api.groq.com/openai/v1/models",
+  mistral: "https://api.mistral.ai/v1/models",
+  openrouter: "https://openrouter.ai/api/v1/models",
+  together: "https://api.together.xyz/v1/models",
+  deepseek: "https://api.deepseek.com/v1/models",
+}
+
+/** Known auth-header formats for common providers */
+function buildAuthHeader(providerID: string, key: string): [string, string] {
+  switch (providerID) {
+    case "google":
+      return ["x-goog-api-key", key]
+    case "anthropic":
+      return ["x-api-key", key]
+    default:
+      return ["Authorization", `Bearer ${key}`]
+  }
+}
+
 /** LLM provider check: tests LLM connectivity with a minimal ping */
 async function llmProviderCheck(): Promise<CheckResult> {
-  const key = process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY
-  if (!key) {
-    return { name: "LLM Provider", status: "WARN", message: "No API key configured. Set LLM_API_KEY." }
+  // Collect API keys from all sources
+  const envKeys: Array<{ key: string; source: string }> = []
+  if (process.env.LLM_API_KEY) envKeys.push({ key: process.env.LLM_API_KEY, source: "LLM_API_KEY" })
+  if (process.env.ANTHROPIC_API_KEY) envKeys.push({ key: process.env.ANTHROPIC_API_KEY, source: "ANTHROPIC_API_KEY" })
+  if (process.env.OPENAI_API_KEY) envKeys.push({ key: process.env.OPENAI_API_KEY, source: "OPENAI_API_KEY" })
+
+  // Also try keys from OpenCode's provider registry
+  const openCodeKey = findOpenCodeApiKey()
+  if (openCodeKey) {
+    envKeys.push({ key: openCodeKey, source: "OpenCode provider registry" })
   }
 
-  // Try a minimal ping to the configured provider
-  const provider = process.env.LLM_PROVIDER || "openai"
-  const apiUrl = process.env.LLM_API_URL || "https://api.openai.com/v1/models"
+  if (envKeys.length === 0) {
+    return { name: "LLM Provider", status: "WARN", message: "No API key configured. Set LLM_API_KEY or configure a provider in OpenCode." }
+  }
 
+  // Determine which provider to test based on env or fallback
+  const configuredProvider = process.env.LLM_PROVIDER || ""
+  const providers = readOpenCodeProviders()
+
+  // Try each discovered key against the configured/default endpoint
+  for (const { key, source } of envKeys) {
+    // Try the explicitly configured provider first
+    if (configuredProvider && PROVIDER_ENDPOINTS[configuredProvider]) {
+      const [header, value] = buildAuthHeader(configuredProvider, key)
+      const result = await tryPing(configuredProvider, PROVIDER_ENDPOINTS[configuredProvider], header, value)
+      if (result) return result
+      continue // if this provider failed, try the next key
+    }
+
+    // Try each known provider endpoint with this key
+    for (const [providerID, url] of Object.entries(PROVIDER_ENDPOINTS)) {
+      const [header, value] = buildAuthHeader(providerID, key)
+      const result = await tryPing(providerID, url, header, value)
+      if (result) return result
+    }
+  }
+
+  // All attempts failed — give the best diagnostic
+  const attempted = configuredProvider || Object.keys(PROVIDER_ENDPOINTS).join(", ")
+  return {
+    name: "LLM Provider",
+    status: "WARN",
+    message: `None of the attempted providers (${attempted}) accepted the key from ${envKeys.map((k) => k.source).join(", ")}. Check API key and endpoint.`,
+  }
+}
+
+/** Try pinging a single provider endpoint with the given auth header. Returns a PASS result or undefined. */
+async function tryPing(
+  providerID: string,
+  url: string,
+  header: string,
+  value: string,
+): Promise<CheckResult | undefined> {
   try {
-    const resp = await fetch(apiUrl, {
-      headers: { Authorization: `Bearer ${key}` },
+    const resp = await fetch(url, {
+      headers: { [header]: value },
       signal: AbortSignal.timeout(10000),
     })
     if (resp.ok) {
-      return { name: "LLM Provider", status: "PASS", message: `${provider} endpoint reachable (HTTP ${resp.status})` }
+      return { name: "LLM Provider", status: "PASS", message: `${providerID} endpoint reachable (HTTP ${resp.status})` }
     }
-    return { name: "LLM Provider", status: "WARN", message: `${provider} returned HTTP ${resp.status} — check API key and endpoint` }
+    // 401 means key was tried but rejected — don't retry other providers with same key
+    if (resp.status === 401) {
+      return undefined // let the caller try the next key
+    }
+    // Other errors (429 rate limit, 403 forbidden, etc.)
+    return { name: "LLM Provider", status: "WARN", message: `${providerID} returned HTTP ${resp.status}` }
   } catch (error) {
-    return { name: "LLM Provider", status: "WARN", message: `${provider} unreachable: ${(error as Error).cause ?? (error as Error).message}` }
+    // Network errors are non-fatal — try the next provider
+    return undefined
   }
 }
 

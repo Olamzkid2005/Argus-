@@ -1,0 +1,25 @@
+name: arjun
+command: arjun
+description: "HTTP parameter discovery tool"
+args:
+  - "-m"
+  - "GET"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "-u"
+  - name: threads
+    type: integer
+    description: "Thread count"
+    required: false
+    flag: "-t"
+    default: 10
+capabilities:
+  - api_probing
+signal_quality: CANDIDATE
+priority: 50
+cost: medium
+enabled: true
+timeout: 300

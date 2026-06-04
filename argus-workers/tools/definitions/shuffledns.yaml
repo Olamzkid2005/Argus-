@@ -1,0 +1,24 @@
+name: shuffledns
+command: shuffledns
+description: "Mass DNS resolver for resolved subdomain enumeration"
+args:
+  - "-silent"
+  - "-json"
+parameters:
+  - name: target
+    type: string
+    description: "Subdomain list or domain"
+    required: true
+    flag: "-d"
+  - name: wordlist
+    type: string
+    description: "Wordlist for brute forcing"
+    required: false
+    flag: "-w"
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 45
+cost: medium
+enabled: true
+timeout: 300

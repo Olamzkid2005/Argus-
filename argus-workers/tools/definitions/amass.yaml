@@ -1,0 +1,24 @@
+name: amass
+command: amass
+description: "Subdomain enumeration and reconnaissance tool"
+args:
+  - "enum"
+  - "-json"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain"
+    required: true
+    flag: "-d"
+  - name: brute
+    type: boolean
+    description: "Enable brute forcing"
+    required: false
+    flag: "-brute"
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 65
+cost: high
+enabled: true
+timeout: 600

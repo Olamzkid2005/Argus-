@@ -1,0 +1,34 @@
+name: sqlmap
+command: sqlmap
+description: "SQL injection detection and exploitation tool"
+args:
+  - "--batch"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "-u"
+  - name: level
+    type: integer
+    description: "Test level (1-5)"
+    required: false
+    flag: "--level"
+    default: 1
+  - name: risk
+    type: integer
+    description: "Risk level (1-3)"
+    required: false
+    flag: "--risk"
+    default: 1
+capabilities:
+  - sqli_detection
+  - database_exfiltration
+signal_quality: CONFIRMED
+requires:
+  recon_signals:
+    - parameterized_forms
+priority: 90
+cost: high
+enabled: true
+timeout: 600

@@ -1,0 +1,22 @@
+name: wafw00f
+command: wafw00f
+description: "Web Application Firewall fingerprinting and detection"
+args:
+  - "-a"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+  - name: verbose
+    type: boolean
+    description: "Enable verbose output"
+    required: false
+    flag: "-v"
+capabilities:
+  - web_recon
+signal_quality: CONFIRMED
+priority: 45
+cost: low
+enabled: true
+timeout: 120

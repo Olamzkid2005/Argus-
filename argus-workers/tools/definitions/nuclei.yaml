@@ -1,6 +1,6 @@
 name: nuclei
 command: nuclei
-description: "Nuclei vulnerability scanner using customizable templates"
+description: "Nuclei vulnerability scanner using customizable YAML templates"
 args:
   - "-json"
   - "-silent"
@@ -18,5 +18,26 @@ parameters:
     description: "Target URL or host to scan"
     required: true
     flag: "-u"
+  - name: severity
+    type: string
+    description: "Severity filter (info, low, medium, high, critical)"
+    required: false
+    flag: "-severity"
+  - name: templates
+    type: string
+    description: "Custom template directory or template ID"
+    required: false
+    flag: "-t"
+  - name: tags
+    type: string
+    description: "Template tags to run (comma-separated)"
+    required: false
+    flag: "-tags"
+capabilities:
+  - vulnerability_scanning
+  - template_scanning
+signal_quality: CONFIRMED
+priority: 95
+cost: medium
 enabled: true
-timeout: 120
+timeout: 600

@@ -1,0 +1,29 @@
+name: wpscan
+command: wpscan
+description: "WordPress vulnerability scanner"
+args:
+  - "-f"
+  - "json"
+  - "--no-banner"
+parameters:
+  - name: target
+    type: string
+    description: "WordPress URL"
+    required: true
+    flag: "--url"
+  - name: api_token
+    type: string
+    description: "WPScan API token"
+    required: false
+    flag: "--api-token"
+capabilities:
+  - vulnerability_scanning
+signal_quality: CANDIDATE
+requires:
+  tech_contains:
+    - wordpress
+    - wp-
+priority: 55
+cost: medium
+enabled: true
+timeout: 600

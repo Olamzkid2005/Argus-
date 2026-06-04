@@ -1,0 +1,19 @@
+name: chaos
+command: chaos
+description: "ProjectDiscovery chaos data feed client for subdomain enumeration"
+args:
+  - "-json"
+  - "-silent"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain"
+    required: true
+    flag: "-d"
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 30
+cost: low
+enabled: true
+timeout: 120

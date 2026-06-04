@@ -11,6 +11,36 @@ import time
 from pathlib import Path
 from typing import Any
 
+
+# ── Signal quality tiers for planner intelligence ──
+
+class SignalQuality:
+    """Signal quality tier for a tool's findings reliability.
+    
+    Maps to ConfidenceEngine baseline:
+        CONFIRMED  → HIGH   (e.g. sqlmap, nuclei verified templates)
+        PROBABLE   → MEDIUM (e.g. dalfox, semgrep)
+        CANDIDATE  → LOW    (e.g. ffuf, nikto, passive recon)
+    """
+    CONFIRMED = "CONFIRMED"
+    PROBABLE = "PROBABLE"
+    CANDIDATE = "CANDIDATE"
+
+
+# ── Tool cost tiers for planner ranking ──
+
+class ToolCost:
+    """Relative execution cost for a tool.
+    
+    Used by planner to select tools appropriate for scan depth:
+        low    → quick scan (always run)
+        medium → full assessment (run by default)
+        high   → deep scan (only when explicitly requested)
+    """
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
 from tracing import setup_tracing
 
 tracer = setup_tracing()
@@ -37,12 +67,24 @@ class ToolDefinition:
     """
     A tool definition loaded from YAML or registered programmatically.
     Mirrors CyberStrikeAI's YAML tool definitions pattern.
+    
+    Extended with planner intelligence fields:
+        capabilities   — capabilities this tool satisfies (e.g. sqli_detection)
+        signal_quality — reliability tier for confidence baseline
+        requires       — gates that must pass before this tool is eligible
+        priority       — ranking weight (0-100, higher = preferred)
+        cost           — execution cost tier for scan-depth filtering
     """
     def __init__(self, name: str, command: str, description: str = "",
                  args: list[str] = None, parameters: list[dict] = None,
                  enabled: bool = True, timeout: int = 300,
                  env: dict[str, str] = None,
-                 binary: str | None = None):
+                 binary: str | None = None,
+                 capabilities: list[str] = None,
+                 signal_quality: str = None,
+                 requires: dict = None,
+                 priority: int = None,
+                 cost: str = None):
         self.name = name
         self.command = command
         self.description = description
@@ -52,10 +94,16 @@ class ToolDefinition:
         self.timeout = timeout
         self.env = env or {}
         self.binary = binary
+        # Planner intelligence fields
+        self.capabilities = capabilities or []
+        self.signal_quality = signal_quality
+        self.requires = requires or {}
+        self.priority = priority
+        self.cost = cost
 
     def to_dict(self) -> dict:
-        """Serialize to MCP tool schema format."""
-        return {
+        """Serialize to MCP tool schema format (includes planner metadata)."""
+        result = {
             "name": self.name,
             "description": self.description,
             "inputSchema": {
@@ -70,30 +118,42 @@ class ToolDefinition:
                     for p in self.parameters
                 },
                 "required": [p.name for p in self.parameters if p.required],
-            }
+            },
+            "capabilities": self.capabilities,
+            "signal_quality": self.signal_quality,
+            "requires": self.requires,
+            "priority": self.priority,
+            "cost": self.cost,
         }
+        # Strip None values for cleaner output
+        return {k: v for k, v in result.items() if v is not None and v != []}
 
 
 class MCPToolResult:
     """Result of an MCP tool execution."""
     def __init__(self, success: bool, output: str = "", error: str = "",
-                 duration_ms: int = 0, tool: str = "", data: dict = None):
+                 duration_ms: int = 0, tool: str = "", data: dict = None,
+                 signal_quality: str = None):
         self.success = success
         self.output = output
         self.error = error
         self.duration_ms = duration_ms
         self.tool = tool
         self.data = data or {}
+        self.signal_quality = signal_quality
 
     def to_dict(self) -> dict:
+        meta = {
+            "tool": self.tool,
+            "duration_ms": self.duration_ms,
+            "success": self.success,
+        }
+        if self.signal_quality:
+            meta["signal_quality"] = self.signal_quality
         return {
             "content": [{"type": "text", "text": self.output or self.error}],
             "isError": not self.success,
-            "meta": {
-                "tool": self.tool,
-                "duration_ms": self.duration_ms,
-                "success": self.success,
-            }
+            "meta": meta,
         }
 
 
@@ -159,6 +219,12 @@ class MCPServer:
                             parameters=data.get("parameters", []),
                             enabled=data.get("enabled", True),
                             timeout=data.get("timeout", 300),
+                            # Planner intelligence fields (optional — backward compat)
+                            capabilities=data.get("capabilities", []),
+                            signal_quality=data.get("signal_quality"),
+                            requires=data.get("requires", {}),
+                            priority=data.get("priority"),
+                            cost=data.get("cost"),
                         )
                         self.register_tool(tool)
                         logger.info("Loaded tool definition: %s", tool.name)
@@ -224,6 +290,8 @@ class MCPServer:
                 success=False, error=f"Tool disabled: {name}", tool=name
             ).to_dict()
 
+        tool_signal_quality = tool.signal_quality if hasattr(tool, 'signal_quality') else None
+
         # Build command line from tool definition + arguments
         cmd = [tool.command]
         cmd.extend(tool.args)  # Static args
@@ -249,6 +317,7 @@ class MCPServer:
                 success=False,
                 error=f"Security validation failed: {e}",
                 tool=name,
+                signal_quality=tool_signal_quality,
             ).to_dict()
 
         # Track execution
@@ -301,6 +370,7 @@ class MCPServer:
                 error=result.stderr,
                 duration_ms=duration_ms,
                 tool=name,
+                signal_quality=tool_signal_quality,
             ).to_dict()
 
         except subprocess.TimeoutExpired:
@@ -312,6 +382,7 @@ class MCPServer:
                 error=f"Tool execution timed out after {timeout or tool.timeout}s",
                 duration_ms=duration_ms,
                 tool=name,
+                signal_quality=tool_signal_quality,
             ).to_dict()
         except Exception as e:
             duration_ms = int((time.time() - start) * 1000)
@@ -321,6 +392,7 @@ class MCPServer:
                 error=str(e),
                 duration_ms=duration_ms,
                 tool=name,
+                signal_quality=tool_signal_quality,
             ).to_dict()
 
     def get_stats(self) -> dict:

@@ -1,0 +1,21 @@
+name: gosec
+command: gosec
+description: "Go security code scanner"
+args:
+  - "-fmt=json"
+  - "-quiet"
+parameters:
+  - name: target
+    type: string
+    description: "Target Go package path"
+    required: true
+capabilities:
+  - vulnerability_scanning
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - go
+priority: 65
+cost: medium
+enabled: true
+timeout: 600

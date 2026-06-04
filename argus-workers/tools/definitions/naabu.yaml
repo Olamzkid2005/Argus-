@@ -1,0 +1,28 @@
+name: naabu
+command: naabu
+description: "Port scanning tool (fast TCP/UDP port discovery)"
+args:
+  - "-json"
+parameters:
+  - name: target
+    type: string
+    description: "Target host"
+    required: true
+    flag: "-host"
+  - name: top_ports
+    type: integer
+    description: "Top ports to scan"
+    required: false
+    flag: "-top-ports"
+  - name: port_range
+    type: string
+    description: "Port range (e.g. 1-1000)"
+    required: false
+    flag: "-p"
+capabilities:
+  - port_scanning
+signal_quality: CANDIDATE
+priority: 75
+cost: medium
+enabled: true
+timeout: 300

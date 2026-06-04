@@ -1,0 +1,26 @@
+name: masscan
+command: masscan
+description: "Massive-scale port scanner (entire internet in minutes)"
+args:
+  - "--rate"
+  - "1000"
+  - "--output-format"
+  - "json"
+parameters:
+  - name: target
+    type: string
+    description: "Target CIDR range or IP"
+    required: true
+    flag: "--range"
+  - name: ports
+    type: string
+    description: "Port range (e.g. 80,443 or 1-65535)"
+    required: true
+    flag: "-p"
+capabilities:
+  - port_scanning
+signal_quality: CANDIDATE
+priority: 50
+cost: high
+enabled: true
+timeout: 600

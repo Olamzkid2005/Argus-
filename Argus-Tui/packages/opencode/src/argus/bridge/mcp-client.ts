@@ -297,12 +297,12 @@ export class WorkersBridge {
       }
 
       // Transform MCP response format to ToolResult format
-      // Python MCP server returns: { content: [...], isError: bool, meta: { success, duration_ms, tool } }
-      // Executor expects:        { success: bool, data: unknown, error?: string, durationMs: number }
+      // Python MCP server returns: { content: [...], isError: bool, meta: { success, duration_ms, tool, signal_quality } }
+      // Executor expects:        { success: bool, data: unknown, error?: string, durationMs: number, signalQuality?: string }
       const mcpResponse = raw as {
         content?: Array<{ type: string; text: string }>
         isError?: boolean
-        meta?: { success?: boolean; duration_ms?: number; tool?: string }
+        meta?: { success?: boolean; duration_ms?: number; tool?: string; signal_quality?: string }
       }
       const text = mcpResponse.content?.[0]?.text ?? ""
       const result: ToolResult = {
@@ -310,6 +310,7 @@ export class WorkersBridge {
         data: text,
         error: mcpResponse.isError ? text : undefined,
         durationMs: mcpResponse.meta?.duration_ms ?? 0,
+        signalQuality: mcpResponse.meta?.signal_quality as ToolResult["signalQuality"],
       }
       return result
     } catch (error) {

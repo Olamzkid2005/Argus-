@@ -1,0 +1,17 @@
+name: gau
+command: gau
+description: "Get all URLs from web archives (Wayback, AlienVault, etc.)"
+args:
+  - "--json"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain"
+    required: true
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 40
+cost: low
+enabled: true
+timeout: 180

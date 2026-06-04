@@ -56,7 +56,11 @@ export class WorkflowPlanner {
     const phases: PhaseExecutionRequest[] = []
     for (let i = 0; i < workflow.phases.length; i++) {
       const def = workflow.phases[i]
-      const tools = this.toolRegistry.selectBest(def.required_capabilities, targetType)
+      // Pass gate context for tech-based and scheme-based tool filtering
+      const tools = this.toolRegistry.selectBest(def.required_capabilities, targetType, {
+        techStack: plannerContext.techStack,
+        targetScheme: target.startsWith("https") ? "https" : "http",
+      })
 
       if (tools.length === 0) {
         if (def.error_recovery !== "fail_fast") {

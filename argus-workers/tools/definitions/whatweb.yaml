@@ -8,5 +8,10 @@ parameters:
     type: string
     description: "Target URL to fingerprint"
     required: true
+capabilities:
+  - technology_detection
+signal_quality: CANDIDATE
+priority: 75
+cost: low
 enabled: true
 timeout: 120

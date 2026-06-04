@@ -1,0 +1,18 @@
+name: testssl
+command: testssl
+description: "TLS/SSL security testing tool"
+parameters:
+  - name: target
+    type: string
+    description: "Target host:port"
+    required: true
+capabilities:
+  - vulnerability_scanning
+signal_quality: CANDIDATE
+requires:
+  target_scheme:
+    - https
+priority: 60
+cost: medium
+enabled: true
+timeout: 300

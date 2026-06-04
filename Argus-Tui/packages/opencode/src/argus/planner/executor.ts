@@ -2,6 +2,8 @@ import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding, Er
 import { Capability } from "./capabilities"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { WorkersBridge } from "../bridge/mcp-client"
+import type { SignalQuality } from "../bridge/types"
+import { Confidence } from "../shared/types"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
 import type { ApprovalGate } from "../workflows/types"
@@ -9,6 +11,24 @@ import { WorkflowRegistry } from "../workflows/registry"
 import type { EvidenceCollector } from "../evidence/collector"
 import type { BrowserEngine } from "../browser/engine"
 import { Feature, type FeatureFlags } from "../config/feature-flags"
+
+/**
+ * Map a tool's signal_quality tier to a baseline confidence level.
+ * This gives the ConfidenceEngine a smarter starting point than always INFORMATIONAL.
+ *
+ *   CONFIRMED  → HIGH    (e.g. sqlmap, browser verifier, nuclei CVE templates)
+ *   PROBABLE   → MEDIUM  (e.g. dalfox, semgrep, gitleaks)
+ *   CANDIDATE  → LOW     (e.g. ffuf, nikto, passive recon)
+ *   undefined  → INFORMATIONAL (legacy — no signal_quality metadata)
+ */
+function baselineConfidence(signalQuality: SignalQuality | undefined): number {
+  switch (signalQuality) {
+    case "CONFIRMED": return Confidence.HIGH
+    case "PROBABLE":  return Confidence.MEDIUM
+    case "CANDIDATE": return Confidence.LOW
+    default:          return Confidence.INFORMATIONAL
+  }
+}
 
 export interface PhaseExecutor {
   execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult>
@@ -134,9 +154,12 @@ export class InProcessExecutor implements PhaseExecutor {
 
             if (result.success && result.data) {
               const data = result.data
+              const baseConfidence = baselineConfidence(result.signalQuality)
               if (Array.isArray(data)) {
                 // Structured findings from tool (expected format)
+                // Apply signal_quality as a baseline floor for each finding
                 for (const finding of data) {
+                  finding.confidence = Math.max(finding.confidence ?? 0, baseConfidence)
                   const promoted = this.confidenceEngine.promote(finding)
                   findings.push({ ...finding, confidence: promoted })
                 }
@@ -149,7 +172,7 @@ export class InProcessExecutor implements PhaseExecutor {
                   id: `find-${tool.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                   title: `${tool.name} scan against ${phase.target}`,
                   severity: 2,
-                  confidence: 0.5,
+                  confidence: baseConfidence,
                   status: "PENDING",
                   description: truncated,
                   tool: tool.name,

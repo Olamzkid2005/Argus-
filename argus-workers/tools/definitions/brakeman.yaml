@@ -1,0 +1,27 @@
+name: brakeman
+command: brakeman
+description: "Ruby on Rails security scanner for static analysis"
+args:
+  - "--format"
+  - "json"
+parameters:
+  - name: target
+    type: string
+    description: "Target Rails application path"
+    required: true
+  - name: confidence
+    type: string
+    description: "Minimum confidence level (1-3)"
+    required: false
+    flag: "--confidence-level"
+    default: "2"
+capabilities:
+  - vulnerability_scanning
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - ruby
+priority: 65
+cost: medium
+enabled: true
+timeout: 600

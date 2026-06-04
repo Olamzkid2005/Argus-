@@ -1,0 +1,15 @@
+name: sn1per
+command: sn1per
+description: "Automated penetration testing framework"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain or IP"
+    required: true
+capabilities:
+  - vulnerability_scanning
+signal_quality: CANDIDATE
+priority: 40
+cost: high
+enabled: true
+timeout: 600

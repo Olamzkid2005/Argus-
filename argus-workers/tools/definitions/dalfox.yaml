@@ -1,0 +1,27 @@
+name: dalfox
+command: dalfox
+description: "XSS vulnerability scanner with DOM/param analysis"
+args:
+  - "--json"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+  - name: blind
+    type: string
+    description: "Blind XSS callback URL"
+    required: false
+    flag: "-b"
+  - name: deep_dom
+    type: boolean
+    description: "Enable deep DOM scanning"
+    required: false
+    flag: "--deep-dom"
+capabilities:
+  - sqli_detection
+signal_quality: PROBABLE
+priority: 75
+cost: medium
+enabled: true
+timeout: 600
