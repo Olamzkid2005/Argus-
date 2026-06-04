@@ -210,6 +210,53 @@ const commands: ArgusTuiCommand[] = [
       return await configCommand()
     },
   },
+  {
+    name: "help",
+    title: "Show help",
+    description: "Show all Argus commands with descriptions",
+    slashes: ["help", "?"],
+    needsTarget: false,
+    handler: async () => {
+      const all = getArgusTuiCommands()
+      // Build a formatted help text grouped by category
+      const lines = [
+        "**Argus Commands**",
+        "",
+        // Assessment
+        "**Assessment**",
+        `  /assess <target>   ${all.find((c) => c.name === "assess")?.description ?? "Run assessment"}`,
+        `  /recon <target>    ${all.find((c) => c.name === "recon")?.description ?? "Run reconnaissance"}`,
+        "",
+        // System
+        "**System**",
+        `  /doctor            ${all.find((c) => c.name === "doctor")?.description ?? "Health checks"}`,
+        `  /status            ${all.find((c) => c.name === "status")?.description ?? "System status"}`,
+        `  /config            ${all.find((c) => c.name === "config")?.description ?? "Configuration"}`,
+        "",
+        // Data
+        "**Data**",
+        `  /findings          ${all.find((c) => c.name === "findings")?.description ?? "Browse findings"}`,
+        `  /engagements       ${all.find((c) => c.name === "engagements")?.description ?? "List engagements"}`,
+        `  /report <id>       ${all.find((c) => c.name === "report")?.description ?? "Generate report"}`,
+        "",
+        // Tools
+        "**Tools**",
+        `  /tools             ${all.find((c) => c.name === "tools")?.description ?? "Show MCP tools"}`,
+        `  /workflows         ${all.find((c) => c.name === "workflows")?.description ?? "Show workflows"}`,
+        `  /verify <finding>  ${all.find((c) => c.name === "verify")?.description ?? "Browser verification"}`,
+        `  /evidence          ${all.find((c) => c.name === "evidence")?.description ?? "Browse evidence"}`,
+        "",
+        "**Natural language**",
+        '  Type "assess https://target.com" or "find vulnerabilities in https://target.com"',
+        "  and Argus will automatically route to the assessment workflow.",
+        "",
+        "**Navigation**",
+        "  /help, /?  Show this help",
+        "  /config    Show configuration",
+      ]
+      return lines.join("\n")
+    },
+  },
 ]
 
 export function getArgusTuiCommands(): ArgusTuiCommand[] {
@@ -218,4 +265,20 @@ export function getArgusTuiCommands(): ArgusTuiCommand[] {
 
 export function findArgusTuiCommand(slashName: string): ArgusTuiCommand | undefined {
   return commands.find((c) => c.slashes.includes(slashName) || c.name === slashName)
+}
+
+/** Format a short help text for CLI usage */
+export function formatCliHelp(): string {
+  const all = getArgusTuiCommands()
+  return [
+    "Commands:",
+    ...all
+      .filter((c) => c.name !== "help")
+      .map((c) => {
+        const slashes = c.slashes.map((s) => `/${s}`).join(", ")
+        return `  ${slashes.padEnd(25)} ${c.description}`
+      }),
+    "",
+    '  "assess https://target.com" - natural language also works',
+  ].join("\n")
 }
