@@ -3,6 +3,9 @@ import { assessCommand } from "./commands/assess"
 import { doctorCommand } from "./commands/doctor"
 import { reportCommand } from "./commands/report"
 import { resumeCommand } from "./commands/resume"
+import { verifyCommand } from "./commands/verify"
+import { evidenceCommand } from "./commands/evidence"
+import { configCommand } from "./commands/config"
 
 export const ArgusAssessCommand = {
   command: "assess <target>",
@@ -74,5 +77,55 @@ export const ArgusResumeCommand = {
     } catch (e) {
       process.stderr.write(`[Argus] resume error: ${(e as Error).message}\n`)
     }
+  },
+}
+
+export const ArgusVerifyCommand = {
+  command: "verify <finding-id>",
+  describe: "Re-run browser verification for a specific finding",
+  builder: (yargs: Argv) =>
+    yargs
+      .positional("finding-id", { describe: "Finding ID to verify", type: "string", demandOption: true })
+      .option("target", { describe: "Target URL override", type: "string" })
+      .option("creds", { describe: "Path to credentials JSON file", type: "string" }),
+  handler: async (argv: Record<string, unknown>) => {
+    const findingId = argv.findingId as string
+    const output = await verifyCommand(findingId, {
+      targetUrl: argv.target as string | undefined,
+      credsPath: argv.creds as string | undefined,
+    }).catch((e: Error) => `[Argus] verify error: ${e.message}`)
+    process.stdout.write(output + "\n")
+  },
+}
+
+export const ArgusEvidenceCommand = {
+  command: "evidence <action> [args..]",
+  describe: "Browse and manage captured evidence",
+  builder: (yargs: Argv) =>
+    yargs
+      .positional("action", {
+        describe: "Action: list, show <package-id>, prune [keep-last], verify-package <package-id>",
+        type: "string", demandOption: true,
+      })
+      .positional("args", { describe: "Arguments for the action", type: "string", array: true }),
+  handler: async (argv: Record<string, unknown>) => {
+    const action = argv.action as string
+    const args = (argv.args as string[]) ?? []
+    const output = await evidenceCommand(action as any, args)
+      .catch((e: Error) => `[Argus] evidence error: ${e.message}`)
+    process.stdout.write(output + "\n")
+  },
+}
+
+export const ArgusConfigCommand = {
+  command: "config [filter]",
+  describe: "Show effective Argus configuration",
+  builder: (yargs: Argv) =>
+    yargs.positional("filter", { describe: "Optional filter string", type: "string" }),
+  handler: async (argv: Record<string, unknown>) => {
+    const filter = argv.filter as string | undefined
+    const output = await configCommand(filter)
+      .catch((e: Error) => `[Argus] config error: ${e.message}`)
+    process.stdout.write(output + "\n")
   },
 }
