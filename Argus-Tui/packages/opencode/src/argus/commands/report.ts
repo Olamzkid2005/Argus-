@@ -1,7 +1,7 @@
 import { ReportGenerator } from "../reporting/generator"
 import { EngagementStore } from "../engagement/store"
 
-export async function reportCommand(engagementId: string, format: "markdown" | "json" | "sarif" = "markdown"): Promise<string> {
+export async function reportCommand(engagementId: string, format: "markdown" | "json" | "sarif" | "html" = "markdown"): Promise<string> {
   const store = new EngagementStore()
   const engagement = store.getEngagement(engagementId)
 
@@ -17,6 +17,8 @@ export async function reportCommand(engagementId: string, format: "markdown" | "
       return generator.generateJSON(findings, engagementId, engagement.target, engagement.workflow)
     case "sarif":
       return generator.generateSARIF(findings, engagementId, engagement.target, engagement.workflow)
+    case "html":
+      return generator.generateHTML(findings, engagementId, engagement.target, engagement.workflow)
     default:
       return generator.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow)
   }

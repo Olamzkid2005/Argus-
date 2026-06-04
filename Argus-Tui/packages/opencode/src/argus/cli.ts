@@ -53,10 +53,10 @@ export const ArgusReportCommand = {
   builder: (yargs: Argv) =>
     yargs
       .positional("engagement-id", { describe: "Engagement ID", type: "string", demandOption: true })
-      .option("format", { describe: "Output format", choices: ["markdown", "json", "sarif"] as const, default: "markdown" }),
+      .option("format", { describe: "Output format", choices: ["markdown", "json", "sarif", "html"] as const, default: "markdown" }),
   handler: async (argv: Record<string, unknown>) => {
     const id = argv.engagementId as string
-    const format = argv.format as "markdown" | "json" | "sarif"
+    const format = argv.format as "markdown" | "json" | "sarif" | "html"
     try {
       const output = await reportCommand(id, format)
       process.stdout.write(output + "\n")

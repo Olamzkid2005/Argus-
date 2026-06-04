@@ -1,6 +1,9 @@
+import { readFileSync } from "fs"
+import { join } from "path"
 import type { NormalizedFinding } from "../planner/types"
 import { Severity, Confidence } from "../planner/types"
 import type { Report, ReportFormat, ReportSummary } from "./types"
+import { EngagementStore } from "../engagement/store"
 
 function escapeMarkdown(text: string): string {
   return text.replace(/[-_*`\[\]()#+!|{}.~]/g, "\\$&")
@@ -19,6 +22,25 @@ function enumValue<T extends Record<string, number | string>>(e: T, v: unknown, 
 }
 
 export class ReportGenerator {
+  /**
+   * Generate a report directly from the SQLite store — re-queries findings
+   * and evidence on every call so the report always reflects the latest state.
+   */
+  generateFromEngagement(engagementId: string, format: ReportFormat = "markdown"): string {
+    const store = new EngagementStore()
+    const engagement = store.getEngagement(engagementId)
+    if (!engagement) return `Engagement not found: ${engagementId}`
+
+    const findings = store.getFindings(engagementId)
+
+    switch (format) {
+      case "json": return this.generateJSON(findings, engagementId, engagement.target, engagement.workflow)
+      case "sarif": return this.generateSARIF(findings, engagementId, engagement.target, engagement.workflow)
+      case "html": return this.generateHTML(findings, engagementId, engagement.target, engagement.workflow)
+      default: return this.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow)
+    }
+  }
+
   generate(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): Report {
     return {
       engagementId,
@@ -94,6 +116,67 @@ export class ReportGenerator {
   generateJSON(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): string {
     const report = this.generate(findings, engagementId, target, workflow)
     return JSON.stringify(report, null, 2)
+  }
+
+  generateHTML(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): string {
+    const report = this.generate(findings, engagementId, target, workflow)
+    const s = report.summary
+
+    // Count by severity
+    const sevCounts = {
+      CRITICAL: s.bySeverity["CRITICAL"] ?? 0,
+      HIGH: s.bySeverity["HIGH"] ?? 0,
+      MEDIUM: s.bySeverity["MEDIUM"] ?? 0,
+      LOW: s.bySeverity["LOW"] ?? 0,
+      INFO: s.bySeverity["INFO"] ?? 0,
+    }
+
+    // Build findings HTML
+    const severityLabels = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    const findingItems = findings
+      .sort((a, b) => b.severity - a.severity)
+      .map((f) => {
+        const sevLabel = severityLabels[f.severity] ?? "INFO"
+        const badges = [`<span class="badge badge-${sevLabel.toLowerCase()}">${sevLabel}</span>`]
+        const refs: string[] = []
+        if (f.cve) refs.push(`<a href="https://nvd.nist.gov/vuln/detail/${f.cve}">${f.cve}</a>`)
+        if (f.cwe) refs.push(`<a href="https://cwe.mitre.org/data/definitions/${f.cwe.replace("CWE-", "")}.html">${f.cwe}</a>`)
+        return `
+        <div class="finding severity-${f.severity}">
+          <div class="title">${this.escapeHtml(f.title)}</div>
+          <div>${badges.join(" ")} <span class="badge" style="background:#0d6efd;color:white">${f.tool}</span></div>
+          <div class="details">${this.escapeHtml(f.description || "")}</div>
+          ${refs.length > 0 ? `<div class="refs">${refs.join(" · ")}</div>` : ""}
+          <div style="margin-top:0.5rem;font-size:0.8rem;color:#6c757d">Phase: ${f.phase} · ${f.status}</div>
+        </div>`
+      }).join("\n")
+
+    // Load template and substitute
+    const templatePath = join(__dirname, "templates", "report.html")
+    let html: string
+    try {
+      html = readFileSync(templatePath, "utf-8")
+    } catch {
+      html = "<html><body><h1>Report: {{TARGET}}</h1><p>Template not found</p>{{FINDINGS}}</body></html>"
+    }
+
+    html = html.replace("{{TARGET}}", this.escapeHtml(target))
+    html = html.replace("{{ENGAGEMENT_ID}}", this.escapeHtml(engagementId))
+    html = html.replace("{{WORKFLOW}}", this.escapeHtml(workflow))
+    html = html.replace(/{{DATE}}/g, report.createdAt)
+    html = html.replace("{{TOTAL_FINDINGS}}", String(s.totalFindings))
+    html = html.replace("{{CRITICAL_COUNT}}", String(sevCounts.CRITICAL))
+    html = html.replace("{{HIGH_COUNT}}", String(sevCounts.HIGH))
+    html = html.replace("{{MEDIUM_COUNT}}", String(sevCounts.MEDIUM))
+    html = html.replace("{{LOW_COUNT}}", String(sevCounts.LOW))
+    html = html.replace("{{INFO_COUNT}}", String(sevCounts.INFO))
+    html = html.replace("{{FINDINGS}}", findingItems)
+
+    return html
+  }
+
+  private escapeHtml(text: string): string {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
   }
 
   generateSARIF(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): string {
