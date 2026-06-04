@@ -95,6 +95,7 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
     }
   }
 
+  if (route.data.type !== "plugin") return { name: "", params: undefined }
   return {
     name: route.data.id,
     params: route.data.data,

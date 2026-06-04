@@ -1195,6 +1195,7 @@ export function Prompt(props: PromptProps) {
 
       if (isArgusSlash) {
         const cmdName = firstWord.slice(1).toLowerCase()
+        const { findArgusTuiCommand } = await import("@/argus/tui-commands")
         const argusCmd = findArgusTuiCommand(cmdName)
         if (argusCmd) {
           argusHandled = true

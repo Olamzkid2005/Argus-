@@ -42,10 +42,8 @@ function show(out: string) {
  * Launch the interactive Argus TUI (OpenCode TUI with Argus branding).
  */
 function launchTui() {
-  const __dirname = typeof __dirname !== "undefined"
-    ? __dirname
-    : dirname(fileURLToPath(import.meta.url))
-  const entry = join(__dirname, "../../src/index.ts")
+  const _dirname = dirname(fileURLToPath(import.meta.url))
+  const entry = join(_dirname, "../../src/index.ts")
 
   const child = spawn("bun", ["run", "--conditions=browser", entry, "run", "--interactive"], {
     stdio: "inherit",

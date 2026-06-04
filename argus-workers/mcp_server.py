@@ -13,12 +13,11 @@ from typing import Any
 
 from tracing import setup_tracing
 
-
 # ── Signal quality tiers for planner intelligence ──
 
 class SignalQuality:
     """Signal quality tier for a tool's findings reliability.
-    
+
     Maps to ConfidenceEngine baseline:
         CONFIRMED  → HIGH   (e.g. sqlmap, nuclei verified templates)
         PROBABLE   → MEDIUM (e.g. dalfox, semgrep)
@@ -33,7 +32,7 @@ class SignalQuality:
 
 class ToolCost:
     """Relative execution cost for a tool.
-    
+
     Used by planner to select tools appropriate for scan depth:
         low    → quick scan (always run)
         medium → full assessment (run by default)
@@ -68,7 +67,7 @@ class ToolDefinition:
     """
     A tool definition loaded from YAML or registered programmatically.
     Mirrors CyberStrikeAI's YAML tool definitions pattern.
-    
+
     Extended with planner intelligence fields:
         capabilities   — capabilities this tool satisfies (e.g. sqli_detection)
         signal_quality — reliability tier for confidence baseline

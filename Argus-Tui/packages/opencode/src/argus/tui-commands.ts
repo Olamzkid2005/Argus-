@@ -142,7 +142,8 @@ const commands: ArgusTuiCommand[] = [
       if (engagements.length === 0) return "No engagements found."
       let output = `Engagements (${engagements.length}):\n${"=".repeat(50)}\n`
       for (const e of engagements) {
-        output += `\n  ${e.id}: ${e.target} [${e.status}] — ${new Date(e.created_at).toLocaleDateString()}`
+        const dateStr = (e as any).createdAt || (e as any).created_at || ""
+        output += `\n  ${e.id}: ${e.target} [${e.status}] — ${dateStr ? new Date(dateStr).toLocaleDateString() : ""}`
       }
       return output
     },

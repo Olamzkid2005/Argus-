@@ -32,7 +32,7 @@ const EvidenceConfigSchema = z.object({
     .default(Confidence.HIGH),
 })
 
-const FeaturesConfigSchema = z.record(z.boolean())
+const FeaturesConfigSchema = z.record(z.string(), z.boolean())
 
 const ArgusConfigSchema = z.object({
   features: FeaturesConfigSchema.optional(),

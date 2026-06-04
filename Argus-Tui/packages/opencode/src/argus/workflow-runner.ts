@@ -21,6 +21,7 @@ import { PlaywrightEngine } from "./browser/engine"
 import { join } from "path"
 import { homedir } from "os"
 import type { NormalizedFinding } from "./shared/types"
+import type { PhaseRecord } from "./engagement/types"
 
 export interface WorkflowRunOptions {
   target: string
@@ -110,12 +111,10 @@ export class WorkflowRunner {
     progress(`✓ Target validated: ${target}`)
 
     // Resolve paths relative to this file (src/argus/)
-    const __dirname = typeof __dirname !== "undefined"
-      ? __dirname
-      : new URL(".", import.meta.url).pathname
+    const _dirname = new URL(".", import.meta.url).pathname
 
-    const workersPath = options.workersPath ?? join(__dirname, "../../../../../../argus-workers/mcp_server.py")
-    const workflowsDir = options.workflowsDir ?? join(__dirname, "./workflows")
+    const workersPath = options.workersPath ?? join(_dirname, "../../../../../../argus-workers/mcp_server.py")
+    const workflowsDir = options.workflowsDir ?? join(_dirname, "./workflows")
     const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
     // ── 1. Create or use existing engagement ──
@@ -149,7 +148,7 @@ export class WorkflowRunner {
     progress(`✓ Plan created: ${plan.phases.length} phase(s)`)
 
     // ── 4. Create phase records ──
-    const phaseRecords = plan.phases.map((p, i) => ({
+    const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({
       id: p.phaseId,
       engagementId,
       name: p.phaseId.split("-")[2] ?? p.phaseId,
@@ -157,7 +156,7 @@ export class WorkflowRunner {
       capabilities: p.requiredCapabilities,
       executionMode: "sequential" as const,
       replanCycle: p.phaseId.startsWith("replan"),
-    }))
+    })) as unknown as PhaseRecord[]
     store.savePhases(engagementId, phaseRecords)
 
     // ── 5. Connect bridge ──
@@ -229,7 +228,7 @@ export class WorkflowRunner {
         `Workflow error: ${executionError.message}`)
     } finally {
       const allCompleted = phaseRecords.every((p) => p.status === "COMPLETED")
-      store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PARTIAL")
+      store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
       store.saveFindings(engagementId, allFindings)
       await bridge.disconnect()
       progress(`✓ Assessment ${executionError ? "failed" : "complete"}`)

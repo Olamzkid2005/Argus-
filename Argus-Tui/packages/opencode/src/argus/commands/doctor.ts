@@ -379,7 +379,8 @@ function toolchainCheck(): CheckResult {
           const cmd = versionDef.version_cmd
           const cmdParts = cmd.split(/\s+/)
           const output = execSync(cmd + " 2>&1", { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] })
-          const match = output.match(new RegExp(versionDef.version_regex))
+          const regex = versionDef.version_regex
+          const match = regex ? output.match(new RegExp(regex)) : null
           if (match) {
             const version = match[0]
             if (compareVersions(version, versionDef.min_version) < 0) {
