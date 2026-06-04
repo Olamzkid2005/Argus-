@@ -1761,11 +1761,11 @@ _Last updated: 2026-06-04_
 
 | Phase | Tasks | Status | Completion Estimate |
 |-------|-------|--------|-------------------|
-| **Phase 0: Architecture Gaps** | 16 tasks | ✅ Mostly done | ~80% |
-| **Phase B: Backend Remediation** | 12 tasks | ⚠️ Mixed | ~45% |
+| **Phase 0: Architecture Gaps** | 16 tasks | ✅ Mostly done | ~90% |
+| **Phase B: Backend Remediation** | 12 tasks | ✅ Mostly done | ~75% |
 | **Phase 1: Foundation** | 5 tasks | ✅ Mostly done | ~80% |
-| **Phase 2: Core Modules** | 6 tasks | ✅ Mostly done | ~85% |
-| **Phase 3: CLI Integration** | 6 tasks | ✅ Mostly done | ~90% |
+| **Phase 2: Core Modules** | 6 tasks | ✅ Nearly complete | ~95% |
+| **Phase 3: CLI Integration** | 6 tasks | ✅ Nearly complete | ~95% |
 | **Phase 4: Safety & Rollback** | 3 tasks | ❌ Mostly not started | ~30% |
 | **Phase 5: Polish** | 3 tasks | ❌ Not started | ~0% |
 
@@ -1791,6 +1791,9 @@ _Last updated: 2026-06-04_
 | 2026-06-04 | **B.09**: Extracted CWE/OWASP mappings from `normalizer.py` to `config/cwe_owasp_mappings.yaml` — hot-reloadable without code changes |
 | 2026-06-04 | **B.12**: Refactored `constants.py` from 101 flat module-level constants into 13 grouped `@dataclass` config objects with backward-compat aliases |
 | 2026-06-04 | **B.08**: Added `argus_cli/crypto.py` — machine-local Fernet key at `~/.argus/.key`, encrypts `api_key`/`api_url` in TOML config and session `metadata` in SQLite. Pre-encryption data still readable (backward compat) |
+| 2026-06-04 | **Task 3.2**: Added `--online` flag to `/doctor` for LLM provider connectivity check; added `toolchainCheck()` verifying nuclei/nmap/whatweb on PATH |
+| 2026-06-04 | **Task 2.2**: `EvidenceCollector.checkStorageLimit()` enforces `max_engagement_size_mb`; `pruneEngagement()` deletes files older than `retention_days`; `/evidence prune` calls it per-engagement |
+| 2026-06-04 | **Task 2.3**: Added `templates/report.html` with responsive CSS; `generateHTML()` loads/substitutes template data; `generateFromEngagement()` queries SQLite directly; report command accepts `html` format |
 | 2026-06-04 | Added 19 new tests (executor, resume, evidence, config, verify commands) — 280 total, 0 failures |
 
 ### Remaining High-Impact Items
@@ -1798,11 +1801,10 @@ _Last updated: 2026-06-04_
 | Priority | Item | Phase | Effort |
 |----------|------|-------|--------|
 | 🔴 High | Feature flag system in TypeScript CLI (all V5 features opt-in) | 4 | Medium |
-| 🟡 Medium | OpenTelemetry integration replacing custom `ExecutionSpan` | B | Medium |
+| 🟡 Medium | Async I/O for LLM client and parser hot paths (B.10) | B | Medium |
+| 🟡 Medium | OpenTelemetry integration replacing custom `ExecutionSpan` (B.06) | B | Medium |
 | 🟡 Medium | ESLint `no-restricted-imports` rule for fork boundary enforcement | 0 | Small |
-| 🟡 Medium | Storage limit enforcement in `EvidenceCollector` | 2 | Small |
 | 🟡 Medium | `./argus.config.yaml` project config + `~/.argus/config.yaml` user config | 0 | Medium |
 | 🟢 Low | E2E tests against Juice Shop, crAPI, DVWA, VAmPI | 4 | Large |
 | 🟢 Low | Git tags for rollback (`v5-phase-1-complete`, etc.) | — | Trivial |
 | 🟢 Low | Drizzle Kit migration files | 2 | Small |
-| 🟢 Low | HTML report template | 2 | Small |
