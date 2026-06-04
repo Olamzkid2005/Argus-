@@ -1787,6 +1787,9 @@ _Last updated: 2026-06-04_
 | 2026-06-04 | **Task 0.0.5**: Wired `capability_gaps` in `detectDrift()` — compares capability sets between MCP tools and local registry |
 | 2026-06-04 | **Task 0.5**: Added `postinstall` hook to `package.json` for automatic Playwright Chromium download |
 | 2026-06-04 | **Task 0.6**: Added `ARGUS_PYTHON` env var support + cross-platform Python discovery (Windows/Darwin/Linux) in `doctor.ts` |
+| 2026-06-04 | **B.07**: Made `GIT_HOST_ALLOWLIST` configurable via `ARGUS_ALLOWED_GIT_HOSTS` env var — organizations can add self-hosted GitLab without patching source |
+| 2026-06-04 | **B.09**: Extracted CWE/OWASP mappings from `normalizer.py` to `config/cwe_owasp_mappings.yaml` — hot-reloadable without code changes |
+| 2026-06-04 | **B.12**: Refactored `constants.py` from 101 flat module-level constants into 13 grouped `@dataclass` config objects with backward-compat aliases |
 | 2026-06-04 | Added 19 new tests (executor, resume, evidence, config, verify commands) — 280 total, 0 failures |
 
 ### Remaining High-Impact Items

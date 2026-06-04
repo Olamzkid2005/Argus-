@@ -3,6 +3,8 @@ Normalizer - Enforces VulnerabilityFinding schema and normalizes data
 """
 
 import logging
+import os
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -14,6 +16,33 @@ from models.finding import (
 )
 
 logger = logging.getLogger(__name__)
+
+# B.09: Load CWE/OWASP mappings from external YAML with fallback to hardcoded defaults
+_MAPPINGS_DIR = Path(os.path.dirname(__file__)) / ".." / "config"
+_MAPPINGS_FILE = _MAPPINGS_DIR / "cwe_owasp_mappings.yaml"
+
+# Cache for loaded mappings
+_MAPPINGS_CACHE: dict | None = None
+
+
+def _load_mappings() -> dict:
+    """Load CWE/OWASP mappings from YAML file, falling back to empty dict."""
+    global _MAPPINGS_CACHE
+    if _MAPPINGS_CACHE is not None:
+        return _MAPPINGS_CACHE
+
+    try:
+        import yaml
+        if _MAPPINGS_FILE.exists():
+            with open(_MAPPINGS_FILE) as f:
+                _MAPPINGS_CACHE = yaml.safe_load(f)
+            logger.info("Loaded CWE/OWASP mappings from %s", _MAPPINGS_FILE)
+            return _MAPPINGS_CACHE
+    except Exception as e:
+        logger.warning("Failed to load CWE/OWASP mappings from %s: %s. Using hardcoded defaults.", _MAPPINGS_FILE, e)
+
+    _MAPPINGS_CACHE = {}
+    return _MAPPINGS_CACHE
 
 
 class FindingNormalizer:
@@ -105,8 +134,13 @@ class FindingNormalizer:
         "subdomain_permutation": "SUBDOMAIN_PERMUTATION",
     }
 
-    # CWE to vulnerability type mappings
+    # B.09: CWE/OWASP mappings — loaded from config/cwe_owasp_mappings.yaml
+    # with fallback to hardcoded defaults. Mappings are merged at import time
+    # so the YAML file can be modified without code changes.
+
+    # Hardcoded defaults (used when YAML file is missing or inaccessible)
     CWE_TYPE_MAPPINGS = {
+        # CWE to vulnerability type mappings
         # CWE-78: OS Command Injection (RCE)
         "CWE-78": "REMOTE_CODE_EXECUTION",
         "CWE-74": "REMOTE_CODE_EXECUTION",
@@ -550,3 +584,17 @@ class FindingNormalizer:
                 continue
 
         return normalized
+
+
+# ── Post-class merge: overlay YAML-loaded mappings onto class defaults ──
+# This runs once at import time. The YAML file can be edited freely without
+# modifying Python code. If the file is missing or corrupt, hardcoded defaults
+# are used transparently.
+_yaml_data = _load_mappings()
+if _yaml_data:
+    if "cwe_type_mappings" in _yaml_data:
+        FindingNormalizer.CWE_TYPE_MAPPINGS.update(_yaml_data["cwe_type_mappings"])
+    if "owasp_type_mappings" in _yaml_data:
+        FindingNormalizer.OWASP_TYPE_MAPPINGS.update(_yaml_data["owasp_type_mappings"])
+    if "type_classification_map" in _yaml_data:
+        FindingNormalizer.TYPE_CLASSIFICATION_MAP.update(_yaml_data["type_classification_map"])
