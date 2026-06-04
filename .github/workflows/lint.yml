@@ -154,12 +154,18 @@ jobs:
             sleep 2
           done
 
-      - name: Run E2E tests
+      - name: Run unit tests
+        working-directory: Argus-Tui/packages/opencode
+        run: bun test test/argus/ --timeout 30000 2>&1 | tail -5
+
+      - name: Run doctor
+        working-directory: Argus-Tui/packages/opencode
+        run: timeout 30 bun run src/argus/main.ts doctor 2>&1 | tail -10 || true
+
+      - name: Run assessment smoke test
         working-directory: Argus-Tui/packages/opencode
         run: |
-          bun test test/argus/ --timeout 30000 2>&1 | tail -3
-          bun run src/argus/index.ts doctor 2>&1 | head -10 || true
-          timeout 60 bun run src/argus/index.ts assess http://127.0.0.1:3001 --deterministic 2>&1 || \
+          timeout 60 bun run src/argus/main.ts assess http://127.0.0.1:3001 --deterministic 2>&1 || \
             echo "Assessment smoke test completed (may have warnings)"
 
       - name: Teardown test targets

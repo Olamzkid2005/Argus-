@@ -57,10 +57,10 @@ echo ""
 echo "--- Running assessment smoke test ---"
 
 # Run doctor first
-bun run src/argus/index.ts doctor 2>&1 | head -10 || true
+bun run src/argus/main.ts doctor 2>&1 | head -10 || true
 
 # Quick assessment against Juice Shop (deterministic mode, no LLM)
-timeout 60 bun run src/argus/index.ts assess http://127.0.0.1:3001 --deterministic 2>&1 && pass "Juice Shop assessment completed" || echo "Assessment ran (may have warnings)"
+timeout 60 bun run src/argus/main.ts assess http://127.0.0.1:3001 --deterministic 2>&1 && pass "Juice Shop assessment completed" || echo "Assessment ran (may have warnings)"
 
 # ── Phase 4: Cleanup ──
 echo ""
