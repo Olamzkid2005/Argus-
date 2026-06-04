@@ -1752,3 +1752,50 @@ No circular dependencies. Coupling is moderate: commands depends on 5 modules, b
 | No async I/O on hot paths | B.10 | P3 |
 | Missing error taxonomy | B.11 | P3 |
 | Constants.py module bloat | B.12 | P3 |
+
+---
+
+## 12. Implementation Status Summary
+
+_Last updated: 2026-06-04_
+
+| Phase | Tasks | Status | Completion Estimate |
+|-------|-------|--------|-------------------|
+| **Phase 0: Architecture Gaps** | 16 tasks | ✅ Mostly done | ~80% |
+| **Phase B: Backend Remediation** | 12 tasks | ⚠️ Mixed | ~45% |
+| **Phase 1: Foundation** | 5 tasks | ✅ Mostly done | ~80% |
+| **Phase 2: Core Modules** | 6 tasks | ✅ Mostly done | ~85% |
+| **Phase 3: CLI Integration** | 6 tasks | ✅ Mostly done | ~90% |
+| **Phase 4: Safety & Rollback** | 3 tasks | ❌ Mostly not started | ~30% |
+| **Phase 5: Polish** | 3 tasks | ❌ Not started | ~0% |
+
+### Notable Changes Since Initial Design
+
+| Date | Change |
+|------|--------|
+| 2026-06-04 | Wired browser verifiers (BOLA, XSS, PrivEsc) into `InProcessExecutor` — previously defined but never invoked |
+| 2026-06-04 | All 3 browser verifiers now capture screenshots, request URLs, and response data during execution |
+| 2026-06-04 | `/resume` command completed — re-connects bridge, reloads plan, skips completed phases, continues execution |
+| 2026-06-04 | `/verify <finding-id>` command added — re-runs appropriate browser verifier for a past finding |
+| 2026-06-04 | `/evidence [list\|show\|prune\|verify-package]` command added — browse, prune, and verify evidence integrity |
+| 2026-06-04 | `/config [filter]` command added — shows effective configuration with source annotations |
+| 2026-06-04 | All 16 ADR documents created in `docs/adr/ADR-001.md` through `ADR-016.md` |
+| 2026-06-04 | Fixed pre-existing type errors in `report.ts` (missing `workflow` arg to `generateSARIF`) and `global.ts` (EventEmitter override) |
+| 2026-06-04 | Added `getAllCredentials()` to `CredentialStore` for passing all roles to browser verifiers |
+| 2026-06-04 | Added 19 new tests (executor, resume, evidence, config, verify commands) — 280 total, 0 failures |
+
+### Remaining High-Impact Items
+
+| Priority | Item | Phase | Effort |
+|----------|------|-------|--------|
+| 🔴 High | SIGTERM/SIGINT forwarding to child Python process (orphan prevention) | 0 | Small |
+| 🔴 High | Feature flag system in TypeScript CLI (all V5 features opt-in) | 4 | Medium |
+| 🟡 Medium | OpenTelemetry integration replacing custom `ExecutionSpan` | B | Medium |
+| 🟡 Medium | ESLint `no-restricted-imports` rule for fork boundary enforcement | 0 | Small |
+| 🟡 Medium | Storage limit enforcement in `EvidenceCollector` | 2 | Small |
+| 🟡 Medium | `./argus.config.yaml` project config + `~/.argus/config.yaml` user config | 0 | Medium |
+| 🟢 Low | E2E tests against Juice Shop, crAPI, DVWA, VAmPI | 4 | Large |
+| 🟢 Low | `package.json` postinstall hook for Playwright browser download | 0 | Small |
+| 🟢 Low | Git tags for rollback (`v5-phase-1-complete`, etc.) | — | Trivial |
+| 🟢 Low | Drizzle Kit migration files | 2 | Small |
+| 🟢 Low | HTML report template | 2 | Small |

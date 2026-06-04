@@ -173,7 +173,28 @@ function envCheck(): CheckResult {
 }
 
 async function resolvePython(): Promise<string> {
-  for (const py of ["python3", "python"]) {
+  // Task 0.6: Check ARGUS_PYTHON env var first for explicit override
+  const envPython = process.env.ARGUS_PYTHON
+  if (envPython) {
+    try {
+      await execCapture(envPython, ["--version"])
+      return envPython
+    } catch {
+      process.stderr.write(`[doctor] ARGUS_PYTHON=${envPython} specified but not found — falling back to auto-detection\n`)
+    }
+  }
+
+  // Cross-platform discovery: try platform-specific names first
+  const candidates: string[] = []
+  if (process.platform === "win32") {
+    candidates.push("python", "python3", "py")
+  } else if (process.platform === "darwin") {
+    candidates.push("python3", "python3.12", "python3.11", "python")
+  } else {
+    candidates.push("python3", "python", "python3.12", "python3.11")
+  }
+
+  for (const py of candidates) {
     try {
       await execCapture(py, ["--version"])
       return py

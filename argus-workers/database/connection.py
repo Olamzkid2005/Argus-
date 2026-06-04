@@ -7,6 +7,7 @@ Supports PgBouncer transaction pooling and connection monitoring.
 
 import logging
 import os
+import random
 import threading
 import time
 from contextlib import contextmanager
@@ -73,6 +74,8 @@ class ConnectionManager:
             "total_wait_time_ms": 0,
         }
         self._metrics_lock = threading.Lock()
+        # Condition variable for signaling connection availability (B.03 fix)
+        self._pool_cond = threading.Condition()
 
     def _get_connection_string(self) -> str:
         """Get database connection string from environment with PgBouncer support"""
@@ -152,10 +155,10 @@ class ConnectionManager:
         wait_start = time.time()
         pool_instance = self._ensure_pool()
         try:
-            # Use a wait-loop with timeout to avoid stalling worker processes.
-            # L-23: Use exponential backoff (10ms → 100ms) on retry to reduce
-            # CPU waste under high contention while keeping latency low when
-            # connections become available quickly.
+            # Use a condition-variable wait with exponential backoff + jitter
+            # to avoid busy-wait CPU waste under high contention.
+            # B.03: Replaced time.sleep() polling with threading.Condition wait.
+            # B.04: Added uniform jitter to spread retries during thundering herd.
             deadline = wait_start + timeout if timeout > 0 else None
             _retry_count = 0
             while True:
@@ -169,7 +172,12 @@ class ConnectionManager:
                             f"after {timeout}s (pool max={self._max_connections})"
                         ) from None
                     _retry_count += 1
-                    time.sleep(min(0.01 * _retry_count, 0.1))
+                    # Exponential backoff: 10ms, 20ms, 40ms, ... capped at 500ms
+                    base_delay = min(0.01 * (2 ** (_retry_count - 1)), 0.5)
+                    # Uniform jitter: [0.5 * base, 1.5 * base)
+                    jitter = base_delay * (0.5 + random.random())
+                    with self._pool_cond:
+                        self._pool_cond.wait(timeout=jitter)
                     continue
             wait_time = (time.time() - wait_start) * 1000
 
@@ -205,6 +213,9 @@ class ConnectionManager:
         if self._pool and conn:
             try:
                 self._pool.putconn(conn)
+                # Notify any thread waiting on the condition variable (B.03 fix)
+                with self._pool_cond:
+                    self._pool_cond.notify()
             except Exception as e:
                 logger.error("Failed to release connection back to pool: %s", e)
             with self._metrics_lock:

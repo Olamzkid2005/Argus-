@@ -270,10 +270,19 @@ export class WorkersBridge {
     const mcpNames = new Set(mcpTools.map((t) => t.name))
     const registryNames = new Set(this.toolsCache.map((t) => t.name))
 
+    // Detect capability gaps: tools that exist in both but have different capability sets
+    const capabilityGaps: string[] = []
+    for (const mcpTool of mcpTools) {
+      const regTool = this.toolsCache.find((t) => t.name === mcpTool.name)
+      if (regTool && JSON.stringify(mcpTool.capabilities?.sort()) !== JSON.stringify(regTool.capabilities?.sort())) {
+        capabilityGaps.push(`${mcpTool.name}: MCP=${JSON.stringify(mcpTool.capabilities)} vs registry=${JSON.stringify(regTool.capabilities)}`)
+      }
+    }
+
     return {
       missing_from_registry: mcpTools.filter((t) => !registryNames.has(t.name)).map((t) => t.name),
       missing_from_mcp: this.toolsCache.filter((t) => !mcpNames.has(t.name)).map((t) => t.name),
-      capability_gaps: [],
+      capability_gaps: capabilityGaps,
     }
   }
 
