@@ -1,11 +1,6 @@
 """Tests for tool_core/registry.py — ToolRegistry."""
 
-import os
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from tool_core.registry import ToolRegistry
 
@@ -36,20 +31,14 @@ class TestToolRegistryIsAvailable:
             assert "nonexistent" in reg._cache
 
 
-class TestToolRegistryResolve:
-    def test_returns_cached_value(self):
+    def test_scans_augmented_path(self):
         reg = ToolRegistry()
-        reg._cache["test-tool"] = "/usr/bin/test-tool"
-        assert reg.resolve("test-tool") == "/usr/bin/test-tool"
+        with patch.object(reg, "_get_augmented_path", return_value="/usr/bin:/bin"):
+            with patch("shutil.which", return_value="/usr/bin/python"):
+                path = reg._resolve("python")
+                assert path == "/usr/bin/python"
 
-    def test_resolves_and_caches(self):
-        reg = ToolRegistry()
-        with patch.object(reg, "_resolve", return_value="/usr/bin/echo"):
-            path = reg.resolve("echo")
-            assert path == "/usr/bin/echo"
-            assert reg._cache["echo"] == "/usr/bin/echo"
-
-    def test_unknown_returns_none(self):
+    def test_returns_none_for_missing(self):
         reg = ToolRegistry()
         with patch.object(reg, "_resolve", return_value=None):
             assert reg.resolve("__missing__") is None

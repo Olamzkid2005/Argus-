@@ -24,7 +24,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # Skip on Windows — tests require websockets library and local echo server
 pytestmark = pytest.mark.skipif(
     sys.platform.startswith("win"),
@@ -74,7 +73,7 @@ class _TestWsEchoServer:
                 if text.startswith("rate-test"):
                     continue
                 await websocket.send(message)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if not welcome_sent:
                     await websocket.send("Welcome to test echo server")
                     welcome_sent = True

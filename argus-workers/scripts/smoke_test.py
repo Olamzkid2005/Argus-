@@ -74,11 +74,11 @@ def _header(label: str) -> None:
 def test_config_constants() -> bool:
     """Validate that named constants load correctly."""
     from config.constants import (
-        HARD_TIMEOUT_SECONDS,
-        TOOL_TIMEOUT_DEFAULT,
-        MAX_TOOL_RETRIES,
-        LLM_AGENT_MAX_COST_USD,
         GIT_HOST_ALLOWLIST,
+        HARD_TIMEOUT_SECONDS,
+        LLM_AGENT_MAX_COST_USD,
+        MAX_TOOL_RETRIES,
+        TOOL_TIMEOUT_DEFAULT,
     )
     ok = True
     _header("config.constants")
@@ -101,7 +101,7 @@ def test_config_redis() -> bool:
 def test_feature_flags() -> bool:
     """Validate feature flags system works without DB."""
     _header("feature_flags")
-    from feature_flags import FeatureFlags, is_enabled, get_flag
+    from feature_flags import FeatureFlags, get_flag, is_enabled
 
     fresh_flags = FeatureFlags()
     ok = True
@@ -167,7 +167,7 @@ def test_models() -> bool:
     ok &= _check("ReconContext to_dict", isinstance(ctx.to_dict(), dict))
 
     _header("models.candidate_list")
-    from models.candidate_list import CandidateList, Candidate, CandidateSource
+    from models.candidate_list import Candidate, CandidateList, CandidateSource
     cl = CandidateList(target="https://example.com/login")
     ok &= _check("CandidateList created", cl is not None)
     ok &= _check("CandidateList has no candidates by default", len(cl.candidates) == 0)
@@ -188,7 +188,7 @@ def test_models() -> bool:
 def test_state_machine() -> bool:
     """Validate state machine transitions without DB."""
     _header("state_machine")
-    from state_machine import EngagementStateMachine, InvalidStateTransitionError
+    from state_machine import EngagementStateMachine
 
     ok = True
     ok &= _check("STATES include all expected states",
@@ -390,7 +390,7 @@ def test_attack_graph() -> bool:
 def test_tool_definitions() -> bool:
     """Validate tool definitions registry."""
     _header("tool_definitions")
-    from tool_definitions import TOOLS, SignalQuality, get_tool, ALL_PHASES
+    from tool_definitions import ALL_PHASES, TOOLS, SignalQuality, get_tool
 
     ok = True
     ok &= _check("TOOLS registry is populated", len(TOOLS) > 10)
@@ -422,8 +422,8 @@ def test_tool_definitions() -> bool:
 def test_tool_registry() -> bool:
     """Validate agent tool registry."""
     _header("agent.tool_registry")
-    from agent.tool_registry import ToolRegistry
     from agent.agent_result import AgentResult
+    from agent.tool_registry import ToolRegistry
 
     ok = True
     registry = ToolRegistry()
@@ -459,7 +459,7 @@ def test_utils() -> bool:
     _header("utils")
 
     ok = True
-    from utils.result import Ok, Err, is_ok, is_err, unwrap, unwrap_or
+    from utils.result import Err, Ok, is_err, is_ok
     ok_result = Ok(42)
     ok &= _check("Ok result created", is_ok(ok_result) and ok_result.value == 42)
     err_result = Err("something went wrong")
@@ -476,7 +476,7 @@ def test_utils() -> bool:
     except ValueError:
         ok &= _check("validate_uuid rejects invalid UUID", True)
 
-    from utils.retry import retry_function, retry
+    from utils.retry import retry, retry_function
     ok &= _check("retry imported", callable(retry))
     ok &= _check("retry_function imported", callable(retry_function))
 
@@ -486,7 +486,12 @@ def test_utils() -> bool:
 def test_sanitization() -> bool:
     """Validate sanitization utilities."""
     _header("utils.sanitization")
-    from utils.sanitization import sanitize_string, sanitize_evidence, check_for_dangerous_content, strip_dangerous_tags
+    from utils.sanitization import (
+        check_for_dangerous_content,
+        sanitize_evidence,
+        sanitize_string,
+        strip_dangerous_tags,
+    )
 
     ok = True
     ok &= _check("sanitize_string escapes HTML",
@@ -510,8 +515,11 @@ def test_error_classifier() -> bool:
     """Validate error classification."""
     _header("error_classifier")
     from error_classifier import (
-        classify_error, ErrorCategory, ErrorCode,
-        classify_by_error_code, tag_error,
+        ErrorCategory,
+        ErrorCode,
+        classify_by_error_code,
+        classify_error,
+        tag_error,
     )
 
     ok = True
@@ -579,8 +587,8 @@ def test_cache() -> bool:
 def test_llm_client() -> bool:
     """Validate LLM client imports and configuration (no API key needed)."""
     _header("llm_client")
-    from llm_client import LLMClient
     from config.constants import LLM_AGENT_MODEL
+    from llm_client import LLMClient
 
     ok = True
     ok &= _check("LLM_AGENT_MODEL from config", isinstance(LLM_AGENT_MODEL, str))
@@ -598,8 +606,8 @@ def test_llm_client() -> bool:
 def test_llm_service() -> bool:
     """Validate LLM service imports and basic setup."""
     _header("llm_service")
-    from llm_service import LLMService
     from llm_client import LLMClient
+    from llm_service import LLMService
 
     ok = True
     # LLMService requires an llm_client argument
@@ -618,8 +626,8 @@ def test_llm_service() -> bool:
 def test_pipeline() -> bool:
     """Validate pipeline routing imports."""
     _header("pipeline_router & dispatch_task")
-    from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
     from dispatch_task import dispatch_task
+    from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
 
     ok = True
     ok &= _check("execute_recon_pipeline imported", callable(execute_recon_pipeline))
@@ -655,7 +663,7 @@ def test_tracing() -> bool:
 def test_cvss() -> bool:
     """Validate CVSS estimator."""
     _header("cvss_calculator")
-    from cvss_calculator import estimate_cvss, get_cvss_label, TYPE_BASE_SCORES
+    from cvss_calculator import TYPE_BASE_SCORES, estimate_cvss, get_cvss_label
 
     ok = True
     ok &= _check("estimate_cvss imported", callable(estimate_cvss))
@@ -728,7 +736,7 @@ def test_dlq() -> bool:
 def test_checkpoint() -> bool:
     """Validate checkpoint manager instantiation (no DB)."""
     _header("checkpoint_manager")
-    from checkpoint_manager import CheckpointManager, CheckpointContext
+    from checkpoint_manager import CheckpointContext, CheckpointManager
 
     mgr = CheckpointManager()
     ok = True
@@ -775,7 +783,7 @@ def test_auth() -> bool:
 def test_streaming() -> bool:
     """Validate streaming module imports."""
     _header("streaming")
-    from streaming import StreamManager, EventBus, emit_thinking
+    from streaming import EventBus, StreamManager, emit_thinking
 
     ok = True
     ok &= _check("StreamManager imported", StreamManager is not None)
@@ -790,8 +798,8 @@ def main(verbose: bool = False) -> int:
     global PASSED, FAILED, SKIPPED
 
     print(f"\n{'#' * 70}")
-    print(f"  ARGUS WORKERS \u2014\u2014 CORE ENGINE SMOKE TEST")
-    print(f"  No infrastructure required (no Redis, PostgreSQL, tools, or API keys)")
+    print("  ARGUS WORKERS \u2014\u2014 CORE ENGINE SMOKE TEST")
+    print("  No infrastructure required (no Redis, PostgreSQL, tools, or API keys)")
     print(f"{'#' * 70}")
     print(f"\n  Started at: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -866,12 +874,12 @@ def main(verbose: bool = False) -> int:
     print(f"{'=' * 70}")
 
     if FAILED == 0:
-        print(f"\n  \u2705  ALL CORE ENGINE CHECKS PASSED")
-        print(f"      The backend is ready for validation with infrastructure tests.")
+        print("\n  \u2705  ALL CORE ENGINE CHECKS PASSED")
+        print("      The backend is ready for validation with infrastructure tests.")
         return 0
     else:
         print(f"\n  \u274c  {FAILED} CHECK(S) FAILED")
-        print(f"      Review the failures above before proceeding to infrastructure tests.")
+        print("      Review the failures above before proceeding to infrastructure tests.")
         return 1
 
 

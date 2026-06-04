@@ -11,12 +11,9 @@ These tests are excluded from default CI. Run manually:
 
 from __future__ import annotations
 
-from unittest.mock import Mock, PropertyMock, patch
-
-import pytest
+from unittest.mock import Mock, patch
 
 from runtime.workflows.base import WorkflowResult
-
 
 # ── E2E: Feature Flag Dispatch via execute_scan_tools ──────────────────
 
@@ -52,9 +49,9 @@ class TestFeatureFlagE2E:
 
     def test_bola_workflow_result_contract(self) -> None:
         """BolaWorkflow.execute() returns a WorkflowResult matching the contract."""
+        from runtime.engagement_state import EngagementState
         from runtime.workflows import BolaWorkflow
         from utils.logging_utils import ScanLogger
-        from runtime.engagement_state import EngagementState
 
         state = EngagementState("e2e-test")
         slog = ScanLogger("bola_workflow_e2e", engagement_id=state.engagement_id)
@@ -65,7 +62,7 @@ class TestFeatureFlagE2E:
             auth_config_b={"token": "tok_b", "token_header": "Authorization"},
             engagement_id=state.engagement_id,
             state=state,
-            emit_finding_callback=lambda *a: None,
+            emit_finding_callback=lambda *_: None,
             slog=slog,
         )
 
@@ -86,9 +83,9 @@ class TestFeatureFlagE2E:
 
     def test_bola_workflow_produces_obstacles_on_unreachable_target(self) -> None:
         """Workflow produces obstacles when target is unreachable."""
+        from runtime.engagement_state import EngagementState
         from runtime.workflows import BolaWorkflow
         from utils.logging_utils import ScanLogger
-        from runtime.engagement_state import EngagementState
 
         state = EngagementState("e2e-unreachable")
         slog = ScanLogger("bola_workflow_e2e", engagement_id=state.engagement_id)
@@ -99,7 +96,7 @@ class TestFeatureFlagE2E:
             auth_config_b={"token": "tok_b", "token_header": "Authorization"},
             engagement_id=state.engagement_id,
             state=state,
-            emit_finding_callback=lambda *a: None,
+            emit_finding_callback=lambda *_: None,
             slog=slog,
         )
 
@@ -112,9 +109,10 @@ class TestFeatureFlagE2E:
 
     def test_bola_workflow_zero_findings_success(self) -> None:
         """Clean run with zero findings is success=True, not a failure."""
-        from runtime.workflows.bola import BolaWorkflow
-        from runtime.engagement_state import EngagementState
         from unittest.mock import Mock
+
+        from runtime.engagement_state import EngagementState
+        from runtime.workflows.bola import BolaWorkflow
 
         state = EngagementState("e2e-zero")
         workflow = BolaWorkflow(
@@ -123,7 +121,7 @@ class TestFeatureFlagE2E:
             auth_config_b={},
             engagement_id=state.engagement_id,
             state=state,
-            emit_finding_callback=lambda *a: None,
+            emit_finding_callback=lambda *_: None,
             slog=Mock(),
         )
 
@@ -140,10 +138,11 @@ class TestFeatureFlagE2E:
 
         This verifies the SSE streaming path: _emit_finding → callback.
         """
+        from unittest.mock import Mock
+
         from runtime.engagement_state import EngagementState
         from runtime.workflows import BolaWorkflow
         from runtime.workflows.steps import TestBolaStep
-        from unittest.mock import Mock
 
         state = EngagementState("e2e-sse")
         captured: list[dict] = []

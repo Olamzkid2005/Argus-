@@ -5,9 +5,7 @@ Covers: add_obstacle(), to_dict() count, _bump_version, from_dict
 exclusion (V1 in-memory-only design), and obstacle metadata.
 """
 
-from unittest.mock import Mock, patch
 
-import pytest
 
 from runtime.engagement_state import EngagementState
 

@@ -10,10 +10,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from tools.api_security_scanner import APISecurityScanner
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
-
+from tools.api_security_scanner import APISecurityScanner
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -255,7 +254,7 @@ class TestBola:
     def test_skips_non_id_endpoint(self, scanner):
         """Endpoints without ID-like segments are skipped."""
         async def run():
-            with patch("httpx.AsyncClient") as mock_cls:
+            with patch("httpx.AsyncClient"):
                 findings = await scanner._test_bola(
                     self.SCANNER_BASE_URL,
                     ["/api/users/me"],
@@ -741,10 +740,10 @@ class TestScan:
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
-                    with patch.object(scanner, "_test_bola") as mock_bola:
-                        with patch.object(scanner, "_test_mass_assignment") as mock_ma:
-                            with patch.object(scanner, "_test_auth_bypass") as mock_ab:
-                                with patch.object(scanner, "_test_api_rate_limiting") as mock_rl:
+                    with patch.object(scanner, "_test_bola"):
+                        with patch.object(scanner, "_test_mass_assignment"):
+                            with patch.object(scanner, "_test_auth_bypass"):
+                                with patch.object(scanner, "_test_api_rate_limiting"):
                                     findings = await scanner.scan(
                                         "https://api.example.com",
                         ["/api/users/123"],
@@ -878,8 +877,8 @@ class TestAsyncExecute:
                 with patch.object(scanner, "_validate_external_url"):
                     with patch.object(scanner, "discover_endpoints") as mock_discovery:
                         with patch.object(scanner, "_test_bola") as mock_bola:
-                            with patch.object(scanner, "_test_mass_assignment") as mock_ma:
-                                with patch.object(scanner, "_test_auth_bypass") as mock_ab:
+                            with patch.object(scanner, "_test_mass_assignment"):
+                                with patch.object(scanner, "_test_auth_bypass"):
                                     with patch.object(scanner, "_test_api_rate_limiting", return_value=[]):
                                         await scanner.async_execute(ctx, endpoints=explicit_endpoints)
                                         # Discovery should NOT be called

@@ -1,8 +1,6 @@
 """Tests for tool_core/result.py — UnifiedToolResult and ToolStatus."""
 
-from datetime import datetime
 
-import pytest
 
 from tool_core.result import ToolStatus, UnifiedToolResult
 

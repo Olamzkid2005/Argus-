@@ -1,6 +1,5 @@
 """Tests for tool_core/base.py — AbstractTool, AsyncTool, ToolContext."""
 
-from unittest.mock import MagicMock, patch
 
 import pytest
 

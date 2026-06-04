@@ -7,19 +7,16 @@ without hitting real AI endpoints.
 
 from unittest.mock import Mock, patch
 
-import pytest
-
-from tools.ai_vuln_scanner import (
-    AIVulnScanner,
-    PROMPT_INJECTION_PAYLOADS,
-    INFORMATION_DISCLOSURE_PROBES,
-    INJECTION_SUCCESS_INDICATORS,
-    REFUSAL_PATTERNS,
-    SENSITIVE_DATA_PATTERNS,
-)
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
-
+from tools.ai_vuln_scanner import (
+    INFORMATION_DISCLOSURE_PROBES,
+    INJECTION_SUCCESS_INDICATORS,
+    PROMPT_INJECTION_PAYLOADS,
+    REFUSAL_PATTERNS,
+    SENSITIVE_DATA_PATTERNS,
+    AIVulnScanner,
+)
 
 # ── Construction ────────────────────────────────────────────────────────
 
@@ -75,7 +72,6 @@ class TestIsRefusal:
 
     def test_refusal_regex_pins(self):
         """All REFUSAL_PATTERNS produce working regexes."""
-        scanner = AIVulnScanner()
         for pattern in REFUSAL_PATTERNS:
             assert hasattr(pattern, "search") or isinstance(pattern, str)
 

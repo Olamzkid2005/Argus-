@@ -8,8 +8,8 @@ class TestErrorLogging:
     @patch("tools.port_scanner.is_enabled", return_value=True)
     def test_port_scanner_missing_tool_logs_warning(self, _mock_is_enabled):
         """Missing tools should produce warning logs, not silent failures."""
-        from tools.port_scanner import PortScanner
         from tool_core.base import ToolContext
+        from tools.port_scanner import PortScanner
 
         scanner = PortScanner()
         scanner._check_tools_available = MagicMock(
@@ -26,8 +26,8 @@ class TestErrorLogging:
     @patch("tools.port_scanner.is_enabled", return_value=True)
     def test_port_scanner_returns_empty_on_missing_naabu(self, _mock_is_enabled):
         """When naabu is unavailable, scan returns empty result without crashing."""
-        from tools.port_scanner import PortScanner
         from tool_core.base import ToolContext
+        from tools.port_scanner import PortScanner
 
         scanner = PortScanner()
         scanner._check_tools_available = MagicMock(
@@ -43,9 +43,9 @@ class TestErrorLogging:
     @patch("tools.port_scanner.is_enabled", return_value=True)
     def test_port_scanner_continues_without_nmap(self, _mock_is_enabled):
         """When only nmap is missing, scan should still return naabu results."""
-        from tools.port_scanner import PortScanner
         from tool_core.base import ToolContext
         from tool_core.result import ToolStatus, UnifiedToolResult
+        from tools.port_scanner import PortScanner
 
         scanner = PortScanner()
         naabu_result = UnifiedToolResult(tool_name="naabu", status=ToolStatus.SUCCESS, stdout='{"port":80,"protocol":"tcp"}\n')
@@ -64,8 +64,8 @@ class TestErrorLogging:
     @patch("tools.port_scanner.is_enabled", return_value=False)
     def test_port_scanner_disabled_flag(self, _mock_is_enabled):
         """When PORT_SCANNER feature flag is off, scan returns empty without checking tools."""
-        from tools.port_scanner import PortScanner
         from tool_core.base import ToolContext
+        from tools.port_scanner import PortScanner
 
         scanner = PortScanner()
         scanner._check_tools_available = MagicMock()

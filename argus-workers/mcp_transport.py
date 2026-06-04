@@ -20,7 +20,8 @@ import json
 import logging
 import sys
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class MCPTransport:
                 self._handle_request(request)
             except KeyboardInterrupt:
                 break
-            except Exception as e:
+            except Exception:
                 logger.error("Transport error: %s", traceback.format_exc())
                 break
 

@@ -8,8 +8,8 @@ import json
 import logging
 import socket
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from types import SimpleNamespace
 
 from config.constants import (

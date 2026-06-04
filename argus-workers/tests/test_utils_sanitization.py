@@ -1,6 +1,5 @@
 """Tests for utils/sanitization.py — input sanitization utilities."""
 
-import pytest
 
 from utils.sanitization import (
     check_for_dangerous_content,

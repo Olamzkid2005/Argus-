@@ -6,7 +6,6 @@ for discoverability, type safety, and IDE autocompletion.
 
 import os
 from dataclasses import dataclass, field
-from typing import Tuple
 
 
 # ──────────────────────────────────────────────
@@ -86,8 +85,8 @@ class ScanConfig:
 # ──────────────────────────────────────────────
 @dataclass(frozen=True)
 class GitSSRFConfig:
-    allowed_git_schemes: Tuple[str, ...] = ("https", "http", "ssh")
-    host_allowlist: Tuple[str, ...] = field(default_factory=lambda: tuple(sorted({
+    allowed_git_schemes: tuple[str, ...] = ("https", "http", "ssh")
+    host_allowlist: tuple[str, ...] = field(default_factory=lambda: tuple(sorted({
         "github.com", "gitlab.com", "gitlab.freedesktop.org", "bitbucket.org",
         "gist.github.com", "git.sr.ht", "git.kernel.org",
         "git.savannah.gnu.org", "git.savannah.nongnu.org",

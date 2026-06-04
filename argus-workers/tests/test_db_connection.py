@@ -24,8 +24,6 @@ from database.connection import (
     ConnectionManager,
     DatabaseConnectionError,
     connect,
-    db_connection,
-    db_cursor,
     get_db,
 )
 
@@ -117,7 +115,7 @@ class TestConnectionContextManager:
         mock_conn = MagicMock()
         with patch.object(cm, "get_connection", return_value=mock_conn):
             with pytest.raises(ValueError):
-                with cm.connection(commit=True) as conn:
+                with cm.connection(commit=True) as _:
                     raise ValueError("test error")
         mock_conn.rollback.assert_called_once()
 

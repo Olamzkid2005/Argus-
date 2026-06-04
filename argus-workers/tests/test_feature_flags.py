@@ -28,10 +28,9 @@ from feature_flags import (
     FEATURE_TRANSACTIONAL_EVENTS,
     FEATURE_TRUE_REACT_LOOP,
     FeatureFlags,
-    FlagSource,
     get_feature_flags,
-    is_enabled,
     get_flag,
+    is_enabled,
 )
 
 

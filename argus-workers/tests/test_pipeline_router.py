@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
 
 

@@ -21,12 +21,11 @@ from __future__ import annotations
 import json
 import sys
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
-
 
 # Skip on Windows — tests require local HTTP server with threading
 pytestmark = pytest.mark.skipif(
@@ -36,7 +35,6 @@ pytestmark = pytest.mark.skipif(
 
 from runtime.engagement_state import EngagementState
 from runtime.workflows.base import StepResult
-
 
 # ── Local Test Server ─────────────────────────────────────────────────
 
@@ -271,7 +269,7 @@ class TestBolaWorkflowIntegration:
             auth_config_b=auth_b,
             engagement_id=state.engagement_id,
             state=state,
-            emit_finding_callback=lambda *a: None,
+            emit_finding_callback=lambda *_: None,
             slog=slog,
         )
 

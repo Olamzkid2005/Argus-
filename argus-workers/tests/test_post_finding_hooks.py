@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from post_finding_hooks import (
     _dispatch,
     _get_matching_webhooks,
@@ -26,7 +24,7 @@ class TestFireFindingWebhooks:
     """Tests for fire_finding_webhooks."""
 
     def test_skips_low_severity(self):
-        result = fire_finding_webhooks({
+        fire_finding_webhooks({
             "id": "finding-1",
             "engagement_id": "eng-001",
             "severity": "LOW",

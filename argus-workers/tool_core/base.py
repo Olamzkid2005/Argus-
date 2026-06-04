@@ -10,11 +10,10 @@ focus only on domain-specific scanning logic.
 from __future__ import annotations
 
 import asyncio
-import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable
 
 from tool_core.config.models import DualAuthConfig
 from tool_core.result import UnifiedToolResult

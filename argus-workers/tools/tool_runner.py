@@ -18,12 +18,12 @@ from pathlib import Path
 
 from cache import cache
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
+from tool_core.result import ToolStatus, UnifiedToolResult
 from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
 )
-from tool_core.result import ToolStatus, UnifiedToolResult
-from tracing import ExecutionSpan, StructuredLogger, get_trace_id
+from tracing import ExecutionSpan, StructuredLogger
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)

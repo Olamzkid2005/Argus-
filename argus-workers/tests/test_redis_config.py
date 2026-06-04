@@ -8,13 +8,10 @@ Covers:
 
 from __future__ import annotations
 
-import os
-from unittest.mock import patch
-
 # We need to reload the module to test different env states
 import importlib
-
-import pytest
+import os
+from unittest.mock import patch
 
 
 class TestRedisConfig:

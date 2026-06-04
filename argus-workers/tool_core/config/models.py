@@ -7,7 +7,7 @@ tool_core/config/models.py — Configuration dataclasses
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

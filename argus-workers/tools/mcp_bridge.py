@@ -9,11 +9,10 @@ truth) instead of duplicating metadata inline.  Adding a new tool in
 from __future__ import annotations
 
 import logging
-import os
 
+from mcp_server import get_mcp_server
 from tool_core.result import UnifiedToolResult
 from tool_definitions import build_mcp_tool_definitions
-from mcp_server import ToolDefinition, get_mcp_server
 from tools.tool_runner import ToolRunner
 from utils.logging_utils import ScanLogger
 

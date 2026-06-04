@@ -660,7 +660,7 @@ class TestCreatePhaseAgent:
 
     def test_create_phase_agent_with_tool_runner_registers_tools(self):
         """Test that create_phase_agent with a tool_runner registers tools."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from agent_loop import ReActAgent, create_phase_agent
 

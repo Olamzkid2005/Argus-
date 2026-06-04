@@ -46,13 +46,12 @@ from config.constants import (
     SSL_TIMEOUT,
     WEB_SCANNER_CHECK_TIMEOUT,
 )
-from tools.scope_validator import validate_target_scope  # M-25: scope validation
-from tools.web_scanner_checks._helpers import test_jwt_alg_none
-from utils.logging_utils import ScanLogger
-
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
+from tools.scope_validator import validate_target_scope  # M-25: scope validation
+from tools.web_scanner_checks._helpers import test_jwt_alg_none
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 

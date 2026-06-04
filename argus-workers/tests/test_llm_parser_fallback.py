@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from llm_parser_fallback import (
     LLMParserFallback,
     _sanitize_parser_input,
@@ -84,7 +82,7 @@ class TestLLMParserFallback:
     def test_sanitize_called_on_extract(self):
         fb = LLMParserFallback()
 
-        with patch("llm_parser_fallback._sanitize_parser_input", return_value="sanitized") as mock_sanitize:
+        with patch("llm_parser_fallback._sanitize_parser_input", return_value="sanitized"):
             # Should call sanitize but fail at ensure_service
             fb.extract_findings("test", "  some output  ")
             # _sanitize_parser_input is called inside extract_findings

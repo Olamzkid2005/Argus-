@@ -2,7 +2,6 @@
 
 import queue
 import threading
-import time
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
@@ -13,8 +12,8 @@ from streaming import (
     EventType,
     StreamEvent,
     StreamEventType,
-    StreamManager,
     StreamingFindingEmitter,
+    StreamManager,
     clear_engagement_rt_fingerprints,
     clear_transactional_emitter,
     emit_agent_decision,

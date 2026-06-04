@@ -10,8 +10,9 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from developer_fix_assistant import DeveloperFixAssistant
 

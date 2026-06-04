@@ -6,15 +6,14 @@ live authentication or HTTP requests.
 """
 
 import threading
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from tools.dual_auth_scanner import DualAuthScanner
 from tool_core.base import ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus
-
+from tools.dual_auth_scanner import DualAuthScanner
 
 # ── Fixtures ────────────────────────────────────────────────────────────
 

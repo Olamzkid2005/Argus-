@@ -19,7 +19,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from tool_core.config.models import ToolMetadata
 

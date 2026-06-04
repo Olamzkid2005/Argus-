@@ -5,14 +5,13 @@ Uses mocked ``_safe_request`` to test scanner logic without live HTTP.
 Follows the same pattern as ``test_api_scanner.py``.
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
-from tools.web_scanner import WebScanner
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
-
+from tools.web_scanner import WebScanner
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -176,7 +175,7 @@ class TestCheckSecurityHeaders:
     def test_all_headers_present_no_finding(self):
         scanner = WebScanner()
         scanner.target_url = "https://example.com"
-        headers = {h: "present" for h in scanner.SECURITY_HEADERS}
+        headers = dict.fromkeys(scanner.SECURITY_HEADERS, "present")
         headers["Content-Type"] = "text/html"
         resp = _mock_response(headers=headers)
 

@@ -78,7 +78,6 @@ class TestFindingBuilder:
         assert builder.findings == []
 
     def test_emit_callback_called(self):
-        callback = None
         results = []
 
         def emit(engagement_id, finding, tool_name):

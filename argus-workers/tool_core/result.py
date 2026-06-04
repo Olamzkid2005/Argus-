@@ -294,7 +294,7 @@ class UnifiedToolResult:
         return int(self.duration_seconds * 1000)
 
     @property
-    def timeout(self) -> bool:
+    def timeout(self) -> bool:  # noqa: F811
         """Legacy ``ToolResult.timeout`` → ``.status == ToolStatus.TIMEOUT``."""
         return self.status == ToolStatus.TIMEOUT
 

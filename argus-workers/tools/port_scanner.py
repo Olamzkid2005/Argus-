@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
@@ -17,7 +16,7 @@ from typing import Any
 from feature_flags import is_enabled
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
-from tool_core.result import UnifiedToolResult, ToolStatus
+from tool_core.result import ToolStatus, UnifiedToolResult
 from tools.tool_runner import ToolRunner
 from utils.logging_utils import ScanLogger
 

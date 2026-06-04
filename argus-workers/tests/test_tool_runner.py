@@ -12,7 +12,6 @@ import pytest
 
 from tools.tool_runner import SecurityError, ToolRunner
 
-
 # Skip tests that require Unix commands (echo, sleep) on Windows
 _windows_skip = pytest.mark.skipif(
     sys.platform.startswith("win"),

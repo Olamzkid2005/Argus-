@@ -121,9 +121,7 @@ def _is_private_ip(ip: str) -> bool:
         return True
     if ip.startswith("fe80:"):
         return True
-    if ip.startswith("fc") or ip.startswith("fd"):
-        return True
-    return False
+    return bool(ip.startswith("fc") or ip.startswith("fd"))
 
 
 def run_npm_audit(repo_path: str) -> list[dict]:

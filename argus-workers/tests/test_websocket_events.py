@@ -1,10 +1,7 @@
 """Tests for websocket_events.py — WebSocketEventPublisher and convenience functions."""
 
 import json
-from unittest.mock import MagicMock, PropertyMock, patch
-
-import pytest
-import redis
+from unittest.mock import MagicMock, patch
 
 from websocket_events import (
     WebSocketEventPublisher,

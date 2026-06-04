@@ -14,7 +14,6 @@ Usage::
 """
 from __future__ import annotations
 
-import json
 import logging
 
 from tool_core.base import AbstractTool, ToolContext

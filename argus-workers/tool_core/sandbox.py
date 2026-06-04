@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from tool_core.registry import ToolRegistry
 from tool_core.result import ToolStatus, UnifiedToolResult
@@ -170,7 +170,6 @@ class AsyncToolRunner:
         safe_args, env = runner._redact_sensitive_args(args, env)
 
         # 6. Async subprocess execution
-        start_time = time.time()
         result = UnifiedToolResult(
             tool_name=tool,
             target=target,
@@ -191,7 +190,7 @@ class AsyncToolRunner:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
                     proc.communicate(), timeout=timeout
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.wait()
                 result.status = ToolStatus.TIMEOUT
@@ -336,7 +335,6 @@ class AsyncToolRunner:
         safe_args, env = runner._redact_sensitive_args(args, env)
 
         # 6. Async streaming subprocess
-        start_time = time.time()
         result = UnifiedToolResult(
             tool_name=tool,
             target=target,
@@ -397,7 +395,7 @@ class AsyncToolRunner:
 
             try:
                 await asyncio.wait_for(_read_stdout(), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 timed_out = True
                 proc.kill()
 

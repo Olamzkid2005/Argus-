@@ -69,8 +69,9 @@ class TestAsyncToolRunnerRun:
             mock_runner.is_tool_available.return_value = False  # circuit breaker open
             mock_get_runner.return_value = mock_runner
             with patch("tool_core.validators.scope.validate_target_scope", return_value=True):
-                from tools.circuit_breaker import CircuitOpenError
                 import asyncio
+
+                from tools.circuit_breaker import CircuitOpenError
                 with pytest.raises(CircuitOpenError):
                     asyncio.run(runner.run("nuclei", [], target="https://example.com"))
 
@@ -122,10 +123,10 @@ class TestAsyncToolRunnerRun:
 
                 async def mock_run():
                     mock_proc = AsyncMock()
-                    mock_proc.communicate.side_effect = asyncio.TimeoutError()
+                    mock_proc.communicate.side_effect = TimeoutError()
 
                     with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
-                        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+                        with patch("asyncio.wait_for", side_effect=TimeoutError()):
                             result = await runner.run("sleep", ["100"], timeout=0.001)
                             assert result.status == ToolStatus.TIMEOUT
                             return result

@@ -88,7 +88,7 @@ class TestTOOLSRegistry:
             assert phase in tools_by_phase, f"Phase {phase} has no tools"
 
     def test_tool_names_unique(self):
-        assert len(TOOLS) == len(set(t.name for t in TOOLS.values()))
+        assert len(TOOLS) == len({t.name for t in TOOLS.values()})
 
     def test_metadata_on_nuclei(self):
         td = TOOLS["nuclei"]
