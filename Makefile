@@ -99,70 +99,57 @@ install-frontend: ## Install frontend dependencies
 install-backend: ## Install backend dependencies
 	cd argus-workers && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 
-# ── CLI ──
+# ── Python CLI (Legacy v4) ──
 
-install-cli: ## Install CLI dependencies
+install-cli: ## Install Python CLI dependencies
 	cd argus-cli && pip install -e .
 
-dev-cli: ## Run CLI in development mode (no TUI)
+dev-cli: ## Run Python CLI in development mode (no TUI)
 	cd argus-cli && PYTHONPATH=".:../argus-workers:$$PYTHONPATH" python -m argus_cli --no-tui
 
-tui-cli: ## Launch CLI TUI
+tui-cli: ## Launch Python CLI TUI
 	cd argus-cli && PYTHONPATH=".:../argus-workers:$$PYTHONPATH" python -m argus_cli
 
-test-cli: ## Run CLI tests
-	cd argus-cli && PYTHONPATH=".:$$PYTHONPATH" python -m pytest tests/ -v --tb=short 2>/dev/null || PYTHONPATH=".:$$PYTHONPATH" python -c "
-import sys
-sys.path.insert(0, '.')
-from tests.test_providers import TestResolveProvider
-from tests.test_config import TestConfig
-from tests.test_session import TestSessionManager
-import tempfile
-from pathlib import Path
-from argus_cli.config.settings import Config
-from argus_cli.session.manager import SessionManager
-from argus_cli.core.providers import resolve_provider
+test-cli: ## Run Python CLI tests
+	cd argus-cli && PYTHONPATH=".:$$PYTHONPATH" python -m pytest tests/ -v --tb=short
 
-# Provider tests
-tests = [
-    ('gpt-5', 'openai', 'gpt-5'),
-    ('o3', 'openai', 'o3'),
-    ('claude-sonnet-4', 'anthropic', 'claude-sonnet-4'),
-    ('gemini-2.5-pro', 'gemini', 'gemini-2.5-pro'),
-    ('ollama:qwen3', 'ollama', 'qwen3'),
-]
-for model, exp_prov, exp_model in tests:
-    p, m = resolve_provider(model)
-    assert p == exp_prov and m == exp_model, f'FAIL: {model}'
-print('PASS: Provider tests')
-
-# Config tests
-config = Config()
-assert config.model == 'gpt-4o-mini'
-assert config.is_enabled('planner')
-assert not config.is_enabled('swarm')
-print('PASS: Config tests')
-
-# Session tests
-with tempfile.TemporaryDirectory() as d:
-    c = Config(); c.sessions_db = Path(d) / 's.db'
-    m = SessionManager(c)
-    s = m.create_session(target='test.com')
-    assert s.target == 'test.com'
-    m.update_session(s.id, phase='scanning')
-    assert m.get_session(s.id).phase == 'scanning'
-print('PASS: Session tests')
-print('All CLI tests passed!')
-"
-
-lint-cli: ## Lint CLI code
+lint-cli: ## Lint Python CLI code
 	cd argus-cli && ruff check argus_cli/ --fix 2>/dev/null || echo "Install ruff: pip install ruff"
 
-build-cli: ## Build CLI package
+build-cli: ## Build Python CLI package
 	cd argus-cli && python -m build
 
-clean-cli: ## Clean CLI build artifacts
+clean-cli: ## Clean Python CLI build artifacts
 	cd argus-cli && rm -rf build dist *.egg-info __pycache__ .pytest_cache
+
+# ── V5 TypeScript CLI ──
+
+install-v5: ## Install V5 CLI dependencies
+	cd Argus-Tui && bun install
+
+typecheck-v5: ## Type-check V5 TypeScript code
+	cd Argus-Tui/packages/opencode && bun typecheck
+
+test-v5: ## Run V5 CLI tests (280+ tests)
+	cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000
+
+test-v5-ci: ## Run V5 CLI tests with JUnit output
+	cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000 --reporter=junit
+
+assess-v5: ## Run V5 assessment against a target (usage: make assess-v5 TARGET=https://example.com)
+	cd Argus-Tui/packages/opencode && bun run src/argus/index.ts assess $(TARGET)
+
+doctor-v5: ## Run V5 health checks
+	cd Argus-Tui/packages/opencode && bun run src/argus/index.ts doctor
+
+doctor-v5-online: ## Run V5 health checks with LLM connectivity test
+	cd Argus-Tui/packages/opencode && bun run src/argus/index.ts doctor --online
+
+lint-v5: ## Lint V5 TypeScript code
+	cd Argus-Tui/packages/opencode && bun typecheck
+
+clean-v5: ## Clean V5 build artifacts
+	cd Argus-Tui/packages/opencode && rm -rf .artifacts
 
 # ── Security ──
 
