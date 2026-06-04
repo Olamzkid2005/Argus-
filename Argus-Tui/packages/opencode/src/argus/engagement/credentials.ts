@@ -38,6 +38,10 @@ export class CredentialStore {
     return this.data.roles[role] ?? null
   }
 
+  getAllCredentials(): Record<string, CredentialEntry> {
+    return { ...this.data.roles }
+  }
+
   listRoles(): string[] {
     return Object.keys(this.data.roles)
   }

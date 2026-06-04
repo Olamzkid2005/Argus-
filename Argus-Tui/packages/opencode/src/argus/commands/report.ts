@@ -16,7 +16,7 @@ export async function reportCommand(engagementId: string, format: "markdown" | "
     case "json":
       return generator.generateJSON(findings, engagementId, engagement.target, engagement.workflow)
     case "sarif":
-      return generator.generateSARIF(findings, engagementId, engagement.target)
+      return generator.generateSARIF(findings, engagementId, engagement.target, engagement.workflow)
     default:
       return generator.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow)
   }
