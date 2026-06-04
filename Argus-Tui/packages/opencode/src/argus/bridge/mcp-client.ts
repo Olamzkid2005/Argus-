@@ -39,6 +39,10 @@ export class WorkersBridge {
   private pendingCount = 0
   private readonly maxPending = 10
 
+  // Signal forwarding state
+  private signalHandlers: Array<{ signal: NodeJS.Signals; handler: () => void }> = []
+  private forwardingEnabled = false
+
   constructor(
     private workersPath: string,
     private pythonPath: string = "python3",
@@ -48,6 +52,36 @@ export class WorkersBridge {
       connect: () => this.connect(),
       isHealthy: () => this.isHealthy(),
     })
+  }
+
+  /** Register signal forwarding from parent to child process */
+  enableSignalForwarding(): void {
+    if (this.forwardingEnabled) return
+    this.forwardingEnabled = true
+
+    const forward = (signal: NodeJS.Signals) => {
+      if (this.process && !this.process.killed) {
+        try {
+          this.process.kill(signal)
+        } catch { /* process may already be dead */ }
+      }
+      // Don't prevent default — let the signal propagate
+    }
+
+    for (const signal of ["SIGTERM", "SIGINT"] as NodeJS.Signals[]) {
+      const handler = () => forward(signal)
+      process.on(signal, handler)
+      this.signalHandlers.push({ signal, handler })
+    }
+  }
+
+  /** Remove signal forwarding handlers */
+  private disableSignalForwarding(): void {
+    for (const { signal, handler } of this.signalHandlers) {
+      process.removeListener(signal, handler)
+    }
+    this.signalHandlers = []
+    this.forwardingEnabled = false
   }
 
   on(event: "llm-status-changed", handler: (status: string) => void): void {
@@ -69,10 +103,12 @@ export class WorkersBridge {
 
   async connect(): Promise<void> {
     this.cleanup()
-    return this.spawnChild()
+    await this.spawnChild()
+    this.enableSignalForwarding()
   }
 
   private cleanup(): void {
+    this.disableSignalForwarding()
     if (this.rl) {
       this.rl.removeAllListeners()
       this.rl.close()
@@ -136,10 +172,10 @@ export class WorkersBridge {
   }
 
   killChild(): void {
-    if (this.process) {
+    if (this.process && !this.process.killed && this.process.exitCode === null) {
       this.process.kill("SIGTERM")
       setTimeout(() => {
-        if (this.process && !this.process.killed) {
+        if (this.process && !this.process.killed && this.process.exitCode === null) {
           this.process.kill("SIGKILL")
         }
       }, 3000)
