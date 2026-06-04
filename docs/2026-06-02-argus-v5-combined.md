@@ -1782,20 +1782,23 @@ _Last updated: 2026-06-04_
 | 2026-06-04 | All 16 ADR documents created in `docs/adr/ADR-001.md` through `ADR-016.md` |
 | 2026-06-04 | Fixed pre-existing type errors in `report.ts` (missing `workflow` arg to `generateSARIF`) and `global.ts` (EventEmitter override) |
 | 2026-06-04 | Added `getAllCredentials()` to `CredentialStore` for passing all roles to browser verifiers |
+| 2026-06-04 | **Task 0.2**: Added SIGTERM/SIGINT forwarding to child Python process — signal handlers registered in `connect()`, cleaned up in `disconnect()` |
+| 2026-06-04 | **B.03 + B.04**: Replaced busy-wait `time.sleep()` polling in `connection.py` with `threading.Condition.wait()` + exponential backoff with uniform jitter |
+| 2026-06-04 | **Task 0.0.5**: Wired `capability_gaps` in `detectDrift()` — compares capability sets between MCP tools and local registry |
+| 2026-06-04 | **Task 0.5**: Added `postinstall` hook to `package.json` for automatic Playwright Chromium download |
+| 2026-06-04 | **Task 0.6**: Added `ARGUS_PYTHON` env var support + cross-platform Python discovery (Windows/Darwin/Linux) in `doctor.ts` |
 | 2026-06-04 | Added 19 new tests (executor, resume, evidence, config, verify commands) — 280 total, 0 failures |
 
 ### Remaining High-Impact Items
 
 | Priority | Item | Phase | Effort |
 |----------|------|-------|--------|
-| 🔴 High | SIGTERM/SIGINT forwarding to child Python process (orphan prevention) | 0 | Small |
 | 🔴 High | Feature flag system in TypeScript CLI (all V5 features opt-in) | 4 | Medium |
 | 🟡 Medium | OpenTelemetry integration replacing custom `ExecutionSpan` | B | Medium |
 | 🟡 Medium | ESLint `no-restricted-imports` rule for fork boundary enforcement | 0 | Small |
 | 🟡 Medium | Storage limit enforcement in `EvidenceCollector` | 2 | Small |
 | 🟡 Medium | `./argus.config.yaml` project config + `~/.argus/config.yaml` user config | 0 | Medium |
 | 🟢 Low | E2E tests against Juice Shop, crAPI, DVWA, VAmPI | 4 | Large |
-| 🟢 Low | `package.json` postinstall hook for Playwright browser download | 0 | Small |
 | 🟢 Low | Git tags for rollback (`v5-phase-1-complete`, etc.) | — | Trivial |
 | 🟢 Low | Drizzle Kit migration files | 2 | Small |
 | 🟢 Low | HTML report template | 2 | Small |
