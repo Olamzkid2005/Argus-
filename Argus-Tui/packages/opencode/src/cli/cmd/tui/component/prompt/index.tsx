@@ -1199,31 +1199,47 @@ export function Prompt(props: PromptProps) {
         if (argusCmd) {
           argusHandled = true
           const arg = firstLine.slice(firstWord.length).trim()
-          // Run the command and send its output as a chat message
-          const { WorkflowRunner } = await import("@/argus/workflow-runner")
           void (async () => {
             try {
               let output: string
-              if (cmdName === "assess" || cmdName === "scan") {
+              if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
+                const { WorkflowRunner, formatFindingsSummary } = await import("@/argus/workflow-runner")
                 const runner = new WorkflowRunner()
-                const result = await runner.run({ target: arg, useLLM: true })
-                output = [
-                  `**Assessment Complete: ${arg}**`,
-                  `Engagement: \`${result.engagementId}\``,
-                  `Findings: ${result.findings} total`,
-                  `  Critical: ${result.critical}  |  High: ${result.high}  |  Medium: ${result.medium}  |  Low: ${result.low}`,
-                  `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
-                  `\nRun \`/report ${result.engagementId}\` for the full report.`,
-                ].join("\n")
-              } else if (cmdName === "recon") {
-                const runner = new WorkflowRunner()
-                const result = await runner.run({ target: arg, useLLM: false })
-                output = [
-                  `**Recon Complete: ${arg}**`,
-                  `Engagement: \`${result.engagementId}\``,
-                  `Findings: ${result.findings} total`,
-                  `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
-                ].join("\n")
+                // Send progress updates as streaming messages
+                const progressMessages: string[] = []
+                const result = await runner.run({
+                  target: arg,
+                  useLLM: cmdName === "assess" || cmdName === "scan",
+                  onProgress: (status) => {
+                    progressMessages.push(status)
+                    // Batch progress updates into the session
+                    if (progressMessages.length >= 3) {
+                      const batch = progressMessages.splice(0, 3).join("\n")
+                      void sdk.client.session.prompt({
+                        sessionID,
+                        ...selectedModel,
+                        messageID: MessageID.ascending(),
+                        agent: agent.name,
+                        model: selectedModel,
+                        variant,
+                        parts: [{ id: PartID.ascending(), type: "text" as const, text: batch }],
+                      })
+                    }
+                  },
+                })
+                // Flush remaining progress
+                if (progressMessages.length > 0) {
+                  void sdk.client.session.prompt({
+                    sessionID,
+                    ...selectedModel,
+                    messageID: MessageID.ascending(),
+                    agent: agent.name,
+                    model: selectedModel,
+                    variant,
+                    parts: [{ id: PartID.ascending(), type: "text" as const, text: progressMessages.join("\n") }],
+                  })
+                }
+                output = formatFindingsSummary(result.allFindings, result.engagementId, arg)
               } else {
                 output = await argusCmd.handler(arg)
               }
@@ -1258,7 +1274,6 @@ export function Prompt(props: PromptProps) {
         const intent = classify(inputText)
         if (intent.type === "assessment") {
           argusHandled = true
-          const { WorkflowRunner } = await import("@/argus/workflow-runner")
           void (async () => {
             void sdk.client.session.prompt({
               sessionID,
@@ -1274,16 +1289,40 @@ export function Prompt(props: PromptProps) {
               }],
             })
             try {
+              const { WorkflowRunner, formatFindingsSummary } = await import("@/argus/workflow-runner")
               const runner = new WorkflowRunner()
-              const result = await runner.run({ target: intent.target, useLLM: intent.useLLM })
-              const output = [
-                `**Assessment Complete: ${intent.target}**`,
-                `Engagement: \`${result.engagementId}\``,
-                `Findings: ${result.findings} total`,
-                `  Critical: ${result.critical}  |  High: ${result.high}  |  Medium: ${result.medium}  |  Low: ${result.low}`,
-                `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
-                `\nRun \`/report ${result.engagementId}\` for the full report.`,
-              ].join("\n")
+              const progressMessages: string[] = []
+              const result = await runner.run({
+                target: intent.target,
+                useLLM: intent.useLLM,
+                onProgress: (status) => {
+                  progressMessages.push(status)
+                  if (progressMessages.length >= 3) {
+                    const batch = progressMessages.splice(0, 3).join("\n")
+                    void sdk.client.session.prompt({
+                      sessionID,
+                      ...selectedModel,
+                      messageID: MessageID.ascending(),
+                      agent: agent.name,
+                      model: selectedModel,
+                      variant,
+                      parts: [{ id: PartID.ascending(), type: "text" as const, text: batch }],
+                    })
+                  }
+                },
+              })
+              if (progressMessages.length > 0) {
+                void sdk.client.session.prompt({
+                  sessionID,
+                  ...selectedModel,
+                  messageID: MessageID.ascending(),
+                  agent: agent.name,
+                  model: selectedModel,
+                  variant,
+                  parts: [{ id: PartID.ascending(), type: "text" as const, text: progressMessages.join("\n") }],
+                })
+              }
+              const output = formatFindingsSummary(result.allFindings, result.engagementId, intent.target)
               void sdk.client.session.prompt({
                 sessionID,
                 ...selectedModel,

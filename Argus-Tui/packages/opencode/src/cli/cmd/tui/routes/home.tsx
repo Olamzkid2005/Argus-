@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, For, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -11,8 +11,8 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
+import { useTheme, tint } from "@tui/context/theme"
 import { logo as argusLogo } from "@/argus/logo"
-import { findArgusTuiCommand } from "@/argus/tui-commands"
 
 let once = false
 const placeholder = {
@@ -25,6 +25,14 @@ const placeholder = {
   shell: ["argus doctor", "argus status", "argus --help"],
 }
 
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+  } catch {
+    return iso
+  }
+}
+
 export function Home() {
   const sync = useSync()
   const route = useRouteData("home")
@@ -35,11 +43,32 @@ export function Home() {
   const editor = useEditorContext()
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
+  const { theme } = useTheme()
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
     return configured ?? 75
   })
+
+  // Load recent engagements
+  const [engagements, setEngagements] = createSignal<Array<{ id: string; target: string; status: string; created_at: string; findings?: number }>>([])
+  onMount(async () => {
+    try {
+      const { EngagementStore } = await import("@/argus/engagement/store")
+      const store = new EngagementStore()
+      const all = store.listEngagements()
+      const recent = all.slice(-5).reverse()
+      const withFindings = recent.map((e) => {
+        let findings = 0
+        try { findings = store.getFindings(e.id).length } catch {}
+        return { id: e.id, target: e.target, status: e.status, created_at: e.created_at, findings }
+      })
+      setEngagements(withFindings)
+    } catch {
+      // Engagement store not available
+    }
+  })
+
   let sent = false
 
   onMount(() => {
@@ -72,6 +101,8 @@ export function Home() {
     r.submit()
   })
 
+  const dimColor = tint(theme.background, theme.textMuted, 0.5)
+
   return (
     <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
@@ -88,6 +119,24 @@ export function Home() {
             <Prompt ref={bind} right={<TuiPluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </TuiPluginRuntime.Slot>
         </box>
+        <box height={1} minHeight={0} flexShrink={1} />
+        <Show when={engagements().length > 0}>
+          <box flexDirection="column" width="100%" maxWidth={promptMaxWidth()} paddingLeft={1}>
+            <text fg={theme.textMuted} attributes={{ bold: true }}>Recent Engagements</text>
+            <box height={1} />
+            <For each={engagements()}>
+              {(eng) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.textMuted}>•</text>
+                  <text fg={theme.text}>{eng.target}</text>
+                  <text fg={dimColor}>
+                    {eng.status.toLowerCase()} — {eng.findings ?? 0} finding(s) — {formatDate(eng.created_at)}
+                  </text>
+                </box>
+              )}
+            </For>
+          </box>
+        </Show>
         <TuiPluginRuntime.Slot name="home_bottom" />
         <box flexGrow={1} minHeight={0} />
         <Toast />

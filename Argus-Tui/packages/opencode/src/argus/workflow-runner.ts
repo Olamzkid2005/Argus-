@@ -4,6 +4,7 @@
  * This is the single entry point for all assessment executions, whether
  * triggered by /assess, natural language detection, CLI, or API.
  *
+ * Supports progress streaming via onProgress callback for live TUI updates.
  * Engagement creation happens here, not in the caller.
  */
 
@@ -16,10 +17,10 @@ import { EngagementStore } from "./engagement/store"
 import { CredentialStore } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
 import { EvidenceCollector } from "./evidence/collector"
-import { ReportGenerator } from "./reporting/generator"
 import { PlaywrightEngine } from "./browser/engine"
 import { join } from "path"
 import { homedir } from "os"
+import type { NormalizedFinding } from "./shared/types"
 
 export interface WorkflowRunOptions {
   target: string
@@ -27,6 +28,8 @@ export interface WorkflowRunOptions {
   workersPath?: string
   workflowsDir?: string
   credsPath?: string
+  /** Called with status updates during assessment execution */
+  onProgress?: (status: string) => void
 }
 
 export interface WorkflowRunResult {
@@ -37,16 +40,68 @@ export interface WorkflowRunResult {
   medium: number
   low: number
   durationMs: number
+  /** All findings with promoted confidence, for rendering summaries */
+  allFindings: Array<{
+    title: string
+    severity: number
+    confidence: number
+    tool: string
+    phase: string
+  }>
+}
+
+/**
+ * Format a findings summary string from raw findings.
+ * Used by both TUI and CLI output.
+ */
+export function formatFindingsSummary(
+  allFindings: WorkflowRunResult["allFindings"],
+  engagementId: string,
+  target: string,
+): string {
+  const critical = allFindings.filter((f) => f.severity >= 4)
+  const high = allFindings.filter((f) => f.severity === 3)
+  const medium = allFindings.filter((f) => f.severity === 2)
+  const low = allFindings.filter((f) => f.severity <= 1)
+
+  const lines: string[] = [
+    `**Assessment Complete: ${target}**`,
+    `Engagement: \`${engagementId}\``,
+    "",
+    "**Summary**",
+    `  Critical: ${critical.length}`,
+    `  High:     ${high.length}`,
+    `  Medium:   ${medium.length}`,
+    `  Low:      ${low.length}`,
+  ]
+
+  // Top findings by severity
+  const topFindings = [...critical, ...high, ...medium].slice(0, 5)
+  if (topFindings.length > 0) {
+    lines.push("", "**Top Findings**")
+    for (const f of topFindings) {
+      const sevLabel = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][f.severity] ?? "UNKNOWN"
+      const confLabel = ["INFO", "LOW", "MEDIUM", "HIGH", "VERIFIED", "CONFIRMED"][f.confidence] ?? "UNKNOWN"
+      lines.push(`  [${sevLabel}] ${f.title} (${confLabel})`)
+    }
+  }
+
+  lines.push("", `Run \`/report ${engagementId}\` for the full report.`)
+  return lines.join("\n")
 }
 
 export class WorkflowRunner {
   /**
    * Run an assessment workflow against a target.
    * Creates an engagement, plans phases, executes them, and returns results.
+   * Calls onProgress() with status updates for live TUI feedback.
    */
   async run(options: WorkflowRunOptions): Promise<WorkflowRunResult> {
     const startTime = Date.now()
     const target = options.target
+    const progress = options.onProgress ?? ((_: string) => {})
+
+    progress(`✓ Target validated: ${target}`)
 
     // Resolve paths relative to this file (src/argus/)
     const __dirname = typeof __dirname !== "undefined"
@@ -62,17 +117,19 @@ export class WorkflowRunner {
     const engagement = store.createEngagement(target, "assessment")
     const engagementId = engagement.id
     store.updateStatus(engagementId, "RUNNING")
+    progress(`✓ Engagement created: \`${engagementId}\``)
 
     // ── 2. Load registries ──
     const workflowRegistry = new WorkflowRegistry(workflowsDir)
     workflowRegistry.loadAll()
-
     const toolRegistry = new ToolRegistry()
     toolRegistry.load(toolsPath)
 
     // ── 3. Plan ──
+    progress(`⠋ Planning assessment...`)
     const planner = new WorkflowPlanner(workflowRegistry, toolRegistry)
     const plan = await planner.plan(target, undefined, { useLLM: options.useLLM ?? true })
+    progress(`✓ Plan created: ${plan.phases.length} phase(s)`)
 
     // ── 4. Create phase records ──
     const phaseRecords = plan.phases.map((p, i) => ({
@@ -87,8 +144,10 @@ export class WorkflowRunner {
     store.savePhases(engagementId, phaseRecords)
 
     // ── 5. Connect bridge ──
+    progress(`⠋ Connecting MCP workers...`)
     const bridge = new WorkersBridge(workersPath)
     await bridge.connect()
+    progress(`✓ MCP workers connected`)
 
     const confidenceEngine = new ConfidenceEngine()
     const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
@@ -118,6 +177,9 @@ export class WorkflowRunner {
     try {
       for (let i = 0; i < plan.phases.length; i++) {
         const phase = plan.phases[i]
+        const phaseName = phase.phaseId.split("-").slice(2).join("-") || `phase-${i}`
+        progress(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
+
         phaseRecords[i].status = "RUNNING"
         phaseRecords[i].startedAt = new Date().toISOString()
         store.savePhase(engagementId, phaseRecords[i])
@@ -129,36 +191,43 @@ export class WorkflowRunner {
           allFindings.push({ ...finding, confidence: promoted })
         }
 
-        phaseRecords[i].status = result.status === "failed" ? "FAILED" : "COMPLETED"
+        const phaseStatus = result.status === "failed" ? "FAILED" : "COMPLETED"
+        phaseRecords[i].status = phaseStatus
         phaseRecords[i].completedAt = new Date().toISOString()
         if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")
         store.savePhase(engagementId, phaseRecords[i])
+
+        const findingCount = result.findings.length
+        const errorCount = result.errors.length
+        if (errorCount > 0) {
+          progress(`⚠ Phase ${phaseName}: ${findingCount} finding(s), ${errorCount} error(s)`)
+        } else {
+          progress(`✓ Phase ${phaseName}: ${findingCount} finding(s)`)
+        }
       }
     } catch (error) {
       executionError = error as Error
+      progress(`✗ Error: ${executionError.message}`)
       store.appendAuditLog(engagementId, "RUNNER_ERROR",
-        `Workflow error: ${(error as Error).message}`)
+        `Workflow error: ${executionError.message}`)
     } finally {
       const allCompleted = phaseRecords.every((p) => p.status === "COMPLETED")
       store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PARTIAL")
       store.saveFindings(engagementId, allFindings)
       await bridge.disconnect()
+      progress(`✓ Assessment ${executionError ? "failed" : "complete"}`)
     }
 
-    // ── 8. Return results ──
-    const critical = allFindings.filter((f) => f.severity >= 4).length
-    const high = allFindings.filter((f) => f.severity === 3).length
-    const medium = allFindings.filter((f) => f.severity === 2).length
-    const low = allFindings.filter((f) => f.severity <= 1).length
-
+    // ── 8. Collate and return results ──
     return {
       engagementId,
       findings: allFindings.length,
-      critical,
-      high,
-      medium,
-      low,
+      critical: allFindings.filter((f) => f.severity >= 4).length,
+      high: allFindings.filter((f) => f.severity === 3).length,
+      medium: allFindings.filter((f) => f.severity === 2).length,
+      low: allFindings.filter((f) => f.severity <= 1).length,
       durationMs: Date.now() - startTime,
+      allFindings,
     }
   }
 }
