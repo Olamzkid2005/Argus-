@@ -89,7 +89,7 @@ export async function verifyCommand(
     await page.close()
     await ctx.close()
     lines.push(`[Argus] Evidence captured for ${findingId}`)
-  } catch { /* evidence screenshot best-effort */ }
+  } catch { console.warn("[verify] evidence screenshot failed") }
 
   await engine.close()
   return lines.join("\n")

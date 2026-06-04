@@ -144,9 +144,9 @@ describe("EngagementStore", () => {
     expect(saved[2].severity).toBe(Severity.LOW)
   })
 
-  test("saveFindings() replaces previous findings for same engagement", () => {
+  test("saveFindings() upserts findings without deleting existing ones", () => {
     const store = makeStore()
-    const eng = store.createEngagement("https://replace-findings.com", "assessment")
+    const eng = store.createEngagement("https=", "assessment")
     store.saveFindings(eng.id, [
       { id: "fo", title: "Old Finding", severity: Severity.INFO, confidence: Confidence.INFORMATIONAL, status: "PENDING", description: "old", tool: "scanner", phase: "recon", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
     ])
@@ -154,9 +154,10 @@ describe("EngagementStore", () => {
       { id: "fn", title: "New Finding", severity: Severity.HIGH, confidence: Confidence.HIGH, status: "PENDING", description: "new", tool: "scanner", phase: "vuln", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
     ])
     const saved = store.getFindings(eng.id)
-    expect(saved).toHaveLength(1)
-    expect(saved[0].id).toBe("fn")
-    expect(saved[0].title).toBe("New Finding")
+    // With upsert semantics, both findings should exist (no delete)
+    expect(saved).toHaveLength(2)
+    const ids = saved.map((f) => f.id).sort()
+    expect(ids).toEqual(["fn", "fo"])
   })
 
   test("appendAuditLog() writes audit entries", () => {

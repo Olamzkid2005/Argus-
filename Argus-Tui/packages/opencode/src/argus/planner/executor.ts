@@ -258,7 +258,7 @@ export class InProcessExecutor implements PhaseExecutor {
           artifacts.push(entry)
           await page.close()
           await ctx.close()
-        } catch { /* evidence screenshot best-effort */ }
+        } catch { console.warn("[executor] evidence screenshot failed") }
 
         if (artifacts.length > 0) {
           await evidenceCollector.createPackage(target, findingId, artifacts)
@@ -287,7 +287,7 @@ export class InProcessExecutor implements PhaseExecutor {
           findings.push(finding)
         }
       } catch (error) {
-        // Verifier error — skip silently, don't fail the whole phase
+        console.warn(`[executor] verifier error: ${(error as Error).message}`)
         continue
       }
     }

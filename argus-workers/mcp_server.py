@@ -141,15 +141,9 @@ class MCPServer:
                         command = data.get("command", data["name"])
                         # Validate command: no path traversal, no shell injection
                         cmd_basename = os.path.basename(command)
-                        if ".." in command or "/" not in command and command in blocked_command_patterns:
+                        if ".." in command or cmd_basename.lower() in blocked_command_patterns:
                             logger.warning(
                                 "Blocked potentially dangerous tool command in %s: %s",
-                                yaml_file, command,
-                            )
-                            continue
-                        if cmd_basename.lower() in blocked_command_patterns or cmd_basename.lower() in {"sh", "bash", "zsh", "dash"}:
-                            logger.warning(
-                                "Blocked shell interpreter command in %s: %s",
                                 yaml_file, command,
                             )
                             continue
@@ -262,8 +256,14 @@ class MCPServer:
             # to subprocesses (same pattern as ToolRunner._locked_env).
             _env = os.environ.copy()
             # Strip sensitive variables that should not leak to tool subprocesses
-            for _key in ("DATABASE_URL", "REDIS_URL", "OPENAI_API_KEY",
-                         "LLM_API_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID"):
+            BLOCKED_ENV_VARS = {
+                "DATABASE_URL", "REDIS_URL", "OPENAI_API_KEY", "LLM_API_KEY",
+                "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "AZURE_OPENAI_API_KEY",
+                "OPENROUTER_API_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID",
+                "AWS_SESSION_TOKEN", "GITLAB_TOKEN", "GITHUB_TOKEN", "SLACK_TOKEN",
+                "ARGUS_API_KEY", "ARGUS_ALLOWED_GIT_HOSTS",
+            }
+            for _key in BLOCKED_ENV_VARS:
                 _env.pop(_key, None)
             # Add venv to PATH so pip-installed tools are findable
             _venv_bin = str(Path(sys.executable).parent)

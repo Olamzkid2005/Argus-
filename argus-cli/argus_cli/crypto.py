@@ -21,6 +21,10 @@ from cryptography.fernet import Fernet, InvalidToken
 
 logger = logging.getLogger(__name__)
 
+
+class DecryptionError(Exception):
+    """Raised when decryption of a value fails."""
+
 _KEY_DIR = Path.home() / ".argus"
 _KEY_FILE = _KEY_DIR / ".key"
 
@@ -29,6 +33,7 @@ def _ensure_key() -> bytes:
     """Load the machine-local key, generating it if necessary."""
     if not _KEY_DIR.exists():
         _KEY_DIR.mkdir(parents=True, exist_ok=True)
+        _KEY_DIR.chmod(0o700)
 
     if _KEY_FILE.exists():
         key = _KEY_FILE.read_bytes()
@@ -67,4 +72,6 @@ def decrypt_value(ciphertext: str) -> str:
         return f.decrypt(ciphertext.encode()).decode()
     except (InvalidToken, Exception) as e:
         logger.warning("Failed to decrypt value: %s", e)
-        return ciphertext  # Return as-is if decryption fails (backward compat)
+        # Backward compat: previously returned ciphertext as plaintext;
+        # now raises so callers handle the error explicitly.
+        raise DecryptionError(f"Failed to decrypt value: {e}") from e

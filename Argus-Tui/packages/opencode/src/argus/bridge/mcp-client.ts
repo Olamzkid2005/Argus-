@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from "child_process"
 import { createInterface } from "readline"
+import { accessSync, constants } from "fs"
 import type { ToolDefinition, ToolResult, MCPError, DriftReport } from "./types"
 import { LLMUnavailableError } from "./types"
 import { WorkerSupervisor } from "./supervisor"
@@ -61,6 +62,31 @@ export class WorkersBridge {
     })
   }
 
+  private validatePaths(): void {
+    const VALID_PYTHON = new Set(["python3", "python"])
+    if (!VALID_PYTHON.has(this.pythonPath)) {
+      try {
+        accessSync(this.pythonPath, constants.X_OK)
+      } catch {
+        throw new Error(
+          `Invalid pythonPath: "${this.pythonPath}" is not "python3", "python", or a resolvable executable`
+        )
+      }
+    }
+    if (!this.workersPath.endsWith("mcp_server.py")) {
+      throw new Error(
+        `Invalid workersPath: "${this.workersPath}" must end with "mcp_server.py"`
+      )
+    }
+    try {
+      accessSync(this.workersPath, constants.R_OK)
+    } catch {
+      throw new Error(
+        `Invalid workersPath: "${this.workersPath}" does not exist or is not readable`
+      )
+    }
+  }
+
   /** Register signal forwarding from parent to child process */
   enableSignalForwarding(): void {
     if (this.forwardingEnabled) return
@@ -109,6 +135,7 @@ export class WorkersBridge {
   }
 
   async connect(): Promise<void> {
+    this.validatePaths()
     this.cleanup()
     await this.spawnChild()
     this.enableSignalForwarding()
@@ -160,7 +187,7 @@ export class WorkersBridge {
     })
 
     this.process.on("exit", (code) => {
-      this.setLLMStatus(code !== 0 ? "UNAVAILABLE" : "AVAILABLE")
+      this.setLLMStatus("UNAVAILABLE")
       // Reject all pending requests — process is gone
       for (const [id, pending] of this.pending) {
         clearTimeout(pending.timer)
@@ -179,11 +206,12 @@ export class WorkersBridge {
   }
 
   killChild(): void {
-    if (this.process && !this.process.killed && this.process.exitCode === null) {
-      this.process.kill("SIGTERM")
+    const proc = this.process
+    if (proc && !proc.killed && proc.exitCode === null) {
+      proc.kill("SIGTERM")
       setTimeout(() => {
-        if (this.process && !this.process.killed && this.process.exitCode === null) {
-          this.process.kill("SIGKILL")
+        if (proc && !proc.killed && proc.exitCode === null) {
+          proc.kill("SIGKILL")
         }
       }, 3000)
     }
@@ -309,7 +337,7 @@ export class WorkersBridge {
     const capabilityGaps: string[] = []
     for (const mcpTool of mcpTools) {
       const regTool = this.toolsCache.find((t) => t.name === mcpTool.name)
-      if (regTool && JSON.stringify(mcpTool.capabilities?.sort()) !== JSON.stringify(regTool.capabilities?.sort())) {
+      if (regTool && JSON.stringify([...(mcpTool.capabilities ?? [])].sort()) !== JSON.stringify([...(regTool.capabilities ?? [])].sort())) {
         capabilityGaps.push(`${mcpTool.name}: MCP=${JSON.stringify(mcpTool.capabilities)} vs registry=${JSON.stringify(regTool.capabilities)}`)
       }
     }

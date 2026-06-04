@@ -30,6 +30,34 @@
           {
             "group": ["**/opencode/streaming/*"],
             "message": "Import streaming through @opencode/runtime, not directly."
+          },
+          {
+            "group": ["@/provider/*"],
+            "message": "Import providers through @opencode/runtime (IProviderManager interface), not directly."
+          },
+          {
+            "group": ["@/session/*"],
+            "message": "Import sessions through @opencode/runtime (ISessionStore interface), not directly."
+          },
+          {
+            "group": ["@/agent/*"],
+            "message": "Import agent through @opencode/runtime, not directly."
+          },
+          {
+            "group": ["@/streaming/*"],
+            "message": "Import streaming through @opencode/runtime, not directly."
+          },
+          {
+            "group": ["@/tui/*"],
+            "message": "Import TUI through @opencode/runtime (IRuntimeEvents interface), not directly."
+          },
+          {
+            "group": ["@opencode-ai/core/*"],
+            "message": "Import @opencode-ai/core through @opencode/runtime, not directly."
+          },
+          {
+            "group": ["@opencode-ai/*"],
+            "message": "Import @opencode-ai packages through @opencode/runtime, not directly."
           }
         ]
       }

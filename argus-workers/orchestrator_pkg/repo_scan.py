@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 from urllib.parse import urlparse
@@ -54,6 +55,12 @@ def validate_repo_url(repo_url: str) -> str:
             f"Allowed schemes: {', '.join(ALLOWED_GIT_SCHEMES)}"
         )
 
+    # Block HTTPS/HTTP URLs with userinfo (@) — SSRF bypass via hostname spoofing
+    if parsed.scheme in ("https", "http") and parsed.username:
+        raise ValueError(
+            f"Disallowed userinfo in URL: '@' is not allowed for {parsed.scheme}:// URLs (SSRF risk)"
+        )
+
     # For ssh:// URLs, also validate the hostname
     # For git@host:path URLs, parse the host part
     netloc = parsed.netloc or ""
@@ -64,7 +71,8 @@ def validate_repo_url(repo_url: str) -> str:
             netloc = before_colon.split("@")[-1]
 
     if netloc:
-        hostname = netloc.split(":")[0] if ":" in netloc else netloc
+        # Use parsed.hostname instead of manually splitting netloc (prevents SSRF bypass via userinfo)
+        hostname = parsed.hostname or (netloc.split(":")[0] if ":" in netloc else netloc)
         if hostname and not any(
             hostname == domain or hostname.endswith("." + domain)
             for domain in GIT_HOST_ALLOWLIST
@@ -74,7 +82,48 @@ def validate_repo_url(repo_url: str) -> str:
                 f"Allowed hosts end with one of: {', '.join(sorted(set(GIT_HOST_ALLOWLIST)))}"
             )
 
+        # IP resolution check: prevent SSRF to private/loopback/link-local IPs
+        try:
+            addr_info = socket.getaddrinfo(hostname, None)
+            for family, type_, proto, canonname, sockaddr in addr_info:
+                ip = sockaddr[0]
+                if _is_private_ip(ip):
+                    raise ValueError(
+                        f"Git host '{hostname}' resolves to private IP '{ip}' (SSRF risk)"
+                    )
+        except socket.gaierror:
+            raise ValueError(f"Failed to resolve hostname: '{hostname}'")
+
     return repo_url
+
+
+def _is_private_ip(ip: str) -> bool:
+    """Check if an IP address is private, loopback, or link-local."""
+    parts = ip.split(".")
+    if len(parts) == 4:
+        if parts[0] == "10":
+            return True
+        if parts[0] == "172" and 16 <= int(parts[1]) <= 31:
+            return True
+        if parts[0] == "192" and parts[1] == "168":
+            return True
+        if parts[0] == "127":
+            return True
+        if parts[0] == "169" and parts[1] == "254":
+            return True
+        if parts[0] == "0":
+            return True
+        if parts[0] == "100" and 64 <= int(parts[1]) <= 127:
+            return True
+        if parts[0] == "198" and parts[1] == "18":
+            return True
+    if ip == "::1":
+        return True
+    if ip.startswith("fe80:"):
+        return True
+    if ip.startswith("fc") or ip.startswith("fd"):
+        return True
+    return False
 
 
 def run_npm_audit(repo_path: str) -> list[dict]:

@@ -12,6 +12,11 @@
  *   5. Built-in defaults (all false)
  */
 
+import { homedir } from "os"
+import { join } from "path"
+import { readFileSync } from "fs"
+import { parse as YAML } from "yaml"
+
 export enum Feature {
   BROWSER_VERIFICATION = "browser_verification",
   WORKFLOW_REGISTRY = "workflow_registry",
@@ -73,6 +78,22 @@ export class FeatureFlags {
         this.sources.set(feature, "config")
       }
     }
+  }
+
+  /** Load from ~/.argus/config.yaml (user config) */
+  loadFromUserConfig(configPath?: string): void {
+    const path = configPath ?? join(homedir(), ".argus", "config.yaml")
+    try {
+      const content = readFileSync(path, "utf-8")
+      const parsed = YAML.parse(content) as { features?: Record<string, boolean> } | undefined
+      if (parsed?.features) {
+        this.loadFromConfig(parsed.features)
+        for (const key of Object.keys(parsed.features)) {
+          const feature = Object.values(Feature).find((f) => f === key)
+          if (feature) this.sources.set(feature, "user_config")
+        }
+      }
+    } catch { /* config file missing or invalid — use defaults */ }
   }
 
   /** Apply CLI flag overrides */

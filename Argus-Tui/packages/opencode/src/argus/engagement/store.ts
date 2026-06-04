@@ -1,9 +1,9 @@
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { eq, desc, sql } from "drizzle-orm"
-import { join } from "path"
+import { join, dirname } from "path"
 import { homedir } from "os"
-import { mkdirSync, existsSync } from "fs"
+import { mkdirSync, existsSync, readFileSync } from "fs"
 import { randomUUID } from "crypto"
 import {
   engagements,
@@ -207,10 +207,8 @@ export class EngagementStore {
     return rows.map(toEngagementState)
   }
 
-  // FIXME: delete-then-insert is not atomic under concurrent access. Use per-row upsert for safety.
   savePhases(id: string, records: PhaseRecord[]): void {
     this.db.transaction((tx) => {
-      tx.delete(phasesTable).where(eq(phasesTable.engagement_id, id)).run()
       for (const record of records) {
         tx.insert(phasesTable).values({
           id: record.id, engagement_id: id, name: record.name, status: record.status,
@@ -218,6 +216,19 @@ export class EngagementStore {
           started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
           completed_at: record.completedAt ? new Date(record.completedAt).getTime() : null,
           error: record.error ?? null, replan_cycle: record.replanCycle ? 1 : 0,
+        }).onConflictDoUpdate({
+          target: phasesTable.id,
+          set: {
+            engagement_id: id,
+            name: record.name,
+            status: record.status,
+            capabilities: record.capabilities,
+            execution_mode: record.executionMode,
+            started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
+            completed_at: record.completedAt ? new Date(record.completedAt).getTime() : null,
+            error: record.error ?? null,
+            replan_cycle: record.replanCycle ? 1 : 0,
+          },
         }).run()
       }
     })
@@ -251,12 +262,13 @@ export class EngagementStore {
     return rows.map(toPhaseRecord)
   }
 
-  // FIXME: delete-then-insert is not atomic under concurrent access. Use per-row upsert for safety.
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
     this.db.transaction((tx) => {
-      tx.delete(findingsTable).where(eq(findingsTable.engagement_id, engagementId)).run()
       for (const record of records) {
-        tx.insert(findingsTable).values(toFindingRow(record, engagementId)).run()
+        tx.insert(findingsTable).values(toFindingRow(record, engagementId)).onConflictDoUpdate({
+          target: findingsTable.id,
+          set: toFindingRow(record, engagementId),
+        }).run()
       }
     })
   }
