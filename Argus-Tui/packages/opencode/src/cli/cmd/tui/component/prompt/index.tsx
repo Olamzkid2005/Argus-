@@ -1200,14 +1200,18 @@ export function Prompt(props: PromptProps) {
           argusHandled = true
           const arg = firstLine.slice(firstWord.length).trim()
           // Navigate to scan dashboard for assess/recon commands
+          let scanEngagementId: string | undefined
           if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
             try {
               const { navigateTo } = await import("@/argus/tui/navigator")
               const { EngagementStore } = await import("@/argus/engagement/store")
               const store = new EngagementStore()
               const eng = store.createEngagement(arg, "assessment")
+              scanEngagementId = eng.id
               navigateTo({ type: "scan", target: arg, engagementId: eng.id })
-            } catch {}
+            } catch (e) {
+              console.error("Failed to navigate to scan dashboard:", e)
+            }
           }
           void (async () => {
             try {
@@ -1219,6 +1223,7 @@ export function Prompt(props: PromptProps) {
                 const progressMessages: string[] = []
                 const result = await runner.run({
                   target: arg,
+                  engagementId: scanEngagementId,
                   useLLM: cmdName === "assess" || cmdName === "scan",
                   onProgress: (status) => {
                     progressMessages.push(status)
@@ -1285,13 +1290,17 @@ export function Prompt(props: PromptProps) {
         if (intent.type === "assessment") {
           argusHandled = true
           // Navigate to scan dashboard
+          let nlEngagementId: string | undefined
           try {
             const { navigateTo } = await import("@/argus/tui/navigator")
             const { EngagementStore } = await import("@/argus/engagement/store")
             const store = new EngagementStore()
             const eng = store.createEngagement(intent.target, "assessment")
+            nlEngagementId = eng.id
             navigateTo({ type: "scan", target: intent.target, engagementId: eng.id })
-          } catch {}
+          } catch (e) {
+            console.error("Failed to navigate to scan dashboard:", e)
+          }
           void (async () => {
             void sdk.client.session.prompt({
               sessionID,
@@ -1312,6 +1321,7 @@ export function Prompt(props: PromptProps) {
               const progressMessages: string[] = []
               const result = await runner.run({
                 target: intent.target,
+                engagementId: nlEngagementId,
                 useLLM: intent.useLLM,
                 onProgress: (status) => {
                   progressMessages.push(status)

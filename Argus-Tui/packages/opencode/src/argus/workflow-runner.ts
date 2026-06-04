@@ -30,6 +30,12 @@ export interface WorkflowRunOptions {
   credsPath?: string
   /** Called with status updates during assessment execution */
   onProgress?: (status: string) => void
+  /**
+   * Existing engagement ID to use instead of creating a new one.
+   * The caller is responsible for creating the engagement and passing
+   * the ID here. If omitted, a new engagement is created automatically.
+   */
+  engagementId?: string
 }
 
 export interface WorkflowRunResult {
@@ -112,12 +118,23 @@ export class WorkflowRunner {
     const workflowsDir = options.workflowsDir ?? join(__dirname, "./workflows")
     const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
-    // ── 1. Create engagement ──
+    // ── 1. Create or use existing engagement ──
     const store = new EngagementStore()
-    const engagement = store.createEngagement(target, "assessment")
-    const engagementId = engagement.id
-    store.updateStatus(engagementId, "RUNNING")
-    progress(`✓ Engagement created: \`${engagementId}\``)
+    let engagementId = options.engagementId
+    if (engagementId) {
+      // Verify the engagement exists
+      const existing = store.getEngagement(engagementId)
+      if (!existing) {
+        throw new Error(`Engagement ${engagementId} not found in store`)
+      }
+      store.updateStatus(engagementId, "RUNNING")
+      progress(`✓ Using existing engagement: \`${engagementId}\``)
+    } else {
+      const engagement = store.createEngagement(target, "assessment")
+      engagementId = engagement.id
+      store.updateStatus(engagementId, "RUNNING")
+      progress(`✓ Engagement created: \`${engagementId}\``)
+    }
 
     // ── 2. Load registries ──
     const workflowRegistry = new WorkflowRegistry(workflowsDir)

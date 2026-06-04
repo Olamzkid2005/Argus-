@@ -2,7 +2,7 @@
  * Findings Viewer — Browse and filter assessment findings.
  */
 
-import { createEffect, createMemo, createSignal, onMount, For, Show } from "solid-js"
+import { createMemo, createSignal, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRouteData } from "@tui/context/route"
 import { Toast } from "@tui/ui/toast"
@@ -29,26 +29,28 @@ export function FindingsViewer() {
 
   const severityLabel = (s: number) => ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][s] ?? "UNKNOWN"
   const severityColor = (s: number) => {
-    if (s >= 4) return "#ef4444"
-    if (s >= 3) return "#f59e0b"
-    if (s >= 2) return "#00bcd4"
-    return theme.textMuted
+    if (s >= 4) return theme.error as string
+    if (s >= 3) return theme.warning as string
+    if (s >= 2) return theme.primary as string
+    return theme.textMuted as string
   }
 
   onMount(async () => {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
-      const all = store.listEngagements()
-      setEngagements(all.map((e: any) => ({ id: e.id, target: e.target })))
+      interface EngInfo { id: string; target: string }
+      const all = store.listEngagements() as EngInfo[]
+      setEngagements(all.map((e: EngInfo) => ({ id: e.id, target: e.target })))
 
       if (!selectedEng() && all.length > 0) {
         setSelectedEng(all[all.length - 1].id)
       }
 
       if (selectedEng()) {
-        const findings = store.getFindings(selectedEng()!)
-        setAllFindings(findings.map((f: any) => ({
+        interface RawFinding { title: string; severity: number; confidence: number; description?: string; tool?: string; phase?: string; status?: string }
+        const findings = store.getFindings(selectedEng()!) as RawFinding[]
+        setAllFindings(findings.map((f: RawFinding) => ({
           title: f.title,
           severity: f.severity ?? 0,
           confidence: f.confidence ?? 0,
@@ -60,6 +62,7 @@ export function FindingsViewer() {
       }
       setLoading(false)
     } catch (e) {
+      console.error("Failed to load findings:", e)
       setLoading(false)
     }
   })
@@ -101,7 +104,7 @@ export function FindingsViewer() {
           paddingX={0.5}
           onMouse={(e: any) => { if (e.type === "down") setFilterSev(4) }}
         >
-          <text fg={filterSev() === 4 ? "#ef4444" : theme.textMuted} font="mono">
+          <text fg={filterSev() === 4 ? (theme.error as string) : theme.textMuted} font="mono">
             Critical ({critical()})
           </text>
         </box>
@@ -109,7 +112,7 @@ export function FindingsViewer() {
           paddingX={0.5}
           onMouse={(e: any) => { if (e.type === "down") setFilterSev(3) }}
         >
-          <text fg={filterSev() === 3 ? "#f59e0b" : theme.textMuted} font="mono">
+          <text fg={filterSev() === 3 ? (theme.warning as string) : theme.textMuted} font="mono">
             High ({high()})
           </text>
         </box>
@@ -117,7 +120,7 @@ export function FindingsViewer() {
           paddingX={0.5}
           onMouse={(e: any) => { if (e.type === "down") setFilterSev(2) }}
         >
-          <text fg={filterSev() === 2 ? "#00bcd4" : theme.textMuted} font="mono">
+          <text fg={filterSev() === 2 ? (theme.primary as string) : theme.textMuted} font="mono">
             Medium ({medium()})
           </text>
         </box>

@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tracing import setup_tracing
+
 
 # ── Signal quality tiers for planner intelligence ──
 
@@ -41,7 +43,6 @@ class ToolCost:
     MEDIUM = "medium"
     HIGH = "high"
 
-from tracing import setup_tracing
 
 tracer = setup_tracing()
 

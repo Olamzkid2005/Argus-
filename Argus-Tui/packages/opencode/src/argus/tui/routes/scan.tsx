@@ -5,18 +5,31 @@
  * and a results summary when the assessment completes.
  */
 
-import { createEffect, createMemo, createSignal, onMount, For, Show, onCleanup } from "solid-js"
+import { createMemo, createSignal, onMount, For, Show, onCleanup } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { useTerminalDimensions } from "@opentui/solid"
 import { Toast } from "@tui/ui/toast"
-import { useRoute, useRouteData } from "@tui/context/route"
+import { useRouteData } from "@tui/context/route"
 
+interface EngPhase {
+  id: string
+  name: string
+  status: string
+  error?: string
+}
+interface EngFinding {
+  title: string
+  severity: number
+  confidence: number
+  tool: string
+  description?: string
+  phase?: string
+}
 interface EngagementData {
   id: string
   target: string
   status: string
-  phases: Array<{ name: string; status: string; findings: number; errors: string[] }>
-  findings: Array<{ title: string; severity: number; confidence: number; tool: string }>
+  phases: Array<{ name: string; status: string; errors: string[] }>
+  findings: EngFinding[]
   duration: number
 }
 
@@ -39,19 +52,18 @@ export function ScanDashboard() {
         setLoading(false)
         return
       }
-      const engPhases = store.getPhases(route.engagementId)
-      const engFindings = store.getFindings(route.engagementId)
+      const engPhases = store.getPhases(route.engagementId) as EngPhase[]
+      const engFindings = store.getFindings(route.engagementId) as EngFinding[]
       setData({
         id: engagement.id,
         target: engagement.target,
         status: engagement.status,
-        phases: engPhases.map((p: any) => ({
+        phases: engPhases.map((p: EngPhase) => ({
           name: p.name || p.id,
           status: p.status,
-          findings: 0,
           errors: p.error ? [p.error] : [],
         })),
-        findings: engFindings.map((f: any) => ({
+        findings: engFindings.map((f: EngFinding) => ({
           title: f.title,
           severity: f.severity ?? 0,
           confidence: f.confidence ?? 0,
@@ -63,22 +75,23 @@ export function ScanDashboard() {
 
       // Poll for updates if running
       if (engagement.status === "RUNNING" || engagement.status === "ACTIVE") {
+        let pollCount = 0
         const interval = setInterval(async () => {
+          pollCount++
           try {
             const updated = store.getEngagement(route.engagementId)
             if (!updated) return
-            const uPhases = store.getPhases(route.engagementId)
-            const uFindings = store.getFindings(route.engagementId)
+            const uPhases = store.getPhases(route.engagementId) as EngPhase[]
+            const uFindings = store.getFindings(route.engagementId) as EngFinding[]
             setData((prev) => prev ? {
               ...prev,
               status: updated.status,
-              phases: uPhases.map((p: any) => ({
+              phases: uPhases.map((p: EngPhase) => ({
                 name: p.name || p.id,
                 status: p.status,
-                findings: 0,
                 errors: p.error ? [p.error] : [],
               })),
-              findings: uFindings.map((f: any) => ({
+              findings: uFindings.map((f: EngFinding) => ({
                 title: f.title,
                 severity: f.severity ?? 0,
                 confidence: f.confidence ?? 0,
@@ -88,8 +101,10 @@ export function ScanDashboard() {
             if (updated.status === "COMPLETED" || updated.status === "FAILED") {
               clearInterval(interval)
             }
-          } catch {}
-        }, 2000)
+          } catch (pollErr) {
+            console.error("Scan poll error:", pollErr)
+          }
+        }, pollCount < 5 ? 1000 : 5000)
         onCleanup(() => clearInterval(interval))
       }
     } catch (e) {
@@ -102,16 +117,16 @@ export function ScanDashboard() {
 
   const severityLabel = (s: number) => ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][s] ?? "UNKNOWN"
   const severityColor = (s: number) => {
-    if (s >= 4) return "#ef4444"
-    if (s >= 3) return "#f59e0b"
-    if (s >= 2) return "#00bcd4"
-    return theme.textMuted
+    if (s >= 4) return theme.error as string
+    if (s >= 3) return theme.warning as string
+    if (s >= 2) return theme.primary as string
+    return theme.textMuted as string
   }
   const statusColor = (s: string) => {
-    if (s === "COMPLETED" || s === "PASS") return "#00d4aa"
-    if (s === "RUNNING" || s === "ACTIVE") return "#00bcd4"
-    if (s === "FAILED") return "#ef4444"
-    return theme.textMuted
+    if (s === "COMPLETED" || s === "PASS") return theme.success as string
+    if (s === "RUNNING" || s === "ACTIVE") return theme.primary as string
+    if (s === "FAILED") return theme.error as string
+    return theme.textMuted as string
   }
 
   const critical = createMemo(() => data()?.findings.filter((f) => f.severity >= 4).length ?? 0)

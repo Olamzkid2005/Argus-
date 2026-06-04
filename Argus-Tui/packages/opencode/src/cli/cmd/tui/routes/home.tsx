@@ -11,7 +11,7 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
-import { useTheme, tint } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { logo as argusLogo } from "@/argus/logo"
 
 let once = false
@@ -85,6 +85,9 @@ export function Home() {
     { name: "Browser Verify", online: false, icon: "🌐" },
   ])
 
+  // Cache for doctor results (30 second TTL)
+  let doctorCache: { results: ReturnType<typeof doctorCommand> extends Promise<infer T> ? T : never; ts: number } | null = null
+
   onMount(async () => {
     // Load engagements from store
     try {
@@ -92,7 +95,7 @@ export function Home() {
       const store = new EngagementStore()
       const all = store.listEngagements()
       const recent = all.slice(-5).reverse()
-      const withFindings = recent.map((e) => {
+      const withFindings = recent.map((e: any) => {
         let findings = 0
         try { findings = store.getFindings(e.id).length } catch {}
         return { id: e.id, target: e.target, status: e.status, created_at: e.created_at, findings }
@@ -100,10 +103,17 @@ export function Home() {
       setEngagements(withFindings)
     } catch {}
 
-    // Check system status via doctor
+    // Check system status via cached doctor
     try {
-      const { doctorCommand } = await import("@/argus/commands/doctor")
-      const results = await doctorCommand()
+      const CACHE_TTL = 30000 // 30 seconds
+      let results: Array<{ name: string; status: string }>
+      if (doctorCache && Date.now() - doctorCache.ts < CACHE_TTL) {
+        results = doctorCache.results
+      } else {
+        const { doctorCommand } = await import("@/argus/commands/doctor")
+        results = await doctorCommand() as Array<{ name: string; status: string }>
+        doctorCache = { results, ts: Date.now() }
+      }
       const statusMap: Record<string, boolean> = {
         "Planner": true,
         "Workflow Engine": true,
@@ -115,7 +125,9 @@ export function Home() {
       setSystemStatus((prev) =>
         prev.map((s) => ({ ...s, online: statusMap[s.name] ?? false })),
       )
-    } catch {}
+    } catch (e) {
+      console.error("Failed to check system status:", e)
+    }
   })
 
   let sent = false
