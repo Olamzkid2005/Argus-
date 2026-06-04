@@ -32,6 +32,7 @@ export class InProcessExecutor implements PhaseExecutor {
   private requiredGates: ApprovalGate[] = []
   private browserDeps: BrowserVerifierDeps | null = null
   private featureFlags: FeatureFlags | null = null
+  private phaseCount = 0
 
   constructor(
     private toolRegistry: ToolRegistry,
@@ -66,6 +67,24 @@ export class InProcessExecutor implements PhaseExecutor {
   async execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
     if (!this.gatesLoaded) {
       throw new Error("loadGates must be called before execute")
+    }
+
+    this.phaseCount++
+
+    // Periodic MCP drift check: every 5 phases, run a lightweight capability
+    // hash comparison. On mismatch, run the full detectDrift() and log.
+    if (this.phaseCount % 5 === 0) {
+      try {
+        const inSync = await this.bridge.quickDriftCheck()
+        if (!inSync) {
+          const drift = await this.bridge.detectDrift()
+          if (drift.missing_from_mcp.length > 0 || drift.missing_from_registry.length > 0 || drift.capability_gaps.length > 0) {
+            console.warn(`[executor] MCP drift detected at phase ${phase.phaseId}:`, JSON.stringify(drift))
+          }
+        }
+      } catch {
+        // Drift check is advisory — never fail a phase for it
+      }
     }
 
     const gate = this.isFeatureEnabled(Feature.APPROVAL_GATES)

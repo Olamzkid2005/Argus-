@@ -329,6 +329,31 @@ export class WorkersBridge {
     this.setLLMStatus("AVAILABLE")
   }
 
+  /** Lightweight drift check: compares a hash of (tool names + capability sets).
+   *  Returns true if MCP and registry are in sync. Returns false on mismatch,
+   *  at which point callers should run the full detectDrift() for details.
+   *  Hash includes capability sets so a tool that changes capabilities without
+   *  changing its name is still detected.
+   */
+  async quickDriftCheck(): Promise<boolean> {
+    const { createHash } = await import("crypto")
+    const mcpTools = await this.getTools()
+
+    const mcpKey = mcpTools
+      .map((t) => `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`)
+      .sort()
+      .join("|")
+    const regKey = this.toolsCache
+      .map((t) => `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`)
+      .sort()
+      .join("|")
+
+    const mcpHash = createHash("sha256").update(mcpKey).digest("hex")
+    const regHash = createHash("sha256").update(regKey).digest("hex")
+
+    return mcpHash === regHash
+  }
+
   async detectDrift(): Promise<DriftReport> {
     const mcpTools = await this.getTools()
     const mcpNames = new Set(mcpTools.map((t) => t.name))

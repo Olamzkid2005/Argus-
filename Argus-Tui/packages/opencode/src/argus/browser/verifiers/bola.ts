@@ -64,10 +64,12 @@ export class BOLAVerifier implements VerificationScenario {
   async collectEvidence(): Promise<EvidencePackage> {
     return {
       packageId: "", findingId: "",
-      screenshots: this.capturedScreenshots.map(s => s.label),
-      requests: this.capturedRequests,
-      responses: this.capturedResponses,
-      logs: this.logs,
+      artifacts: [
+        ...this.capturedScreenshots.map((s) => ({ path: s.label, type: "screenshot" as const })),
+        ...this.capturedRequests.map((r) => ({ path: r, type: "request" as const })),
+        ...this.capturedResponses.map((r) => ({ path: r, type: "response" as const })),
+      ],
+      packageHash: "",
       createdAt: new Date().toISOString(),
     }
   }

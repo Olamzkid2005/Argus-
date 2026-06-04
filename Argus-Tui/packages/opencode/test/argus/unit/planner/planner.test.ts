@@ -51,6 +51,7 @@ describe("WorkflowPlanner", () => {
       }
       const toolRegistry = {
         findBestTools: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
+        selectBest: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
       }
       const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
       const plan = await planner.plan("https://example.com/api/v1")
@@ -66,6 +67,7 @@ describe("WorkflowPlanner", () => {
       const registry = { findByCapabilities: () => workflow }
       const toolRegistry = {
         findBestTools: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
+        selectBest: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
       }
       const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
       const plan = await planner.plan("https://example.com")
@@ -81,7 +83,7 @@ describe("WorkflowPlanner", () => {
 
     test("plan() uses deterministic fallback when useLLM is false", async () => {
       const registry = { findByCapabilities: () => null }
-      const toolRegistry = { findBestTools: () => [] }
+      const toolRegistry = { findBestTools: () => [], selectBest: () => [] }
       const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
       const plan = await planner.plan("https://example.com", {}, { useLLM: false })
 
@@ -90,7 +92,7 @@ describe("WorkflowPlanner", () => {
 
     test("plan() falls back to deterministic when no workflow matches", async () => {
       const registry = { findByCapabilities: () => null }
-      const toolRegistry = { findBestTools: () => [] }
+      const toolRegistry = { findBestTools: () => [], selectBest: () => [] }
       const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
       const plan = await planner.plan("https://example.com")
 

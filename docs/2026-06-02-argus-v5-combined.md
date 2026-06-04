@@ -1675,22 +1675,22 @@ No circular dependencies. Coupling is moderate: commands depends on 5 modules, b
 
 | ADR | Title | Key Decision |
 |-----|-------|-------------|
-| ADR-001 | MCP Transport Layer | stdio JSON-RPC subprocess vs TCP daemon |
-| ADR-002 | Evidence Storage | Hybrid: SQLite (better-sqlite3 via Drizzle ORM, WAL mode) for all metadata, engagements, findings, evidence_packages, artifacts. Filesystem for binary blobs only. Per-package manifest.json for exportable integrity independent of DB. No JSON indexes, no state.json, no findings.json. |
-| ADR-003 | Planner Decision Mode | Hybrid: LLM first, deterministic fallback |
-| ADR-004 | Credential Management | JSON credential file vs env vars |
-| ADR-005 | Error Recovery Policy | Per-phase retry/skip/fail matrix |
-| ADR-006 | Backend Connection Pooling | Single pool always vs raw connections |
-| ADR-007 | Threat Intel Caching | Redis-TTL vs in-memory vs no cache |
-| ADR-008 | Future Multi-Agent Architecture | Reserved — single-agent for v5, architecture must support future delegation |
-| ADR-009 | Feature Flag Strategy | Per-module activation (browser_verification, workflow_registry, engagement_store); all off by default in v5 |
-| ADR-010 | Evidence Integrity | SHA256 per artifact is sufficient for v5; signature-based verification deferred until evidence sharing across orgs is required |
-| ADR-011 | Credential Storage Evolution | `--creds` JSON file for v5; document future path to OS keychain, HashiCorp Vault, or encrypted secrets store |
-| ADR-012 | Assessment Execution Model | Sequential workflow execution for v5; parallel DAG support reserved for v5.1 — phases execute in order, tools within a phase run concurrently when `execution: parallel` |
-| ADR-013 | Capability Taxonomy | Canonical `Capability` enum in `capabilities.ts` — single source of truth: what a capability is, how it is named, how it is deprecated; YAML validation enforces enum membership |
-| ADR-014 | Configuration Hierarchy | CLI flags > Environment variables > Project config (`./argus.config.yaml`) > User config (`~/.argus/config.yaml`) > Built-in defaults. Deep-merge objects, replace arrays. Workflow YAMLs excluded — they define the plan, not runtime config. |
-| ADR-015 | Fork Boundary Enforcement | Argus modules depend only on symbols exported from public runtime entry points (`@opencode/runtime`). Direct imports into OpenCode implementation files or subdirectories are prohibited. Enforced via `no-restricted-imports` ESLint rule. |
-| ADR-016 | LLM Availability & Fallback Strategy | Layered detection: Provider → Bridge → Planner. Typed `LLMUnavailableError`. Per-phase fallback to deterministic mode. Circuit breaker enters sticky `DEGRADED` after 3 failures in 10 minutes. Recovery probes re-enable LLM after cooldown. |
+| [ADR-001](docs/adr/ADR-001.md) | MCP Transport Layer | stdio JSON-RPC subprocess vs TCP daemon |
+| [ADR-002](docs/adr/ADR-002.md) | Evidence Storage | Hybrid: SQLite (better-sqlite3 via Drizzle ORM, WAL mode) for all metadata, engagements, findings, evidence_packages, artifacts. Filesystem for binary blobs only. Per-package manifest.json for exportable integrity independent of DB. No JSON indexes, no state.json, no findings.json. |
+| [ADR-003](docs/adr/ADR-003.md) | Planner Decision Mode | Hybrid: LLM first, deterministic fallback |
+| [ADR-004](docs/adr/ADR-004.md) | Credential Management | JSON credential file vs env vars |
+| [ADR-005](docs/adr/ADR-005.md) | Error Recovery Policy | Per-phase retry/skip/fail matrix |
+| [ADR-006](docs/adr/ADR-006.md) | Backend Connection Pooling | Single pool always vs raw connections |
+| [ADR-007](docs/adr/ADR-007.md) | Threat Intel Caching | Redis-TTL vs in-memory vs no cache |
+| [ADR-008](docs/adr/ADR-008.md) | Future Multi-Agent Architecture | Reserved — single-agent for v5, architecture must support future delegation |
+| [ADR-009](docs/adr/ADR-009.md) | Feature Flag Strategy | Per-module activation (browser_verification, workflow_registry, engagement_store); all off by default in v5 |
+| [ADR-010](docs/adr/ADR-010.md) | Evidence Integrity | SHA256 per artifact is sufficient for v5; signature-based verification deferred until evidence sharing across orgs is required |
+| [ADR-011](docs/adr/ADR-011.md) | Credential Storage Evolution | `--creds` JSON file for v5; document future path to OS keychain, HashiCorp Vault, or encrypted secrets store |
+| [ADR-012](docs/adr/ADR-012.md) | Assessment Execution Model | Sequential workflow execution for v5; parallel DAG support reserved for v5.1 — phases execute in order, tools within a phase run concurrently when `execution: parallel` |
+| [ADR-013](docs/adr/ADR-013.md) | Capability Taxonomy | Canonical `Capability` enum in `capabilities.ts` — single source of truth: what a capability is, how it is named, how it is deprecated; YAML validation enforces enum membership |
+| [ADR-014](docs/adr/ADR-014.md) | Configuration Hierarchy | CLI flags > Environment variables > Project config (`./argus.config.yaml`) > User config (`~/.argus/config.yaml`) > Built-in defaults. Deep-merge objects, replace arrays. Workflow YAMLs excluded — they define the plan, not runtime config. |
+| [ADR-015](docs/adr/ADR-015.md) | Fork Boundary Enforcement | Argus modules depend only on symbols exported from public runtime entry points (`@opencode/runtime`). Direct imports into OpenCode implementation files or subdirectories are prohibited. Enforced via `no-restricted-imports` ESLint rule. |
+| [ADR-016](docs/adr/ADR-016.md) | LLM Availability & Fallback Strategy | Layered detection: Provider → Bridge → Planner. Typed `LLMUnavailableError`. Per-phase fallback to deterministic mode. Circuit breaker enters sticky `DEGRADED` after 3 failures in 10 minutes. Recovery probes re-enable LLM after cooldown. |
 
 ---
 
@@ -1761,11 +1761,11 @@ _Last updated: 2026-06-04_
 
 | Phase | Tasks | Status | Completion Estimate |
 |-------|-------|--------|-------------------|
-| **Phase 0: Architecture Gaps** | 16 tasks | ✅ Nearly complete | ~95% |
-| **Phase B: Backend Remediation** | 12 tasks | ✅ Mostly done | ~90% |
-| **Phase 1: Foundation** | 5 tasks | ✅ Mostly done | ~80% |
-| **Phase 2: Core Modules** | 6 tasks | ✅ Complete | ~98% |
-| **Phase 3: CLI Integration** | 6 tasks | ✅ Nearly complete | ~97% |
+| **Phase 0: Architecture Gaps** | 16 tasks | ✅ Complete | 100% |
+| **Phase B: Backend Remediation** | 12 tasks | ✅ Complete | 100% |
+| **Phase 1: Foundation** | 5 tasks | ✅ Complete | 100% |
+| **Phase 2: Core Modules** | 6 tasks | ✅ Complete | 100% |
+| **Phase 3: CLI Integration** | 6 tasks | ✅ Complete | 100% |
 | **Phase 4: Safety & Rollback** | 3 tasks | ✅ Complete | 100% |
 | **Phase 5: Polish** | 3 tasks | ✅ Complete | 100% |
 

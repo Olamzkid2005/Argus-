@@ -58,7 +58,7 @@ describe("PrivilegeEscalationVerifier", () => {
     await verifier.execute()
     const evidence = await verifier.collectEvidence()
     // Should have requests for both endpoints (+ initial navigate for login)
-    const endpointRequests = evidence.requests.filter((r: string) => r.startsWith("GET"))
+    const endpointRequests = evidence.artifacts.filter((r) => r.type === "request")
     expect(endpointRequests.length).toBeGreaterThanOrEqual(2)
   })
 
@@ -119,7 +119,7 @@ describe("PrivilegeEscalationVerifier", () => {
     await verifier.setup()
     await verifier.execute()
     const evidence = await verifier.collectEvidence()
-    expect(evidence.logs.length).toBeGreaterThan(0)
+    expect(evidence.artifacts.length).toBeGreaterThan(0)
     expect(evidence.createdAt).toBeDefined()
   })
 

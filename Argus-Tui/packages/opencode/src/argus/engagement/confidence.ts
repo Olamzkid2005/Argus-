@@ -15,7 +15,10 @@ const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (fin
   {
     from: Confidence.MEDIUM,
     to: Confidence.HIGH,
-    condition: (f) => f.owasp !== undefined || f.cwe !== undefined,
+    condition: (f) =>
+      (f.owasp !== undefined || f.cwe !== undefined) ||
+      // 2xx on an auth check endpoint is a strong signal
+      (f.statusCode !== undefined && f.statusCode >= 200 && f.statusCode < 300),
   },
   {
     from: Confidence.HIGH,

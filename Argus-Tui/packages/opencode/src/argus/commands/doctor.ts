@@ -111,18 +111,28 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
 
 async function playwrightCheck(): Promise<CheckResult> {
   try {
-    await execCapture("npx", ["playwright", "--version"])
+    // Use --no-install to avoid npx downloading packages on check
+    await execCapture("npx", ["--no-install", "playwright", "--version"], 15000)
     return {
       name: "Playwright",
       status: "PASS",
       message: "Playwright CLI available",
     }
   } catch (error) {
-    process.stderr.write(`[doctor] playwright check failed: ${(error as Error).message}\n`)
-    return {
-      name: "Playwright",
-      status: "WARN",
-      message: "Playwright CLI not found. Run: npx playwright install chromium",
+    // Try without --no-install in case Playwright isn't cached yet (slower)
+    try {
+      await execCapture("npx", ["playwright", "--version"], 30000)
+      return {
+        name: "Playwright",
+        status: "PASS",
+        message: "Playwright CLI available",
+      }
+    } catch {
+      return {
+        name: "Playwright",
+        status: "WARN",
+        message: "Playwright CLI not found. Run: npx playwright install chromium",
+      }
     }
   }
 }
@@ -230,19 +240,93 @@ function credCheck(): CheckResult {
   }
 }
 
-/** Toolchain check: verify security tool binaries exist on PATH */
+interface ToolVersionDef {
+  name: string
+  min_version?: string
+  version_cmd?: string
+  version_regex?: string
+}
+
+/** Built-in version definitions for tools that don't appear in tool-definitions.yaml */
+const BUILTIN_TOOL_VERSIONS: ToolVersionDef[] = [
+  { name: "nuclei", min_version: "3.0.0", version_cmd: "nuclei --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "nmap", version_cmd: "nmap --version", version_regex: "\\d+\\.\\d+" },
+  { name: "whatweb", version_cmd: "whatweb --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+]
+
+function parseSemver(version: string): number[] {
+  return version.split(".").map((p) => {
+    const n = parseInt(p, 10)
+    return isNaN(n) ? 0 : n
+  })
+}
+
+function compareVersions(a: string, b: string): number {
+  const aParts = parseSemver(a)
+  const bParts = parseSemver(b)
+  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+    const diff = (aParts[i] ?? 0) - (bParts[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+/** Toolchain check: verify security tool binaries exist on PATH and check versions */
 function toolchainCheck(): CheckResult {
   const requiredTools = ["nuclei", "nmap", "whatweb"]
   const optionalTools = ["nikto", "ffuf", "httpx", "subfinder"]
   const { execFileSync } = require("child_process") as typeof import("child_process")
+  const { execSync } = require("child_process") as typeof import("child_process")
 
   const missing: string[] = []
   const found: string[] = []
+  const versionWarnings: string[] = []
+
+  // Load per-tool version requirements from tool-definitions.yaml if available
+  const toolVersionMap = new Map<string, ToolVersionDef>()
+  for (const def of BUILTIN_TOOL_VERSIONS) {
+    toolVersionMap.set(def.name, def)
+  }
+  try {
+    const { readFileSync } = require("fs") as typeof import("fs")
+    const { parse: YAML } = require("yaml") as typeof import("yaml")
+    const yamlPath = require("path").join(__dirname, "../workflows/tool-definitions.yaml")
+    const raw = readFileSync(yamlPath, "utf-8")
+    const parsed = YAML(raw) as { tools?: ToolVersionDef[] } | undefined
+    if (parsed?.tools) {
+      for (const tool of parsed.tools) {
+        if (tool.min_version || tool.version_cmd) {
+          toolVersionMap.set(tool.name, tool)
+        }
+      }
+    }
+  } catch { /* tool-definitions.yaml not available — use builtins */ }
 
   for (const tool of [...requiredTools, ...optionalTools]) {
     try {
       execFileSync("which", [tool], { stdio: "ignore" })
       found.push(tool)
+
+      // Version check
+      const versionDef = toolVersionMap.get(tool)
+      if (versionDef?.version_cmd && versionDef?.min_version) {
+        try {
+          const cmd = versionDef.version_cmd
+          const cmdParts = cmd.split(/\s+/)
+          const output = execSync(cmd, { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] })
+          const match = output.match(new RegExp(versionDef.version_regex))
+          if (match) {
+            const version = match[0]
+            if (compareVersions(version, versionDef.min_version) < 0) {
+              versionWarnings.push(`${tool} v${version} is older than recommended minimum v${versionDef.min_version}`)
+            }
+          } else {
+            versionWarnings.push(`${tool}: could not determine version from "${cmd}" output`)
+          }
+        } catch {
+          versionWarnings.push(`${tool}: version check failed (is it installed?)`)
+        }
+      }
     } catch {
       if (requiredTools.includes(tool)) missing.push(tool)
     }
@@ -251,9 +335,13 @@ function toolchainCheck(): CheckResult {
   const messages: string[] = []
   if (found.length > 0) messages.push(`${found.length} tool(s) found: ${found.join(", ")}`)
   if (missing.length > 0) messages.push(`MISSING: ${missing.join(", ")} (required for ${missing.length > 1 ? "some" : "a"} capability)`)
+  if (versionWarnings.length > 0) messages.push(...versionWarnings)
 
-  if (missing.length > 0) {
-    return { name: "Toolchain", status: "WARN", message: messages.join("; ") }
+  const hasErrors = missing.length > 0
+  const hasWarnings = versionWarnings.length > 0
+
+  if (hasErrors || hasWarnings) {
+    return { name: "Toolchain", status: hasErrors ? "FAIL" : "WARN", message: messages.join("; ") }
   }
   return { name: "Toolchain", status: "PASS", message: messages.join("; ") || "No tools defined" }
 }

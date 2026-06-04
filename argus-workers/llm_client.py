@@ -407,7 +407,7 @@ class LLMClient:
                 self._circuit_failures = 0
 
         # Rate limit: ensure we don't exceed 60 req/min per worker
-        self._check_rate_limit()
+        await self._check_rate_limit_async()
 
         last_error = None
         for attempt in range(self.max_retries + 1):
@@ -525,7 +525,7 @@ class LLMClient:
                 self._circuit_failures = 0
 
         # Rate limit: ensure we don't exceed 60 req/min per worker
-        self._check_rate_limit()
+        await self._check_rate_limit_async()
 
         req_timeout = timeout or 30
         last_error = None

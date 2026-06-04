@@ -1,0 +1,23 @@
+name: xss
+label: Stored Cross-Site Scripting Verification
+version: 1
+phases:
+  - name: injection
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: retry_once_then_skip
+  - name: victim_view
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: skip_and_continue
+  - name: evidence_collection
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: skip_and_continue
+approval_required:
+  destructive_tools: false
+  auth_testing: false
+  privilege_escalation: false

@@ -240,43 +240,27 @@ class ExecutionSpan:
                 end_time = time.time()
                 duration_ms = int((end_time - start_time) * 1000)
 
-                if trace_id:
-                    self._store_span(trace_id, span_name, duration_ms)
+                # NOTE: _store_span() was removed 2026-06-04 as part of B.06.
+                # OTel exporter (console + OTLP) is the only persistence path.
+                # If you need DB-backed spans, configure an OTLP collector to
+                # write to Postgres instead.
 
                 otel_span.set_attribute("duration_ms", duration_ms)
                 slog.info(f"SPAN END: {span_name} ({duration_ms}ms)")
 
-    def _store_span(self, trace_id: str, span_name: str, duration_ms: int) -> None:
-        if not self.connection_string:
-            return
-        try:
-            from database.connection import get_db
-            db = get_db()
-            conn = db.get_connection()
-            cursor = conn.cursor()
-            try:
-                cursor.execute("""
-                    INSERT INTO execution_spans
-                    (trace_id, span_name, duration_ms, created_at)
-                    VALUES (%s, %s, %s, %s)
-                """, (
-                    trace_id,
-                    span_name,
-                    duration_ms,
-                    datetime.now(UTC).isoformat(),
-                ))
-                conn.commit()
-            finally:
-                cursor.close()
-                db.release_connection(conn)
-        except Exception as e:
-            logger.error("Failed to store span: %s", e)
+    # DEPRECATED: _store_span() removed 2026-06-04 (B.06).
+    # The execution_spans table is preserved for backward compatibility
+    # but is no longer written to. OTel exporter handles span persistence.
+    # To re-enable DB-backed spans, configure an OTLP collector.
+    #
+    # The table definition in the database migration is marked @deprecated
+    # and can be dropped once all deployments confirm they don't rely on it.
 
     def record_span(self, span_name: str, duration_ms: int, trace_id: str = None) -> None:
-        if not trace_id:
-            trace_id = TraceContext.get_trace_id()
-        if trace_id:
-            self._store_span(trace_id, span_name, duration_ms)
+        """Record a span duration. Span is exported via OTel, not written to DB."""
+        from utils.logging_utils import ScanLogger
+        slog = ScanLogger("tracing")
+        slog.info(f"SPAN RECORD: {span_name} ({duration_ms}ms)")
 
 
 class TracingManager:

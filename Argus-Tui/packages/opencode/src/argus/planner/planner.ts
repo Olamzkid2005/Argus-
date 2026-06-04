@@ -56,7 +56,7 @@ export class WorkflowPlanner {
     const phases: PhaseExecutionRequest[] = []
     for (let i = 0; i < workflow.phases.length; i++) {
       const def = workflow.phases[i]
-      const tools = this.toolRegistry.findBestTools(def.required_capabilities, targetType)
+      const tools = this.toolRegistry.selectBest(def.required_capabilities, targetType)
 
       if (tools.length === 0) {
         if (def.error_recovery !== "fail_fast") {

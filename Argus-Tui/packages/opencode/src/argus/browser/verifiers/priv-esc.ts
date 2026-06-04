@@ -85,17 +85,22 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
-    const screenshots: string[] = []
+    const artifacts: import("../../shared/types").ArtifactRef[] = []
     for (const shot of this.capturedScreenshots) {
       const filename = `priv-esc-${shot.label}.png`
       await Bun.write(filename, shot.data)
-      screenshots.push(filename)
+      artifacts.push({ path: filename, type: "screenshot" })
+    }
+    for (const req of this.capturedRequests) {
+      artifacts.push({ path: req, type: "request" })
+    }
+    for (const res of this.capturedResponses) {
+      artifacts.push({ path: res, type: "response" })
     }
     return {
-      packageId: "", findingId: "", screenshots,
-      requests: this.capturedRequests,
-      responses: this.capturedResponses,
-      logs: this.logs,
+      packageId: "", findingId: "",
+      artifacts,
+      packageHash: "",
       createdAt: new Date().toISOString(),
     }
   }

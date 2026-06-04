@@ -82,6 +82,28 @@ export const phases = sqliteTable("phases", {
   index("idx_phases_engagement").on(table.engagement_id),
 ])
 
+/**
+ * Tool execution log — records outcomes for adaptive scoring (Task 11).
+ * Writing to this table is optional; the adaptive scoring feedback loop
+ * is deferred to v6. The table exists now so the schema is ready when
+ * execution data needs to be collected.
+ * Fields: tool_name, target_type, capability, succeeded, duration_ms, engagement_id, created_at
+ */
+export const tool_execution_log = sqliteTable("tool_execution_log", {
+  id: text().primaryKey(),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
+  tool_name: text().notNull(),
+  target_type: text().notNull(),
+  capability: text().notNull(),
+  succeeded: integer({ mode: "boolean" }).notNull(),
+  duration_ms: integer().notNull(),
+  created_at: integer().notNull().$default(() => Date.now()),
+}, (table) => [
+  index("idx_tool_exec_engagement").on(table.engagement_id),
+  index("idx_tool_exec_tool").on(table.tool_name),
+  index("idx_tool_exec_capability").on(table.capability),
+])
+
 export const audit_log = sqliteTable("audit_log", {
   id: text().primaryKey(),
   engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),

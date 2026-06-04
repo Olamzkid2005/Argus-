@@ -50,6 +50,14 @@ const TABLE_SQL = [
     created_at INTEGER NOT NULL
   )`,
   sql`CREATE INDEX IF NOT EXISTS idx_audit_log_engagement ON audit_log(engagement_id)`,
+  sql`CREATE TABLE IF NOT EXISTS tool_execution_log (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+    tool_name TEXT NOT NULL, target_type TEXT NOT NULL, capability TEXT NOT NULL,
+    succeeded INTEGER NOT NULL, duration_ms INTEGER NOT NULL, created_at INTEGER NOT NULL
+  )`,
+  sql`CREATE INDEX IF NOT EXISTS idx_tool_exec_engagement ON tool_execution_log(engagement_id)`,
+  sql`CREATE INDEX IF NOT EXISTS idx_tool_exec_tool ON tool_execution_log(tool_name)`,
+  sql`CREATE INDEX IF NOT EXISTS idx_tool_exec_capability ON tool_execution_log(capability)`,
   sql`CREATE TABLE IF NOT EXISTS evidence_packages (
     id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
     package_hash TEXT NOT NULL, created_at INTEGER NOT NULL
@@ -203,7 +211,7 @@ export class EngagementStore {
   }
 
   listEngagements(): EngagementState[] {
-    const rows = this.db.select().from(engagements).orderBy(desc(engagements.created_at)).all()
+    const rows = this.db.select().from(engagements).orderBy(desc(engagements.created_at), desc(engagements.id)).all()
     return rows.map(toEngagementState)
   }
 

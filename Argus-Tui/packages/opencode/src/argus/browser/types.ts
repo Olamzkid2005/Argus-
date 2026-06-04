@@ -1,4 +1,5 @@
 import { Confidence } from "../shared/types"
+import type { EvidencePackage } from "../shared/types"
 
 export interface VerificationScenario {
   name: string
@@ -31,13 +32,4 @@ export interface DiffResult {
   removals: string[]
 }
 
-export interface EvidencePackage {
-  packageId: string
-  findingId: string
-  screenshots: string[]
-  requests: string[]
-  responses: string[]
-  har?: string
-  logs: string[]
-  createdAt: string
-}
+export type { EvidencePackage }

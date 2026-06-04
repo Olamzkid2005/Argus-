@@ -9,6 +9,9 @@ tools:
     supports_api: true
     supports_web: true
     timeout_seconds: 300
+    min_version: "3.0.0"
+    version_cmd: "nuclei --version"
+    version_regex: "\\d+\\.\\d+\\.\\d+"
     scoring:
       confidence_score: 90
       coverage_score: 85

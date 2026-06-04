@@ -66,7 +66,12 @@ export class ToolRegistry {
     return Array.from(this.toolsByName.values())
   }
 
+  /** @deprecated Use selectBest() instead */
   findBestTools(capabilities: Capability[], _targetType: string): ToolDef[] {
+    return this.selectBest(capabilities, _targetType)
+  }
+
+  selectBest(capabilities: Capability[], _targetType?: string): ToolDef[] {
     const candidates = new Map<string, { tool: ToolDef; score: number }>()
 
     for (const cap of capabilities) {

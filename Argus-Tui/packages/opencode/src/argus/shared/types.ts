@@ -26,6 +26,12 @@ export interface NormalizedFinding {
   created_at: string
   updated_at: string
   finalized_at?: string
+  /** HTTP status code observed during finding (e.g., 200, 403, 500) */
+  statusCode?: number
+  /** If true, this finding represents the absence of a finding (negative evidence).
+   *  Used by replan to trigger capability insertion on scan misses.
+   *  Negative findings are exempt from MAX_REPLANS on first consideration. */
+  negative?: boolean
 }
 
 export interface ArtifactRef {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { validateWorkflowVersion, canResume, canRetryPhase } from "@argus/engagement/recovers"
+import { validateWorkflowVersion, canResume, canRetryPhase } from "@argus/engagement/recovery"
 import type { EngagementState } from "@argus/engagement/types"
 
 function makeEngagement(overrides?: Partial<EngagementState>): EngagementState {

@@ -1,0 +1,23 @@
+name: privilege_escalation
+label: Privilege Escalation Verification
+version: 1
+phases:
+  - name: auth_bypass_check
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: retry_once_then_skip
+  - name: endpoint_access_check
+    required_capabilities:
+      - browser_verification
+    execution: parallel
+    error_recovery: skip_and_continue
+  - name: evidence_collection
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: skip_and_continue
+approval_required:
+  destructive_tools: false
+  auth_testing: true
+  privilege_escalation: true

@@ -2,6 +2,11 @@
 -- Generated from: src/argus/engagement/schema.sql.ts
 -- Applied automatically by EngagementStore.ensureTables() on startup.
 -- Run `bun drizzle-kit push` to apply, or rely on the auto-create in store.ts.
+--
+-- NOTE: The execution_spans table (Postgres, created by argus-workers tracing.py)
+-- is @deprecated as of 2026-06-04. The OTel exporter replaced DB-backed span
+-- storage. The table still exists in existing databases for backward compat
+-- but is no longer written to. Safe to drop once no deployments rely on it.
 
 CREATE TABLE IF NOT EXISTS engagements (
     id TEXT PRIMARY KEY,

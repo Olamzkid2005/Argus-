@@ -23,6 +23,18 @@ from tracing import ExecutionSpan, StructuredLogger, get_trace_id
 logger = logging.getLogger(__name__)
 
 
+# Thread-local event loop for async enrichment (B.10).
+# Each Celery worker thread gets its own loop, reused across evaluate() calls.
+# Avoids creating a new event loop per call while keeping callers synchronous.
+_thread_local = threading.local()
+
+
+def _get_event_loop() -> asyncio.AbstractEventLoop:
+    if not hasattr(_thread_local, "loop"):
+        _thread_local.loop = asyncio.new_event_loop()
+    return _thread_local.loop
+
+
 class IntelligenceEngine:
     """
     Decision-making core that analyzes findings and generates actions.
@@ -113,7 +125,18 @@ class IntelligenceEngine:
             # Enrich findings with threat intelligence (CVE data, EPSS scores,
             # threat feed hits, FP assessment) before analysis so
             # high-exploitability CVEs can influence risk assessment.
-            enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
+            # B.10: Use async enrichment variant with thread-local event loop.
+            # The cache from B.02 is in place, so concurrent NVD/EPSS requests
+            # hit Redis rather than the upstream API.
+            try:
+                loop = _get_event_loop()
+                enriched_findings = loop.run_until_complete(
+                    self.enrich_findings_with_threat_intel_async(scored_findings)
+                )
+            except Exception:
+                # Fall back to sync enrichment if async fails (e.g., event loop issue)
+                logger.warning("Async enrichment failed — falling back to sync", exc_info=True)
+                enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
 
             # Build and persist attack graph for snapshot consumption
             self._build_and_persist_attack_graph(enriched_findings, snapshot)

@@ -6,3 +6,5 @@ app.log
 script/build-*.ts
 temporary-*.md
 .artifacts
+# Test-generated screenshots from browser verifiers
+*.png
