@@ -43,7 +43,19 @@ export class WorkflowPlanner {
     }
 
     if (options?.useLLM === false) {
-      return planDeterministic(target)
+      const plan = planDeterministic(target)
+      // Filter out phases with zero tools (unless fail_fast) — deterministic
+      // mode uses hardcoded phases that may reference capabilities no tool provides.
+      plan.phases = plan.phases.filter((p) => {
+        const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
+        if (tools.length > 0) return true
+        const name = p.phaseId.split("-").slice(2).join("-")
+        const skip = plan.errorRecovery?.[p.phaseId] !== "fail_fast"
+        if (skip) return false
+        process.stderr.write(`Warning: Adding fail_fast phase "${name}" with zero available tools\n`)
+        return true
+      })
+      return plan
     }
 
     const requiredCaps = determineRequiredCapabilities(targetType, authState, plannerContext.techStack)

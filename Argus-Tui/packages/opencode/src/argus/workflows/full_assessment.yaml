@@ -41,7 +41,7 @@ phases:
     required_capabilities:
       - report_generation
     execution: sequential
-    error_recovery: fail_fast
+    error_recovery: skip_and_continue
 
 approval_required:
   destructive_tools: true

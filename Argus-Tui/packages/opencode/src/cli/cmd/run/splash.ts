@@ -20,6 +20,7 @@ import {
 } from "@opentui/core"
 import * as Locale from "@/util/locale"
 import { go, logo } from "@/cli/logo"
+import { logo as argusLogo } from "@/argus/logo"
 import type { RunSplashTheme } from "./theme"
 
 export const SPLASH_TITLE_LIMIT = 50
@@ -203,14 +204,16 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   const left = color(input.theme.left, fallback(81, "#38bdf8"))
   const right = color(input.theme.right, RGBA.defaultForeground(RGBA.fromHex("#f8fafc")))
   const leftShadow = color(input.theme.leftShadow, fallback(238, "#334155"))
+  const isArgus = !!process.env.ARGUS_MODE
   let height = 1
 
   if (kind === "entry") {
     const rightShadow = color(input.theme.rightShadow, fallback(240, "#475569"))
+    const glyphs = isArgus ? argusLogo : logo
 
-    for (let i = 0; i < logo.left.length; i += 1) {
-      const leftText = logo.left[i] ?? ""
-      const rightText = logo.right[i] ?? ""
+    for (let i = 0; i < glyphs.left.length; i += 1) {
+      const leftText = glyphs.left[i] ?? ""
+      const rightText = glyphs.right[i] ?? ""
 
       draw(lines, leftText, {
         left: 0,
@@ -226,11 +229,11 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       })
     }
 
-    height = logo.left.length
+    height = glyphs.left.length
 
     if (input.showSession !== false) {
-      const top = logo.left.length + 1
-      const label = "Session".padEnd(10, " ")
+      const top = glyphs.left.length + 1
+      const label = isArgus ? "Engagement".padEnd(10, " ") : "Session".padEnd(10, " ")
       push(lines, 0, top, label, left, undefined, TextAttributes.DIM)
       push(lines, label.length, top, meta.title, right, undefined, TextAttributes.BOLD)
       height = top + 1
@@ -238,11 +241,14 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   }
 
   if (kind === "exit") {
-    const mark = go.right.slice(1)
+    const mark = isArgus ? argusLogo.right.slice(1) : go.right.slice(1)
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
-    const session = "Session  "
+    const session = isArgus ? "Engagement  " : "Session  "
     const label = "Continue "
+    const resumeCmd = isArgus
+      ? `argus resume ${meta.session_id}`
+      : `opencode run -i -s ${meta.session_id}`
 
     for (let i = 0; i < mark.length; i += 1) {
       draw(lines, mark[i] ?? "", {
@@ -263,7 +269,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       lines,
       body_left + label.length,
       top + 1,
-      `opencode run -i -s ${meta.session_id}`,
+      resumeCmd,
       right,
       undefined,
       TextAttributes.BOLD,

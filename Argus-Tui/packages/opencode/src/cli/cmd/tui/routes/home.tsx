@@ -38,6 +38,7 @@ export function Home() {
   })
 
   const [engagements, setEngagements] = createSignal<Array<{ id: string; target: string; status: string }>>([])
+  const [stats, setStats] = createSignal<{ targets: number; active: number; findings: number } | null>(null)
   const [statusLine, setStatusLine] = createSignal("")
 
   let doctorCache: { results: string; ts: number } | null = null
@@ -46,8 +47,15 @@ export function Home() {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
-      const all = store.listEngagements() as Array<{ id: string; target: string; status: string }>
-      setEngagements(all.slice(-5).reverse())
+      const all = store.listEngagements()
+      setEngagements(all.slice(-5).reverse() as Array<{ id: string; target: string; status: string }>)
+      const totalTargets = new Set(all.map((e: any) => e.target)).size
+      const openEngagements = all.filter((e: any) => e.status === "RUNNING" || e.status === "CREATED").length
+      let totalFindings = 0
+      for (const e of all.slice(0, 20)) {
+        totalFindings += store.getFindings(e.id).length
+      }
+      setStats({ targets: totalTargets, active: openEngagements, findings: totalFindings })
     } catch {}
     // Quick async status check without importing doctorCommand (which launches MCP)
     Promise.resolve().then(async () => {
@@ -100,7 +108,24 @@ export function Home() {
         <box alignItems="center" paddingTop={1}>
           <text fg={theme.primary}>● Ready for assessment operations.</text>
         </box>
-        <box height={2} />
+        {/* Summary stats */}
+        <Show when={stats()}>
+          <box flexDirection="row" gap={3} paddingTop={1} paddingBottom={1}>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.text} bold>{stats()!.targets.toString()}</text>
+              <text fg={theme.textMuted}>targets</text>
+            </box>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.warning} bold>{stats()!.active.toString()}</text>
+              <text fg={theme.textMuted}>active</text>
+            </box>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.error} bold>{stats()!.findings.toString()}</text>
+              <text fg={theme.textMuted}>findings</text>
+            </box>
+          </box>
+        </Show>
+        <box height={1} />
         <box flexDirection="row" maxWidth={promptMaxWidth()}>
           <box flexDirection="column" flexGrow={1}>
             <text fg={theme.text}>Quick Actions</text>

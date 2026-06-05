@@ -84,7 +84,7 @@ import {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
-import { ArgusCommandRegistry } from "@/argus/tui-command-registry"
+
 import { setNavigateHandler } from "@/argus/tui/navigator"
 
 const appGlobalBindingCommands = [
@@ -238,7 +238,6 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
         fallback={(error, reset) => <ErrorComponent error={error} reset={reset} exit={input.exit} mode={mode} />}
       >
         <OpencodeKeymapProvider keymap={input.keymap}>
-          <ArgusCommandRegistry />
           <ArgsProvider {...input.args}>
             <ExitProvider exit={input.exit}>
               <KVProvider>
@@ -955,12 +954,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           dialog.clear()
         },
       },
+
     ].map((command) => ({
       namespace: "palette",
       ...command,
     })),
   )
-
   useBindings(() => ({
     commands: appCommands(),
   }))
@@ -1112,7 +1111,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
               <ArgusDashboard />
             </Match>
             <Match when={route.data.type === "home"}>
-              {process.env.ARGUS_MODE ? <ArgusDashboard /> : <Home />}
+              <Home />
             </Match>
             <Match when={route.data.type === "session"}>
               <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>

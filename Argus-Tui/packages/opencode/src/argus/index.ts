@@ -4,15 +4,16 @@
  * Primary entry point for the Argus CLI and TUI.
  *
  * Usage:
- *   argus                        Launch Argus TUI (interactive)
+ *   argus                        Launch Argus TUI (interactive dashboard)
  *   argus doctor                 Run health checks
  *   argus assess <target>        Run full assessment
  *   argus --help                 Show this help
  *
- * This file replaces `src/index.ts` as the user-facing binary.
- * OpenCode's `src/index.ts` remains available for development.
+ * The TUI is powered by OpenCode's SolidJS terminal UI framework
+ * (@opentui/solid) with Argus branding and routes. When ARGUS_MODE=1,
+ * the TUI shows ArgusDashboard, ScanDashboard, FindingsViewer, and
+ * other Argus-specific screens instead of the default OpenCode home.
  */
-
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { EOL } from "os"
@@ -39,44 +40,35 @@ function show(out: string) {
 }
 
 /**
- * Load dashboard stats from the engagement store.
- * Silently returns null if the store can't be opened (first run, no ~/.argus/).
- */
-async function loadDashboardStats(): Promise<UI.DashboardStats | null> {
-  try {
-    const { EngagementStore } = await import("./engagement/store")
-    const store = new EngagementStore()
-    const engagements = store.listEngagements()
-    if (engagements.length === 0) return null
-    const totalTargets = new Set(engagements.map((e) => e.target)).size
-    const openEngagements = engagements.filter((e) => e.status === "RUNNING" || e.status === "CREATED").length
-    let confirmedFindings = 0
-    const recentEngagements = engagements.slice(0, 10).map((e) => {
-      const findings = store.getFindings(e.id)
-      confirmedFindings += findings.filter((f) => f.status === "CONFIRMED" || f.status === "FINALIZED").length
-      return { id: e.id, target: e.target, status: e.status, findingCount: findings.length, updatedAt: e.updatedAt }
-    })
-    return { totalTargets, openEngagements, confirmedFindings, recentEngagements }
-  } catch (e) {
-    // First run or DB issue — log to debug, show welcome dashboard without stats
-    console.debug("Could not load engagement stats (first run?):", e)
-    return null
-  }
-}
-
-/**
  * Launch the interactive Argus TUI (OpenCode TUI with Argus branding).
+ *
+ * The TUI uses SolidJS via @opentui/solid for a rich terminal interface.
+ * When ARGUS_MODE=1, the home screen shows ArgusDashboard and all
+ * Argus routes (scan, findings, engagements, workspace) are available.
  */
 function launchTui() {
   const _dirname = dirname(fileURLToPath(import.meta.url))
   const entry = join(_dirname, "../../src/index.ts")
+  const pkgDir = join(_dirname, "../..")
 
   const child = spawn("bun", ["run", "--conditions=browser", entry, "run", "--interactive"], {
     stdio: "inherit",
+    cwd: pkgDir,
     env: { ...process.env, ARGUS_MODE: "1" },
   })
 
+  child.on("error", (err) => {
+    // #region debug log
+    fetch('http://127.0.0.1:50797/ingest/argus-debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'argus-debug',location:'index.ts:launchTui',message:'spawn error',data:{error:err.message,entry,code:err.code},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    console.error("Failed to launch TUI:", err.message)
+    process.exit(1)
+  })
+
   child.on("exit", (code, signal) => {
+    // #region debug log
+    fetch('http://127.0.0.1:50797/ingest/argus-debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'argus-debug',location:'index.ts:launchTui',message:'child exited',data:{code,signal,entry,cwd:pkgDir},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (signal) {
       process.kill(process.pid, signal)
       return
@@ -87,9 +79,9 @@ function launchTui() {
 
 async function main() {
   if (args.length === 0) {
-    // No arguments: show the Argus dashboard, then launch the TUI
-    const stats = await loadDashboardStats()
-    process.stderr.write(EOL + UI.dashboard(stats) + EOL)
+    // No arguments: launch the rich TUI directly.
+    // The TUI's home route shows ArgusDashboard (via ARGUS_MODE=1) with
+    // stats loaded from the engagement store, so no need to pre-render here.
     launchTui()
   } else if (args[0] === "--help" || args[0] === "-h") {
     show(formatCliHelp())

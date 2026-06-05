@@ -275,16 +275,22 @@ export function RunPromptBody(props: {
 export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
+    const isArgus = !!process.env.ARGUS_MODE
+
     if (shell()) {
-      return new StyledText([bg(input.theme().surface)(fg(input.theme().muted)('Run a command... "git status"'))])
+      const text = isArgus ? 'Run a command... "nmap -sV target"' : 'Run a command... "git status"'
+      return new StyledText([bg(input.theme().surface)(fg(input.theme().muted)(text))])
     }
 
     if (!input.state().first) {
       return ""
     }
 
+    const text = isArgus
+      ? 'Run an assessment... "/assess https://example.com"'
+      : 'Ask anything... "Fix a TODO in the codebase"'
     return new StyledText([
-      bg(input.theme().surface)(fg(input.theme().muted)('Ask anything... "Fix a TODO in the codebase"')),
+      bg(input.theme().surface)(fg(input.theme().muted)(text)),
     ])
   })
 

@@ -38,6 +38,8 @@ export const SLASH_COMMANDS = new Set([
   "tools",
   "workflows",
   "config", "status",
+  "help",
+  "quit", "exit",
 ])
 
 export function detectSlashCommand(input: string): ClassifiedIntent | null {

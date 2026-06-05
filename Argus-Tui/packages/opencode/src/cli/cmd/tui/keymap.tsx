@@ -8,6 +8,7 @@ import {
 import { KeymapProvider, useKeymap, useKeymapSelector, useBindings } from "@opentui/keymap/solid"
 import { createMemo, type Accessor } from "solid-js"
 import type { TuiConfig } from "./config/tui"
+
 import { useTuiConfig } from "./context/tui-config"
 import { TuiKeybind } from "./config/keybind"
 

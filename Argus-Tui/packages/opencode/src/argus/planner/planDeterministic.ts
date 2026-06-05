@@ -8,7 +8,7 @@ const PHASE_ERROR_POLICY: Record<string, ErrorRecovery> = {
   auth_detection: "skip_and_continue",
   api_discovery: "skip_and_continue",
   verification: "skip_and_continue",
-  reporting: "fail_fast",
+  reporting: "skip_and_continue",
 }
 
 function getTargetPlans(target: string): Record<TargetType, PhaseExecutionRequest[]> {

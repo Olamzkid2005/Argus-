@@ -312,11 +312,20 @@ interface ToolVersionDef {
   version_regex?: string
 }
 
-/** Built-in version definitions for tools that don't appear in tool-definitions.yaml */
-const BUILTIN_TOOL_VERSIONS: ToolVersionDef[] = [
+/** Built-in version definitions for tools. These are checked if a tool is found on PATH. */
+const TOOL_VERSION_CHECKS: ToolVersionDef[] = [
   { name: "nuclei", min_version: "3.0.0", version_cmd: "nuclei --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
   { name: "nmap", version_cmd: "nmap --version", version_regex: "\\d+\\.\\d+" },
+  { name: "nikto", version_cmd: "nikto -Version", version_regex: "\\d+\\.\\d+\\.\\d+" },
   { name: "whatweb", version_cmd: "whatweb --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "ffuf", version_cmd: "ffuf -V", version_regex: "\\d+\\.\\d+" },
+  { name: "httpx", version_cmd: "httpx -version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "subfinder", version_cmd: "subfinder -version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "dalfox", version_cmd: "dalfox version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "gitleaks", version_cmd: "gitleaks version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "trivy", version_cmd: "trivy --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "semgrep", version_cmd: "semgrep --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
+  { name: "katana", version_cmd: "katana -version", version_regex: "\\d+\\.\\d+\\.\\d+" },
 ]
 
 function parseSemver(version: string): number[] {
@@ -338,78 +347,94 @@ function compareVersions(a: string, b: string): number {
 
 /** Toolchain check: verify security tool binaries exist on PATH and check versions */
 function toolchainCheck(): CheckResult {
-  const requiredTools = ["nuclei", "nmap", "whatweb"]
-  const optionalTools = ["nikto", "ffuf", "httpx", "subfinder"]
   const { execFileSync } = require("child_process") as typeof import("child_process")
   const { execSync } = require("child_process") as typeof import("child_process")
+  const { readdirSync } = require("fs") as typeof import("fs")
 
-  const missing: string[] = []
   const found: string[] = []
+  const missing: string[] = []
   const versionWarnings: string[] = []
 
-  // Load per-tool version requirements from tool-definitions.yaml if available
-  const toolVersionMap = new Map<string, ToolVersionDef>()
-  for (const def of BUILTIN_TOOL_VERSIONS) {
-    toolVersionMap.set(def.name, def)
+  // Build a map of tool → version check info from builtins (these have min_version)
+  const versionCheckMap = new Map<string, ToolVersionDef>()
+  for (const def of TOOL_VERSION_CHECKS) {
+    versionCheckMap.set(def.name, def)
   }
+
+  // Tools considered "core" (expected to be installed, warn if missing)
+  const coreTools = new Set<string>(["nuclei", "nmap", "gitleaks", "semgrep", "trivy"])
+
+  // ── Scan the authoritative tool definitions directory ──────────────
+  // This is the same directory the Python MCP worker reads.
+  const toolsDefDir = join(projectRoot, "argus-workers/tools/definitions")
+  let allToolNames: string[] = []
   try {
-    const { readFileSync } = require("fs") as typeof import("fs")
-    const { parse: YAML } = require("yaml") as typeof import("yaml")
-    const yamlPath = require("path").join(__dirname, "../workflows/tool-definitions.yaml")
-    const raw = readFileSync(yamlPath, "utf-8")
-    const parsed = YAML(raw) as { tools?: ToolVersionDef[] } | undefined
-    if (parsed?.tools) {
-      for (const tool of parsed.tools) {
-        if (tool.min_version || tool.version_cmd) {
-          toolVersionMap.set(tool.name, tool)
-        }
+    const files = readdirSync(toolsDefDir)
+    for (const file of files) {
+      if (file.endsWith(".yaml") || file.endsWith(".yml")) {
+        allToolNames.push(file.replace(/\.(yaml|yml)$/, ""))
       }
     }
-  } catch { /* tool-definitions.yaml not available — use builtins */ }
+    allToolNames.sort()
+  } catch {
+    // tools/definitions/ not available — fall back to builtin names
+    allToolNames = Array.from(versionCheckMap.keys()).sort()
+  }
 
-  for (const tool of [...requiredTools, ...optionalTools]) {
+  // ── Check each tool ────────────────────────────────────────────────
+  for (const tool of allToolNames) {
     try {
       execFileSync("which", [tool], { stdio: "ignore" })
       found.push(tool)
 
-      // Version check
-      const versionDef = toolVersionMap.get(tool)
+      // Version check — only for tools that have a version check defined
+      const versionDef = versionCheckMap.get(tool)
       if (versionDef?.version_cmd && versionDef?.min_version) {
         try {
-          const cmd = versionDef.version_cmd
-          const cmdParts = cmd.split(/\s+/)
-          const output = execSync(cmd + " 2>&1", { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] })
+          const output = execSync(versionDef.version_cmd + " 2>&1", {
+            encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"],
+          })
           const regex = versionDef.version_regex
           const match = regex ? output.match(new RegExp(regex)) : null
           if (match) {
             const version = match[0]
             if (compareVersions(version, versionDef.min_version) < 0) {
-              versionWarnings.push(`${tool} v${version} is older than recommended minimum v${versionDef.min_version}`)
+              versionWarnings.push(`${tool} v${version} < min v${versionDef.min_version}`)
             }
-          } else {
-            versionWarnings.push(`${tool}: could not determine version from "${cmd}" output`)
           }
         } catch {
-          versionWarnings.push(`${tool}: version check failed (is it installed?)`)
+          // version check failed — skip (tool still works, just can't verify version)
         }
       }
     } catch {
-      if (requiredTools.includes(tool)) missing.push(tool)
+      if (coreTools.has(tool)) missing.push(tool)
     }
   }
 
-  const messages: string[] = []
-  if (found.length > 0) messages.push(`${found.length} tool(s) found: ${found.join(", ")}`)
-  if (missing.length > 0) messages.push(`MISSING: ${missing.join(", ")} (required for ${missing.length > 1 ? "some" : "a"} capability)`)
-  if (versionWarnings.length > 0) messages.push(...versionWarnings)
+  // Build a clean message. The registry has 46 tools, but many are niche/optional.
+  // Only the "core" set are expected — everything else is a bonus.
+  const corePresent = [...coreTools].filter((t) => found.includes(t))
+  const extrasCount = found.length - corePresent.length
+
+  const parts: string[] = []
+  if (found.length > 0) {
+    parts.push(`${found.length} tools on PATH`)
+    parts.push(`core: ${corePresent.join(", ")}`)
+    if (extrasCount > 0) parts.push(`+${extrasCount} additional`)
+  } else {
+    parts.push("0 tools found on PATH")
+  }
+  if (missing.length > 0) parts.push(`MISSING: ${missing.join(", ")}`)
+  if (versionWarnings.length > 0) parts.push(...versionWarnings)
 
   const hasErrors = missing.length > 0
-  const hasWarnings = versionWarnings.length > 0
+  const hasWarnings = versionWarnings.length > 0 || found.length === 0
 
-  if (hasErrors || hasWarnings) {
-    return { name: "Toolchain", status: hasErrors ? "FAIL" : "WARN", message: messages.join("; ") }
+  return {
+    name: "Toolchain",
+    status: hasErrors ? "FAIL" : hasWarnings ? "WARN" : "PASS",
+    message: parts.join("; "),
   }
-  return { name: "Toolchain", status: "PASS", message: messages.join("; ") || "No tools defined" }
 }
 
 /** Known endpoint URLs for common providers used in connectivity pings */
