@@ -1,0 +1,16 @@
+name: secure_code_intelligence_engine
+command: secure_code_intelligence_engine
+description: "secure_code_intelligence_engine - security assessment tool"
+args: []
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+capabilities:
+  - security_analysis
+signal_quality: CONFIRMED
+priority: 80
+cost: low
+enabled: true
+timeout: 300

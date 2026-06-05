@@ -737,6 +737,123 @@ _register(ToolDefinition(
 
 
 # ═══════════════════════════════════════════════════════════════
+# Advanced Security Tools (14 new tools)
+# ═══════════════════════════════════════════════════════════════
+
+_register(ToolDefinition(
+    name="finding_correlation_engine",
+    description="Correlates findings: semantic deduplication, root cause analysis, attack chain detection, priority ranking",
+    phases=["analyze"],
+    parameters=[ToolParameter("target", "Target URL or scope", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="attack_path_generator",
+    description="Generates attack paths from findings using graph analysis and narrative generation",
+    phases=["analyze"],
+    parameters=[ToolParameter("target", "Target URL or scope", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="verification_agent",
+    description="Verifies findings by attempting reproduction, collecting evidence, and scoring confidence",
+    phases=["deep_scan", "analyze"],
+    parameters=[ToolParameter("target", "Target URL to verify against", required=True)],
+    timeout=300, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="browser_security_operator",
+    description="Comprehensive browser-based security testing: DOM analysis, auth testing, XSS/CSRF verification",
+    phases=["scan", "deep_scan"],
+    parameters=[ToolParameter("target", "Target URL to test", required=True)],
+    timeout=600, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="attack_surface_mapper",
+    description="Maps complete attack surface using subfinder, amass, naabu, httpx, katana, gau, waybackurls",
+    phases=["recon"],
+    parameters=[ToolParameter("target", "Target domain or URL", required=True)],
+    timeout=600, signal_quality=SignalQuality.CONFIRMED, parallel_safe=True,
+))
+
+_register(ToolDefinition(
+    name="evidence_intelligence_engine",
+    description="Collects, hashes, and scores evidence for findings with chain of custody",
+    phases=["analyze", "report"],
+    parameters=[ToolParameter("target", "Target URL or scope", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=True,
+))
+
+_register(ToolDefinition(
+    name="executive_report_generator",
+    description="Generates executive security reports with summary, attack paths, and remediation guidance",
+    phases=["report"],
+    parameters=[ToolParameter("target", "Target URL or scope", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="threat_intelligence_aggregator",
+    description="Aggregates threat intelligence from Shodan, Censys, VirusTotal, AbuseIPDB, crt.sh, WHOIS",
+    phases=["recon", "analyze"],
+    parameters=[ToolParameter("target", "Target domain to investigate", required=True)],
+    timeout=300, signal_quality=SignalQuality.PROBABLE, parallel_safe=True,
+))
+
+_register(ToolDefinition(
+    name="vulnerability_knowledge_engine",
+    description="Looks up CVE, CWE, CAPEC, OWASP, ExploitDB knowledge for findings",
+    phases=["analyze"],
+    parameters=[ToolParameter("target", "Target URL or scope", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=True,
+))
+
+_register(ToolDefinition(
+    name="secure_code_intelligence_engine",
+    description="Unified SAST/SCA/secret scanning combining gitleaks, semgrep, bandit, trivy",
+    phases=["repo_scan"],
+    parameters=[ToolParameter("target", "Target repository path", required=True)],
+    timeout=600, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="infrastructure_security_analyzer",
+    description="Analyzes Terraform, Kubernetes, Docker configs for misconfigurations and attack paths",
+    phases=["repo_scan", "analyze"],
+    parameters=[ToolParameter("target", "Target directory containing IaC files", required=True)],
+    timeout=300, signal_quality=SignalQuality.PROBABLE, parallel_safe=True,
+))
+
+_register(ToolDefinition(
+    name="assessment_orchestrator",
+    description="Coordinates all assessment phases: recon, scan, deep_scan, repo_scan, analyze, report",
+    phases=["analyze"],
+    parameters=[ToolParameter("target", "Target URL or scope", required=True)],
+    timeout=300, signal_quality=SignalQuality.CONFIRMED, parallel_safe=False,
+))
+
+_register(ToolDefinition(
+    name="workflow_intelligence_engine",
+    description="Analyzes execution metrics, detects bottlenecks, recommends workflow optimizations",
+    phases=["analyze", "report"],
+    parameters=[ToolParameter("target", "Target engagement ID or scope", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=True,
+))
+
+_register(ToolDefinition(
+    name="engagement_analytics_engine",
+    description="Cross-engagement analytics: trends, benchmarks, portfolio risk scoring",
+    phases=["analyze", "report"],
+    parameters=[ToolParameter("target", "Target scope for analytics", required=True)],
+    timeout=120, signal_quality=SignalQuality.CONFIRMED, parallel_safe=True,
+))
+
+
+# ═══════════════════════════════════════════════════════════════
 # Helper functions
 # ═══════════════════════════════════════════════════════════════
 
@@ -749,7 +866,7 @@ TOOLS_DEFINED = list(TOOLS.keys())
 # Agent-internal tools that have no external binary.
 # These are always "available" because they are implemented as
 # Python functions within the agent itself.
-_AGENT_INTERNAL_TOOLS = frozenset({"register", "login"})
+_AGENT_INTERNAL_TOOLS = frozenset({"register", "login", "finding_correlation_engine", "attack_path_generator", "verification_agent", "browser_security_operator", "attack_surface_mapper", "evidence_intelligence_engine", "executive_report_generator", "threat_intelligence_aggregator", "vulnerability_knowledge_engine", "secure_code_intelligence_engine", "infrastructure_security_analyzer", "assessment_orchestrator", "workflow_intelligence_engine", "engagement_analytics_engine"})
 
 
 def is_tool_available(tool_name: str) -> bool:

@@ -1,0 +1,16 @@
+name: infrastructure_security_analyzer
+command: infrastructure_security_analyzer
+description: "infrastructure_security_analyzer - security assessment tool"
+args: []
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+capabilities:
+  - security_analysis
+signal_quality: CONFIRMED
+priority: 80
+cost: low
+enabled: true
+timeout: 300

@@ -1,0 +1,16 @@
+name: engagement_analytics_engine
+command: engagement_analytics_engine
+description: "engagement_analytics_engine - security assessment tool"
+args: []
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+capabilities:
+  - security_analysis
+signal_quality: CONFIRMED
+priority: 80
+cost: low
+enabled: true
+timeout: 300

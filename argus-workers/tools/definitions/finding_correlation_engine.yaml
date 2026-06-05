@@ -1,0 +1,16 @@
+name: finding_correlation_engine
+command: finding_correlation_engine
+description: "Correlates findings: semantic deduplication, root cause analysis, attack chain detection"
+args: []
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+capabilities:
+  - finding_correlation
+signal_quality: CONFIRMED
+priority: 95
+cost: low
+enabled: true
+timeout: 120
