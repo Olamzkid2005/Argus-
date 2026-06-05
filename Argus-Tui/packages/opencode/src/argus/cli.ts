@@ -156,3 +156,61 @@ export const ArgusConfigCommand = {
     process.stdout.write(output + "\n")
   },
 }
+
+export const ArgusToolsCommand = {
+  command: "tools",
+  describe: "List all registered MCP tools and their capabilities",
+  handler: async () => {
+    const { WorkersBridge } = await import("./bridge/mcp-client")
+    const { homedir } = await import("os")
+    const { join } = await import("path")
+    const { existsSync } = await import("fs")
+    const { fileURLToPath } = await import("url")
+    const dir = typeof __dirname !== "undefined" ? __dirname : fileURLToPath(new URL(".", import.meta.url))
+    const wp = join(dir, "../../../../../argus-workers/mcp_server.py")
+    if (!existsSync(wp)) {
+      process.stdout.write("MCP worker not found. Run `argus doctor` to check setup.\n")
+      return
+    }
+    const bridge = new WorkersBridge(wp)
+    await bridge.connect()
+    const toolDefs = await bridge.getTools()
+    await bridge.disconnect()
+
+    // Group tools by category based on capabilities
+    const byCap: Record<string, typeof toolDefs> = {}
+    for (const t of toolDefs) {
+      const cap = (t.capabilities?.[0] ?? "uncategorized") as string
+      if (!byCap[cap]) byCap[cap] = []
+      byCap[cap].push(t)
+    }
+
+    const capLabels: Record<string, string> = {
+      web_recon: "Reconnaissance",
+      port_scanning: "Port Scanning",
+      technology_detection: "Tech Detection",
+      content_discovery: "Content Discovery",
+      vulnerability_scanning: "Vulnerability Scanning",
+      sqli_detection: "SQL Injection",
+      browser_verification: "Browser Verification",
+      auth_detection: "Authentication",
+      security_analysis: "Security Analysis",
+      report_generation: "Reporting",
+      sast: "SAST / Code Analysis",
+      http_probe: "HTTP Probing",
+    }
+
+    let output = `Registered MCP Tools (${toolDefs.length} total)\n${"─".repeat(50)}\n`
+    const sortedCaps = Object.keys(byCap).sort()
+    for (const cap of sortedCaps) {
+      const tools = byCap[cap]
+      const label = capLabels[cap] ?? cap.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+      output += `\n${label} (${tools.length}):\n`
+      for (const t of tools) {
+        const quality = t.signal_quality ? ` [${t.signal_quality}]` : ""
+        output += `  • ${t.name}${quality}\n`
+      }
+    }
+    process.stdout.write(output + "\n")
+  },
+}

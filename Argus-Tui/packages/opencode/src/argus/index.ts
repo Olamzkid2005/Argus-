@@ -28,6 +28,7 @@ import {
   ArgusVerifyCommand,
   ArgusEvidenceCommand,
   ArgusConfigCommand,
+  ArgusToolsCommand,
 } from "./cli"
 import { UI } from "./ui"
 import { formatCliHelp } from "./tui-commands"
@@ -101,6 +102,7 @@ async function main() {
       .command(ArgusVerifyCommand)
       .command(ArgusEvidenceCommand)
       .command(ArgusConfigCommand)
+      .command(ArgusToolsCommand)
       .fail((msg, err) => {
         if (err) throw err
         cli.showHelp(show)
