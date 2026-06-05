@@ -332,3 +332,263 @@ tools:
     scoring:
       confidence_score: 70
       coverage_score: 65
+
+  # ── Agent-Internal Tools (Planner-Callable) ──────────────────────────
+
+  - name: finding_correlation_engine
+    label: Finding Correlation Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 95
+    cost: low
+
+  - name: attack_path_generator
+    label: Attack Path Generator
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 90
+    cost: low
+
+  - name: verification_agent
+    label: Verification Agent
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+    signal_quality: CONFIRMED
+    priority: 85
+    cost: low
+
+  - name: browser_security_operator
+    label: Browser Security Operator
+    capabilities:
+      - browser_verification
+    requires_auth: true
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 85
+    cost: medium
+
+  - name: attack_surface_mapper
+    label: Attack Surface Mapper
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 80
+      coverage_score: 85
+    signal_quality: PROBABLE
+    priority: 80
+    cost: low
+
+  - name: evidence_intelligence_engine
+    label: Evidence Intelligence Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 75
+    cost: low
+
+  - name: executive_report_generator
+    label: Executive Report Generator
+    capabilities:
+      - report_generation
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 90
+      coverage_score: 90
+    signal_quality: CONFIRMED
+    priority: 70
+    cost: low
+
+  - name: threat_intelligence_aggregator
+    label: Threat Intelligence Aggregator
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: PROBABLE
+    priority: 70
+    cost: low
+
+  - name: vulnerability_knowledge_engine
+    label: Vulnerability Knowledge Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 65
+    cost: low
+
+  - name: secure_code_intelligence_engine
+    label: Secure Code Intelligence Engine
+    capabilities:
+      - sast
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 75
+    cost: low
+
+  - name: infrastructure_security_analyzer
+    label: Infrastructure Security Analyzer
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 70
+    cost: low
+
+  - name: assessment_orchestrator
+    label: Assessment Orchestrator
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 100
+    cost: low
+
+  - name: workflow_intelligence_engine
+    label: Workflow Intelligence Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 65
+    cost: low
+
+  - name: engagement_analytics_engine
+    label: Engagement Analytics Engine
+    capabilities:
+      - report_generation
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 60
+    cost: low
+
+  # ── Auth Tools ───────────────────────────────────────────────
+
+  - name: register
+    label: Register (Auto Account Creation)
+    capabilities:
+      - auth_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: PROBABLE
+    priority: 95
+    cost: low
+
+  - name: login
+    label: Login (Auto Authentication)
+    capabilities:
+      - auth_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 95
+    cost: low

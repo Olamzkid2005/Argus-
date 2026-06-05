@@ -1,16 +1,22 @@
 name: assessment_orchestrator
-command: assessment_orchestrator
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - assessment_orchestrator
 description: "assessment_orchestrator - security assessment tool"
-args: []
 parameters:
   - name: target
     type: string
     description: "Target URL or scope"
     required: true
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'
+    required: false
 capabilities:
   - security_analysis
 signal_quality: CONFIRMED
-priority: 80
+priority: 90
 cost: low
 enabled: true
 timeout: 300

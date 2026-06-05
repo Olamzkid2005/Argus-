@@ -1,9 +1,9 @@
-name: infrastructure_security_analyzer
+name: register
 command: python3
 args:
   - argus-workers/tools/run_agent_tool.py
-  - infrastructure_security_analyzer
-description: "infrastructure_security_analyzer - security assessment tool"
+  - register
+description: "register - security assessment tool"
 parameters:
   - name: target
     type: string
@@ -11,12 +11,12 @@ parameters:
     required: true
   - name: extra
     type: string
-    description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'
+    description: 'JSON-encoded extra parameters (e.g. {"email":"test@example.com","password":"test123"})'
     required: false
 capabilities:
-  - security_analysis
+  - auth_detection
 signal_quality: CONFIRMED
-priority: 90
+priority: 95
 cost: low
 enabled: true
-timeout: 300
+timeout: 120

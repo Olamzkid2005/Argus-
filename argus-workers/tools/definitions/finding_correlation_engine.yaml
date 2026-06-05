@@ -1,16 +1,22 @@
 name: finding_correlation_engine
-command: finding_correlation_engine
-description: "Correlates findings: semantic deduplication, root cause analysis, attack chain detection"
-args: []
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - finding_correlation_engine
+description: "finding_correlation_engine - security assessment tool"
 parameters:
   - name: target
     type: string
     description: "Target URL or scope"
     required: true
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'
+    required: false
 capabilities:
-  - finding_correlation
+  - security_analysis
 signal_quality: CONFIRMED
-priority: 95
+priority: 90
 cost: low
 enabled: true
-timeout: 120
+timeout: 300

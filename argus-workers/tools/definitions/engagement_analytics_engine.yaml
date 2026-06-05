@@ -1,16 +1,22 @@
 name: engagement_analytics_engine
-command: engagement_analytics_engine
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - engagement_analytics_engine
 description: "engagement_analytics_engine - security assessment tool"
-args: []
 parameters:
   - name: target
     type: string
     description: "Target URL or scope"
     required: true
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'
+    required: false
 capabilities:
   - security_analysis
 signal_quality: CONFIRMED
-priority: 80
+priority: 90
 cost: low
 enabled: true
 timeout: 300

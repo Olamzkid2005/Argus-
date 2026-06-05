@@ -27,6 +27,24 @@ import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import {
+  FindingCorrelationEngineTool,
+  AttackPathGeneratorTool,
+  VerificationAgentTool,
+  BrowserSecurityOperatorTool,
+  AttackSurfaceMapperTool,
+  EvidenceIntelligenceEngineTool,
+  ExecutiveReportGeneratorTool,
+  ThreatIntelligenceAggregatorTool,
+  VulnerabilityKnowledgeEngineTool,
+  SecureCodeIntelligenceEngineTool,
+  InfrastructureSecurityAnalyzerTool,
+  AssessmentOrchestratorTool,
+  WorkflowIntelligenceEngineTool,
+  EngagementAnalyticsEngineTool,
+  RegisterTool,
+  LoginTool,
+} from "./argus-tools"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -133,6 +151,24 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
+    // Argus security tools
+    const findingCorrelationEngine = yield* FindingCorrelationEngineTool
+    const attackPathGenerator = yield* AttackPathGeneratorTool
+    const verificationAgent = yield* VerificationAgentTool
+    const browserSecurityOperator = yield* BrowserSecurityOperatorTool
+    const attackSurfaceMapper = yield* AttackSurfaceMapperTool
+    const evidenceIntelligenceEngine = yield* EvidenceIntelligenceEngineTool
+    const executiveReportGenerator = yield* ExecutiveReportGeneratorTool
+    const threatIntelligenceAggregator = yield* ThreatIntelligenceAggregatorTool
+    const vulnerabilityKnowledgeEngine = yield* VulnerabilityKnowledgeEngineTool
+    const secureCodeIntelligenceEngine = yield* SecureCodeIntelligenceEngineTool
+    const infrastructureSecurityAnalyzer = yield* InfrastructureSecurityAnalyzerTool
+    const assessmentOrchestrator = yield* AssessmentOrchestratorTool
+    const workflowIntelligenceEngine = yield* WorkflowIntelligenceEngineTool
+    const engagementAnalyticsEngine = yield* EngagementAnalyticsEngineTool
+    const registerArgus = yield* RegisterTool
+    const loginArgus = yield* LoginTool
+
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
@@ -238,6 +274,23 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          // Argus security tools
+          findingCorrelationEngine: Tool.init(findingCorrelationEngine),
+          attackPathGenerator: Tool.init(attackPathGenerator),
+          verificationAgent: Tool.init(verificationAgent),
+          browserSecurityOperator: Tool.init(browserSecurityOperator),
+          attackSurfaceMapper: Tool.init(attackSurfaceMapper),
+          evidenceIntelligenceEngine: Tool.init(evidenceIntelligenceEngine),
+          executiveReportGenerator: Tool.init(executiveReportGenerator),
+          threatIntelligenceAggregator: Tool.init(threatIntelligenceAggregator),
+          vulnerabilityKnowledgeEngine: Tool.init(vulnerabilityKnowledgeEngine),
+          secureCodeIntelligenceEngine: Tool.init(secureCodeIntelligenceEngine),
+          infrastructureSecurityAnalyzer: Tool.init(infrastructureSecurityAnalyzer),
+          assessmentOrchestrator: Tool.init(assessmentOrchestrator),
+          workflowIntelligenceEngine: Tool.init(workflowIntelligenceEngine),
+          engagementAnalyticsEngine: Tool.init(engagementAnalyticsEngine),
+          registerArgus: Tool.init(registerArgus),
+          loginArgus: Tool.init(loginArgus),
         })
 
         return {
@@ -259,6 +312,23 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            // Argus security tools
+            tool.findingCorrelationEngine,
+            tool.attackPathGenerator,
+            tool.verificationAgent,
+            tool.browserSecurityOperator,
+            tool.attackSurfaceMapper,
+            tool.evidenceIntelligenceEngine,
+            tool.executiveReportGenerator,
+            tool.threatIntelligenceAggregator,
+            tool.vulnerabilityKnowledgeEngine,
+            tool.secureCodeIntelligenceEngine,
+            tool.infrastructureSecurityAnalyzer,
+            tool.assessmentOrchestrator,
+            tool.workflowIntelligenceEngine,
+            tool.engagementAnalyticsEngine,
+            tool.registerArgus,
+            tool.loginArgus,
           ],
           task: tool.task,
           read: tool.read,

@@ -5,7 +5,13 @@
   "reference": {
     "effect": "github.com/Effect-TS/effect-smol",
   },
-  "mcp": {},
+  "mcp": {
+    "argus-workers": {
+      "type": "local",
+      "command": ["python3", "../argus-workers/mcp_server.py"],
+      "enabled": true,
+    },
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

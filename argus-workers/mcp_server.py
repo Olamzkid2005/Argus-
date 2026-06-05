@@ -192,46 +192,76 @@ class MCPServer:
             "sh", "bash", "zsh", "dash", "/bin/sh", "/bin/bash",
             "rm", "mv", "cp", "dd", "mkfs", "chmod", "chown",
             "nc", "netcat", "curl", "wget", "telnet", "ssh",
-            "python", "python3", "ruby", "perl", "node", "php",
+            "ruby", "perl", "node", "php",
+        }
+        # Agent-internal tools use a runner script — allow python3 for whitelisted scripts
+        server_dir = os.path.dirname(os.path.abspath(__file__))  # .../argus-workers/
+        project_dir = os.path.dirname(server_dir)                 # project root
+        # The YAML args use "argus-workers/tools/run_agent_tool.py" which call_tool
+        # resolves to project_dir/argus-workers/tools/run_agent_tool.py
+        allowed_python_scripts = {
+            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "run_agent_tool.py")),
         }
 
         try:
             import yaml
-            for yaml_file in tools_path.glob("*.yaml"):
-                try:
-                    with open(yaml_file) as f:
-                        data = yaml.safe_load(f)
-                    if data and "name" in data:
-                        command = data.get("command", data["name"])
-                        # Validate command: no path traversal, no shell injection
-                        cmd_basename = os.path.basename(command)
-                        if ".." in command or cmd_basename.lower() in blocked_command_patterns:
-                            logger.warning(
-                                "Blocked potentially dangerous tool command in %s: %s",
-                                yaml_file, command,
-                            )
-                            continue
-                        tool = ToolDefinition(
-                            name=data["name"],
-                            command=command,
-                            description=data.get("description", ""),
-                            args=data.get("args", []),
-                            parameters=data.get("parameters", []),
-                            enabled=data.get("enabled", True),
-                            timeout=data.get("timeout", 300),
-                            # Planner intelligence fields (optional — backward compat)
-                            capabilities=data.get("capabilities", []),
-                            signal_quality=data.get("signal_quality"),
-                            requires=data.get("requires", {}),
-                            priority=data.get("priority"),
-                            cost=data.get("cost"),
-                        )
-                        self.register_tool(tool)
-                        logger.info("Loaded tool definition: %s", tool.name)
-                except Exception as e:
-                    logger.warning("Failed to load tool %s: %s", yaml_file, e)
         except ImportError:
             logger.info("PyYAML not installed, skipping YAML tool loading")
+            return
+
+        for yaml_file in sorted(tools_path.glob("*.yaml")):
+            try:
+                with open(yaml_file, "r") as f:
+                    data = yaml.safe_load(f)
+                if not data:
+                    continue
+
+                command = data.get("command", "")
+                cmd_basename = Path(command).name.lower() if command else ""
+
+                # Allow python3 for whitelisted runner scripts, block everything else
+                if cmd_basename == "python3":
+                    args = data.get("args", [])
+                    if args:
+                        # Resolve path the same way call_tool does
+                        script_arg = args[0]
+                        if script_arg.startswith("argus-workers/") or script_arg.startswith("tools/"):
+                            script_path = os.path.normpath(os.path.join(project_dir, script_arg))
+                        else:
+                            script_path = os.path.normpath(os.path.join(server_dir, script_arg))
+                        if script_path not in allowed_python_scripts:
+                            logger.warning(
+                                "Skipping tool '%s': python3 script '%s' is not whitelisted",
+                                data.get("name", "unknown"), args[0],
+                            )
+                            continue
+                    else:
+                        continue  # bare python3 with no script — blocked
+                elif ".." in command or cmd_basename in blocked_command_patterns:
+                    logger.warning(
+                        "Skipping tool '%s': command '%s' is blocked",
+                        data.get("name", "unknown"), command,
+                    )
+                    continue
+
+                tool = ToolDefinition(
+                    name=data["name"],
+                    command=command,
+                    description=data.get("description", ""),
+                    args=data.get("args", []),
+                    parameters=data.get("parameters", []),
+                    enabled=data.get("enabled", True),
+                    timeout=data.get("timeout", 300),
+                    capabilities=data.get("capabilities", []),
+                    signal_quality=data.get("signal_quality"),
+                    requires=data.get("requires", {}),
+                    priority=data.get("priority"),
+                    cost=data.get("cost"),
+                )
+                self.register_tool(tool)
+                logger.info("Loaded tool definition: %s", tool.name)
+            except Exception as e:
+                logger.warning("Failed to load tool %s: %s", yaml_file, e)
 
     def register_tool(self, tool: ToolDefinition):
         """Register a tool definition."""
@@ -294,7 +324,13 @@ class MCPServer:
 
         # Build command line from tool definition + arguments
         cmd = [tool.command]
-        cmd.extend(tool.args)  # Static args
+        # Resolve relative paths in static args against the server's directory
+        server_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(server_dir)  # parent of argus-workers/
+        for static_arg in tool.args:
+            if static_arg.startswith("argus-workers/") or static_arg.startswith("tools/"):
+                static_arg = os.path.join(project_dir, static_arg)
+            cmd.append(static_arg)
 
         # Map named arguments to CLI flags
         arguments = arguments or {}
@@ -427,8 +463,8 @@ def main():
 
     transport.register("ping", create_ping_handler())
 
-    def handle_list_tools(params: dict) -> list[dict]:
-        return server.get_tools()
+    def handle_list_tools(params: dict) -> dict:
+        return {"tools": server.get_tools()}
 
     def handle_call_tool(params: dict) -> dict:
         name = params.get("name", "")
