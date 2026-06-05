@@ -12,10 +12,23 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from llm_parser_fallback import (
     LLMParserFallback,
     _sanitize_parser_input,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_llm_services():
+    """Mock LLMClient + LLMService to avoid real API calls during _ensure_service."""
+    with patch("llm_client.LLMClient") as mock_client, \
+         patch("llm_service.LLMService") as mock_service:
+        client_instance = MagicMock()
+        client_instance.is_available.return_value = False
+        mock_client.return_value = client_instance
+        yield mock_client
 
 
 class TestSanitizeParserInput:

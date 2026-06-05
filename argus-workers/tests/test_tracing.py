@@ -355,15 +355,16 @@ class TestExecutionSpan:
         assert ExecutionSpan.SPAN_INTELLIGENCE_EVALUATION == "intelligence_evaluation"
         assert ExecutionSpan.SPAN_ORCHESTRATOR_STEP == "orchestrator_step"
 
-    @patch('database.connection.get_db')
-    def test_span_context_manager(self, mock_get_db):
-        """Test span context manager records duration"""
-        mock_db = MagicMock()
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_get_db.return_value = mock_db
-        mock_db.get_connection.return_value = mock_conn
-        mock_conn.cursor.return_value = mock_cursor
+    def test_span_context_manager(self):
+        """Test span context manager yields correct span_data.
+        
+        NOTE: Spans are now exported via OpenTelemetry (not written to DB).
+        _store_span() was removed 2026-06-04 (B.06).
+        """
+        # Use a mock tracer to avoid OpenTelemetry ConsoleSpanExporter crashes
+        mock_tracer = MagicMock()
+        mock_otel_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_otel_span
 
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
@@ -373,32 +374,31 @@ class TestExecutionSpan:
         )
 
         with TraceContext.with_context(context):
-            recorder = ExecutionSpan("test_connection_string")
+            recorder = ExecutionSpan(tracer=mock_tracer)
 
             with recorder.span("test_span") as span_data:
                 assert span_data["span_name"] == "test_span"
                 assert span_data["trace_id"] == trace_id
                 time.sleep(0.01)  # Small delay to ensure duration > 0
 
-            # Should have executed INSERT
-            mock_cursor.execute.assert_called_once()
+        # Span data should have been returned correctly
+        assert span_data["span_name"] == "test_span"
+        # OTel span should have been started and had attributes set
+        mock_otel_span.set_attribute.assert_called()
 
-            # Check the call arguments
-            call_args = mock_cursor.execute.call_args
-            assert "test_span" in str(call_args)
+    def test_span_without_trace_context(self):
+        """Test span without trace context still works (no crash)."""
+        mock_tracer = MagicMock()
+        mock_otel_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_otel_span
 
-    @patch('database.connection.get_db')
-    def test_span_without_trace_context(self, mock_get_db):
-        """Test span without trace context (should not store)"""
         TraceContext.clear_context()
 
-        recorder = ExecutionSpan()
+        recorder = ExecutionSpan(tracer=mock_tracer)
 
-        with recorder.span("test_span"):
-            pass
-
-        # Should not have attempted database connection
-        mock_get_db.get_connection.assert_not_called()
+        with recorder.span("test_span") as span_data:
+            assert span_data["span_name"] == "test_span"
+            assert span_data["trace_id"] is None  # No context set
 
 
 class TestConvenienceFunctions:

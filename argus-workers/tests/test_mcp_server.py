@@ -94,7 +94,8 @@ class TestMCPToolResult:
 
 class TestMCPServer:
     def test_init(self):
-        server = MCPServer()
+        # Pass a non-existent tools_dir to avoid auto-loading all YAML tool defs
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
         assert server._tools == {}
         assert server._execution_stats == {}
 

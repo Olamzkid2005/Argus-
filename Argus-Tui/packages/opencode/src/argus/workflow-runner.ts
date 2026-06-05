@@ -29,7 +29,10 @@ export interface WorkflowRunOptions {
   workersPath?: string
   workflowsDir?: string
   credsPath?: string
-  /** Called with status updates during assessment execution */
+  /**
+   * Called with status updates during assessment execution.
+   * Currently unthrottled — see ADR-017 for throttling guidelines.
+   */
   onProgress?: (status: string) => void
   /**
    * Existing engagement ID to use instead of creating a new one.

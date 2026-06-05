@@ -40,7 +40,7 @@ export function ScanDashboard() {
         const interval = setInterval(async () => {
           pollCount++
           try {
-            const updated = store.getEngagement(route.engagementId) as any
+            const updated = store.getEngagement(route.engagementId)
             if (!updated) return
             const uPhases = store.getPhases(route.engagementId) as EngPhase[]
             const uFindings = store.getFindings(route.engagementId) as EngFinding[]

@@ -136,9 +136,9 @@ export const ArgusEvidenceCommand = {
       })
       .positional("args", { describe: "Arguments for the action", type: "string", array: true }),
   handler: async (argv: Record<string, unknown>) => {
-    const action = argv.action as string
+    const action = argv.action as "list" | "show" | "prune" | "verify-package"
     const args = (argv.args as string[]) ?? []
-    const output = await evidenceCommand(action as any, args)
+    const output = await evidenceCommand(action, args)
       .catch((e: Error) => `[Argus] evidence error: ${e.message}`)
     process.stdout.write(output + "\n")
   },
