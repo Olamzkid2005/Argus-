@@ -48,6 +48,9 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { ScanDashboard } from "@/argus/tui/routes/scan"
 import { FindingsViewer } from "@/argus/tui/routes/findings"
+import { ArgusDashboard } from "@/argus/tui/routes/dashboard"
+import { EngagementBrowser } from "@/argus/tui/routes/engagements"
+import { Workspace } from "@/argus/tui/routes/workspace"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -378,10 +381,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   // Subscribe to Argus navigation requests
   onMount(() => {
     setNavigateHandler((r) => {
-      if (r.type === "scan") {
+      if (r.type === "dashboard") {
+        route.navigate({ type: "dashboard" })
+      } else if (r.type === "scan") {
         route.navigate({ type: "scan", target: r.target, engagementId: r.engagementId })
       } else if (r.type === "findings") {
         route.navigate({ type: "findings", engagementId: r.engagementId })
+      } else if (r.type === "engagements") {
+        route.navigate({ type: "engagements" })
+      } else if (r.type === "engagement") {
+        route.navigate({ type: "scan", target: r.engagementId, engagementId: r.engagementId })
+      } else if (r.type === "workspace") {
+        route.navigate({ type: "workspace" })
       }
     })
   })
@@ -1097,8 +1108,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       <Show when={ready()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Switch>
+            <Match when={route.data.type === "dashboard"}>
+              <ArgusDashboard />
+            </Match>
             <Match when={route.data.type === "home"}>
-              <Home />
+              {process.env.ARGUS_MODE ? <ArgusDashboard /> : <Home />}
             </Match>
             <Match when={route.data.type === "session"}>
               <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
@@ -1110,6 +1124,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             </Match>
             <Match when={route.data.type === "findings"}>
               <FindingsViewer />
+            </Match>
+            <Match when={route.data.type === "engagements"}>
+              <EngagementBrowser />
+            </Match>
+            <Match when={route.data.type === "workspace"}>
+              <Workspace />
             </Match>
           </Switch>
           {plugin()}

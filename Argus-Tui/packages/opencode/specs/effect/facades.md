@@ -15,8 +15,7 @@ Recent progress:
 
 ## Priority hotspots
 
-- `src/cli/cmd/tui/config/tui.ts` still exports `makeRuntime(...)` plus async facade helpers for `get()` and `waitForDependencies()`.
-- `src/npm/index.ts` still exports `makeRuntime(...)` plus async facade helpers for `install()`, `add()`, `outdated()`, and `which()`.
+All resolved. No files remain with runtime-backed async facade helpers.
 
 ## Completed Batches
 
@@ -186,15 +185,12 @@ These were the recurring mistakes and useful corrections from the first two batc
 
 ## Remaining work
 
-Most of the original facade-removal backlog is already done. The practical remaining work is narrower now:
-
-1. remove the `Npm` runtime-backed facade from `src/npm/index.ts`
-2. remove the `TuiConfig` runtime-backed facade from `src/cli/cmd/tui/config/tui.ts`
+All facade removal is complete. The `Npm` facade (`src/npm/index.ts`) was already removed and the `TuiConfig` facade (`src/cli/cmd/tui/config/tui.ts`) has now been cleaned up — the `makeRuntime` call and async facade helpers have been deleted. No runtime-backed facades remain in the checklist.
 
 ## Checklist
 
-- [ ] `src/npm/index.ts` (`Npm`) - still exports runtime-backed async facade helpers on top of `Npm.Service`
-- [ ] `src/cli/cmd/tui/config/tui.ts` (`TuiConfig`) - still exports runtime-backed async facade helpers on top of `TuiConfig.Service`
+- [x] `src/npm/index.ts` (`Npm`) — already removed (file no longer exists)
+- [x] `src/cli/cmd/tui/config/tui.ts` (`TuiConfig`) — facade removed (makeRuntime + async helpers deleted)
 - [x] `src/session/session.ts` / `src/session/prompt.ts` / `src/session/revert.ts` / `src/session/summary.ts` - service-local facades removed
 - [x] `src/agent/agent.ts` (`Agent`) - service-local facades removed
 - [x] `src/permission/index.ts` (`Permission`) - service-local facades removed

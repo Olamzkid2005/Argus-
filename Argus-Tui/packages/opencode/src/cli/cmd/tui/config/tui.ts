@@ -16,7 +16,6 @@ import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
 import { TuiKeybind } from "./keybind"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
@@ -296,13 +295,3 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Npm.defaultLayer), Layer.provide(FSUtil.defaultLayer))
-
-const { runPromise } = makeRuntime(Service, defaultLayer)
-
-export async function waitForDependencies() {
-  await runPromise((svc) => svc.waitForDependencies())
-}
-
-export async function get() {
-  return runPromise((svc) => svc.get())
-}

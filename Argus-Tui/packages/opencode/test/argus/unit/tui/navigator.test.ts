@@ -4,6 +4,7 @@ import {
   clearNavigateHandler,
   navigateTo,
 } from "../../../../src/argus/tui/navigator"
+import type { ArgusRoute } from "../../../../src/argus/tui/navigator"
 
 describe("navigator", () => {
   it("setNavigateHandler() stores the handler", () => {
@@ -42,5 +43,63 @@ describe("navigator", () => {
     clearNavigateHandler()
     navigateTo({ type: "scan", target: "https://test.com", engagementId: "eng-1" })
     expect(handler).not.toHaveBeenCalled()
+  })
+})
+
+// ── New route types (dashboard, engagements, workspace) ──────────────
+
+describe("navigator — new route types", () => {
+  it("navigates to dashboard", () => {
+    const handler = mock()
+    setNavigateHandler(handler)
+    navigateTo({ type: "dashboard" })
+    expect(handler).toHaveBeenCalledWith({ type: "dashboard" })
+    clearNavigateHandler()
+  })
+
+  it("navigates to engagements list", () => {
+    const handler = mock()
+    setNavigateHandler(handler)
+    navigateTo({ type: "engagements" })
+    expect(handler).toHaveBeenCalledWith({ type: "engagements" })
+    clearNavigateHandler()
+  })
+
+  it("navigates to workspace", () => {
+    const handler = mock()
+    setNavigateHandler(handler)
+    navigateTo({ type: "workspace" })
+    expect(handler).toHaveBeenCalledWith({ type: "workspace" })
+    clearNavigateHandler()
+  })
+
+  it("navigates to engagement detail", () => {
+    const handler = mock()
+    setNavigateHandler(handler)
+    navigateTo({ type: "engagement", engagementId: "ENG-001" })
+    expect(handler).toHaveBeenCalledWith({ type: "engagement", engagementId: "ENG-001" })
+    clearNavigateHandler()
+  })
+})
+
+// ── ArgusRoute type exhaustiveness check ────────────────────────────
+
+describe("ArgusRoute type", () => {
+  it("accepts all valid route shapes at compile time", () => {
+    const routes: ArgusRoute[] = [
+      { type: "dashboard" },
+      { type: "scan", target: "x", engagementId: "y" },
+      { type: "findings" },
+      { type: "findings", engagementId: "z" },
+      { type: "engagements" },
+      { type: "engagement", engagementId: "w" },
+      { type: "report", engagementId: "v" },
+      { type: "workspace" },
+    ]
+    expect(routes).toHaveLength(8)
+    expect(routes.map((r) => r.type)).toEqual([
+      "dashboard", "scan", "findings", "findings",
+      "engagements", "engagement", "report", "workspace",
+    ])
   })
 })

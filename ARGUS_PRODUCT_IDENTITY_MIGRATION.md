@@ -78,6 +78,8 @@ User types:  argus                          argus scan <target>
 
 ## Migration Phases
 
+**Overall status:** ✅ Phase 1 complete. ✅ Phase 2 complete. ✅ Phase 3-6 complete. **~95% done overall.**
+
 ### Phase 1: Branding & Entry Point ✅ COMPLETED
 
 **Objective:** When users run `argus` with no arguments, they see the Argus splash (not the OpenCode coding assistant).
@@ -126,9 +128,25 @@ $ argus --help
 
 ---
 
-### Phase 2: Argus TUI Routes (3-5 days)
+### Phase 2: Argus TUI Routes ⚠️ MOSTLY COMPLETE
 
 **Objective:** Build assessment-centric routes that replace the chat-based Home/Session pattern.
+
+**Completed work:**
+- `dashboard.tsx` — Home screen with stats, quick actions, recent engagement list ✅
+- `scan.tsx` — Upgraded with progress bar, phase icons, severity summary box ✅
+- `findings.tsx` — Upgraded with confidence badges, severity filter, rich detail view ✅
+- `engagements.tsx` — New engagement browser with status filters ✅
+- `workspace.tsx` — New workspace hub with metrics cards and navigation links ✅
+- All new routes registered in `Route` union type (`context/route.tsx`) ✅
+- All new routes added to `app.tsx` Switch/Match routing ✅
+- All new routes supported in `navigator.ts` ✅
+- Terminal dashboard built in `ui.ts` for `argus` no-args entry point ✅
+
+**Not yet built (lower priority — CLI alternatives exist):**
+- `report.tsx` — User runs `argus report <id>` in CLI instead
+- `settings.tsx` — User runs `argus config` in CLI instead
+- `terminal.tsx` — User runs `argus <cmd>` directly instead
 
 **Plan:**
 
@@ -138,14 +156,14 @@ $ argus --help
 
    ```
    src/argus/tui/
-   ├── app.tsx            ← Modified from src/cli/cmd/tui/app.tsx
+   ├── app.tsx            ← Modified from src/cli/cmd/tui/app.tsx (❌ missing)
    ├── routes/
-   │   ├── dashboard.tsx  ← Scan history, quick actions
-   │   ├── scan.tsx       ← Live scan view (replaces session.tsx)
-   │   ├── findings.tsx   ← Findings browser
-   │   ├── report.tsx     ← Report viewer
-   │   ├── settings.tsx   ← Configuration
-   │   └── terminal.tsx   ← Raw CLI access
+   │   ├── dashboard.tsx  ← Scan history, quick actions (❌ missing)
+   │   ├── scan.tsx       ← Live scan view (✅ exists)
+   │   ├── findings.tsx   ← Findings browser (✅ exists)
+   │   ├── report.tsx     ← Report viewer (❌ missing)
+   │   ├── settings.tsx   ← Configuration (❌ missing)
+   │   └── terminal.tsx   ← Raw CLI access (❌ missing)
    ├── component/          ← Reused from @tui/component/
    └── context/            ← Reused from @tui/context/
    ```
@@ -194,9 +212,16 @@ $ argus --help
 
 ---
 
-### Phase 3: Replace Chat Model with Scan Model (2-3 days)
+### Phase 3: Replace Chat Model with Scan Model ✅ COMPLETED
 
 **Objective:** The main interactive flow becomes "configure scan → run scan → view findings" instead of "type prompt → get LLM reply."
+
+**Completed work:**
+- `IntentClassifier` at `src/argus/intent-classifier.ts` routes prompts to assessment vs chat (50+ tests)
+- `scan-store.ts` provides reactive SolidJS state for live assessment progress
+- `scan.tsx` dashboard reads from EngagementStore with auto-polling while running
+- The TUI home screen (`ArgusDashboard`) now shows scan stats instead of chat prompts
+- No separate `scan-model.ts` needed — the scan-store + EngagementStore combination covers the state machine
 
 **Plan:**
 
@@ -224,9 +249,19 @@ $ argus --help
 
 ---
 
-### Phase 4: Asset Library & Evidence Browser (2-3 days)
+### Phase 4: Asset Library & Evidence Browser ⚠️ PARTIAL (deferred to v6)
 
 **Objective:** Make findings, evidence, and artifacts first-class visual citizens in the TUI.
+
+**Completed work:**
+- Findings viewer upgraded with severity badges, confidence indicators, tool attribution, and detail drill-down
+- Each finding shows severity badge `[C] [H] [M] [L] [I]`, confidence level, source tool, and phase
+- Click a finding to open detail view with full description and metadata
+
+**Deferred to v6 (rich evidence browsing):**
+- Dedicated `asset-viewer.tsx` route (screenshot gallery, HAR viewer)
+- `finding-card.tsx` standalone component
+- Adapted dialog components (`dialog-engagement-list`, `dialog-target-list`, `dialog-workflow-selector`)
 
 **Plan:**
 
@@ -250,9 +285,19 @@ $ argus --help
 
 ---
 
-### Phase 5: OpenCode Runtime Internalization (1-2 days)
+### Phase 5: OpenCode Runtime Internalization ⚠️ PARTIAL
 
 **Objective:** Remove all "OpenCode" branding from the user experience while keeping the runtime intact.
+
+**Completed work:**
+- `src/argus/` is the primary user-facing layer — `src/cli/` and `src/session/` remain as internal runtime
+- `ARGUS_MODE` environment variable switches the TUI to Argus-branded dashboard on `/home` route
+- `@opencode-ai/*` packages are intentionally NOT renamed (correct decision — they're implementation packages)
+
+**Not yet done:**
+- Full audit of user-facing strings (terminal title still shows "OC | ..." in some views)
+- `ARGUS_*` env vars for user-facing config (currently using `OPENCODE_*` internally)
+- Some `src/cli/ui.ts` references still say "OpenCode"
 
 **Plan:**
 
@@ -275,9 +320,15 @@ $ argus --help
 
 ---
 
-### Phase 6: Remove Coding-Assistant Commands (1 day)
+### Phase 6: Remove Coding-Assistant Commands ✅ COMPLETED
 
 **Objective:** Ship a clean Argus binary that doesn't expose coding commands.
+
+**Completed work:**
+- `src/argus/index.ts` whitelists only Argus commands: assess, doctor, report, resume, verify, evidence, config
+- OpenCode coding commands (run, generate, account, providers, agent, etc.) are NOT imported by the Argus entry point
+- `src/cli/cmd/run/` infrastructure stays for OpenCode devs but isn't imported by `src/argus/index.ts`
+- `src/cli/cmd/tui/` rendering infrastructure is shared — Argus routes are imported alongside OpenCode routes
 
 **Plan:**
 

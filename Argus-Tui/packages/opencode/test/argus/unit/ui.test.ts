@@ -1,6 +1,6 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test"
 
-const { Style, println, print, empty, error, logo, markdown } = await import("../../../src/argus/ui")
+const { Style, println, print, empty, error, logo, markdown, dashboard } = await import("../../../src/argus/ui")
 
 describe("Style constants", () => {
   it("contain ANSI escape codes", () => {
@@ -96,5 +96,93 @@ describe("logo", () => {
 describe("markdown", () => {
   it("passes through unchanged", () => {
     expect(markdown("hello **world**")).toBe("hello **world**")
+  })
+})
+
+// ── Dashboard rendering ─────────────────────────────────────────────
+
+describe("dashboard", () => {
+  const origStdoutTTY = process.stdout.isTTY
+  const origStderrTTY = process.stderr.isTTY
+
+  beforeEach(() => {
+    process.stdout.isTTY = true
+    process.stderr.isTTY = true
+  })
+
+  afterEach(() => {
+    process.stdout.isTTY = origStdoutTTY
+    process.stderr.isTTY = origStderrTTY
+  })
+
+  it("renders the logo and platform name", () => {
+    const result = dashboard()
+    expect(result).toContain("ARGUS v5")
+    expect(result).toContain("Autonomous Security Assessment Platform")
+  })
+
+  it("includes quick actions section", () => {
+    const result = dashboard()
+    expect(result).toContain("$ argus assess")
+    expect(result).toContain("$ argus recon")
+    expect(result).toContain("$ argus doctor")
+  })
+
+  it("shows empty state when no stats provided", () => {
+    const result = dashboard()
+    expect(result).toContain("No assessments yet")
+  })
+
+  it("shows stats when provided", () => {
+    const result = dashboard({
+      totalTargets: 5,
+      openEngagements: 2,
+      confirmedFindings: 12,
+      recentEngagements: [
+        { id: "ENG-001", target: "example.com", status: "COMPLETED", findingCount: 8, updatedAt: Date.now() },
+        { id: "ENG-002", target: "test.com", status: "RUNNING", findingCount: 3, updatedAt: Date.now() },
+      ],
+    })
+    expect(result).toContain("5")
+    expect(result).toContain("targets")
+    expect(result).toContain("2")
+    expect(result).toContain("active")
+    expect(result).toContain("12")
+    expect(result).toContain("findings")
+  })
+
+  it("shows recent engagements when provided", () => {
+    const result = dashboard({
+      totalTargets: 1,
+      openEngagements: 0,
+      confirmedFindings: 0,
+      recentEngagements: [
+        { id: "ENG-001", target: "example.com", status: "COMPLETED", findingCount: 8, updatedAt: Date.now() },
+      ],
+    })
+    expect(result).toContain("ENG-001")
+    expect(result).toContain("example.com")
+    expect(result).toContain("completed")
+  })
+
+  it("shows ANSI style codes in output", () => {
+    const result = dashboard()
+    expect(result).toContain("\x1b[") // ANSI escape
+  })
+
+  it("limits recent engagements to 5", () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      id: `ENG-${String(i).padStart(3, "0")}`,
+      target: `target-${i}.com`,
+      status: "COMPLETED",
+      findingCount: i,
+      updatedAt: Date.now(),
+    }))
+    const result = dashboard({ totalTargets: 10, openEngagements: 0, confirmedFindings: 0, recentEngagements: many })
+    // Should contain first 5
+    expect(result).toContain("ENG-000")
+    expect(result).toContain("ENG-004")
+    // Should NOT contain the 6th
+    expect(result).not.toContain("ENG-005")
   })
 })

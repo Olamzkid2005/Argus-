@@ -1,5 +1,7 @@
 # Test Coverage Expansion Plan
 
+> **Status: ✅ All 9 phases complete.** See [`progress.md`](progress.md) for the full report of 37 new test files and results.
+
 **Goal:** Raise Python coverage from ~50% to ~70%+ and achieve ~85%+ on TypeScript business logic.
 
 ## Phases
@@ -36,12 +38,12 @@
 - Run all tests, check coverage, report final numbers
 
 ## Progress
-- Phase 1: Not started
-- Phase 2: Not started
-- Phase 3: Not started
-- Phase 4: Not started
-- Phase 5: Not started
-- Phase 6: Not started
-- Phase 7: Not started
-- Phase 8: Not started
-- Phase 9: Not started
+- Phase 1: ✅ Complete
+- Phase 2: ✅ Complete
+- Phase 3: ✅ Complete
+- Phase 4: ✅ Complete
+- Phase 5: ✅ Complete
+- Phase 6: ✅ Complete
+- Phase 7: ✅ Complete
+- Phase 8: ✅ Complete
+- Phase 9: ✅ Complete

@@ -1,5 +1,9 @@
 /**
  * Scan Dashboard — Real-time assessment progress and results.
+ *
+ * Shows live phase progress, finding severity breakdown, and
+ * a detailed finding list. Polls the EngagementStore while
+ * the assessment is running.
  */
 import { createMemo, createSignal, onMount, For, Show, onCleanup } from "solid-js"
 import { useTheme } from "@tui/context/theme"
@@ -12,6 +16,24 @@ interface EngagementData {
   id: string; target: string; status: string
   phases: Array<{ name: string; status: string; errors: string[] }>
   findings: EngFinding[]
+}
+
+function sevLabel(s: number): string {
+  return ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][s] ?? "UNKNOWN"
+}
+
+function sevShort(s: number): string {
+  return ["I", "L", "M", "H", "C"][s] ?? "?"
+}
+
+function phaseIcon(status: string): string {
+  switch (status) {
+    case "COMPLETED": case "PASS": return "✓"
+    case "RUNNING": return "⟳"
+    case "FAILED": return "✗"
+    case "PENDING": return "○"
+    default: return "○"
+  }
 }
 
 export function ScanDashboard() {
@@ -31,8 +53,11 @@ export function ScanDashboard() {
       const engFindings = store.getFindings(route.engagementId) as EngFinding[]
       setData({
         id: engagement.id, target: engagement.target, status: engagement.status,
-        phases: engPhases.map((p: EngPhase) => ({ name: p.name || p.id, status: p.status, errors: p.error ? [p.error] : [] })),
-        findings: engFindings.map((f: EngFinding) => ({ title: f.title, severity: f.severity ?? 0, confidence: f.confidence ?? 0, tool: f.tool })),
+        phases: engPhases.map((p) => ({ name: p.name || p.id, status: p.status, errors: p.error ? [p.error] : [] })),
+        findings: engFindings.map((f) => ({
+          title: f.title, severity: f.severity ?? 0, confidence: f.confidence ?? 0,
+          tool: f.tool, description: (f.description ?? "").slice(0, 300),
+        })),
       })
       setLoading(false)
       if (engagement.status === "RUNNING") {
@@ -44,10 +69,13 @@ export function ScanDashboard() {
             if (!updated) return
             const uPhases = store.getPhases(route.engagementId) as EngPhase[]
             const uFindings = store.getFindings(route.engagementId) as EngFinding[]
-            setData((prev: EngagementData | null) => prev ? {
+            setData((prev) => prev ? {
               ...prev, status: updated.status,
-              phases: uPhases.map((p: EngPhase) => ({ name: p.name || p.id, status: p.status, errors: p.error ? [p.error] : [] })),
-              findings: uFindings.map((f: EngFinding) => ({ title: f.title, severity: f.severity ?? 0, confidence: f.confidence ?? 0, tool: f.tool })),
+              phases: uPhases.map((p) => ({ name: p.name || p.id, status: p.status, errors: p.error ? [p.error] : [] })),
+              findings: uFindings.map((f) => ({
+                title: f.title, severity: f.severity ?? 0, confidence: f.confidence ?? 0,
+                tool: f.tool, description: (f.description ?? "").slice(0, 300),
+              })),
             } : null)
             if (updated.status === "COMPLETED" || updated.status === "FAILED") clearInterval(interval)
           } catch (e) { console.error("Poll error:", e) }
@@ -58,45 +86,89 @@ export function ScanDashboard() {
   }
   onMount(loadData)
 
-  const severityColor = (s: number) => s >= 4 ? theme.error : s >= 3 ? theme.warning : s >= 2 ? theme.primary : theme.textMuted
-  const statusColor = (s: string) => s === "COMPLETED" || s === "PASS" ? theme.success : s === "RUNNING" ? theme.primary : s === "FAILED" ? theme.error : theme.textMuted
+  const severityColor = (s: number) =>
+    s >= 4 ? theme.error : s >= 3 ? theme.warning : s >= 2 ? theme.primary : theme.textMuted
+  const statusColor = (s: string) =>
+    s === "COMPLETED" || s === "PASS" ? theme.success : s === "RUNNING" ? theme.primary : s === "FAILED" ? theme.error : theme.textMuted
+
+  const completedPhases = createMemo(() => data()?.phases.filter((p) => p.status === "COMPLETED").length ?? 0)
+  const totalPhases = createMemo(() => data()?.phases.length ?? 0)
+  const progressPct = createMemo(() => totalPhases() > 0 ? Math.round((completedPhases() / totalPhases()) * 100) : 0)
 
   const critical = createMemo(() => data()?.findings.filter((f) => f.severity >= 4).length ?? 0)
   const high = createMemo(() => data()?.findings.filter((f) => f.severity === 3).length ?? 0)
   const medium = createMemo(() => data()?.findings.filter((f) => f.severity === 2).length ?? 0)
   const low = createMemo(() => data()?.findings.filter((f) => f.severity <= 1).length ?? 0)
+  const totalFindingCount = createMemo(() => data()?.findings.length ?? 0)
 
-  const sevLabel = (s: number) => ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][s] ?? "UNKNOWN"
+  // Progress bar characters
+  const barWidth = 30
+  const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth))
+  const emptyBars = createMemo(() => barWidth - filledBars())
+  const barFilled = "█".repeat(filledBars())
+  const barEmpty = "░".repeat(emptyBars())
 
   return (
     <box flexDirection="column" paddingX={2} paddingTop={1} flexGrow={1}>
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.text}>Assessment</text>
-        <text fg={theme.textMuted}>{route.target}</text>
+      {/* Header row: assessment title + status */}
+      <box flexDirection="row" gap={1} paddingBottom={1}>
+        <text fg={theme.text} bold>Assessment</text>
+        <text fg={theme.textMuted}>{data()?.target ?? route.target}</text>
+        <Show when={data()}>
+          <text fg={statusColor(data()!.status)}>
+            {phaseIcon(data()!.status)} {data()!.status.toLowerCase()}
+          </text>
+        </Show>
       </box>
+
       <Show when={!loading() && !error()} fallback={
         <Show when={loading()}><text fg={theme.primary}>⠋ Loading...</text></Show>
       }>
-        <box flexDirection="row" gap={2}>
-          <text fg={statusColor(data()!.status)}>●</text>
-          <text fg={theme.text}>{(data()?.status ?? "").toLowerCase()}</text>
-          <text fg={theme.textMuted}>Engagement: {data()?.id}</text>
+        {/* Progress bar */}
+        <box flexDirection="row" gap={1} paddingBottom={1}>
+          <text fg={theme.primary}>{barFilled}</text>
+          <text fg={theme.textMuted}>{barEmpty}</text>
+          <text fg={theme.text}>{progressPct()}%</text>
+          <text fg={theme.textMuted}>({completedPhases()}/{totalPhases()} phases)</text>
         </box>
-        {/* Findings counters */}
-        <box flexDirection="row" gap={2}>
-          <text fg={theme.error}>{critical()} critical</text>
-          <text fg={theme.warning}>{high()} high</text>
-          <text fg={theme.primary}>{medium()} medium</text>
-          <text fg={theme.textMuted}>{low()} low</text>
+
+        {/* Finding severity summary box */}
+        <box
+          border={{ type: "round", fg: theme.textMuted }}
+          paddingX={1}
+          paddingY={1}
+          marginBottom={1}
+        >
+          <box flexDirection="row" gap={2}>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.error} bold>{critical()}</text>
+              <text fg={theme.textMuted}>critical</text>
+            </box>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.warning} bold>{high()}</text>
+              <text fg={theme.textMuted}>high</text>
+            </box>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.primary} bold>{medium()}</text>
+              <text fg={theme.textMuted}>medium</text>
+            </box>
+            <box flexDirection="column" alignItems="center">
+              <text fg={theme.text} bold>{low()}</text>
+              <text fg={theme.textMuted}>low</text>
+            </box>
+            <box border={{ type: "left", fg: theme.textMuted }} paddingLeft={1} flexDirection="column" alignItems="center">
+              <text fg={theme.text} bold>{totalFindingCount()}</text>
+              <text fg={theme.textMuted}>total</text>
+            </box>
+          </box>
         </box>
-        {/* Phase list */}
-        <text fg={theme.textMuted}>Phases</text>
+
+        {/* Phase list with workflow icons */}
+        <text fg={theme.textMuted}>Workflow Phases</text>
         <For each={data()?.phases ?? []}>
           {(phase) => (
             <box flexDirection="row" gap={1}>
-              <text fg={statusColor(phase.status)}>
-                {phase.status === "RUNNING" ? "⠋" : phase.status === "COMPLETED" ? "✓" : phase.status === "FAILED" ? "✗" : "○"}
-              </text>
+              <text fg={statusColor(phase.status)}>{phaseIcon(phase.status)}</text>
               <text fg={theme.text}>{phase.name}</text>
               <text fg={statusColor(phase.status)}>{phase.status.toLowerCase()}</text>
               <Show when={phase.errors.length > 0}>
@@ -105,29 +177,50 @@ export function ScanDashboard() {
             </box>
           )}
         </For>
-        {/* Finding entries */}
-        <Show when={(data()?.findings.length ?? 0) > 0}>
-          <text fg={theme.textMuted}>Findings ({data()?.findings.length})</text>
-          <For each={data()?.findings.slice(0, 10) ?? []}>
+
+        {/* Finding entries with severity badges */}
+        <Show when={totalFindingCount() > 0}>
+          <text fg={theme.textMuted} paddingTop={1}>Findings ({totalFindingCount()})</text>
+          <For each={data()?.findings.slice(0, 15) ?? []}>
             {(finding) => (
-              <box flexDirection="row" gap={1}>
-                <text fg={severityColor(finding.severity)}>[{sevLabel(finding.severity)}]</text>
-                <text fg={theme.text}>{finding.title}</text>
-                <text fg={theme.textMuted}>({finding.tool})</text>
+              <box flexDirection="column" paddingTop={1}>
+                <box flexDirection="row" gap={1}>
+                  <text
+                    fg={severityColor(finding.severity)}
+                    bold
+                  >
+                    [{sevShort(finding.severity)}]
+                  </text>
+                  <text fg={severityColor(finding.severity)}>
+                    {sevLabel(finding.severity)}
+                  </text>
+                  <text fg={theme.text}>{finding.title}</text>
+                  <text fg={theme.textMuted}>({finding.tool})</text>
+                </box>
+                <Show when={finding.description}>
+                  <text fg={theme.textMuted} paddingLeft={6}>
+                    {finding.description}
+                  </text>
+                </Show>
               </box>
             )}
           </For>
-          <Show when={(data()?.findings.length ?? 0) > 10}>
-            <text fg={theme.textMuted}>... and {(data()?.findings.length ?? 0) - 10} more</text>
+          <Show when={totalFindingCount() > 15}>
+            <text fg={theme.textMuted} paddingTop={1}>
+              ... and {totalFindingCount() - 15} more findings
+            </text>
           </Show>
         </Show>
       </Show>
+
+      {/* Error state */}
       <Show when={error() !== null}>
         <box flexDirection="row" gap={1}>
           <text fg={theme.error}>✗</text>
           <text fg={theme.text}>{error()}</text>
         </box>
       </Show>
+
       <box flexGrow={1} />
       <Toast />
     </box>

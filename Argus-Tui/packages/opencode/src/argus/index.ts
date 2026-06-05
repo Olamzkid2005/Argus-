@@ -39,6 +39,32 @@ function show(out: string) {
 }
 
 /**
+ * Load dashboard stats from the engagement store.
+ * Silently returns null if the store can't be opened (first run, no ~/.argus/).
+ */
+async function loadDashboardStats(): Promise<UI.DashboardStats | null> {
+  try {
+    const { EngagementStore } = await import("./engagement/store")
+    const store = new EngagementStore()
+    const engagements = store.listEngagements()
+    if (engagements.length === 0) return null
+    const totalTargets = new Set(engagements.map((e) => e.target)).size
+    const openEngagements = engagements.filter((e) => e.status === "RUNNING" || e.status === "CREATED").length
+    let confirmedFindings = 0
+    const recentEngagements = engagements.slice(0, 10).map((e) => {
+      const findings = store.getFindings(e.id)
+      confirmedFindings += findings.filter((f) => f.status === "CONFIRMED" || f.status === "FINALIZED").length
+      return { id: e.id, target: e.target, status: e.status, findingCount: findings.length, updatedAt: e.updatedAt }
+    })
+    return { totalTargets, openEngagements, confirmedFindings, recentEngagements }
+  } catch (e) {
+    // First run or DB issue — log to debug, show welcome dashboard without stats
+    console.debug("Could not load engagement stats (first run?):", e)
+    return null
+  }
+}
+
+/**
  * Launch the interactive Argus TUI (OpenCode TUI with Argus branding).
  */
 function launchTui() {
@@ -59,9 +85,11 @@ function launchTui() {
   })
 }
 
-try {
+async function main() {
   if (args.length === 0) {
-    // No arguments: launch the interactive TUI
+    // No arguments: show the Argus dashboard, then launch the TUI
+    const stats = await loadDashboardStats()
+    process.stderr.write(EOL + UI.dashboard(stats) + EOL)
     launchTui()
   } else if (args[0] === "--help" || args[0] === "-h") {
     show(formatCliHelp())
@@ -88,8 +116,10 @@ try {
       .strict()
     await cli.parse()
   }
-} catch (e) {
+}
+
+main().catch((e) => {
   const message = e instanceof Error ? e.message : String(e)
   UI.error(message)
   process.exitCode = 1
-}
+})

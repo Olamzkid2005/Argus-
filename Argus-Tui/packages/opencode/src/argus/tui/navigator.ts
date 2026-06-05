@@ -6,13 +6,18 @@
  * The app.tsx subscribes to this callback.
  */
 
-type Route =
+export type ArgusRoute =
+  | { type: "dashboard" }
   | { type: "scan"; target: string; engagementId: string }
   | { type: "findings"; engagementId?: string }
+  | { type: "engagements" }
+  | { type: "engagement"; engagementId: string }
+  | { type: "report"; engagementId: string }
+  | { type: "workspace" }
 
-let navigateHandler: ((route: Route) => void) | null = null
+let navigateHandler: ((route: ArgusRoute) => void) | null = null
 
-export function setNavigateHandler(handler: (route: Route) => void) {
+export function setNavigateHandler(handler: (route: ArgusRoute) => void) {
   navigateHandler = handler
 }
 
@@ -20,6 +25,6 @@ export function clearNavigateHandler() {
   navigateHandler = null
 }
 
-export function navigateTo(route: Route) {
+export function navigateTo(route: ArgusRoute) {
   navigateHandler?.(route)
 }

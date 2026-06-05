@@ -1543,91 +1543,91 @@ The Python backend has a well-thought-out architecture with strong fundamentals 
 
 ### Phase 0: Architecture Gaps (V5 TypeScript Fork — from Architecture Review)
 
-- [ ] **Task 0.0.1:** Define canonical `Capability` enum in `src/argus/planner/capabilities.ts` — single source of truth, YAML validation against it at load time. **Done means:** enum covers all capabilities referenced in workflow YAMLs; YAML loader rejects unknown capability strings at startup.
-- [ ] **Task 0.0.2:** Add workflow versioning — `version: 1` to all YAML files, `workflow_version` field to `EngagementState`. **Done means:** every workflow YAML has a version header; `EngagementState.workflow_version` is set on creation; resume validates version match and falls back to snapshot if drifted.
-- [ ] **Task 0.0.3:** Add replan cycle prevention — `executedCapabilities: Set<Capability>`, `insertedPhases: Set<string>`, `MAX_REPLANS = 10` hard limit in `PlannerContext`. **Done means:** deterministic `replan-rules.ts` engine operates on enum values only; `replan()` returns `null` after 10 cycles; duplicate capabilities are never inserted.
-- [ ] **Task 0.0.4:** Upgrade credential schema to role-based — `roles: { attacker, victim, admin, user }` with `credentials.get("roleName")`. **Done means:** `CredentialStore` interface defined; browser verifiers call `get("victim")` by role name; missing roles produce `SKIPPED_MISSING_ROLE` not abort; credentials zeroized on assessment completion.
-- [ ] **Task 0.0.5:** Add MCP registry drift detection — `detectDrift()` compares `getTools()` results against `tool-definitions.yaml` on startup and after worker restart. **Done means:** drift report generated on every `/assess` start; unknown tools auto-added with inferred capabilities; missing tools logged and skipped; `/doctor` includes drift check.
-- [ ] **Task 0.15:** Define SQLite (Drizzle ORM) schema — `engagements`, `findings`, `evidence_packages`, `artifacts`, `workflow_snapshots` tables, WAL mode, Drizzle migration framework with schema versioning strategy, workflow snapshot storage for reproducibility. Replaces all JSON index/state files.
-- [ ] **Task 0.1:** Create `argus-workers/mcp_transport.py` — stdio JSON-RPC transport loop
-- [ ] **Task 0.2:** Add child process lifecycle management to `WorkersBridge` — SIGTERM/SIGINT forwarding, 3s graceful shutdown then SIGKILL, orphan prevention
-- [ ] **Task 0.3:** Define credential file format (`--creds`) and schema — JSON file with user array + target config
-- [ ] **Task 0.4:** Define error recovery matrix per phase — `ErrorRecovery` type per phase
-- [ ] **Task 0.5:** Add Playwright browser installation check to `/doctor` + `package.json` postinstall
-- [ ] **Task 0.6:** Add `ARGUS_PYTHON` env var and cross-platform Python discovery logic
-- [ ] **Task 0.7:** Write and extract ADR documents to `docs/adr/ADR-001.md` through `docs/adr/ADR-016.md`. Each ADR follows the template: Context → Decision → Consequences → Alternatives. Main architecture doc retains a one-line summary and link per ADR.
-- [ ] **Task 0.8:** Define `Confidence` enum and `Finding` types in `src/argus/engagement/types.ts` — INFORMATIONAL through CONFIRMED
-- [ ] **Task 0.9:** Create approval gates framework — `src/argus/commands/approval.ts` with policy YAML reader, interactive prompt, and `--auto` behavior
-- [ ] **Task 0.10:** Create workflow registry scaffolding — `src/argus/workflows/` dir, YAML schemas, `registry.ts` stub
-- [ ] **Task 0.11:** Add `WorkerSupervisor` to `src/argus/bridge/supervisor.ts` — health checks, restart logic, max 3 attempts then deterministic fallback
-- [ ] **Task 0.12:** Define `PlannerContext` interface with `findings` field and `replan()` method signature — enables dynamic planning across phases
-- [ ] **Task 0.13:** Define `NormalizedFinding` schema and `Severity` enum in `src/argus/reporting/types.ts`
+- [x] **Task 0.0.1:** Define canonical `Capability` enum in `src/argus/planner/capabilities.ts` — single source of truth, YAML validation against it at load time. **Done means:** enum covers all capabilities referenced in workflow YAMLs; YAML loader rejects unknown capability strings at startup.
+- [x] **Task 0.0.2:** Add workflow versioning — `version: 1` to all YAML files, `workflow_version` field to `EngagementState`. **Done means:** every workflow YAML has a version header; `EngagementState.workflow_version` is set on creation; resume validates version match and falls back to snapshot if drifted.
+- [x] **Task 0.0.3:** Add replan cycle prevention — `executedCapabilities: Set<Capability>`, `insertedPhases: Set<string>`, `MAX_REPLANS = 10` hard limit in `PlannerContext`. **Done means:** deterministic `replan-rules.ts` engine operates on enum values only; `replan()` returns `null` after 10 cycles; duplicate capabilities are never inserted.
+- [x] **Task 0.0.4:** Upgrade credential schema to role-based — `roles: { attacker, victim, admin, user }` with `credentials.get("roleName")`. **Done means:** `CredentialStore` interface defined; browser verifiers call `get("victim")` by role name; missing roles produce `SKIPPED_MISSING_ROLE` not abort; credentials zeroized on assessment completion.
+- [x] **Task 0.0.5:** Add MCP registry drift detection — `detectDrift()` compares `getTools()` results against `tool-definitions.yaml` on startup and after worker restart. **Done means:** drift report generated on every `/assess` start; unknown tools auto-added with inferred capabilities; missing tools logged and skipped; `/doctor` includes drift check.
+- [x] **Task 0.15:** Define SQLite (Drizzle ORM) schema — `engagements`, `findings`, `evidence_packages`, `artifacts`, `workflow_snapshots` tables, WAL mode, Drizzle migration framework with schema versioning strategy, workflow snapshot storage for reproducibility. Replaces all JSON index/state files.
+- [x] **Task 0.1:** Create `argus-workers/mcp_transport.py` — stdio JSON-RPC transport loop
+- [x] **Task 0.2:** Add child process lifecycle management to `WorkersBridge` — SIGTERM/SIGINT forwarding, 3s graceful shutdown then SIGKILL, orphan prevention
+- [x] **Task 0.3:** Define credential file format (`--creds`) and schema — JSON file with user array + target config
+- [x] **Task 0.4:** Define error recovery matrix per phase — `ErrorRecovery` type per phase
+- [x] **Task 0.5:** Add Playwright browser installation check to `/doctor` + `package.json` postinstall
+- [x] **Task 0.6:** Add `ARGUS_PYTHON` env var and cross-platform Python discovery logic
+- [x] **Task 0.7:** Write and extract ADR documents to `docs/adr/ADR-001.md` through `docs/adr/ADR-016.md`. Each ADR follows the template: Context → Decision → Consequences → Alternatives. Main architecture doc retains a one-line summary and link per ADR.
+- [x] **Task 0.8:** Define `Confidence` enum and `Finding` types in `src/argus/engagement/types.ts` — INFORMATIONAL through CONFIRMED
+- [x] **Task 0.9:** Create approval gates framework — `src/argus/commands/approval.ts` with policy YAML reader, interactive prompt, and `--auto` behavior
+- [x] **Task 0.10:** Create workflow registry scaffolding — `src/argus/workflows/` dir, YAML schemas, `registry.ts` stub
+- [x] **Task 0.11:** Add `WorkerSupervisor` to `src/argus/bridge/supervisor.ts` — health checks, restart logic, max 3 attempts then deterministic fallback
+- [x] **Task 0.12:** Define `PlannerContext` interface with `findings` field and `replan()` method signature — enables dynamic planning across phases
+- [x] **Task 0.13:** Define `NormalizedFinding` schema and `Severity` enum in `src/argus/reporting/types.ts`
 
 ### Phase B: Backend Codebase Remediation (Python Engine)
 
 #### B.0 — Critical (must do before Phase 1)
 
-- [ ] **Task B.01:** Fix connection leak in `state_machine.py` — remove raw conn string path, always use pool
-- [ ] **Task B.02:** Add Redis-backed CVE/EPSS caching in `intelligence_engine.py` — 1-hour TTL, in-memory fallback
+- [x] **Task B.01:** Fix connection leak in `state_machine.py` — remove raw conn string path, always use pool
+- [x] **Task B.02:** Add Redis-backed CVE/EPSS caching in `intelligence_engine.py` — 1-hour TTL, in-memory fallback
 
 #### B.1 — High Priority
 
-- [ ] **Task B.03:** Replace busy-wait loop in `ConnectionManager.get_connection()` with `threading.Condition`
-- [ ] **Task B.04:** Add uniform jitter to retry backoff across all retry sites
-- [ ] **Task B.05:** Narrow exception handling in `_resolve_state_if_needed()` — re-raise DB errors
-- [ ] **Task B.06:** Replace custom `ExecutionSpan` with OpenTelemetry exporter
+- [x] **Task B.03:** Replace busy-wait loop in `ConnectionManager.get_connection()` with `threading.Condition`
+- [x] **Task B.04:** Add uniform jitter to retry backoff across all retry sites
+- [x] **Task B.05:** Narrow exception handling in `_resolve_state_if_needed()` — re-raise DB errors
+- [x] **Task B.06:** Replace custom `ExecutionSpan` with OpenTelemetry exporter
 
 #### B.2 — Medium Priority
 
-- [ ] **Task B.07:** Move `GIT_HOST_ALLOWLIST` to runtime YAML config with env var override
-- [ ] **Task B.08:** Encrypt secrets at rest in SQLite session store and TOML config
+- [x] **Task B.07:** Move `GIT_HOST_ALLOWLIST` to runtime YAML config with env var override
+- [x] **Task B.08:** Encrypt secrets at rest in SQLite session store and TOML config
 
 #### B.3 — Low Priority
 
-- [ ] **Task B.09:** Extract CWE/OWASP mappings from normalizer to external config
-- [ ] **Task B.10:** Migrate hot-path I/O to asyncio (LLM client, parsers, threat intel)
-- [ ] **Task B.11:** Create typed error class hierarchy
-- [ ] **Task B.12:** Refactor `constants.py` into grouped dataclasses
+- [x] **Task B.09:** Extract CWE/OWASP mappings from normalizer to external config
+- [x] **Task B.10:** Migrate hot-path I/O to asyncio (LLM client, parsers, threat intel)
+- [x] **Task B.11:** Create typed error class hierarchy
+- [x] **Task B.12:** Refactor `constants.py` into grouped dataclasses
 
 ### Phase 1: Foundation (V5 CLI)
 
-- [ ] **Task 1.1:** Clone OpenCode into `cli/`, verify `argus --help` works
-- [ ] **Task 1.2:** Rename package to `argus` in `package.json`, update all branding
-- [ ] **Task 1.3:** Create `ARCHITECTURE_BOUNDARIES.md`
-- [ ] **Task 1.4:** Set up GitHub Actions (lint → typecheck → unit tests)
-- [ ] **Task 1.5:** Write `src/argus/bridge/mcp-client.ts` — subprocess MCP connection with lifecycle management from Task 0.2
+- [x] **Task 1.1:** Clone OpenCode into `cli/`, verify `argus --help` works
+- [x] **Task 1.2:** Rename package to `argus` in `package.json`, update all branding
+- [x] **Task 1.3:** Create `ARCHITECTURE_BOUNDARIES.md`
+- [x] **Task 1.4:** Set up GitHub Actions (lint → typecheck → unit tests)
+- [x] **Task 1.5:** Write `src/argus/bridge/mcp-client.ts` — subprocess MCP connection with lifecycle management from Task 0.2
 
 ### Phase 2: Core Modules (V5 CLI)
 
 > **Recommended execution order:** Build the registry and store first (2.5, 2.6), then the planner (2.1) — so the planner is built on top of the WorkflowRegistry rather than hardcoded logic. Evidence (2.2) and reporting (2.3) follow naturally, with browser (2.4) last since it depends on all other modules.
 
-- [ ] **Task 2.5:** Implement `src/argus/workflows/` — registry, loader, types, YAML definitions for all 5 built-in workflows (capability-based, with `execution: parallel|sequential`), tool capability registry with scoring-based ranking (`ToolRegistry.selectBest()`), tests
-- [ ] **Task 2.6:** Implement `src/argus/engagement/` — Drizzle ORM schema, state store (SQLite-backed), types (`Confidence` enum, `schema_version`, `NormalizedFinding`), `ConfidenceEngine` with deterministic promotion rules, recovery logic with `workflow_version` validation, `EngagementStore` with SQLite persistence via Drizzle, tests
-- [ ] **Task 2.1:** Implement `src/argus/planner/` — types, `PlannerContext` with `findings` accumulation, capability-driven strategy (using `WorkflowRegistry` and `ToolRegistry`), `replan()` for dynamic phase insertion, deterministic fallback, tests
-- [ ] **Task 2.2:** Implement `src/argus/evidence/` — types, `EvidenceManifest` with `package_hash`, collector (with storage limit enforcement, integrity verification), store (SQLite-backed artifact index via Drizzle, no JSON files), `/evidence prune --keep-last=N`, `/verify-package` command, tests
-- [ ] **Task 2.3:** Implement `src/argus/reporting/` — `normalizer.ts` (tool-specific → `NormalizedFinding` conversion), generator (markdown/SARIF/JSON), templates, tests
-- [ ] **Task 2.4:** Implement `src/argus/browser/` — `VerificationScenario` interface, engine, observer, verifiers (BOLA/XSS/PrivEsc implement `VerificationScenario`), credential loading from Task 0.3, tests
+- [x] **Task 2.5:** Implement `src/argus/workflows/` — registry, loader, types, YAML definitions for all 5 built-in workflows (capability-based, with `execution: parallel|sequential`), tool capability registry with scoring-based ranking (`ToolRegistry.selectBest()`), tests
+- [x] **Task 2.6:** Implement `src/argus/engagement/` — Drizzle ORM schema, state store (SQLite-backed), types (`Confidence` enum, `schema_version`, `NormalizedFinding`), `ConfidenceEngine` with deterministic promotion rules, recovery logic with `workflow_version` validation, `EngagementStore` with SQLite persistence via Drizzle, tests
+- [x] **Task 2.1:** Implement `src/argus/planner/` — types, `PlannerContext` with `findings` accumulation, capability-driven strategy (using `WorkflowRegistry` and `ToolRegistry`), `replan()` for dynamic phase insertion, deterministic fallback, tests
+- [x] **Task 2.2:** Implement `src/argus/evidence/` — types, `EvidenceManifest` with `package_hash`, collector (with storage limit enforcement, integrity verification), store (SQLite-backed artifact index via Drizzle, no JSON files), `/evidence prune --keep-last=N`, `/verify-package` command, tests
+- [x] **Task 2.3:** Implement `src/argus/reporting/` — `normalizer.ts` (tool-specific → `NormalizedFinding` conversion), generator (markdown/SARIF/JSON), templates, tests
+- [x] **Task 2.4:** Implement `src/argus/browser/` — `VerificationScenario` interface, engine, observer, verifiers (BOLA/XSS/PrivEsc implement `VerificationScenario`), credential loading from Task 0.3, tests
 
 ### Phase 3: CLI Integration (V5 CLI)
 
-- [ ] **Task 3.1:** Wire `/assess` command — planner → bridge (with `WorkerSupervisor` from Task 0.11, error recovery from Task 0.4) → verifier (with credential file from Task 0.3) → evidence → report
-- [ ] **Task 3.2:** Wire `/doctor` command — structured health checks across 6 categories (runtime, MCP live subprocess + ping, Playwright headless launch, LLM provider with `--online`, toolchain binary PATH validation, SQLite + WAL integrity), structured PASS/WARN/FAIL output, `--json` flag, per-check timeout
-- [ ] **Task 3.3:** Wire `/verify`, `/report`, `/evidence` commands
-- [ ] **Task 3.4:** Implement deterministic fallback for `/assess` (no LLM, no MCP)
-- [ ] **Task 3.5:** Wire `/resume <engagement-id>` command — engagement store → planner → continue from last incomplete phase
-- [ ] **Task 3.6:** Wire approval gates into `runPhase()` — check `approval_required` per phase, prompt or skip based on policy
+- [x] **Task 3.1:** Wire `/assess` command — planner → bridge (with `WorkerSupervisor` from Task 0.11, error recovery from Task 0.4) → verifier (with credential file from Task 0.3) → evidence → report
+- [x] **Task 3.2:** Wire `/doctor` command — structured health checks across 6 categories (runtime, MCP live subprocess + ping, Playwright headless launch, LLM provider with `--online`, toolchain binary PATH validation, SQLite + WAL integrity), structured PASS/WARN/FAIL output, `--json` flag, per-check timeout
+- [x] **Task 3.3:** Wire `/verify`, `/report`, `/evidence` commands
+- [x] **Task 3.4:** Implement deterministic fallback for `/assess` (no LLM, no MCP)
+- [x] **Task 3.5:** Wire `/resume <engagement-id>` command — engagement store → planner → continue from last incomplete phase
+- [x] **Task 3.6:** Wire approval gates into `runPhase()` — check `approval_required` per phase, prompt or skip based on policy
 
 ### Phase 4: Safety & Rollback
 
-- [ ] **Task 4.1:** Add feature flags — all default to `false`
-- [ ] **Task 4.2:** Add destructive tool confirmation (interactive prompt, skip in `--auto`) — integrate with `ApprovalGate` from Task 0.9
-- [ ] **Task 4.3:** Write E2E tests for Juice Shop, crAPI, DVWA, VAmPI
+- [x] **Task 4.1:** Add feature flags — all default to `false`
+- [x] **Task 4.2:** Add destructive tool confirmation (interactive prompt, skip in `--auto`) — integrate with `ApprovalGate` from Task 0.9
+- [x] **Task 4.3:** Write E2E tests for Juice Shop, crAPI, DVWA, VAmPI
 
 ### Phase 5: Polish
 
 - [x] **Task 5.1:** Remove Python `argus-cli/` (after verifying TypeScript CLI is stable)
-- [ ] **Task 5.2:** Update root `Makefile` and README for new CLI
-- [ ] **Task 5.3:** `npm publish` first v5 release
+- [x] **Task 5.2:** Update root `Makefile` and README for new CLI
+- [x] **Task 5.3:** `npm publish` first v5 release
 
 ---
 
@@ -1761,7 +1761,7 @@ _Last updated: 2026-06-04_
 
 | Phase | Tasks | Status | Completion Estimate |
 |-------|-------|--------|-------------------|
-| **Phase 0: Architecture Gaps** | 16 tasks | ✅ Complete | 100% |
+| **Phase 0: Architecture Gaps** | 19 tasks | ✅ Complete | 100% |
 | **Phase B: Backend Remediation** | 12 tasks | ✅ Complete | 100% |
 | **Phase 1: Foundation** | 5 tasks | ✅ Complete | 100% |
 | **Phase 2: Core Modules** | 6 tasks | ✅ Complete | 100% |
