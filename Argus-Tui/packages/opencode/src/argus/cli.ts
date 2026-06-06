@@ -281,6 +281,40 @@ export const ArgusFindingsCommand = {
   },
 }
 
+export const ArgusWorkflowsCommand = {
+  command: "workflows",
+  describe: "List all loaded workflow definitions",
+  builder: (yargs: Argv) =>
+    yargs.option("json", { describe: "Output as JSON", type: "boolean", default: false }),
+  handler: async (argv: Record<string, unknown>) => {
+    const { WorkflowRegistry } = await import("./workflows/registry")
+    const { join } = await import("path")
+    const { fileURLToPath } = await import("url")
+    const dir = typeof __dirname !== "undefined" ? __dirname : fileURLToPath(new URL(".", import.meta.url))
+    const workflowsDir = join(dir, "./workflows")
+    const registry = new WorkflowRegistry(workflowsDir)
+    const workflows = registry.loadAll()
+
+    if (workflows.length === 0) {
+      process.stdout.write("No workflow definitions found.\n")
+      return
+    }
+
+    if (argv.json as boolean) {
+      process.stdout.write(JSON.stringify(workflows, null, 2) + "\n")
+      return
+    }
+
+    const sep = "─".repeat(80)
+    process.stdout.write(`Workflow Definitions (${workflows.length}):\n${sep}\n`)
+    for (const w of workflows) {
+      const phases = w.phases.map(p => `    ${p.name} [${p.required_capabilities.join(", ")}] (${p.execution})`).join("\n")
+      process.stdout.write(`\n  ${w.name}${w.label ? ` — ${w.label}` : ""}\n${phases}\n`)
+    }
+    process.stdout.write(`\n${sep}\n`)
+  },
+}
+
 export const ArgusToolsCommand = {
   command: "tools",
   describe: "List all registered MCP tools and their capabilities",

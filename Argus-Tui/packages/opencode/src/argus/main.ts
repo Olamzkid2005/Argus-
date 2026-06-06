@@ -15,6 +15,7 @@ import {
   ArgusConfigCommand,
   ArgusEngagementsCommand,
   ArgusFindingsCommand,
+  ArgusWorkflowsCommand,
   ArgusToolsCommand,
 } from "./cli"
 
@@ -29,8 +30,9 @@ yargs(hideBin(process.argv))
   .command(ArgusConfigCommand as any)
   .command(ArgusEngagementsCommand as any)
   .command(ArgusFindingsCommand as any)
+  .command(ArgusWorkflowsCommand as any)
   .command(ArgusToolsCommand as any)
-  .demandCommand(1, "Usage: argus <command> [options]\n\nCommands: assess, doctor, report, resume, verify, evidence, config, engagements, findings, tools")
+  .demandCommand(1, "Usage: argus <command> [options]\n\nCommands: assess, doctor, report, resume, verify, evidence, config, engagements, findings, workflows, tools")
   .strict()
   .help()
   .parse()
