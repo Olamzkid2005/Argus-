@@ -10,8 +10,9 @@ export type ArgusRoute =
   | { type: "dashboard" }
   | { type: "scan"; target: string; engagementId: string }
   | { type: "findings"; engagementId?: string }
+  | { type: "finding"; findingId: string }
   | { type: "engagements" }
-  | { type: "engagement"; engagementId: string }
+  | { type: "engagement"; engagementId: string; tab?: string }
   | { type: "report"; engagementId: string }
   | { type: "workspace" }
 

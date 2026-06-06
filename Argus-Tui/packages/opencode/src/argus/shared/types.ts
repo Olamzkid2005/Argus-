@@ -66,3 +66,14 @@ export enum Confidence {
   VERIFIED = 4,
   CONFIRMED = 5,
 }
+
+export interface FindingAnalysis {
+  findingId: string
+  explanation: string
+  impact: string[]
+  remediation: string[]
+  references?: string[]
+  model: string
+  generatedAt: number
+  findingUpdatedAt: number
+}

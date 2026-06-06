@@ -115,7 +115,7 @@ export function EngagementBrowser() {
                 gap={1}
                 paddingTop={1}
                 border={{ type: "bottom", fg: theme.textMuted }}
-                onClick={() => route.navigate({ type: "scan", target: eng.target, engagementId: eng.id } as any)}
+                onClick={() => route.navigate({ type: "engagement", engagementId: eng.id } as any)}
               >
                 <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
                 <text fg={theme.textMuted}>{eng.id}</text>
@@ -127,6 +127,7 @@ export function EngagementBrowser() {
               </box>
             )}
           </For>
+          <text fg={theme.textMuted} paddingTop={1}>Enter to open</text>
         </Show>
       </Show>
 

@@ -48,6 +48,7 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { ScanDashboard } from "@/argus/tui/routes/scan"
 import { FindingsViewer } from "@/argus/tui/routes/findings"
+import { FindingDetail } from "@/argus/tui/routes/finding-detail"
 import { ArgusDashboard } from "@/argus/tui/routes/dashboard"
 import { EngagementBrowser } from "@/argus/tui/routes/engagements"
 import { Workspace } from "@/argus/tui/routes/workspace"
@@ -386,6 +387,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         route.navigate({ type: "scan", target: r.target, engagementId: r.engagementId })
       } else if (r.type === "findings") {
         route.navigate({ type: "findings", engagementId: r.engagementId })
+      } else if (r.type === "finding") {
+        route.navigate({ type: "finding", findingId: r.findingId } as any)
       } else if (r.type === "engagements") {
         route.navigate({ type: "engagements" })
       } else if (r.type === "engagement") {
@@ -1123,6 +1126,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             </Match>
             <Match when={route.data.type === "findings"}>
               <FindingsViewer />
+            </Match>
+            <Match when={route.data.type === "finding"}>
+              <FindingDetail findingId={(route.data as any).findingId} />
             </Match>
             <Match when={route.data.type === "engagements"}>
               <EngagementBrowser />

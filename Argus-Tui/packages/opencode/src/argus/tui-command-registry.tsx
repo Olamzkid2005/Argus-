@@ -12,7 +12,7 @@ export function ArgusCommandRegistry() {
   const keymap = useKeymap()
 
   const argusCommands = getArgusTuiCommands().map((cmd) => {
-    const needsTarget = cmd.name === "assess" || cmd.name === "recon" || cmd.name === "report" || cmd.name === "verify"
+    const needsTarget = cmd.name === "assess" || cmd.name === "recon" || cmd.name === "report" || cmd.name === "verify" || cmd.name === "open"
     const insertText = `/${cmd.slashes[0]}${needsTarget ? " " : ""}`
     return {
       namespace: "palette" as const,

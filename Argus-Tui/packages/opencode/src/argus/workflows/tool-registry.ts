@@ -2,6 +2,7 @@ import { readFileSync } from "fs"
 import YAML from "yaml"
 import { Capability } from "../shared/capabilities"
 import type { SignalQuality } from "../bridge/types"
+import { ToolConfig } from "../config/tool-config"
 
 export interface RequiresGate {
   /** Tool only runs if the target tech stack contains one of these strings */
@@ -30,6 +31,10 @@ export interface ToolDef {
   requires?: RequiresGate
   priority?: number
   cost?: "low" | "medium" | "high"
+  /** Data signals this tool consumes (needs from prior tools) */
+  consumes?: string[]
+  /** Data signals this tool produces (makes available to downstream tools) */
+  provides?: string[]
 }
 
 interface ToolDefsFile {
@@ -47,6 +52,11 @@ export interface GateContext {
 export class ToolRegistry {
   private toolsByCapability = new Map<Capability, ToolDef[]>()
   private toolsByName = new Map<string, ToolDef>()
+  private toolConfig: ToolConfig = new ToolConfig()
+
+  setConfig(tc: ToolConfig): void {
+    this.toolConfig = tc
+  }
 
   load(definitionsPath: string): void {
     const content = readFileSync(definitionsPath, "utf-8")
@@ -73,7 +83,8 @@ export class ToolRegistry {
   }
 
   getToolsByCapability(cap: Capability): ToolDef[] {
-    return this.toolsByCapability.get(cap) ?? []
+    const all = this.toolsByCapability.get(cap) ?? []
+    return all.filter(t => this.toolConfig.isEnabled(t.name))
   }
 
   getCapabilities(toolName: string): string[] {
@@ -86,6 +97,12 @@ export class ToolRegistry {
 
   listTools(): ToolDef[] {
     return Array.from(this.toolsByName.values())
+  }
+
+  getToolTimeout(toolName: string): number {
+    const custom = this.toolConfig.getTimeout(toolName)
+    if (custom !== undefined) return custom
+    return this.toolsByName.get(toolName)?.timeout_seconds ?? 120
   }
 
   /** @deprecated Use selectBest() instead */

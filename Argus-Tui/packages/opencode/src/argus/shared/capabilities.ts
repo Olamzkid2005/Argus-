@@ -18,4 +18,12 @@ export enum Capability {
   API_DOCS_ANALYSIS = "api_docs_analysis",
   JWT_ANALYSIS = "jwt_analysis",
   SSRF_CHECK = "ssrf_check",
+
+  SECURITY_ANALYSIS = "security_analysis",
+  SECRET_DETECTION = "secret_detection",
+  SAST = "sast",
+  SCA = "sca",
+  CVE_SCANNING = "cve_scanning",
+  CLOUD_ENUM = "cloud_enum",
+  S3_SCANNING = "s3_scanning",
 }

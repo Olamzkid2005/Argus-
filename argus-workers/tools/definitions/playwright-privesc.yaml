@@ -1,0 +1,37 @@
+name: playwright-privesc
+command: python3
+args:
+  - argus-workers/tools/scripts/playwright_privesc.py
+description: Privilege Escalation detection via browser automation
+parameters:
+  - name: target
+    flag: --target
+    type: string
+    required: true
+    description: Target URL
+  - name: low-priv-username
+    flag: --low-priv-username
+    type: string
+    required: true
+    description: Low-privilege user username
+  - name: low-priv-password
+    flag: --low-priv-password
+    type: string
+    required: true
+    description: Low-privilege user password
+  - name: admin-paths
+    flag: --admin-paths
+    type: string
+    required: false
+    description: Comma-separated admin endpoints to probe
+capabilities:
+  - browser_verification
+signal_quality: CONFIRMED
+timeout: 120
+enabled: true
+requires:
+  target_scheme: any
+  credentials: true
+priority: 80
+cost: medium
+risk_level: low

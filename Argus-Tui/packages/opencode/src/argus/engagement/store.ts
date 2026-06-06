@@ -13,9 +13,10 @@ import {
   evidence_packages,
   artifacts,
   workflow_snapshots,
+  finding_analysis,
 } from "./schema.sql"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus } from "./types"
-import type { NormalizedFinding } from "../shared/types"
+import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
 function defaultDbPath(): string {
   return join(homedir(), ".argus", "argus.db")
@@ -74,6 +75,13 @@ const TABLE_SQL = [
     workflow_yaml TEXT NOT NULL, created_at INTEGER NOT NULL
   )`,
   sql`CREATE INDEX IF NOT EXISTS idx_workflow_snapshots_engagement ON workflow_snapshots(engagement_id)`,
+  sql`CREATE TABLE IF NOT EXISTS finding_analysis (
+    finding_id TEXT PRIMARY KEY,
+    explanation TEXT NOT NULL, impact TEXT NOT NULL, remediation TEXT NOT NULL,
+    refs TEXT, model TEXT NOT NULL,
+    generated_at INTEGER NOT NULL, finding_updated_at INTEGER NOT NULL,
+    FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
+  )`,
 ]
 
 function toEngagementState(row: typeof engagements.$inferSelect): EngagementState {
@@ -281,6 +289,12 @@ export class EngagementStore {
     })
   }
 
+  getFinding(id: string): NormalizedFinding | null {
+    const rows = this.db.select().from(findingsTable).where(eq(findingsTable.id, id)).all()
+    if (rows.length === 0) return null
+    return toNormalizedFinding(rows[0])
+  }
+
   getFindings(engagementId: string): NormalizedFinding[] {
     const rows = this.db.select().from(findingsTable)
       .where(eq(findingsTable.engagement_id, engagementId))
@@ -300,6 +314,20 @@ export class EngagementStore {
     }).run()
   }
 
+  getAuditLog(engagementId: string): Array<{ id: string; eventType: string; message: string; metadata: Record<string, unknown>; createdAt: number }> {
+    const rows = this.db.select().from(audit_log)
+      .where(eq(audit_log.engagement_id, engagementId))
+      .orderBy(desc(audit_log.created_at))
+      .all()
+    return rows.map((r) => ({
+      id: r.id,
+      eventType: r.event_type,
+      message: r.message,
+      metadata: (r.metadata ?? {}) as Record<string, unknown>,
+      createdAt: r.created_at,
+    }))
+  }
+
   saveEvidencePackage(id: string, findingId: string, packageHash: string): void {
     this.db.insert(evidence_packages).values({
       id,
@@ -314,6 +342,54 @@ export class EngagementStore {
       .where(eq(evidence_packages.finding_id, findingId))
       .all()
     return rows.map((r) => ({ id: r.id, packageHash: r.package_hash, createdAt: r.created_at }))
+  }
+
+  getEvidenceByEngagement(engagementId: string): Array<{
+    findingId: string
+    findingTitle: string
+    packages: Array<{
+      id: string
+      packageHash: string
+      createdAt: number
+      artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
+    }>
+  }> {
+    const findings = this.db.select().from(findingsTable)
+      .where(eq(findingsTable.engagement_id, engagementId))
+      .all()
+    const result: Array<{
+      findingId: string
+      findingTitle: string
+      packages: Array<{
+        id: string
+        packageHash: string
+        createdAt: number
+        artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
+      }>
+    }> = []
+    for (const f of findings) {
+      const packages = this.db.select().from(evidence_packages)
+        .where(eq(evidence_packages.finding_id, f.id))
+        .all()
+      const pkgList = packages.map((p) => {
+        const arts = this.db.select().from(artifacts)
+          .where(eq(artifacts.package_id, p.id))
+          .all()
+        return {
+          id: p.id,
+          packageHash: p.package_hash,
+          createdAt: p.created_at,
+          artifacts: arts.map((a) => ({
+            id: a.id,
+            path: a.path,
+            type: a.type,
+            sizeBytes: a.size_bytes,
+          })),
+        }
+      })
+      result.push({ findingId: f.id, findingTitle: f.title, packages: pkgList })
+    }
+    return result
   }
 
   saveArtifact(id: string, packageId: string, path: string, sha256: string, sizeBytes: number, type: string): void {
@@ -356,5 +432,67 @@ export class EngagementStore {
       workflowYaml: r.workflow_yaml,
       createdAt: r.created_at,
     }))
+  }
+
+  saveFindingAnalysis(analysis: FindingAnalysis): void {
+    this.db.insert(finding_analysis).values({
+      finding_id: analysis.findingId,
+      explanation: analysis.explanation,
+      impact: JSON.stringify(analysis.impact),
+      remediation: JSON.stringify(analysis.remediation),
+      refs: analysis.references ? JSON.stringify(analysis.references) : null,
+      model: analysis.model,
+      generated_at: analysis.generatedAt,
+      finding_updated_at: analysis.findingUpdatedAt,
+    }).onConflictDoUpdate({
+      target: finding_analysis.finding_id,
+      set: {
+        explanation: analysis.explanation,
+        impact: JSON.stringify(analysis.impact),
+        remediation: JSON.stringify(analysis.remediation),
+        refs: analysis.references ? JSON.stringify(analysis.references) : null,
+        model: analysis.model,
+        generated_at: analysis.generatedAt,
+        finding_updated_at: analysis.findingUpdatedAt,
+      },
+    }).run()
+  }
+
+  getFindingAnalysis(findingId: string): FindingAnalysis | null {
+    const rows = this.db.select().from(finding_analysis)
+      .where(eq(finding_analysis.finding_id, findingId))
+      .all()
+    if (rows.length === 0) return null
+    const row = rows[0]
+    try {
+      return {
+        findingId: row.finding_id,
+        explanation: row.explanation,
+        impact: JSON.parse(row.impact),
+        remediation: JSON.parse(row.remediation),
+        references: row.refs ? JSON.parse(row.refs) : undefined,
+        model: row.model,
+        generatedAt: row.generated_at,
+        findingUpdatedAt: row.finding_updated_at,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  deleteFindingAnalysis(findingId: string): void {
+    this.db.delete(finding_analysis)
+      .where(eq(finding_analysis.finding_id, findingId))
+      .run()
+  }
+
+  getValidAnalysis(findingId: string): FindingAnalysis | null {
+    const cached = this.getFindingAnalysis(findingId)
+    if (!cached) return null
+    const finding = this.getFinding(findingId)
+    if (finding && new Date(finding.updated_at).getTime() > cached.findingUpdatedAt) {
+      return null
+    }
+    return cached
   }
 }

@@ -315,6 +315,6 @@ describe("SLASH_COMMANDS set", () => {
   })
 
   test("size matches expected count", () => {
-    expect(SLASH_COMMANDS.size).toBe(15)
+    expect(SLASH_COMMANDS.size).toBe(19)
   })
 })

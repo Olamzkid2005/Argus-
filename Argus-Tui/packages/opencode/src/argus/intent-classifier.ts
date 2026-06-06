@@ -35,6 +35,7 @@ export const SLASH_COMMANDS = new Set([
   "evidence",
   "findings",
   "engagements",
+  "open",
   "tools",
   "workflows",
   "config", "status",

@@ -6,7 +6,7 @@ export class WorkerSupervisor {
     killChild: () => void
     connect: () => Promise<void>
     isHealthy: () => Promise<boolean>
-  }) {}
+  }, private backoffMs: number = 1000) {}
 
   async restartWorker(): Promise<void> {
     if (this.attempts >= this.maxRestarts) {
@@ -14,8 +14,8 @@ export class WorkerSupervisor {
     }
     this.attempts++
     this.callbacks.killChild()
-    // Exponential backoff: 1s, 2s, 4s
-    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, this.attempts - 1)))
+    // Exponential backoff: base, base*2, base*4
+    await new Promise(r => setTimeout(r, this.backoffMs * Math.pow(2, this.attempts - 1)))
     await this.callbacks.connect()
   }
 

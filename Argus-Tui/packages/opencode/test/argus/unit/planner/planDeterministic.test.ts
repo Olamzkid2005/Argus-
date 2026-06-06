@@ -39,7 +39,7 @@ describe("planDeterministic", () => {
     const plan = planDeterministic("https://example.com")
     expect(plan.errorRecovery["phase-0-recon"]).toBe("retry_once_then_skip")
     expect(plan.errorRecovery["phase-1-vuln_scan"]).toBe("retry_once_then_skip")
-    expect(plan.errorRecovery["phase-2-reporting"]).toBe("fail_fast")
+    expect(plan.errorRecovery["phase-2-reporting"]).toBe("skip_and_continue")
   })
 
   test("sets workflow to deterministic", () => {

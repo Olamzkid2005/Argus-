@@ -11,6 +11,9 @@ import { WorkflowRegistry } from "../workflows/registry"
 import type { EvidenceCollector } from "../evidence/collector"
 import type { BrowserEngine } from "../browser/engine"
 import { Feature, type FeatureFlags } from "../config/feature-flags"
+import { ToolConfig } from "../config/tool-config"
+import { ToolHealthMonitor } from "../bridge/tool-health"
+import type { ToolHealthRecord } from "../bridge/tool-health"
 
 /**
  * Map a tool's signal_quality tier to a baseline confidence level.
@@ -52,7 +55,9 @@ export class InProcessExecutor implements PhaseExecutor {
   private requiredGates: ApprovalGate[] = []
   private browserDeps: BrowserVerifierDeps | null = null
   private featureFlags: FeatureFlags | null = null
+  private toolConfig: ToolConfig = new ToolConfig()
   private phaseCount = 0
+  private toolHealth: ToolHealthMonitor
 
   constructor(
     private toolRegistry: ToolRegistry,
@@ -61,6 +66,11 @@ export class InProcessExecutor implements PhaseExecutor {
     private workflowRegistry?: WorkflowRegistry,
   ) {
     this.approvalService = new ApprovalService()
+    this.toolHealth = new ToolHealthMonitor()
+  }
+
+  getToolHealth(): ToolHealthRecord[] {
+    return this.toolHealth.getStatus()
   }
 
   setBrowserVerifierDeps(deps: BrowserVerifierDeps): void {
@@ -69,6 +79,15 @@ export class InProcessExecutor implements PhaseExecutor {
 
   setFeatureFlags(flags: FeatureFlags): void {
     this.featureFlags = flags
+  }
+
+  setToolConfig(tc: ToolConfig): void {
+    this.toolConfig = tc
+    const cb = tc.getCircuitBreakerConfig()
+    this.toolHealth = new ToolHealthMonitor({
+      maxConsecutiveFailures: cb.maxFailures,
+      cooldownMs: cb.cooldownMs,
+    })
   }
 
   /** Check whether a feature is enabled (defaults true if no flag system attached) */
@@ -85,6 +104,10 @@ export class InProcessExecutor implements PhaseExecutor {
   }
 
   async execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
+    if (phase.execution === "llm_driven") {
+      return this.executeHybrid(phase)
+    }
+
     if (!this.gatesLoaded) {
       throw new Error("loadGates must be called before execute")
     }
@@ -140,11 +163,21 @@ export class InProcessExecutor implements PhaseExecutor {
         if (calledTools.has(tool.name)) continue
         calledTools.add(tool.name)
 
+        if (!this.toolHealth.isHealthy(tool.name)) {
+          const alternatives = this.toolRegistry
+            .getToolsByCapability(cap)
+            .filter(t => t.name !== tool.name)
+            .map(t => t.name)
+          errors.push(`Tool ${tool.name} is temporarily unavailable (circuit breaker). Available alternatives: ${alternatives.join(", ") || "none"}`)
+          continue
+        }
+
         const errorRecovery = this.resolveErrorRecovery(phase, tool.name)
         let lastError: Error | null = null
         let success = false
 
         for (let attempt = 1; attempt <= 2; attempt++) {
+          const attemptStartTime = Date.now()
           try {
             const result = await this.bridge.callTool(tool.name, {
               target: phase.target,
@@ -163,6 +196,7 @@ export class InProcessExecutor implements PhaseExecutor {
                   const promoted = this.confidenceEngine.promote(finding)
                   findings.push({ ...finding, confidence: promoted })
                 }
+                this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
                 success = true
                 break
               } else if (typeof data === "string" && data.length > 0) {
@@ -182,12 +216,14 @@ export class InProcessExecutor implements PhaseExecutor {
                 }
                 const promoted = this.confidenceEngine.promote(finding)
                 findings.push({ ...finding, confidence: promoted })
+                this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
                 success = true
                 break
               }
             }
 
             lastError = new Error(result.error ?? "Tool returned unsuccessful result")
+            this.toolHealth.recordFailure(tool.name, lastError.message)
             if (errorRecovery === "fail_fast") {
               errors.push(`Tool ${tool.name} failed (fail_fast): ${lastError.message}`)
               return {
@@ -207,6 +243,7 @@ export class InProcessExecutor implements PhaseExecutor {
             break
           } catch (error) {
             lastError = error as Error
+            this.toolHealth.recordFailure(tool.name, lastError.message)
             if (errorRecovery === "fail_fast") {
               errors.push(`Tool ${tool.name} failed (fail_fast): ${lastError.message}`)
               return {
@@ -251,6 +288,149 @@ export class InProcessExecutor implements PhaseExecutor {
     return {
       phaseId: phase.phaseId,
       status: errors.length > 0 && findings.length > 0 ? "partial" : errors.length > 0 && findings.length === 0 ? "failed" : findings.length > 0 ? "completed" : "partial",
+      findings,
+      artifacts: [],
+      errors,
+      durationMs: Date.now() - startTime,
+    }
+  }
+
+  async executeHybrid(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
+    const startTime = Date.now()
+    const findings: NormalizedFinding[] = []
+    const errors: string[] = []
+
+    // 1. Resolve pipeline from tool registry
+    const pipeline = phase.requiredCapabilities.flatMap(cap => {
+      const tools = this.toolRegistry.getToolsByCapability(cap)
+      return tools.map(t => ({ tool: t.name, capabilities: [cap] }))
+    })
+
+    // 2. LLM creates plan (or deterministic default for now)
+    const session = await this.bridge.agentInit({
+      target: phase.target,
+      phase: phase.phaseId,
+      techStack: phase.config?.techStack as string[] | undefined,
+      pipeline,
+      context: { previousFindings: phase.previousPhaseResults },
+    })
+
+    let done = false
+
+    while (!done) {
+      // 3. Get next tool from plan
+      const next = await this.bridge.agentNext({ session_id: session.session_id })
+      if (next.done || !next.tool) {
+        done = true
+        break
+      }
+
+      // 4. Check tool health before executing
+      if (!this.toolHealth.isHealthy(next.tool)) {
+        const status = this.toolHealth.getToolStatus(next.tool)
+        const retryAfter = status?.circuitOpenedAt
+          ? Math.ceil((300_000 - (Date.now() - status.circuitOpenedAt)) / 1000)
+          : 300
+        errors.push(`Tool ${next.tool} is circuit-broken (retry in ${retryAfter}s)`)
+        await this.bridge.agentObserve({
+          session_id: session.session_id,
+          tool: next.tool,
+          success: false,
+          summary: `Circuit breaker open for ${next.tool}`,
+        })
+        continue
+      }
+
+      // 5. Execute tool
+      const toolStartTime = Date.now()
+      try {
+        const cap = pipeline.find(p => p.tool === next.tool)?.capabilities?.[0] ?? "web_recon"
+        const result = await this.bridge.callTool(next.tool, {
+          target: phase.target,
+          capability: cap,
+          config: phase.config,
+        })
+        const durationMs = Date.now() - toolStartTime
+
+        if (result.success) {
+          this.toolHealth.recordSuccess(next.tool, durationMs)
+
+          // Parse findings from structured data
+          if (result.data) {
+            const data = result.data as any
+            if (Array.isArray(data)) {
+              for (const finding of data) {
+                const promoted = this.confidenceEngine.promote(finding)
+                findings.push({ ...finding, confidence: promoted })
+              }
+            } else if (typeof data === "string" && data.length > 0) {
+              const baseConfidence = baselineConfidence(result.signalQuality)
+              findings.push({
+                id: `find-${next.tool}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                title: `${next.tool} scan against ${phase.target}`,
+                severity: 2,
+                confidence: baseConfidence,
+                status: "PENDING",
+                description: data.slice(0, 500),
+                tool: next.tool,
+                phase: phase.phaseId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+            }
+          }
+
+          await this.bridge.agentObserve({
+            session_id: session.session_id,
+            tool: next.tool,
+            success: true,
+            durationMs,
+            findingCount: findings.length,
+            summary: `${next.tool}: ${findings.length} findings`,
+          })
+        } else {
+          this.toolHealth.recordFailure(next.tool, result.error ?? "Unknown error")
+          errors.push(`Tool ${next.tool} failed: ${result.error}`)
+
+          await this.bridge.agentObserve({
+            session_id: session.session_id,
+            tool: next.tool,
+            success: false,
+            durationMs,
+            summary: `${next.tool} failed: ${result.error}`,
+          })
+        }
+      } catch (error) {
+        const errorMsg = (error as Error).message
+        this.toolHealth.recordFailure(next.tool, errorMsg)
+        errors.push(`Tool ${next.tool} error: ${errorMsg}`)
+
+        await this.bridge.agentObserve({
+          session_id: session.session_id,
+          tool: next.tool,
+          success: false,
+          summary: errorMsg,
+        })
+      }
+    }
+
+    // Run browser verifiers if phase requires BROWSER_VERIFICATION capability
+    if (
+      this.browserDeps &&
+      this.isFeatureEnabled(Feature.BROWSER_VERIFICATION) &&
+      phase.requiredCapabilities.includes(Capability.BROWSER_VERIFICATION)
+    ) {
+      try {
+        const browserFindings = await this.runBrowserVerifiers(phase.target)
+        findings.push(...browserFindings)
+      } catch (error) {
+        errors.push(`Browser verification failed: ${(error as Error).message}`)
+      }
+    }
+
+    return {
+      phaseId: phase.phaseId,
+      status: errors.length > 0 && findings.length === 0 ? "failed" : "completed",
       findings,
       artifacts: [],
       errors,

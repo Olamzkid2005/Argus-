@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""BOLA detection via Playwright. Called as a subprocess by MCP server."""
+import argparse
+import json
+import sys
+
+from playwright.sync_api import sync_playwright
+
+
+def _check_auth_success(page, target: str) -> bool:
+    """Verify authentication succeeded by checking we're not redirected to login."""
+    current = page.url
+    return "/login" not in current.lower()
+
+
+def check_bola(target: str, attacker: dict, victim: dict,
+               resource_pattern: str = "/api/users/{username}/details") -> list[dict]:
+    findings = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+
+        page = context.new_page()
+        page.goto(f"{target}/login")
+        page.wait_for_load_state("networkidle")
+        page.fill("input[name=username]", attacker["username"])
+        page.fill("input[name=password]", attacker["password"])
+        page.click("button[type=submit]")
+        page.wait_for_load_state("networkidle")
+
+        if not _check_auth_success(page, target):
+            browser.close()
+            return findings
+
+        resource_url = f"{target}{resource_pattern.format(username=victim['username'])}"
+        response = page.goto(resource_url)
+        if response.status == 200:
+            try:
+                body = response.json()
+            except Exception:
+                body = response.text()
+            findings.append({
+                "title": "BOLA: Unauthorized Access to Victim Resource",
+                "severity": 4,
+                "confidence": 5,
+                "description": f"Attacker accessed {victim['username']}'s details without authorization",
+                "tool": "playwright-bola",
+                "evidence": [{"type": "http", "content": json.dumps(body, indent=2) if isinstance(body, dict) else body}],
+            })
+
+        browser.close()
+    return findings
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target", required=True)
+    parser.add_argument("--creds-file", required=True,
+                        help="Path to JSON file with attacker/victim credentials")
+    parser.add_argument("--resource-pattern", default="/api/users/{username}/details",
+                        help="URL pattern for victim resource (use {username} placeholder)")
+    args = parser.parse_args()
+
+    with open(args.creds_file) as f:
+        creds = json.load(f)
+
+    findings = check_bola(
+        args.target,
+        creds["attacker"],
+        creds["victim"],
+        args.resource_pattern,
+    )
+    for f in findings:
+        print(json.dumps(f))
+
+    if not findings:
+        print(json.dumps({
+            "title": "No BOLA vulnerability detected",
+            "severity": 0,
+            "confidence": 5,
+            "tool": "playwright-bola",
+        }))

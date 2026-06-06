@@ -1,0 +1,42 @@
+name: playwright-xss
+command: python3
+args:
+  - argus-workers/tools/scripts/playwright_xss.py
+description: Stored Cross-Site Scripting detection via browser automation
+parameters:
+  - name: target
+    flag: --target
+    type: string
+    required: true
+    description: Target URL
+  - name: username
+    flag: --username
+    type: string
+    required: true
+    description: Login username
+  - name: password
+    flag: --password
+    type: string
+    required: true
+    description: Login password
+  - name: form-page
+    flag: --form-page
+    type: string
+    required: false
+    description: Path to the form page (default /feedback)
+  - name: payload
+    flag: --payload
+    type: string
+    required: false
+    description: XSS payload to inject
+capabilities:
+  - browser_verification
+signal_quality: CONFIRMED
+timeout: 120
+enabled: true
+requires:
+  target_scheme: any
+  credentials: true
+priority: 80
+cost: medium
+risk_level: low

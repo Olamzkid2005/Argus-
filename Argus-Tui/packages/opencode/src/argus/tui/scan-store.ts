@@ -9,8 +9,10 @@
  */
 
 import { createStore } from "solid-js/store"
+import type { ProgressEvent } from "../shared/progress"
 
 export interface ScanPhase {
+  id: string
   name: string
   index: number
   total: number
@@ -60,7 +62,7 @@ export function initScan(target: string, engagementId: string) {
   })
 }
 
-export function addPhase(phase: { name: string; index: number; total: number }) {
+export function addPhase(phase: { id: string; name: string; index: number; total: number }) {
   setScanState("phases", (prev) => [
     ...prev,
     { ...phase, status: "running" as const, findings: 0, errors: [] },
@@ -86,4 +88,39 @@ export function completeScan(success: boolean) {
 
 export function resetScan() {
   setScanState({ ...initialState })
+}
+
+function findPhaseIndex(phaseId: string): number {
+  return scanState.phases.findIndex((p) => p.id === phaseId)
+}
+
+export function handleProgressEvent(event: ProgressEvent) {
+  switch (event.type) {
+    case "phase_start":
+      addPhase({ id: event.phaseId, name: event.name, index: scanState.phases.length, total: event.total })
+      break
+    case "phase_complete": {
+      const ci = findPhaseIndex(event.phaseId)
+      if (ci >= 0) completePhase(ci, event.findings, [])
+      break
+    }
+    case "phase_error": {
+      const ei = findPhaseIndex(event.phaseId)
+      if (ei >= 0) completePhase(ei, 0, [event.error])
+      break
+    }
+    case "finding":
+      appendLog(`[${event.severity}] ${event.title}`)
+      break
+    case "tool_start":
+      appendLog(`Tool: ${event.tool}`)
+      break
+    case "tool_complete":
+      appendLog(`Tool ${event.tool} complete: ${event.findings} finding(s)`)
+      break
+    case "scan_complete":
+      setScanState("status", "completed")
+      setScanState("durationMs", Date.now() - scanState.startTime)
+      break
+  }
 }

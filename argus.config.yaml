@@ -8,6 +8,7 @@ features:
   workflow_registry: false
   engagement_store: false
   approval_gates: false
+  llm_finding_analysis: false
 
 evidence:
   retention_days: 30
@@ -16,3 +17,13 @@ evidence:
 
 security:
   allowed_git_hosts: []
+
+tools:
+  enabled: []
+  disabled:
+    - sqlmap
+  paths: {}
+  timeouts: {}
+  circuit_breaker:
+    max_failures: 5
+    cooldown_ms: 300000

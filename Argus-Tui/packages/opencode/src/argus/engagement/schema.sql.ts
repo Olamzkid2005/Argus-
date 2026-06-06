@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, index, foreignKey } from "drizzle-orm/sqlite-core"
 
 export const engagements = sqliteTable("engagements", {
   id: text().primaryKey(),
@@ -102,6 +102,19 @@ export const tool_execution_log = sqliteTable("tool_execution_log", {
   index("idx_tool_exec_engagement").on(table.engagement_id),
   index("idx_tool_exec_tool").on(table.tool_name),
   index("idx_tool_exec_capability").on(table.capability),
+])
+
+export const finding_analysis = sqliteTable("finding_analysis", {
+  finding_id: text().primaryKey(),
+  explanation: text().notNull(),
+  impact: text().notNull(),
+  remediation: text().notNull(),
+  refs: text(),
+  model: text().notNull(),
+  generated_at: integer().notNull(),
+  finding_updated_at: integer().notNull(),
+}, (table) => [
+  foreignKey({ columns: [table.finding_id], foreignColumns: [findings.id], onDelete: "cascade" }),
 ])
 
 export const audit_log = sqliteTable("audit_log", {

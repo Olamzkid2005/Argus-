@@ -9,6 +9,7 @@ import { createMemo, createSignal, onMount, For, Show, onCleanup } from "solid-j
 import { useTheme } from "@tui/context/theme"
 import { Toast } from "@tui/ui/toast"
 import { useRouteData } from "@tui/context/route"
+import { handleProgressEvent as scanHandleProgress } from "../scan-store"
 
 interface EngPhase { id: string; name: string; status: string; error?: string }
 interface EngFinding { title: string; severity: number; confidence: number; tool: string; description?: string }

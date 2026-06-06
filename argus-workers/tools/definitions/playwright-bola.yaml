@@ -1,0 +1,42 @@
+name: playwright-bola
+command: python3
+args:
+  - argus-workers/tools/scripts/playwright_bola.py
+description: Broken Object Level Authorization detection via browser automation
+parameters:
+  - name: target
+    flag: --target
+    type: string
+    required: true
+    description: Target URL
+  - name: attacker-username
+    flag: --attacker-username
+    type: string
+    required: true
+    description: Attacker username
+  - name: attacker-password
+    flag: --attacker-password
+    type: string
+    required: true
+    description: Attacker password
+  - name: victim-username
+    flag: --victim-username
+    type: string
+    required: true
+    description: Victim username
+  - name: victim-password
+    flag: --victim-password
+    type: string
+    required: true
+    description: Victim password
+capabilities:
+  - browser_verification
+signal_quality: CONFIRMED
+timeout: 120
+enabled: true
+requires:
+  target_scheme: any
+  credentials: true
+priority: 80
+cost: medium
+risk_level: low

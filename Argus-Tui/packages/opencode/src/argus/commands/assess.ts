@@ -4,6 +4,7 @@ import { WorkflowPlanner } from "../planner/planner"
 import { InProcessExecutor } from "../planner/executor"
 import type { NormalizedFinding } from "../shared/types"
 import type { PhaseRecord } from "../engagement/types"
+import type { ProgressEvent } from "../shared/progress"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
@@ -22,6 +23,7 @@ export async function assessCommand(target: string, options?: {
   useLLM?: boolean
   credsPath?: string
   features?: Partial<Record<Feature, boolean>>
+  onProgress?: (event: ProgressEvent | string) => void
 }): Promise<void> {
   const workflowsDir = options?.workflowsPath ?? join(__dirname, "../workflows")
   const toolsPath = options?.toolsPath ?? join(workflowsDir, "tool-definitions.yaml")
@@ -107,10 +109,15 @@ export async function assessCommand(target: string, options?: {
 
   const allFindings: NormalizedFinding[] = []
   let executionError: Error | null = null
+  const emit = options?.onProgress ?? ((_: ProgressEvent | string) => {})
 
   try {
     for (let i = 0; i < plan.phases.length; i++) {
       const phase = plan.phases[i]
+      const phaseName = phase.phaseId.split("-")[2] ?? phase.phaseId
+
+      emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length })
+
       phaseRecords[i].status = "RUNNING"
       phaseRecords[i].startedAt = new Date().toISOString()
       store.savePhase(engagement.id, phaseRecords[i])
@@ -118,20 +125,29 @@ export async function assessCommand(target: string, options?: {
       const result = await executor.execute(phase)
 
       for (const finding of result.findings) {
+        emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
         const promoted = confidenceEngine.promote(finding)
         finding.confidence = promoted
         allFindings.push(finding)
       }
 
-      phaseRecords[i].status = result.status === "failed" ? "FAILED" : "COMPLETED"
+      const phaseStatus = result.status === "failed" ? "FAILED" : "COMPLETED"
+      phaseRecords[i].status = phaseStatus
       phaseRecords[i].completedAt = new Date().toISOString()
       if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")
       store.savePhase(engagement.id, phaseRecords[i])
+
+      if (phaseStatus === "FAILED") {
+        emit({ type: "phase_error", phaseId: phase.phaseId, name: phaseName, error: result.errors.join("; ") })
+      } else {
+        emit({ type: "phase_complete", phaseId: phase.phaseId, name: phaseName, findings: result.findings.length, status: phaseStatus })
+      }
     }
   } catch (error) {
     executionError = error as Error
     store.appendAuditLog(engagement.id, "ASSESS_ERROR", `Assessment error: ${(error as Error).message}`)
   } finally {
+    emit({ type: "scan_complete", totalFindings: allFindings.length })
     const allPhasesCompleted = phaseRecords.every(p => p.status === "COMPLETED")
     store.updateStatus(engagement.id, executionError ? "FAILED" : allPhasesCompleted ? "COMPLETED" : "FAILED")
     store.saveFindings(engagement.id, allFindings)

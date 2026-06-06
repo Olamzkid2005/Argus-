@@ -24,6 +24,7 @@ export enum Feature {
   ENGAGEMENT_STORE = "engagement_store",
   DETERMINISTIC_FALLBACK = "deterministic_fallback",
   APPROVAL_GATES = "approval_gates",
+  LLM_FINDING_ANALYSIS = "llm_finding_analysis",
 }
 
 const DEFAULT_FEATURES: Record<Feature, boolean> = {
@@ -32,6 +33,7 @@ const DEFAULT_FEATURES: Record<Feature, boolean> = {
   [Feature.ENGAGEMENT_STORE]: false,
   [Feature.DETERMINISTIC_FALLBACK]: true,       // Always-on safe default
   [Feature.APPROVAL_GATES]: false,
+  [Feature.LLM_FINDING_ANALYSIS]: false,
 }
 
 export class FeatureFlags implements IFeatureFlags {
@@ -105,6 +107,7 @@ export class FeatureFlags implements IFeatureFlags {
       "enable-engagement-store": Feature.ENGAGEMENT_STORE,
       "enable-approval-gates": Feature.APPROVAL_GATES,
       "disable-deterministic": Feature.DETERMINISTIC_FALLBACK,
+      "enable-llm-analysis": Feature.LLM_FINDING_ANALYSIS,
     }
     for (const [cliKey, feature] of Object.entries(featureMap)) {
       if (cliFlags[cliKey] !== undefined) {

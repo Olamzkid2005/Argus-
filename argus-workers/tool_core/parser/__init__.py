@@ -1,10 +1,4 @@
-"""tool_core.parser — Parser and normalizer facades.
+from .dispatcher import dispatch, has_parser
+from .types import NormalizedFinding
 
-Re-exports from ``parsers/`` — the canonical implementations live
-in ``parsers/parser.py`` and ``parsers/normalizer.py``.
-"""
-
-from tool_core.parser.dispatcher import Parser
-from tool_core.parser.normalizer import FindingNormalizer
-
-__all__ = ["Parser", "FindingNormalizer"]
+__all__ = ["dispatch", "has_parser", "NormalizedFinding"]

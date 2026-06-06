@@ -22,6 +22,8 @@ import { join } from "path"
 import { homedir } from "os"
 import type { NormalizedFinding } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
+import type { ProgressEvent } from "./shared/progress"
+import { handleProgressEvent } from "./tui/scan-store"
 
 export interface WorkflowRunOptions {
   target: string
@@ -31,9 +33,10 @@ export interface WorkflowRunOptions {
   credsPath?: string
   /**
    * Called with status updates during assessment execution.
-   * Currently unthrottled — see ADR-017 for throttling guidelines.
+   * Accepts both structured ProgressEvent objects and plain strings
+   * for backward compatibility.
    */
-  onProgress?: (status: string) => void
+  onProgress?: (event: ProgressEvent | string) => void
   /**
    * Existing engagement ID to use instead of creating a new one.
    * The caller is responsible for creating the engagement and passing
@@ -101,6 +104,21 @@ export function formatFindingsSummary(
 }
 
 export class WorkflowRunner {
+  constructor(
+    private deps?: {
+      store?: EngagementStore
+      workflowRegistry?: WorkflowRegistry
+      toolRegistry?: ToolRegistry
+      planner?: WorkflowPlanner
+      executor?: InProcessExecutor
+      bridge?: WorkersBridge
+      confidenceEngine?: ConfidenceEngine
+      credStore?: CredentialStore
+      evidenceCollector?: EvidenceCollector
+      engine?: PlaywrightEngine
+    },
+  ) {}
+
   /**
    * Run an assessment workflow against a target.
    * Creates an engagement, plans phases, executes them, and returns results.
@@ -109,9 +127,13 @@ export class WorkflowRunner {
   async run(options: WorkflowRunOptions): Promise<WorkflowRunResult> {
     const startTime = Date.now()
     const target = options.target
-    const progress = options.onProgress ?? ((_: string) => {})
+    const userEmit = options.onProgress
+    const emit = (event: ProgressEvent | string) => {
+      userEmit?.(event)
+      if (typeof event !== "string") handleProgressEvent(event)
+    }
 
-    progress(`✓ Target validated: ${target}`)
+    emit(`✓ Target validated: ${target}`)
 
     // Resolve paths relative to this file (src/argus/)
     const _dirname = new URL(".", import.meta.url).pathname
@@ -121,7 +143,7 @@ export class WorkflowRunner {
     const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
     // ── 1. Create or use existing engagement ──
-    const store = new EngagementStore()
+    const store = this.deps?.store ?? new EngagementStore()
     let engagementId = options.engagementId
     if (engagementId) {
       // Verify the engagement exists
@@ -130,25 +152,25 @@ export class WorkflowRunner {
         throw new Error(`Engagement ${engagementId} not found in store`)
       }
       store.updateStatus(engagementId, "RUNNING")
-      progress(`✓ Using existing engagement: \`${engagementId}\``)
+      emit(`✓ Using existing engagement: \`${engagementId}\``)
     } else {
       const engagement = store.createEngagement(target, "assessment")
       engagementId = engagement.id
       store.updateStatus(engagementId, "RUNNING")
-      progress(`✓ Engagement created: \`${engagementId}\``)
+      emit(`✓ Engagement created: \`${engagementId}\``)
     }
 
     // ── 2. Load registries ──
-    const workflowRegistry = new WorkflowRegistry(workflowsDir)
+    const workflowRegistry = this.deps?.workflowRegistry ?? new WorkflowRegistry(workflowsDir)
     workflowRegistry.loadAll()
-    const toolRegistry = new ToolRegistry()
+    const toolRegistry = this.deps?.toolRegistry ?? new ToolRegistry()
     toolRegistry.load(toolsPath)
 
     // ── 3. Plan ──
-    progress(`⠋ Planning assessment...`)
-    const planner = new WorkflowPlanner(workflowRegistry, toolRegistry)
+    emit(`⠋ Planning assessment...`)
+    const planner = this.deps?.planner ?? new WorkflowPlanner(workflowRegistry, toolRegistry)
     const plan = await planner.plan(target, undefined, { useLLM: options.useLLM ?? true })
-    progress(`✓ Plan created: ${plan.phases.length} phase(s)`)
+    emit(`✓ Plan created: ${plan.phases.length} phase(s)`)
 
     // ── 4. Create phase records ──
     const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({
@@ -163,23 +185,23 @@ export class WorkflowRunner {
     store.savePhases(engagementId, phaseRecords)
 
     // ── 5. Connect bridge ──
-    progress(`⠋ Connecting MCP workers...`)
-    const bridge = new WorkersBridge(workersPath)
+    emit(`⠋ Connecting MCP workers...`)
+    const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
     await bridge.connect()
-    progress(`✓ MCP workers connected`)
+    emit(`✓ MCP workers connected`)
 
-    const confidenceEngine = new ConfidenceEngine()
-    const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
+    const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
+    const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
     executor.loadGates(plan.workflow)
 
     // ── 6. Wire up browser verifier deps ──
-    const credStore = new CredentialStore()
+    const credStore = this.deps?.credStore ?? new CredentialStore()
     credStore.load()
     const allRoles = credStore.getAllCredentials()
     if (allRoles && Object.keys(allRoles).length > 0) {
       const evidenceBaseDir = join(homedir(), ".argus", "engagements")
-      const evidenceCollector = new EvidenceCollector(evidenceBaseDir)
-      const engine = new PlaywrightEngine()
+      const evidenceCollector = this.deps?.evidenceCollector ?? new EvidenceCollector(evidenceBaseDir)
+      const engine = this.deps?.engine ?? new PlaywrightEngine()
       executor.setBrowserVerifierDeps({
         evidenceCollector,
         engine,
@@ -190,14 +212,16 @@ export class WorkflowRunner {
     credStore.clear()
 
     // ── 7. Execute phases ──
-    const allFindings: any[] = []
+    const allFindings: NormalizedFinding[] = []
     let executionError: Error | null = null
 
     try {
       for (let i = 0; i < plan.phases.length; i++) {
         const phase = plan.phases[i]
         const phaseName = phase.phaseId.split("-").slice(2).join("-") || `phase-${i}`
-        progress(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
+
+        emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length })
+        emit(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
 
         phaseRecords[i].status = "RUNNING"
         phaseRecords[i].startedAt = new Date().toISOString()
@@ -206,6 +230,7 @@ export class WorkflowRunner {
         const result = await executor.execute(phase)
 
         for (const finding of result.findings) {
+          emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
           const promoted = confidenceEngine.promote(finding)
           allFindings.push({ ...finding, confidence: promoted })
         }
@@ -218,15 +243,18 @@ export class WorkflowRunner {
 
         const findingCount = result.findings.length
         const errorCount = result.errors.length
-        if (errorCount > 0) {
-          progress(`⚠ Phase ${phaseName}: ${findingCount} finding(s), ${errorCount} error(s)`)
+        if (phaseStatus === "FAILED") {
+          emit({ type: "phase_error", phaseId: phase.phaseId, name: phaseName, error: result.errors.join("; ") })
+          emit(`⚠ Phase ${phaseName}: ${findingCount} finding(s), ${errorCount} error(s)`)
         } else {
-          progress(`✓ Phase ${phaseName}: ${findingCount} finding(s)`)
+          emit({ type: "phase_complete", phaseId: phase.phaseId, name: phaseName, findings: findingCount, status: phaseStatus })
+          emit(`✓ Phase ${phaseName}: ${findingCount} finding(s)`)
         }
       }
     } catch (error) {
       executionError = error as Error
-      progress(`✗ Error: ${executionError.message}`)
+      emit({ type: "scan_complete", totalFindings: allFindings.length })
+      emit(`✗ Error: ${executionError.message}`)
       store.appendAuditLog(engagementId, "RUNNER_ERROR",
         `Workflow error: ${executionError.message}`)
     } finally {
@@ -234,7 +262,10 @@ export class WorkflowRunner {
       store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
       store.saveFindings(engagementId, allFindings)
       await bridge.disconnect()
-      progress(`✓ Assessment ${executionError ? "failed" : "complete"}`)
+      if (!executionError) {
+        emit({ type: "scan_complete", totalFindings: allFindings.length })
+      }
+      emit(`✓ Assessment ${executionError ? "failed" : "complete"}`)
     }
 
     // ── 8. Collate and return results ──

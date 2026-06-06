@@ -346,6 +346,12 @@ export class WorkersBridge {
     this.setLLMStatus("AVAILABLE")
   }
 
+  /** Set the local tool registry snapshot for drift comparison.
+   *  Without this, quickDriftCheck would compare MCP against itself. */
+  setRegistryTools(tools: ToolDefinition[]): void {
+    this.toolsCache = tools
+  }
+
   /** Lightweight drift check: compares a hash of (tool names + capability sets).
    *  Returns true if MCP and registry are in sync. Returns false on mismatch,
    *  at which point callers should run the full detectDrift() for details.
@@ -355,12 +361,13 @@ export class WorkersBridge {
   async quickDriftCheck(): Promise<boolean> {
     const { createHash } = await import("crypto")
     const mcpTools = await this.getTools()
+    const regTools = this.toolsCache
 
     const mcpKey = mcpTools
       .map((t) => `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`)
       .sort()
       .join("|")
-    const regKey = this.toolsCache
+    const regKey = regTools
       .map((t) => `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`)
       .sort()
       .join("|")
@@ -390,6 +397,36 @@ export class WorkersBridge {
       missing_from_mcp: this.toolsCache.filter((t) => !mcpNames.has(t.name)).map((t) => t.name),
       capability_gaps: capabilityGaps,
     }
+  }
+
+  async agentInit(params: {
+    target: string
+    phase: string
+    techStack?: string[]
+    pipeline?: any[]
+    context?: Record<string, any>
+  }): Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string }> {
+    return this.sendRequest("agent_init", params) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string }>
+  }
+
+  async agentNext(params: {
+    session_id: string
+    trigger?: "stuck" | "new_finding" | "phase_complete"
+  }): Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }> {
+    return this.sendRequest("agent_next", params) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
+  }
+
+  async agentObserve(params: {
+    session_id: string
+    tool: string
+    arguments?: Record<string, string>
+    reasoning?: string
+    success: boolean
+    durationMs?: number
+    findingCount?: number
+    summary?: string
+  }): Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }> {
+    return this.sendRequest("agent_observe", params) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
   }
 
   async disconnect(): Promise<void> {

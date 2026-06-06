@@ -36,18 +36,21 @@ describe("WorkerSupervisor", () => {
     })
   })
 
+  function makeSupervisor() {
+    const mock = createMockBridge()
+    return { mock, supervisor: new WorkerSupervisor(mock.bridge, 1) }
+  }
+
   describe("restartWorker()", () => {
     test("kills child and reconnects", async () => {
-      const mock = createMockBridge()
-      const supervisor = new WorkerSupervisor(mock.bridge)
+      const { mock, supervisor } = makeSupervisor()
       await supervisor.restartWorker()
       expect(mock.killCalled()).toBe(true)
       expect(mock.connectCount()).toBe(1)
     })
 
     test("increments attempt counter", async () => {
-      const mock = createMockBridge()
-      const supervisor = new WorkerSupervisor(mock.bridge)
+      const { mock, supervisor } = makeSupervisor()
       expect(supervisor.attemptsRemaining()).toBe(3)
       await supervisor.restartWorker()
       expect(supervisor.attemptsRemaining()).toBe(2)
@@ -56,8 +59,7 @@ describe("WorkerSupervisor", () => {
     })
 
     test("throws after maxRestarts (3) attempts", async () => {
-      const mock = createMockBridge()
-      const supervisor = new WorkerSupervisor(mock.bridge)
+      const { supervisor } = makeSupervisor()
 
       await supervisor.restartWorker()
       await supervisor.restartWorker()
@@ -72,8 +74,7 @@ describe("WorkerSupervisor", () => {
 
   describe("resetAttempts()", () => {
     test("resets the attempt counter", async () => {
-      const mock = createMockBridge()
-      const supervisor = new WorkerSupervisor(mock.bridge)
+      const { supervisor } = makeSupervisor()
 
       await supervisor.restartWorker()
       await supervisor.restartWorker()
@@ -86,8 +87,7 @@ describe("WorkerSupervisor", () => {
 
   describe("attemptsRemaining()", () => {
     test("returns correct count", async () => {
-      const mock = createMockBridge()
-      const supervisor = new WorkerSupervisor(mock.bridge)
+      const { supervisor } = makeSupervisor()
       expect(supervisor.attemptsRemaining()).toBe(3)
       await supervisor.restartWorker()
       expect(supervisor.attemptsRemaining()).toBe(2)
@@ -96,8 +96,7 @@ describe("WorkerSupervisor", () => {
 
   describe("After resetAttempts, restartWorker works again", () => {
     test("allows restart after reset", async () => {
-      const mock = createMockBridge()
-      const supervisor = new WorkerSupervisor(mock.bridge)
+      const { supervisor } = makeSupervisor()
 
       await supervisor.restartWorker()
       await supervisor.restartWorker()

@@ -50,6 +50,7 @@ export interface PhaseExecutionRequest {
   config: Record<string, unknown>
   previousPhaseResults: PhaseExecutionResult[]
   approvalGateName?: string
+  execution?: "deterministic" | "llm_driven"
 }
 
 export interface PhaseExecutionResult {

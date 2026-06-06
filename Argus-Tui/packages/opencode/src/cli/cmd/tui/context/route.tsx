@@ -42,7 +42,23 @@ export type WorkspaceRoute = {
   type: "workspace"
 }
 
-export type Route = HomeRoute | SessionRoute | PluginRoute | ScanRoute | FindingsRoute | DashboardRoute | EngagementsRoute | WorkspaceRoute
+export type EngagementDetailRoute = {
+  type: "engagement-detail"
+  engagementId: string
+  tab?: string
+}
+
+export type FindingDetailRoute = {
+  type: "finding-detail"
+  findingId: string
+}
+
+export type ReportRoute = {
+  type: "report"
+  engagementId: string
+}
+
+export type Route = HomeRoute | SessionRoute | PluginRoute | ScanRoute | FindingsRoute | DashboardRoute | EngagementsRoute | WorkspaceRoute | EngagementDetailRoute | FindingDetailRoute | ReportRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

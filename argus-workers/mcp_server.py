@@ -11,7 +11,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tool_core.parser import dispatch
+from tool_core.storage import ArtifactStorage, ArtifactData, ArtifactMissingError
 from tracing import setup_tracing
+from agent.session_store import AgentSessionStore, ToolExecution
 
 # ── Signal quality tiers for planner intelligence ──
 
@@ -150,6 +153,8 @@ class MCPToolResult:
         }
         if self.signal_quality:
             meta["signal_quality"] = self.signal_quality
+        if self.data:
+            meta["data"] = dict(self.data)
         return {
             "content": [{"type": "text", "text": self.output or self.error}],
             "isError": not self.success,
@@ -178,6 +183,7 @@ class MCPServer:
             os.path.dirname(__file__), "tools", "definitions"
         )
         self._load_yaml_tools()
+        self.session_store = AgentSessionStore()
 
     def _load_yaml_tools(self):
         """Load tool definitions from YAML files in tools/definitions/."""
@@ -201,6 +207,9 @@ class MCPServer:
         # resolves to project_dir/argus-workers/tools/run_agent_tool.py
         allowed_python_scripts = {
             os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "run_agent_tool.py")),
+            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "scripts", "playwright_bola.py")),
+            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "scripts", "playwright_xss.py")),
+            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "scripts", "playwright_privesc.py")),
         }
 
         try:
@@ -400,14 +409,18 @@ class MCPServer:
                 self._execution_stats[name]["failures"] += 1
             self._execution_stats[name]["total_duration_ms"] += duration_ms
 
-            return MCPToolResult(
+            mcp_result = MCPToolResult(
                 success=success,
                 output=result.stdout,
                 error=result.stderr,
                 duration_ms=duration_ms,
                 tool=name,
                 signal_quality=tool_signal_quality,
-            ).to_dict()
+            )
+            structured = dispatch(name, result.stdout if success else "")
+            if structured:
+                mcp_result.data["structured"] = [f.__dict__ for f in structured]
+            return mcp_result.to_dict()
 
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start) * 1000)
@@ -434,6 +447,139 @@ class MCPServer:
     def get_stats(self) -> dict:
         """Get execution statistics for all tools."""
         return dict(self._execution_stats)
+
+    # ── Hybrid planning methods ──
+
+    def handle_agent_init(self, params: dict) -> dict:
+        """Create session and generate hybrid plan (1 LLM call per phase)."""
+        session_id = self.session_store.create(
+            target=params.get("target", ""),
+            phase=params.get("phase", ""),
+            tech_stack=params.get("techStack", []),
+        )
+
+        pipeline = params.get("pipeline", [])
+
+        # Generate ordered plan (deterministic for now — LLM integration later)
+        plan = self._generate_plan(session_id, pipeline, params.get("context", {}))
+
+        self.session_store.set_plan(session_id, plan["tool_order"])
+
+        return {
+            "session_id": session_id,
+            "plan": plan["tool_order"],
+            "reasoning": plan["reasoning"],
+            "phase": params.get("phase", ""),
+        }
+
+    def _generate_plan(self, session_id: str, pipeline: list, context: dict) -> dict:
+        """Generate an ordered plan from the available pipeline.
+
+        For now, uses deterministic ordering. LLM integration will come later
+        via the ReActAgent. Returns tool_order and reasoning.
+        """
+        session = self.session_store.get(session_id)
+
+        # Extract tool names from pipeline steps, validating they exist
+        tool_order = []
+        for step in pipeline:
+            tool_name = step.get("tool")
+            if tool_name and tool_name in self._tools:
+                tool_order.append(tool_name)
+            elif tool_name:
+                logger.warning("Pipeline references unknown tool '%s', skipping", tool_name)
+
+        # If no pipeline, use a sensible default ordering
+        if not tool_order:
+            phase = session.phase
+            if phase in ("recon", "reconnaissance"):
+                tool_order = ["subfinder", "httpx", "whatweb", "nmap", "gospider"]
+            elif phase in ("scan", "vulnerability_scanning"):
+                tool_order = ["nuclei", "nikto", "dalfox", "wafw00f"]
+            elif phase in ("deep_scan", "deep"):
+                tool_order = ["nuclei", "sqlmap", "testssl", "commix"]
+            else:
+                tool_order = []
+
+        return {
+            "tool_order": tool_order,
+            "reasoning": f"Deterministic plan for {session.phase}: {len(tool_order)} tools",
+        }
+
+    def handle_agent_next(self, params: dict) -> dict:
+        """Get next tool from current plan, or signal done if plan exhausted."""
+        session_id = params.get("session_id", "")
+        trigger = (params.get("trigger") or "").lower().strip()
+
+        try:
+            session = self.session_store.get(session_id)
+        except ValueError:
+            return {"error": f"Session {session_id} not found", "done": True}
+
+        # Normal case: advance through the deterministic plan
+        next_tool = self.session_store.advance_plan(session_id)
+        if next_tool:
+            return {
+                "tool": next_tool,
+                "session_id": session_id,
+                "reasoning": "Deterministic plan step",
+                "done": False,
+            }
+
+        # Plan exhausted
+        if trigger in ("stuck", "new_finding", "phase_complete"):
+            # Re-plan based on accumulated observations
+            new_plan = self._replan(session)
+            if new_plan.get("done"):
+                return {"done": True, "session_id": session_id}
+            self.session_store.set_plan(session_id, new_plan["tool_order"])
+            next_tool = self.session_store.advance_plan(session_id)
+            if next_tool:
+                return {
+                    "tool": next_tool,
+                    "session_id": session_id,
+                    "reasoning": new_plan.get("reasoning", "Re-plan after trigger"),
+                    "done": False,
+                }
+
+        return {"done": True, "session_id": session_id}
+
+    def _replan(self, session) -> dict:
+        """Re-plan based on current session state.
+
+        For now, returns done if plan exhausted. LLM integration later.
+        """
+        return {"done": True, "reasoning": "Plan complete"}
+
+    def handle_agent_observe(self, params: dict) -> dict:
+        """Record tool execution result and decide next action."""
+        session_id = params.get("session_id", "")
+
+        try:
+            session = self.session_store.get(session_id)
+        except ValueError:
+            return {"error": f"Session {session_id} not found", "done": True}
+
+        execution = ToolExecution(
+            tool=params.get("tool", ""),
+            arguments=params.get("arguments", {}),
+            reasoning=params.get("reasoning", ""),
+            success=params.get("success", False),
+            duration_ms=params.get("durationMs", 0),
+            finding_count=params.get("findingCount", 0),
+            summary=params.get("summary", ""),
+        )
+        self.session_store.add_execution(session_id, execution)
+        self.session_store.add_observation(session_id, params.get("summary", ""))
+
+        # Check if we need to involve the LLM
+        trigger = None
+        if not params.get("success", True):
+            trigger = "stuck"
+        elif params.get("findingCount", 0) > 0:
+            trigger = "new_finding"
+
+        return self.handle_agent_next({"session_id": session_id, "trigger": trigger})
 
 
 # Global MCP server instance
@@ -474,6 +620,19 @@ def main():
 
     transport.register("list_tools", handle_list_tools)
     transport.register("call_tool", handle_call_tool)
+
+    def handle_agent_init(params):
+        return server.handle_agent_init(params)
+
+    def handle_agent_next(params):
+        return server.handle_agent_next(params)
+
+    def handle_agent_observe(params):
+        return server.handle_agent_observe(params)
+
+    transport.register("agent_init", handle_agent_init)
+    transport.register("agent_next", handle_agent_next)
+    transport.register("agent_observe", handle_agent_observe)
 
     logger.info("MCP stdio transport starting")
     transport.run()

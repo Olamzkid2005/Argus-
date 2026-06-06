@@ -12,6 +12,8 @@ tools:
     min_version: "3.0.0"
     version_cmd: "nuclei --version"
     version_regex: "\\d+\\.\\d+\\.\\d+"
+    consumes: [live_hosts, tech_stack]
+    provides: [vulnerabilities]
     scoring:
       confidence_score: 90
       coverage_score: 85
@@ -42,6 +44,8 @@ tools:
     scoring:
       confidence_score: 95
       coverage_score: 90
+    consumes: [target]
+    provides: [open_ports]
 
   - name: whatweb
     label: WhatWeb Technology Detector
@@ -55,6 +59,8 @@ tools:
     scoring:
       confidence_score: 85
       coverage_score: 75
+    consumes: [live_hosts]
+    provides: [tech_stack]
 
   - name: ffuf
     label: FFUF Content Discovery
@@ -82,6 +88,8 @@ tools:
     scoring:
       confidence_score: 90
       coverage_score: 80
+    consumes: [subdomains]
+    provides: [live_hosts]
 
   - name: subfinder
     label: Subfinder Subdomain Discovery
@@ -95,6 +103,8 @@ tools:
     scoring:
       confidence_score: 85
       coverage_score: 80
+    consumes: []
+    provides: [subdomains]
 
   - name: katana
     label: Katana Web Crawler
@@ -109,6 +119,8 @@ tools:
     scoring:
       confidence_score: 75
       coverage_score: 80
+    consumes: [live_hosts]
+    provides: [endpoints]
 
   - name: gau
     label: GetAllURLs Archive Crawler
@@ -122,6 +134,8 @@ tools:
     scoring:
       confidence_score: 50
       coverage_score: 70
+    consumes: [target]
+    provides: [historical_urls]
 
   - name: waybackurls
     label: Wayback Machine URL Fetcher
@@ -135,6 +149,8 @@ tools:
     scoring:
       confidence_score: 50
       coverage_score: 65
+    consumes: [target]
+    provides: [historical_urls]
 
   - name: amass
     label: Amass Subdomain Enumeration
@@ -148,6 +164,8 @@ tools:
     scoring:
       confidence_score: 80
       coverage_score: 85
+    consumes: [target]
+    provides: [subdomains]
 
   - name: naabu
     label: Naabu Port Scanner
@@ -161,6 +179,8 @@ tools:
     scoring:
       confidence_score: 85
       coverage_score: 80
+    consumes: [target]
+    provides: [open_ports]
 
   - name: gospider
     label: GoSpider Web Spider
@@ -175,6 +195,8 @@ tools:
     scoring:
       confidence_score: 70
       coverage_score: 75
+    consumes: [live_hosts]
+    provides: [endpoints]
 
   - name: dalfox
     label: Dalfox XSS Scanner
@@ -188,6 +210,8 @@ tools:
     scoring:
       confidence_score: 75
       coverage_score: 70
+    consumes: [live_hosts, endpoints]
+    provides: [xss_findings]
 
   - name: sqlmap
     label: SQLMap SQL Injection Scanner
@@ -332,6 +356,287 @@ tools:
     scoring:
       confidence_score: 70
       coverage_score: 65
+
+  # ── Security Code Analysis & Secret Detection ──────────────────
+
+  - name: wpscan
+    label: WPScan WordPress Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 65
+      coverage_score: 60
+
+  - name: trufflehog
+    label: TruffleHog Secret Scanner
+    capabilities:
+      - secret_detection
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+
+  - name: gosec
+    label: GoSec Security Scanner
+    capabilities:
+      - sast
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: brakeman
+    label: Brakeman Rails Scanner
+    capabilities:
+      - sast
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: eslint
+    label: ESLint Security Linter
+    capabilities:
+      - sast
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 70
+      coverage_score: 65
+
+  - name: spotbugs
+    label: SpotBugs Bytecode Scanner
+    capabilities:
+      - sast
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 70
+      coverage_score: 65
+
+  - name: phpcs
+    label: PHPCS Security Scanner
+    capabilities:
+      - sast
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 65
+      coverage_score: 60
+
+  - name: govulncheck
+    label: Govulncheck Dependency Scanner
+    capabilities:
+      - sca
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: dependency_check
+    label: OWASP Dependency Check
+    capabilities:
+      - sca
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+
+  - name: npm-audit
+    label: NPM Audit Scanner
+    capabilities:
+      - sca
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 55
+      coverage_score: 50
+
+  # ── Infrastructure Scanning ────────────────────────────────────
+
+  - name: sn1per
+    label: Sn1per Pentest Framework
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: true
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 50
+      coverage_score: 60
+
+  - name: masscan
+    label: Masscan Port Scanner
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: true
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 60
+      coverage_score: 80
+
+  # ── Cloud & Storage Scanning ───────────────────────────────────
+
+  - name: cloud_enum
+    label: Cloud Enumeration Tool
+    capabilities:
+      - cloud_enum
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 50
+      coverage_score: 60
+
+  - name: s3scanner
+    label: S3 Bucket Scanner
+    capabilities:
+      - s3_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 55
+      coverage_score: 60
+
+  - name: bucket_upload
+    label: Bucket Upload Tester
+    capabilities:
+      - s3_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 65
+      coverage_score: 55
+
+  # ── Advanced Recon & Discovery ─────────────────────────────────
+
+  - name: uncover
+    label: Uncover Asset Discovery
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 45
+      coverage_score: 55
+
+  - name: chaos
+    label: Chaos Subdomain Enumeration
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 50
+      coverage_score: 55
+
+  - name: dnsx
+    label: DNSX DNS Resolver
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 55
+      coverage_score: 60
+
+  - name: shuffledns
+    label: ShuffleDNS DNS Resolver
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 55
+      coverage_score: 65
+
+  - name: alterx
+    label: AlterX Subdomain Generator
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 40
+      coverage_score: 50
+
+  - name: github-endpoints
+    label: GitHub Endpoints Enumerator
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 50
+      coverage_score: 55
 
   # ── Agent-Internal Tools (Planner-Callable) ──────────────────────────
 

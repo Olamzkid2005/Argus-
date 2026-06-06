@@ -31,6 +31,21 @@ phases:
     execution: parallel
     error_recovery: retry_once_then_skip
 
+  - name: code_analysis
+    required_capabilities:
+      - sast
+      - secret_detection
+      - sca
+    execution: parallel
+    error_recovery: skip_and_continue
+
+  - name: cloud_enum
+    required_capabilities:
+      - cloud_enum
+      - s3_scanning
+    execution: parallel
+    error_recovery: skip_and_continue
+
   - name: verification
     required_capabilities:
       - browser_verification

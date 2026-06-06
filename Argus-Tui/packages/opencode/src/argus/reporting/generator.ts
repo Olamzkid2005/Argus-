@@ -1,6 +1,6 @@
 import { readFileSync } from "fs"
 import { join } from "path"
-import type { NormalizedFinding } from "../shared/types"
+import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 import { Severity, Confidence } from "../shared/types"
 import type { Report, ReportFormat, ReportSummary } from "./types"
 import { EngagementStore } from "../engagement/store"
@@ -22,6 +22,12 @@ function enumValue<T extends Record<string, number | string>>(e: T, v: unknown, 
 }
 
 export class ReportGenerator {
+  private analyses: FindingAnalysis[] = []
+
+  setAnalyses(analyses: FindingAnalysis[]): void {
+    this.analyses = analyses
+  }
+
   /**
    * Generate a report directly from the SQLite store — re-queries findings
    * and evidence on every call so the report always reflects the latest state.

@@ -5,6 +5,7 @@ import { ToolRegistry } from "../workflows/tool-registry"
 import { detectTargetType, detectAuthState, determineRequiredCapabilities } from "./strategy"
 import { determineNewCapabilities } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
+import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 
 const MAX_REPLANS = 10
 
@@ -81,12 +82,34 @@ export class WorkflowPlanner {
         process.stderr.write(`Warning: Adding fail_fast phase "${def.name}" with zero available tools\n`)
       }
 
+      const pipeline = tools.length > 0
+        ? resolvePipeline(tools.map(t => ({
+            name: t.name,
+            capabilities: t.capabilities,
+            consumes: t.consumes,
+            provides: t.provides,
+          })))
+        : null
+
+      if (pipeline && pipeline.gaps.length > 0) {
+        process.stderr.write(
+          `[planner] Phase "${def.name}" — ${formatPipelineGaps(pipeline.gaps, tools.map(t => t.name))}\n`,
+        )
+      }
+
+      if (pipeline && pipeline.circular) {
+        process.stderr.write(`[planner] Warning: Circular dependency detected in phase "${def.name}" — broken by priority\n`)
+      }
+
       phases.push({
         phaseId: `phase-${i}-${def.name}`,
         workflowName: workflow.name,
         target,
         requiredCapabilities: def.required_capabilities,
-        config: {},
+        config: {
+          pipelineSteps: pipeline?.steps,
+          pipelineGaps: pipeline?.gaps,
+        },
         previousPhaseResults: [],
         approvalGateName: def.approval_gate,
       })
