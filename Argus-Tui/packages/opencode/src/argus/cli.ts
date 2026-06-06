@@ -157,6 +157,57 @@ export const ArgusConfigCommand = {
   },
 }
 
+export const ArgusEngagementsCommand = {
+  command: "engagements",
+  describe: "List all saved engagements/assessments",
+  builder: (yargs: Argv) =>
+    yargs.option("id", { describe: "Filter by engagement ID", type: "string" })
+      .option("status", { describe: "Filter by status (CREATED, RUNNING, COMPLETED, FAILED, PAUSED)", type: "string" })
+      .option("json", { describe: "Output as JSON", type: "boolean", default: false }),
+  handler: async (argv: Record<string, unknown>) => {
+    const { EngagementStore } = await import("./engagement/store")
+    const store = new EngagementStore()
+    const engagements = store.listEngagements()
+
+    if (engagements.length === 0) {
+      process.stdout.write("No engagements found.\n")
+      return
+    }
+
+    const filterId = argv.id as string | undefined
+    const filterStatus = argv.status as string | undefined
+    const asJson = argv.json as boolean
+
+    let filtered = engagements
+    if (filterId) filtered = filtered.filter(e => e.id.toLowerCase().includes(filterId.toLowerCase()))
+    if (filterStatus) filtered = filtered.filter(e => e.status.toUpperCase() === filterStatus.toUpperCase())
+
+    if (filtered.length === 0) {
+      process.stdout.write("No engagements match the filter.\n")
+      return
+    }
+
+    if (asJson) {
+      process.stdout.write(JSON.stringify(filtered, null, 2) + "\n")
+      return
+    }
+
+    const statusIcon = (s: string) =>
+      s === "COMPLETED" ? "✓" : s === "RUNNING" ? "⟳" : s === "FAILED" ? "✗" : s === "PAUSED" ? "⏸" : "○"
+
+    const header = `${"ID".padEnd(16)} ${"Status".padEnd(12)} ${"Target".padEnd(40)} Created`
+    const sep = "─".repeat(80)
+    process.stdout.write(`Engagements (${filtered.length}):\n${sep}\n${header}\n${sep}\n`)
+    for (const e of filtered) {
+      const icon = statusIcon(e.status)
+      const dateStr = e.createdAt ? new Date(e.createdAt).toLocaleDateString() : ""
+      process.stdout.write(`  ${icon} ${e.id.padEnd(14)} ${e.status.padEnd(10)} ${(e.target ?? "").padEnd(40)} ${dateStr}\n`)
+    }
+    process.stdout.write(`\n${sep}\n`)
+    process.stdout.write(`Run \`argus report ${filtered[0]?.id ?? "<id>"}\` for a full report.\n`)
+  },
+}
+
 export const ArgusToolsCommand = {
   command: "tools",
   describe: "List all registered MCP tools and their capabilities",
