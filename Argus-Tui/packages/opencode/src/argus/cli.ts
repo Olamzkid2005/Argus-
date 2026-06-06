@@ -208,6 +208,79 @@ export const ArgusEngagementsCommand = {
   },
 }
 
+export const ArgusFindingsCommand = {
+  command: "findings [engagement-id]",
+  describe: "List findings from an engagement or the most recent one",
+  builder: (yargs: Argv) =>
+    yargs
+      .positional("engagement-id", { describe: "Engagement ID (optional — uses latest if omitted)", type: "string" })
+      .option("severity", { describe: "Filter by severity (info, low, medium, high, critical)", type: "string" })
+      .option("status", { describe: "Filter by status (PENDING, CONFIRMED, DISMISSED)", type: "string" })
+      .option("json", { describe: "Output as JSON", type: "boolean", default: false }),
+  handler: async (argv: Record<string, unknown>) => {
+    const { EngagementStore } = await import("./engagement/store")
+    const store = new EngagementStore()
+    const engId = argv.engagementId as string | undefined
+    const filterSev = argv.severity as string | undefined
+    const filterStatus = argv.status as string | undefined
+    const asJson = argv.json as boolean
+
+    let engagementId = engId
+    if (!engagementId) {
+      const engagements = store.listEngagements()
+      if (engagements.length === 0) {
+        process.stdout.write("No engagements found. Run `argus assess <target>` first.\n")
+        return
+      }
+      engagementId = engagements[0].id
+    }
+
+    const engagement = store.getEngagement(engagementId)
+    if (!engagement) {
+      process.stdout.write(`Engagement not found: ${engagementId}\n`)
+      return
+    }
+
+    let findings = store.getFindings(engagementId)
+
+    const sevMap: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 }
+    if (filterSev) {
+      const sev = sevMap[filterSev.toLowerCase()]
+      if (sev !== undefined) findings = findings.filter(f => f.severity === sev)
+    }
+    if (filterStatus) {
+      findings = findings.filter(f => f.status?.toUpperCase() === filterStatus.toUpperCase())
+    }
+
+    if (findings.length === 0) {
+      process.stdout.write(`No findings for ${engagementId}${filterSev ? ` (severity: ${filterSev})` : ""}${filterStatus ? ` (status: ${filterStatus})` : ""}\n`)
+      return
+    }
+
+    if (asJson) {
+      process.stdout.write(JSON.stringify(findings, null, 2) + "\n")
+      return
+    }
+
+    const sevLabel = (s: number) => ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][s] ?? "UNKNOWN"
+    const sevColor = (s: number) => s >= 4 ? "✗" : s >= 3 ? "!" : s >= 2 ? "•" : "·"
+    const confLabel = (c: number) => ["INFO", "LOW", "MEDIUM", "HIGH", "VERIFIED", "CONFIRMED"][c] ?? "UNKNOWN"
+
+    const header = `${"Severity".padEnd(10)} ${"Finding".padEnd(50)} ${"Tool".padEnd(15)} ${"Confidence"}`
+    const sep = "─".repeat(80)
+    process.stdout.write(`Findings for ${engagement.target} (${engagementId}): ${findings.length} total\n${sep}\n${header}\n${sep}\n`)
+    for (const f of findings) {
+      const sev = sevLabel(f.severity)
+      const icon = sevColor(f.severity)
+      const title = (f.title ?? "").length > 48 ? (f.title ?? "").substring(0, 45) + "..." : (f.title ?? "")
+      const conf = confLabel(f.confidence)
+      process.stdout.write(`  ${icon} ${sev.padEnd(8)} ${title.padEnd(50)} ${(f.tool ?? "").padEnd(15)} ${conf}\n`)
+    }
+    process.stdout.write(`\n${sep}\n`)
+    process.stdout.write(`Run \`argus verify ${findings[0]?.id ?? "<id>"}\` to verify a finding.\n`)
+  },
+}
+
 export const ArgusToolsCommand = {
   command: "tools",
   describe: "List all registered MCP tools and their capabilities",
