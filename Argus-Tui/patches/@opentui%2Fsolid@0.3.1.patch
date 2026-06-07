@@ -1,0 +1,11 @@
+diff --git a/jsx-runtime.d.ts b/jsx-runtime.d.ts
+index beb870efbce1b123d29aad3c62a97d62bf21f0f4..f039cc5abee2a29366be8021d55c7b9df9aa8a98 100644
+--- a/jsx-runtime.d.ts
++++ b/jsx-runtime.d.ts
+@@ -36,4 +36,4 @@
+   interface IntrinsicElements extends ExtendedIntrinsicElements<OpenTUIComponents> {
+-    box: BoxProps
+-    text: TextProps
++    box: BoxProps & { onClick?: () => void }
++    text: TextProps & { bold?: boolean; onClick?: () => void; wrap?: string }
+     span: SpanProps
