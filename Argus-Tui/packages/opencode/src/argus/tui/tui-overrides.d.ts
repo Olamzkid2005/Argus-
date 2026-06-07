@@ -5,9 +5,9 @@
  * in @opentui/solid are incomplete. This file adds the missing props used
  * throughout the Argus TUI codebase.
  */
-import "solid-js"
+import "@opentui/solid"
 
-declare module "solid-js" {
+declare module "@opentui/solid" {
   namespace JSX {
     interface TextProps {
       /** Make text bold */
@@ -16,8 +16,6 @@ declare module "solid-js" {
       onClick?: () => void
       /** Text wrapping mode */
       wrap?: string
-      /** Foreground color — accepts RGBA objects from theme */
-      fg?: string | RGBA
     }
 
     interface BoxProps {
@@ -30,12 +28,6 @@ declare module "solid-js" {
       g: number
       b: number
       a?: number
-    }
-
-    interface BorderSide {
-      type?: string
-      fg?: string | RGBA
-      char?: string
     }
 
     interface BorderSides {

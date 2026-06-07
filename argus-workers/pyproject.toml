@@ -14,6 +14,7 @@ exclude = [
     ".git",
     ".tox",
     "tool_assets",
+    "_generated_tools.py",
 ]
 
 [tool.ruff.lint]
