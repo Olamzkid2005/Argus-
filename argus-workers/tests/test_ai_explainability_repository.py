@@ -3,7 +3,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from database.repositories.ai_explainability_repository import AIExplainabilityRepository
+from database.repositories.ai_explainability_repository import (
+    AIExplainabilityRepository,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +34,7 @@ class TestAIExplainabilityRepositoryInit:
         caplog.set_level("WARNING")
         passed_conn = MagicMock()
 
-        repo = AIExplainabilityRepository(db_connection=passed_conn)
+        AIExplainabilityRepository(db_connection=passed_conn)
 
         assert any("received a shared connection" in msg for msg in caplog.messages)
 

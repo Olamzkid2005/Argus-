@@ -16,7 +16,6 @@ from models.candidate_list import (
 from models.confidence_scorer import ConfidenceScorer
 from models.feedback import FeedbackLearningLoop, FindingFeedback
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CandidateList Tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -390,12 +389,12 @@ class TestFeedbackLearningLoop:
     def test_on_feedback_stores_feedback_when_enabled(self):
         with (
             patch("models.feedback.is_enabled", return_value=True),
-            patch.object(FeedbackLearningLoop, "_store_feedback") as mock_store,
-            patch.object(FeedbackLearningLoop, "_update_finding") as mock_update,
-            patch.object(FeedbackLearningLoop, "_update_tool_accuracy", return_value=True) as mock_accuracy,
-            patch.object(FeedbackLearningLoop, "_update_confidence_model", return_value=True) as mock_confidence,
-            patch.object(FeedbackLearningLoop, "_get_finding_source_tool", return_value="nuclei") as mock_source,
-            patch.object(FeedbackLearningLoop, "_get_tool_fp_rate", return_value=0.1) as mock_fp,
+            patch.object(FeedbackLearningLoop, "_store_feedback"),
+            patch.object(FeedbackLearningLoop, "_update_finding"),
+            patch.object(FeedbackLearningLoop, "_update_tool_accuracy", return_value=True),
+            patch.object(FeedbackLearningLoop, "_update_confidence_model", return_value=True),
+            patch.object(FeedbackLearningLoop, "_get_finding_source_tool", return_value="nuclei"),
+            patch.object(FeedbackLearningLoop, "_get_tool_fp_rate", return_value=0.1),
         ):
             loop = FeedbackLearningLoop()
             fb = FindingFeedback("f-001", "eng-001", True)

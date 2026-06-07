@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent.session_store import AgentSessionStore, AgentSession, ToolExecution
+from agent.session_store import AgentSession, AgentSessionStore, ToolExecution
 
 
 @pytest.fixture

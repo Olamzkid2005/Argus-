@@ -4,8 +4,6 @@ Tests for tasks/replay.py — Dead Letter Queue task replay.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from tasks.replay import replay_dlq_task
 
 

@@ -3,8 +3,8 @@ import io
 import json
 import re
 
-from ..types import NormalizedFinding
 from ..normalizer import normalize_severity
+from ..types import NormalizedFinding
 
 
 def _infer_severity(msg: str) -> int:
@@ -67,7 +67,6 @@ def _parse_csv(output: str) -> list[NormalizedFinding]:
         method = row[3].strip() if len(row) > 3 else ""
         url = row[4].strip() if len(row) > 4 else ""
         description = row[5].strip() if len(row) > 5 else ""
-        endpoint = f"{hostname}:{port}" if port else hostname
 
         findings.append(NormalizedFinding(
             title=description[:120] if description else "Nikto finding",

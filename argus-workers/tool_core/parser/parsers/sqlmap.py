@@ -2,7 +2,6 @@ import json
 import re
 
 from ..types import NormalizedFinding
-from ..normalizer import normalize_severity
 
 
 def _classify_technique(title: str) -> str:

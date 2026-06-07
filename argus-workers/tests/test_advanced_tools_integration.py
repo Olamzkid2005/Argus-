@@ -5,8 +5,6 @@ Tests verify that tools work together correctly and integrate with
 the existing tool infrastructure (ToolRunner, MCP, orchestrator).
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
 
@@ -66,8 +64,8 @@ class TestToolPipeline:
 
     def test_correlation_then_attack_path(self):
         """Finding Correlation → Attack Path Generator pipeline."""
-        from tools.finding_correlation_engine import FindingCorrelationEngine
         from tools.attack_path_generator import AttackPathGenerator
+        from tools.finding_correlation_engine import FindingCorrelationEngine
 
         findings = [
             {"id": "1", "type": "MISCONFIGURATION", "severity": "MEDIUM", "endpoint": "https://example.com", "confidence": 0.7},
@@ -89,8 +87,8 @@ class TestToolPipeline:
 
     def test_verification_then_evidence(self):
         """Verification Agent → Evidence Intelligence Engine pipeline."""
-        from tools.verification_agent import VerificationAgent
         from tools.evidence_intelligence_engine import EvidenceIntelligenceEngine
+        from tools.verification_agent import VerificationAgent
 
         findings = [
             {"id": "1", "type": "XSS", "severity": "HIGH", "endpoint": "https://example.com/a", "confidence": 0.8},
@@ -110,8 +108,8 @@ class TestToolPipeline:
 
     def test_knowledge_then_report(self):
         """Vulnerability Knowledge → Executive Report pipeline."""
-        from tools.vulnerability_knowledge_engine import VulnerabilityKnowledgeEngine
         from tools.executive_report_generator import ExecutiveReportGenerator
+        from tools.vulnerability_knowledge_engine import VulnerabilityKnowledgeEngine
 
         findings = [
             {"id": "1", "type": "SQL_INJECTION", "severity": "CRITICAL", "endpoint": "https://example.com/a", "cwe": "89", "confidence": 0.9},
@@ -159,6 +157,7 @@ class TestYAMLDefinitions:
 
     def test_yaml_files_valid(self):
         import os
+
         import yaml
         yaml_dir = os.path.join(os.path.dirname(__file__), "..", "tools", "definitions")
         expected = [

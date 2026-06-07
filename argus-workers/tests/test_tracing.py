@@ -357,7 +357,7 @@ class TestExecutionSpan:
 
     def test_span_context_manager(self):
         """Test span context manager yields correct span_data.
-        
+
         NOTE: Spans are now exported via OpenTelemetry (not written to DB).
         _store_span() was removed 2026-06-04 (B.06).
         """

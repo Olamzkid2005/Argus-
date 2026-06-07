@@ -4,7 +4,7 @@ import importlib
 import os
 import signal
 import sys
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 

@@ -2,7 +2,6 @@
 """BOLA detection via Playwright. Called as a subprocess by MCP server."""
 import argparse
 import json
-import sys
 
 from playwright.sync_api import sync_playwright
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tool_core.storage import ArtifactStorage, ArtifactMissingError, ArtifactRef
+from tool_core.storage import ArtifactMissingError, ArtifactRef, ArtifactStorage
 
 
 @pytest.fixture

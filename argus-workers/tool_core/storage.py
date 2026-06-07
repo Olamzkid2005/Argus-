@@ -12,7 +12,6 @@ Storage layout:
 """
 
 import hashlib
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,8 +110,8 @@ class ArtifactStorage:
                     continue
                 try:
                     content = file_path.read_bytes()
-                    actual_hash = hashlib.sha256(content).hexdigest()
-                    actual_size = len(content)
+                    hashlib.sha256(content).hexdigest()
+                    len(content)
                 except Exception as e:
                     issues.append({
                         "path": str(file_path),

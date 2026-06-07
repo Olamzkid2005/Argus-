@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tasks.posture import _check_compliance_alerts, recompute_posture as _recompute_posture_task
+from tasks.posture import _check_compliance_alerts
+from tasks.posture import recompute_posture as _recompute_posture_task
 
 # Call the original unwrapped function to avoid Celery auto-retry wrapper
 recompute_posture = _recompute_posture_task._orig_run
@@ -44,7 +45,7 @@ class TestRecomputePosture:
         mock_snapshot.trend = "improving"
         mock_scorer.compute_and_save.return_value = mock_snapshot
 
-        result = recompute_posture("eng-001", org_id=None)
+        recompute_posture("eng-001", org_id=None)
 
         mock_cursor.execute.assert_called_once_with(
             "SELECT org_id FROM engagements WHERE id = %s",

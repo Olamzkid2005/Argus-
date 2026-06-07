@@ -9,7 +9,6 @@ import hashlib
 import json
 import logging
 import time
-from pathlib import Path
 
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder

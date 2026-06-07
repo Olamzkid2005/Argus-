@@ -4,8 +4,6 @@ Tests for tasks/self_scan.py — Argus platform security self-scan.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from tasks.self_scan import run_self_scan
 
 

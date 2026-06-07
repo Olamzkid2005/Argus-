@@ -136,7 +136,7 @@ def _build_tool_registration(data: dict) -> str:
     if not phases:
         phases = ["scan"]
 
-    lines = [f"_register(ToolDefinition("]
+    lines = ["_register(ToolDefinition("]
     lines.append(_indent(f'name="{name}",'))
     lines.append(_indent(f'description="{description}",'))
     if command and command != name:
@@ -201,7 +201,7 @@ def generate(output_path: str, tools_dir: str) -> str:
 def check(tools_dir: str, generated_path: str) -> bool:
     """Compare generated output with existing file. Returns True if consistent."""
     import tempfile
-    import yaml
+
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
         generate(tmp.name, tools_dir)

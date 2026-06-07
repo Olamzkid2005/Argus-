@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 
-from ..types import NormalizedFinding
 from ..normalizer import normalize_severity
+from ..types import NormalizedFinding
 
 
 def parse(output: str) -> list[NormalizedFinding]:

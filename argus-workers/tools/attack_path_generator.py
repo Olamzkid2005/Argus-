@@ -18,10 +18,10 @@ from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
 
 from .attack_paths.asset_graph_builder import build_asset_graph
+from .attack_paths.narrative_generator import generate_narrative
 from .attack_paths.path_finder import find_paths
 from .attack_paths.path_scorer import rank_paths
 from .attack_paths.path_visualizer import render_all_paths, render_mermaid
-from .attack_paths.narrative_generator import generate_narrative
 
 logger = logging.getLogger(__name__)
 

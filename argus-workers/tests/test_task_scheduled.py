@@ -67,7 +67,6 @@ class TestRunDueScans:
 
         sched_id = str(uuid.uuid4())
         org_id = str(uuid.uuid4())
-        now = "2025-01-01 00:00:00"
 
         mock_cursor.fetchall.return_value = [
             (sched_id, org_id, "https://example.com", {}, "recon",

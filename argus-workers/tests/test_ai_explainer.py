@@ -23,14 +23,12 @@ Covers:
 from __future__ import annotations
 
 import builtins
-import sys
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ai_explainer import AIExplainer, ExplanationResult
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
 

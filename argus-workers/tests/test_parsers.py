@@ -2,10 +2,17 @@
 
 import json
 
-import pytest
-
-from tool_core.parser.parsers import nuclei, nmap, semgrep, gitleaks, whatweb, nikto, sqlmap, generic
 from tool_core.parser.dispatcher import dispatch
+from tool_core.parser.parsers import (
+    generic,
+    gitleaks,
+    nikto,
+    nmap,
+    nuclei,
+    semgrep,
+    sqlmap,
+    whatweb,
+)
 
 
 class TestNucleiParser:

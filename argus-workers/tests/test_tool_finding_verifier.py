@@ -324,7 +324,7 @@ class TestVerifyFinding:
             _Awaitable(MagicMock(text="normal")),
         ]
 
-        finding = dict(type="sql-injection", endpoint="https://example.com", evidence=dict(payload="' OR 1=1--"))
+        finding = {"type": "sql-injection", "endpoint": "https://example.com", "evidence": {"payload": "' OR 1=1--"}}
         result = await verify_finding(finding)
 
         assert result["verification"]["confidence"] == "high"
@@ -332,7 +332,7 @@ class TestVerifyFinding:
     async def test_dispatches_to_xss_verifier(self, mock_httpx_client):
         mock_httpx_client.get.return_value = _Awaitable(MagicMock(text="<script>alert(1)</script>"))
 
-        finding = dict(type="xss", endpoint="https://example.com", evidence=dict(payload="<script>alert(1)</script>"))
+        finding = {"type": "xss", "endpoint": "https://example.com", "evidence": {"payload": "<script>alert(1)</script>"}}
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is True
@@ -344,13 +344,13 @@ class TestVerifyFinding:
             MagicMock(history=[history_entry], url="https://external.com/b")
         )
 
-        finding = dict(type="open-redirect", endpoint="https://example.com/a")
+        finding = {"type": "open-redirect", "endpoint": "https://example.com/a"}
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is True
 
     async def test_returns_no_verifier_for_unknown_types(self):
-        finding = dict(type="unknown-type", endpoint="https://example.com")
+        finding = {"type": "unknown-type", "endpoint": "https://example.com"}
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is None
@@ -363,11 +363,11 @@ class TestVerifyFinding:
             _Awaitable(MagicMock(text="clean page")),
         ]
 
-        finding = dict(
-            type="sql-injection",
-            endpoint="https://target.com/search",
-            evidence=dict(payload="' OR '1'='1"),
-        )
+        finding = {
+            "type": "sql-injection",
+            "endpoint": "https://target.com/search",
+            "evidence": {"payload": "' OR '1'='1"},
+        }
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is True
@@ -377,7 +377,7 @@ class TestVerifyFinding:
         """Fallback to finding.url when endpoint is absent."""
         mock_httpx_client.get.return_value = _Awaitable(MagicMock(text="<script>alert(1)</script>"))
 
-        finding = dict(type="xss", url="https://example.com", evidence=dict(payload="<script>alert(1)</script>"))
+        finding = {"type": "xss", "url": "https://example.com", "evidence": {"payload": "<script>alert(1)</script>"}}
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is True
@@ -389,7 +389,7 @@ class TestVerifyFinding:
             _Awaitable(MagicMock(text="normal")),
         ]
 
-        finding = dict(type="sqli", endpoint="https://example.com", payload="' OR 1=1--")
+        finding = {"type": "sqli", "endpoint": "https://example.com", "payload": "' OR 1=1--"}
         result = await verify_finding(finding)
 
         assert result["verification"]["confidence"] == "high"

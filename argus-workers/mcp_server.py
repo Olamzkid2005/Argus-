@@ -11,10 +11,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from tool_core.parser import dispatch
-from tool_core.storage import ArtifactStorage, ArtifactData, ArtifactMissingError
-from tracing import setup_tracing
 from agent.session_store import AgentSessionStore, ToolExecution
+from tool_core.parser import dispatch
+from tracing import setup_tracing
 
 # ── Signal quality tiers for planner intelligence ──
 
@@ -220,7 +219,7 @@ class MCPServer:
 
         for yaml_file in sorted(tools_path.glob("*.yaml")):
             try:
-                with open(yaml_file, "r") as f:
+                with open(yaml_file) as f:
                     data = yaml.safe_load(f)
                 if not data:
                     continue
@@ -556,7 +555,7 @@ class MCPServer:
         session_id = params.get("session_id", "")
 
         try:
-            session = self.session_store.get(session_id)
+            self.session_store.get(session_id)
         except ValueError:
             return {"error": f"Session {session_id} not found", "done": True}
 

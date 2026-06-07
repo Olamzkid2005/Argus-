@@ -3,8 +3,6 @@
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from mcp_transport import MCPTransport, create_ping_handler
 
 

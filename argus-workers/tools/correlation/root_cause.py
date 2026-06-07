@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-
 _SEVERITY_RANK = {"CRITICAL": 5, "HIGH": 4, "MEDIUM": 3, "LOW": 2, "INFO": 1}
 
 

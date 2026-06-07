@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tasks.bugbounty import _fetch_engagement, _fetch_findings, generate_bugbounty_report as _generate_bugbounty_report_task
+from tasks.bugbounty import _fetch_engagement, _fetch_findings
+from tasks.bugbounty import generate_bugbounty_report as _generate_bugbounty_report_task
 
 # Call the original unwrapped function to avoid Celery auto-retry wrapper
 generate_bugbounty_report = _generate_bugbounty_report_task._orig_run

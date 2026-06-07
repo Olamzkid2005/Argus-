@@ -53,7 +53,6 @@ class BrowserSecurityOperator(AbstractTool):
 
     def _analyze_dom(self, ctx: ToolContext, builder: FindingBuilder) -> list[dict]:
         """Analyze DOM for security issues."""
-        findings = []
 
         forms = getattr(ctx, "_browser_forms", [])
         for form in forms:

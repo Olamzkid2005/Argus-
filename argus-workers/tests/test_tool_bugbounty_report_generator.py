@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from tools.bugbounty_report_generator import (
-    IMPACT_STATEMENT_MAP,
-    SEVERITY_TO_WORST_CASE,
-    TRUST_BOUNDARY_MAP,
     VULN_META,
     ArgusFindingAdapter,
     BugBountyReportGenerator,

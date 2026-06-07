@@ -41,6 +41,7 @@ ignore = [
     "B007",  # Loop control variable not used (common in tuple unpacking)
     "B017",  # Assert blind exception in tests (intentional in test contexts)
     "B904",  # raise ... from err (legacy pattern, not a bug)
+    "N803",  # Argument name should be lowercase (test mocks use uppercase names like MockEngine)
     "N806",  # Variable in function should be lowercase (allowed in tests)
     "N817",  # Exception name without Error suffix (legacy naming)
     "N818",  # Exception name without Error suffix (legacy naming)

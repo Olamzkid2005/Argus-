@@ -29,7 +29,7 @@ FAKE_PARSED = [{"type": "PARAMETER_DISCOVERY", "param": "id"}]
 
 
 def _make_context(**overrides):
-    kwargs = dict(target="https://example.com/api", timeout=60, engagement_id="eng-123", aggressiveness="normal")
+    kwargs = {'target': "https://example.com/api", 'timeout': 60, 'engagement_id': "eng-123", 'aggressiveness': "normal"}
     kwargs.update(overrides)
     return MagicMock(spec=ToolContext, **kwargs)
 

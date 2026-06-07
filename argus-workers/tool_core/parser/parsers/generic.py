@@ -2,9 +2,8 @@ import json
 import re
 from typing import Any
 
+from ..normalizer import normalize_confidence, normalize_severity
 from ..types import NormalizedFinding
-from ..normalizer import normalize_severity, normalize_confidence
-
 
 _URL_PATTERN = re.compile(r"https?://[^\s\"'>)]+")
 _IP_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")

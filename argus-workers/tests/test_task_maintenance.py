@@ -7,9 +7,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tasks.maintenance import (
-    cleanup_old_results as _cleanup_old_results_task,
-    cleanup_failed_engagements as _cleanup_failed_engagements_task,
     cleanup_checkpoints as _cleanup_checkpoints_task,
+)
+from tasks.maintenance import (
+    cleanup_failed_engagements as _cleanup_failed_engagements_task,
+)
+from tasks.maintenance import (
+    cleanup_old_results as _cleanup_old_results_task,
+)
+from tasks.maintenance import (
     worker_health_check as _worker_health_check_task,
 )
 

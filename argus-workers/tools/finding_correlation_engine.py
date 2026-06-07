@@ -18,8 +18,8 @@ from tool_core.result import ToolStatus, UnifiedToolResult
 
 from .correlation.attack_chain_detector import detect_attack_chains
 from .correlation.deduplicator import deduplicate
-from .correlation.root_cause import find_root_causes
 from .correlation.priority_ranker import rank_findings
+from .correlation.root_cause import find_root_causes
 
 logger = logging.getLogger(__name__)
 

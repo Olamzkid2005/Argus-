@@ -1,7 +1,7 @@
 """Dispatcher — routes raw tool output to the appropriate parser."""
 import logging
 
-from .parsers import nuclei, nmap, sqlmap, semgrep, gitleaks, whatweb, nikto, generic
+from .parsers import generic, gitleaks, nikto, nmap, nuclei, semgrep, sqlmap, whatweb
 from .types import NormalizedFinding
 
 logger = logging.getLogger(__name__)

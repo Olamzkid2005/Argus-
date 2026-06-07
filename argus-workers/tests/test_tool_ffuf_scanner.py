@@ -26,7 +26,7 @@ def mock_tool_runner():
 
 
 def _make_context(**overrides):
-    kwargs = dict(target="https://example.com/FUZZ", timeout=60, aggressiveness="normal")
+    kwargs = {'target': "https://example.com/FUZZ", 'timeout': 60, 'aggressiveness': "normal"}
     kwargs.update(overrides)
     return MagicMock(spec=ToolContext, **kwargs)
 
@@ -120,9 +120,8 @@ class TestFfufScanner:
 
         def _isfile_side_effect(path):
             for b in fallback_bases:
-                if path == f"{b}/{name}":
-                    if b == "/usr/share/ffuf":
-                        return True
+                if path == f"{b}/{name}" and b == "/usr/share/ffuf":
+                    return True
             return False
 
         with (

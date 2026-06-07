@@ -7,7 +7,6 @@ katana, gau, waybackurls with a single orchestrated tool.
 
 from __future__ import annotations
 
-import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 

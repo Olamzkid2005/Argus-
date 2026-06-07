@@ -1,11 +1,13 @@
 """Tests for EngagementEventsRepository"""
 
-from unittest.mock import MagicMock, patch
 import uuid
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from database.repositories.engagement_events_repository import EngagementEventsRepository
+from database.repositories.engagement_events_repository import (
+    EngagementEventsRepository,
+)
 
 
 @pytest.fixture

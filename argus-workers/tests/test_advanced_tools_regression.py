@@ -5,8 +5,8 @@ Tests verify that existing functionality is not broken by the new tools
 and that the new tools don't interfere with the existing tool system.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus, UnifiedToolResult
 

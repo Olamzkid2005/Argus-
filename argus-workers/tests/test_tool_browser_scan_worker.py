@@ -196,8 +196,8 @@ class TestScan:
     def test_closes_browser_in_finally(self, mock_sync_pw, mock_dns):
         mock_dns.return_value = "93.184.216.34"
         mock_instance = MagicMock()
-        mock_browser = MagicMock()
-        mock_page = MagicMock()
+        MagicMock()
+        MagicMock()
         mock_instance.__enter__.return_value = mock_instance
         mock_instance.chromium.launch.side_effect = Exception("Launch failed")
         mock_sync_pw.return_value = mock_instance

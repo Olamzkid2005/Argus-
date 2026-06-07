@@ -6,8 +6,13 @@ Source:      tools/definitions/*.yaml
 Tools:       65 definitions
 """
 
-from tool_definitions import ToolDefinition, ToolParameter, ToolRequires, SignalQuality, _register
-
+from tool_definitions import (
+    SignalQuality,
+    ToolDefinition,
+    ToolParameter,
+    ToolRequires,
+    _register,
+)
 
 # ── alterx (from alterx.yaml) ──
 _register(ToolDefinition(

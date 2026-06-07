@@ -24,7 +24,7 @@ from llm_parser_fallback import (
 def mock_llm_services():
     """Mock LLMClient + LLMService to avoid real API calls during _ensure_service."""
     with patch("llm_client.LLMClient") as mock_client, \
-         patch("llm_service.LLMService") as mock_service:
+         patch("llm_service.LLMService"):
         client_instance = MagicMock()
         client_instance.is_available.return_value = False
         mock_client.return_value = client_instance

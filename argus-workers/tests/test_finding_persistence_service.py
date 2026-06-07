@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -387,10 +387,10 @@ class TestBatchSaveNonSecret:
 
     @patch("streaming.StreamingFindingEmitter")
     def test_batch_save_success(self, mock_emitter_cls):
+        import database.repositories.finding_repository as fr_mod
         from orchestrator_pkg.persistence.finding_persistence_service import (
             FindingPersistenceService,
         )
-        import database.repositories.finding_repository as fr_mod
 
         with patch.object(fr_mod, "FindingCapExceededError", RuntimeError):
             repo = MagicMock()
@@ -406,10 +406,10 @@ class TestBatchSaveNonSecret:
 
     @patch("streaming.StreamingFindingEmitter")
     def test_batch_save_cap_exceeded(self, mock_emitter_cls):
+        import database.repositories.finding_repository as fr_mod
         from orchestrator_pkg.persistence.finding_persistence_service import (
             FindingPersistenceService,
         )
-        import database.repositories.finding_repository as fr_mod
 
         FakeCapError = type("FindingCapExceededError", (Exception,), {})
         with patch.object(fr_mod, "FindingCapExceededError", FakeCapError):

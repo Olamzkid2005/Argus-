@@ -1,7 +1,7 @@
 import json
 
+from ..normalizer import CONFIDENCE_MAP, SEVERITY_MAP
 from ..types import NormalizedFinding
-from ..normalizer import SEVERITY_MAP, CONFIDENCE_MAP
 
 
 def parse(output: str) -> list[NormalizedFinding]:

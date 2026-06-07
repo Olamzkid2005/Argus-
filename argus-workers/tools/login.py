@@ -3,14 +3,13 @@ Login tool — wraps agent/tools/login_tool.py as an AbstractTool.
 """
 from __future__ import annotations
 
-import json
 import logging
 
 import requests
 
 from agent.tools.login_tool import run_login
 from tool_core.base import AbstractTool, ToolContext
-from tool_core.result import ToolStatus, UnifiedToolResult
+from tool_core.result import UnifiedToolResult
 
 logger = logging.getLogger(__name__)
 

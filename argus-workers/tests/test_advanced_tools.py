@@ -18,11 +18,8 @@ Tests cover:
 - Engagement Analytics Engine
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
-
 
 # ═══════════════════════════════════════════════════════════════
 # Finding Correlation Engine
@@ -349,14 +346,18 @@ class TestSecureCodeIntelligenceEngine:
 
 class TestInfrastructureSecurityAnalyzer:
     def test_skips_non_directory(self):
-        from tools.infrastructure_security_analyzer import InfrastructureSecurityAnalyzer
+        from tools.infrastructure_security_analyzer import (
+            InfrastructureSecurityAnalyzer,
+        )
         analyzer = InfrastructureSecurityAnalyzer()
         ctx = ToolContext(target="/tmp/nonexistent_file", engagement_id="test-123")
         result = analyzer.execute(ctx)
         assert result.status == ToolStatus.SKIPPED
 
     def test_scans_terraform(self, tmp_path):
-        from tools.infrastructure_security_analyzer import InfrastructureSecurityAnalyzer
+        from tools.infrastructure_security_analyzer import (
+            InfrastructureSecurityAnalyzer,
+        )
         tf_file = tmp_path / "main.tf"
         tf_file.write_text('resource "aws_s3_bucket" "example" {\n  bucket = "test"\n  acl = "public-read"\n}')
         analyzer = InfrastructureSecurityAnalyzer()
@@ -366,7 +367,9 @@ class TestInfrastructureSecurityAnalyzer:
         assert result.findings_count > 0
 
     def test_scans_dockerfile(self, tmp_path):
-        from tools.infrastructure_security_analyzer import InfrastructureSecurityAnalyzer
+        from tools.infrastructure_security_analyzer import (
+            InfrastructureSecurityAnalyzer,
+        )
         dockerfile = tmp_path / "Dockerfile"
         dockerfile.write_text('FROM ubuntu:latest\nRUN apt-get update\nUSER root\n')
         analyzer = InfrastructureSecurityAnalyzer()

@@ -11,7 +11,6 @@ import json
 import logging
 import ssl
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder

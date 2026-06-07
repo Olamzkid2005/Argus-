@@ -2,7 +2,6 @@
 """Stored XSS detection via Playwright. Called as a subprocess by MCP server."""
 import argparse
 import json
-import sys
 
 from playwright.sync_api import sync_playwright
 
@@ -51,7 +50,7 @@ def check_stored_xss(target: str, credentials: dict, form_path: str, payload: st
                 "confidence": 5,
                 "description": f"XSS payload '{payload}' was rendered after injection",
                 "tool": "playwright-xss",
-                "evidence": [{"type": "http", "content": f"Payload found in page source"}],
+                "evidence": [{"type": "http", "content": "Payload found in page source"}],
             })
 
         browser.close()
