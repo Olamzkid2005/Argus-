@@ -3,10 +3,6 @@ import { InProcessExecutor } from "../../../../src/argus/planner/executor"
 import { Capability } from "../../../../src/argus/planner/capabilities"
 import { ConfidenceEngine } from "../../../../src/argus/engagement/confidence"
 import type { PhaseExecutionRequest } from "../../../../src/argus/planner/types"
-import type { BrowserEngine } from "../../../../src/argus/browser/engine"
-import type { EvidenceCollector } from "../../../../src/argus/evidence/collector"
-import type { ArtifactEntry } from "../../../../src/argus/evidence/types"
-import type { VerificationScenario, VerifierResult, EvidencePackage } from "../../../../src/argus/browser/types"
 import { Confidence } from "../../../../src/argus/planner/types"
 
 // Mock tool returns no data
@@ -111,100 +107,6 @@ describe("InProcessExecutor", () => {
     })
   })
 
-  describe("setBrowserVerifierDeps", () => {
-    test("accepts browser deps without throwing", () => {
-      const mockCollector = {
-        saveRequest: async () => ({ path: "req.txt", hash: "abc", type: "request" as const, size_bytes: 0 }),
-        saveResponse: async () => ({ path: "resp.txt", hash: "abc", type: "response" as const, size_bytes: 0 }),
-        captureScreenshot: async () => ({ path: "shot.png", hash: "abc", type: "screenshot" as const, size_bytes: 0 }),
-        createPackage: async () => ({ package_id: "pkg", engagement_id: "eng", created_at: "", artifacts: [], package_hash: "abc" }),
-      } as any
-
-      const mockEngine = {
-        launch: async () => {},
-        createContext: async () => ({} as any),
-        closeContext: async () => {},
-        navigate: async () => ({} as any),
-        observe: async () => ({ url: "", domSnapshot: "", responseHeaders: {}, statusCode: 200, timestamp: "" }),
-        captureScreenshot: async () => Buffer.from(""),
-        close: async () => {},
-      } as any
-
-      expect(() => {
-        executor.setBrowserVerifierDeps({
-          evidenceCollector: mockCollector,
-          engine: mockEngine,
-          credentials: { attacker: { username: "a", password: "b" }, victim: { username: "c", password: "d" } },
-          targetUrl: "https://example.com",
-        })
-      }).not.toThrow()
-    })
-
-    test("runs browser verifiers when BROWSER_VERIFICATION capability is present", async () => {
-      const savedArtifacts: ArtifactEntry[] = []
-      const mockCollector = {
-        saveRequest: async () => ({ path: "req.txt", hash: "abc", type: "request" as const, size_bytes: 0 }),
-        saveResponse: async () => ({ path: "resp.txt", hash: "abc", type: "response" as const, size_bytes: 0 }),
-        captureScreenshot: async (_e: string, _f: string, buf: Buffer) => {
-          const entry: ArtifactEntry = { path: "shot.png", hash: "abc", type: "screenshot" as const, size_bytes: buf.length }
-          savedArtifacts.push(entry)
-          return entry
-        },
-        createPackage: async () => ({ package_id: "pkg", engagement_id: "eng", created_at: "", artifacts: savedArtifacts, package_hash: "abc" }),
-      } as any
-
-      let engineLaunched = false
-      let engineClosed = false
-      const mockEngine = {
-        launch: async () => { engineLaunched = true },
-        createContext: async () => ({
-          newPage: async () => ({
-            goto: async () => {},
-            locator: () => ({
-              all: async () => [],
-              first: () => ({ isVisible: async () => false }),
-              innerText: async () => "accessible",
-            }),
-            waitForLoadState: async () => {},
-            waitForTimeout: async () => {},
-            content: async () => "<html><body>test</body></html>",
-            close: async () => {},
-            url: () => "https://example.com/api/resource",
-          }),
-          close: async () => {},
-        }),
-        closeContext: async () => {},
-        navigate: async () => ({
-          waitForLoadState: async () => {},
-          locator: () => ({
-            all: async () => [],
-            first: () => ({ isVisible: async () => false }),
-          }),
-          waitForTimeout: async () => {},
-          content: async () => "<html><body>test</body></html>",
-          close: async () => {},
-        }),
-        observe: async () => ({ url: "", domSnapshot: "", responseHeaders: {}, statusCode: 200, timestamp: "" }),
-        captureScreenshot: async () => Buffer.from("screenshot-data"),
-        close: async () => { engineClosed = true },
-      } as any
-
-      executor.setBrowserVerifierDeps({
-        evidenceCollector: mockCollector,
-        engine: mockEngine,
-        credentials: { attacker: { username: "attacker", password: "pass" }, victim: { username: "victim", password: "pass" } },
-        targetUrl: "https://example.com",
-      })
-
-      const phase = makePhase({
-        requiredCapabilities: [Capability.BROWSER_VERIFICATION],
-      })
-
-      const result = await executor.execute(phase)
-
-      // Should complete without error (verifiers run but may not find issues with mock)
-      expect(result.status).toBe("completed")
-      expect(result.phaseId).toBe("phase-0-test")
-    })
-  })
+  // setBrowserVerifierDeps tests removed — browser verifiers are now MCP tools
+  // (Step 0.6: hardcoded verifiers extracted to standalone Python scripts)
 })

@@ -31,6 +31,8 @@ export interface ScanState {
   log: string[]
   startTime: number
   durationMs: number
+  analysisCurrent: number
+  analysisTotal: number
 }
 
 const initialState: ScanState = {
@@ -43,6 +45,8 @@ const initialState: ScanState = {
   log: [],
   startTime: 0,
   durationMs: 0,
+  analysisCurrent: 0,
+  analysisTotal: 0,
 }
 
 // Module-level store — shared across all components
@@ -86,6 +90,10 @@ export function completeScan(success: boolean) {
   setScanState("durationMs", Date.now() - scanState.startTime)
 }
 
+export function setTotalFindings(count: number) {
+  setScanState("totalFindings", count)
+}
+
 export function resetScan() {
   setScanState({ ...initialState })
 }
@@ -109,6 +117,10 @@ export function handleProgressEvent(event: ProgressEvent) {
       if (ei >= 0) completePhase(ei, 0, [event.error])
       break
     }
+    case "analysis_progress":
+      setScanState("analysisCurrent", event.current)
+      setScanState("analysisTotal", event.total)
+      break
     case "finding":
       appendLog(`[${event.severity}] ${event.title}`)
       break

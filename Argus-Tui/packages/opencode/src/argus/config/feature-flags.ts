@@ -5,7 +5,7 @@
  * v5 behaves identically to v4 until explicitly configured.
  *
  * Precedence (highest to lowest):
- *   1. CLI flags (--enable-browser --enable-workflow-registry)
+ *   1. CLI flags (--enable-workflow-registry)
  *   2. Environment variables (ARGUS_FEATURE_*)
  *   3. Project config (./argus.config.yaml → features: {})
  *   4. User config (~/.argus/config.yaml → features: {})
@@ -19,7 +19,6 @@ import { parse as YAML } from "yaml"
 import type { IFeatureFlags } from "../../opencode-runtime"
 
 export enum Feature {
-  BROWSER_VERIFICATION = "browser_verification",
   WORKFLOW_REGISTRY = "workflow_registry",
   ENGAGEMENT_STORE = "engagement_store",
   DETERMINISTIC_FALLBACK = "deterministic_fallback",
@@ -28,7 +27,6 @@ export enum Feature {
 }
 
 const DEFAULT_FEATURES: Record<Feature, boolean> = {
-  [Feature.BROWSER_VERIFICATION]: false,
   [Feature.WORKFLOW_REGISTRY]: false,
   [Feature.ENGAGEMENT_STORE]: false,
   [Feature.DETERMINISTIC_FALLBACK]: true,       // Always-on safe default
@@ -102,7 +100,6 @@ export class FeatureFlags implements IFeatureFlags {
   /** Apply CLI flag overrides */
   loadFromCLI(cliFlags: Record<string, boolean>): void {
     const featureMap: Record<string, Feature> = {
-      "enable-browser": Feature.BROWSER_VERIFICATION,
       "enable-workflow-registry": Feature.WORKFLOW_REGISTRY,
       "enable-engagement-store": Feature.ENGAGEMENT_STORE,
       "enable-approval-gates": Feature.APPROVAL_GATES,

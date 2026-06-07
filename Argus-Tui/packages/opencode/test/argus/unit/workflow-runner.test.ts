@@ -147,7 +147,6 @@ describe("WorkflowRunner", () => {
         durationMs: 42,
       })),
       loadGates: mock(() => {}),
-      setBrowserVerifierDeps: mock(() => {}),
     }
 
     const mockBridge = {

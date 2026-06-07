@@ -113,21 +113,19 @@ const commands: ArgusTuiCommand[] = [
     description: "Browse findings from the current or most recent engagement",
     slashes: ["findings"],
     needsTarget: false,
-    handler: async () => {
+    handler: async (args = "") => {
       const { EngagementStore } = await import("./engagement/store")
       const store = new EngagementStore()
       const engagements = store.listEngagements()
       if (engagements.length === 0) return "No engagements found."
-      const latest = engagements[engagements.length - 1]
-      const findings = store.getFindings(latest.id)
-      if (findings.length === 0) return `No findings for engagement ${latest.id} (${latest.target})`
-      let output = `Findings for ${latest.target} (${latest.id}):\n${"=".repeat(50)}\n`
-      for (const f of findings) {
-        const sev = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][f.severity] ?? "UNKNOWN"
-        const conf = ["INFORMATIONAL", "LOW", "MEDIUM", "HIGH", "VERIFIED", "CONFIRMED"][f.confidence] ?? "UNKNOWN"
-        output += `\n[${sev}] ${f.title} (${conf})\n  ${f.description.slice(0, 200)}${f.description.length > 200 ? "..." : ""}\n`
-      }
-      return output
+      // Accept optional engagement ID (e.g., /findings ENG-001)
+      const engId = args.trim().toUpperCase() || engagements[engagements.length - 1].id
+      const eng = store.getEngagement(engId)
+      if (!eng) return `Engagement ${engId} not found.`
+      const findings = store.getFindings(engId)
+      if (findings.length === 0) return `Engagement ${engId} has no findings yet. Assessment may still be running.`
+      navigateTo({ type: "findings", engagementId: engId })
+      return `Opened findings for ${engId} (${eng.target}).`
     },
   },
   {
@@ -209,6 +207,56 @@ const commands: ArgusTuiCommand[] = [
     },
   },
   {
+    name: "report",
+    title: "Generate report",
+    description: "Generate a report for an engagement or the most recent one",
+    slashes: ["report"],
+    needsTarget: false,
+    handler: async (args = "") => {
+      const { EngagementStore } = await import("./engagement/store")
+      const store = new EngagementStore()
+
+      // Parse optional --format flag and engagement ID from args
+      // Examples:
+      //   /report                          → latest, markdown
+      //   /report ENG-001                  → ENG-001, markdown
+      //   /report --format json            → latest, json
+      //   /report ENG-001 --format sarif   → ENG-001, sarif
+      const validFormats = ["markdown", "json", "html", "sarif"] as const
+      type ReportFormat = (typeof validFormats)[number]
+
+      let format: ReportFormat = "markdown"
+      let engId: string | undefined
+
+      const tokens = args.trim().split(/\s+/).filter(Boolean)
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i] === "--format" && i + 1 < tokens.length) {
+          const fmt = tokens[++i].toLowerCase()
+          if (validFormats.includes(fmt as ReportFormat)) {
+            format = fmt as ReportFormat
+          }
+        } else if (!tokens[i].startsWith("--")) {
+          engId = tokens[i].toUpperCase()
+        }
+      }
+
+      const engagements = store.listEngagements()
+      if (engagements.length === 0) return "No engagements found. Run /assess first."
+
+      engId = engId || engagements[engagements.length - 1].id
+      const eng = store.getEngagement(engId)
+      if (!eng) return `Engagement ${engId} not found.`
+
+      // Wire progress to ScanStore so ScanDashboard shows analysis progress
+      const { createScanStoreWriter } = await import("./tui/scan-store-writer")
+      const onProgress = createScanStoreWriter()
+
+      const { reportCommand } = await import("./commands/report")
+      const report = await reportCommand(engId, format, store, onProgress)
+      return report
+    },
+  },
+  {
     name: "help",
     title: "Show help",
     description: "Show all Argus commands with descriptions",
@@ -236,7 +284,7 @@ const commands: ArgusTuiCommand[] = [
         `  /findings          ${all.find((c) => c.name === "findings")?.description ?? "Browse findings"}`,
         `  /engagements       ${all.find((c) => c.name === "engagements")?.description ?? "List engagements"}`,
         `  /open <id>         ${all.find((c) => c.name === "open")?.description ?? "Open engagement or finding"}`,
-        `  /report <id>       ${all.find((c) => c.name === "report")?.description ?? "Generate report"}`,
+        `  /report <id>       ${all.find((c) => c.name === "report")?.description ?? "Generate report"} (--format markdown|json|html|sarif)`,
         "",
         // Tools
         "**Tools**",

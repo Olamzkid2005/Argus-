@@ -6,8 +6,6 @@ import { WorkersBridge } from "../bridge/mcp-client"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { ConfidenceEngine } from "../engagement/confidence"
-import { EvidenceCollector } from "../evidence/collector"
-import { PlaywrightEngine } from "../browser/engine"
 import { ReportGenerator } from "../reporting/generator"
 import { canResume, canRetryPhase } from "../engagement/recovery"
 import type { PhaseRecord } from "../engagement/types"
@@ -59,21 +57,8 @@ export async function resumeCommand(
   const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
   executor.loadGates(plan.workflow)
 
-  // Wire up browser verifier deps
   const credStore = new CredentialStore()
   credStore.load()
-  const allRoles = credStore.getAllCredentials()
-  if (allRoles && Object.keys(allRoles).length > 0) {
-    const evidenceBaseDir = join(homedir(), ".argus", "engagements")
-    const evidenceCollector = new EvidenceCollector(evidenceBaseDir)
-    const engine = new PlaywrightEngine()
-    executor.setBrowserVerifierDeps({
-      evidenceCollector,
-      engine,
-      credentials: allRoles as Record<string, { username: string; password: string }>,
-      targetUrl: engagement.target,
-    })
-  }
   credStore.clear()
 
   // Load existing phases and findings

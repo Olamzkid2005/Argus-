@@ -4,7 +4,6 @@
 # Feature flags all default to false — enable explicitly.
 
 features:
-  browser_verification: false
   workflow_registry: false
   engagement_store: false
   approval_gates: false

@@ -16,10 +16,7 @@ import { WorkersBridge } from "./bridge/mcp-client"
 import { EngagementStore } from "./engagement/store"
 import { CredentialStore } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
-import { EvidenceCollector } from "./evidence/collector"
-import { PlaywrightEngine } from "./browser/engine"
 import { join } from "path"
-import { homedir } from "os"
 import type { NormalizedFinding } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
 import type { ProgressEvent } from "./shared/progress"
@@ -114,8 +111,6 @@ export class WorkflowRunner {
       bridge?: WorkersBridge
       confidenceEngine?: ConfidenceEngine
       credStore?: CredentialStore
-      evidenceCollector?: EvidenceCollector
-      engine?: PlaywrightEngine
     },
   ) {}
 
@@ -194,24 +189,7 @@ export class WorkflowRunner {
     const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
     executor.loadGates(plan.workflow)
 
-    // ── 6. Wire up browser verifier deps ──
-    const credStore = this.deps?.credStore ?? new CredentialStore()
-    credStore.load()
-    const allRoles = credStore.getAllCredentials()
-    if (allRoles && Object.keys(allRoles).length > 0) {
-      const evidenceBaseDir = join(homedir(), ".argus", "engagements")
-      const evidenceCollector = this.deps?.evidenceCollector ?? new EvidenceCollector(evidenceBaseDir)
-      const engine = this.deps?.engine ?? new PlaywrightEngine()
-      executor.setBrowserVerifierDeps({
-        evidenceCollector,
-        engine,
-        credentials: allRoles as Record<string, { username: string; password: string }>,
-        targetUrl: target,
-      })
-    }
-    credStore.clear()
-
-    // ── 7. Execute phases ──
+    // ── 6. Execute phases ──
     const allFindings: NormalizedFinding[] = []
     let executionError: Error | null = null
 

@@ -70,7 +70,7 @@ These tasks produce a working but empty CLI shell. Nothing is functional yet but
 
 1. Task 1.1 — clone OpenCode into `cli/`, verify `argus --help` works
 2. Task 1.2 — rename package to `argus`, update branding
-3. Task 1.3 — create `ARCHITECTURE_BOUNDARIES.md` and configure the ESLint `no-restricted-imports` rule
+3. Task 1.3 — create `docs/ARCHITECTURE_BOUNDARIES.md` and configure the ESLint `no-restricted-imports` rule
 4. Task 1.4 — set up GitHub Actions (lint → typecheck → unit tests)
 5. Task 0.15 — define the SQLite schema with Drizzle ORM, WAL mode, migration framework, `workflow_snapshots` table. Do this now, before any module that reads or writes state is built.
 6. Task 0.6 — add `ARGUS_PYTHON` env var and cross-platform Python discovery

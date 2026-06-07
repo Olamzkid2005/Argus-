@@ -51,6 +51,7 @@ import { FindingsViewer } from "@/argus/tui/routes/findings"
 import { FindingDetail } from "@/argus/tui/routes/finding-detail"
 import { ArgusDashboard } from "@/argus/tui/routes/dashboard"
 import { EngagementBrowser } from "@/argus/tui/routes/engagements"
+import { EngagementDetail } from "@/argus/tui/routes/engagement-detail"
 import { Workspace } from "@/argus/tui/routes/workspace"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
@@ -392,7 +393,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       } else if (r.type === "engagements") {
         route.navigate({ type: "engagements" })
       } else if (r.type === "engagement") {
-        route.navigate({ type: "scan", target: r.engagementId, engagementId: r.engagementId })
+        route.navigate({ type: "engagement", engagementId: r.engagementId, tab: (r as any).tab })
       } else if (r.type === "workspace") {
         route.navigate({ type: "workspace" })
       }
@@ -1129,6 +1130,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             </Match>
             <Match when={route.data.type === "finding"}>
               <FindingDetail findingId={(route.data as any).findingId} />
+            </Match>
+            <Match when={route.data.type === "engagement"}>
+              <EngagementDetail
+                engagementId={(route.data as any).engagementId}
+                initialTab={(route.data as any).tab}
+              />
             </Match>
             <Match when={route.data.type === "engagements"}>
               <EngagementBrowser />

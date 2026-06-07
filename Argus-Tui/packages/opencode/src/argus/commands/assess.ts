@@ -9,11 +9,8 @@ import { WorkersBridge } from "../bridge/mcp-client"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { ConfidenceEngine } from "../engagement/confidence"
-import { EvidenceCollector } from "../evidence/collector"
 import { ReportGenerator } from "../reporting/generator"
-import { PlaywrightEngine } from "../browser/engine"
 import { FeatureFlags, Feature } from "../config/feature-flags"
-import { homedir } from "os"
 import { join } from "path"
 
 export async function assessCommand(target: string, options?: {
@@ -68,7 +65,6 @@ export async function assessCommand(target: string, options?: {
 
   const credStore = new CredentialStore()
   const creds = options?.credsPath ? credStore.load(options.credsPath) : credStore.load()
-  const allRoles = credStore.getAllCredentials()
   const defaultCreds = credStore.getDefaultCredentials()
   if (defaultCreds) {
     store.appendAuditLog(engagement.id, "CREDS_LOADED", `Loaded credentials for roles: ${credStore.listRoles().join(", ")}`)
@@ -79,19 +75,6 @@ export async function assessCommand(target: string, options?: {
   executor.loadGates(plan.workflow)
   for (const phase of plan.phases) {
     if (defaultCreds) phase.config.credentials = defaultCreds
-  }
-
-  // Wire up browser verifier deps if credentials are available
-  const evidenceBaseDir = join(homedir(), ".argus", "engagements")
-  const evidenceCollector = new EvidenceCollector(evidenceBaseDir)
-  if (allRoles && Object.keys(allRoles).length > 0) {
-    const engine = new PlaywrightEngine()
-    executor.setBrowserVerifierDeps({
-      evidenceCollector,
-      engine,
-      credentials: allRoles as Record<string, { username: string; password: string }>,
-      targetUrl: target,
-    })
   }
 
   const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({

@@ -3,6 +3,7 @@ import { assessCommand } from "./commands/assess"
 import { doctorCommand } from "./commands/doctor"
 import { reportCommand } from "./commands/report"
 import { resumeCommand } from "./commands/resume"
+import type { ProgressCallback } from "./shared/progress"
 import { verifyCommand } from "./commands/verify"
 import { evidenceCommand } from "./commands/evidence"
 import { configCommand } from "./commands/config"
@@ -18,7 +19,6 @@ export const ArgusAssessCommand = {
       .option("creds", { describe: "Path to credentials JSON file (see credentials.json.example)", type: "string" })
       .option("deterministic", { describe: "Use deterministic mode only (no LLM)", type: "boolean", default: false })
       // Task 4.1: Feature flags — all opt-in
-      .option("enable-browser", { describe: "Enable browser-based verification (BOLA, XSS, PrivEsc)", type: "boolean", default: undefined })
       .option("enable-workflow-registry", { describe: "Enable workflow registry for capability-based planning", type: "boolean", default: undefined })
       .option("enable-engagement-store", { describe: "Enable SQLite engagement persistence", type: "boolean", default: undefined })
       .option("enable-approval-gates", { describe: "Enable interactive approval prompts for destructive actions", type: "boolean", default: undefined }),
@@ -29,7 +29,6 @@ export const ArgusAssessCommand = {
     // Build feature flag overrides from CLI
     const featureOverrides: Partial<Record<Feature, boolean>> = {}
     const cliFeatureMap: Record<string, Feature> = {
-      "enable-browser": Feature.BROWSER_VERIFICATION,
       "enable-workflow-registry": Feature.WORKFLOW_REGISTRY,
       "enable-engagement-store": Feature.ENGAGEMENT_STORE,
       "enable-approval-gates": Feature.APPROVAL_GATES,
@@ -83,7 +82,16 @@ export const ArgusReportCommand = {
     const id = argv.engagementId as string
     const format = argv.format as "markdown" | "json" | "sarif" | "html"
     try {
-      const output = await reportCommand(id, format)
+      // Wire progress to stderr for CLI visibility
+      const onProgress: ProgressCallback = (event) => {
+        if (event.type === "analysis_progress") {
+          process.stderr.write(`\r[Argus] Analyzing findings: ${event.current}/${event.total}`)
+          if (event.current === event.total) {
+            process.stderr.write("\n")
+          }
+        }
+      }
+      const output = await reportCommand(id, format, undefined, onProgress)
       process.stdout.write(output + "\n")
     } catch (e) {
       process.stderr.write(`[Argus] report error: ${(e as Error).message}\n`)

@@ -1,5 +1,4 @@
 import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding, ErrorRecovery } from "./types"
-import { Capability } from "./capabilities"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { WorkersBridge } from "../bridge/mcp-client"
 import type { SignalQuality } from "../bridge/types"
@@ -8,8 +7,6 @@ import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
 import type { ApprovalGate } from "../workflows/types"
 import { WorkflowRegistry } from "../workflows/registry"
-import type { EvidenceCollector } from "../evidence/collector"
-import type { BrowserEngine } from "../browser/engine"
 import { Feature, type FeatureFlags } from "../config/feature-flags"
 import { ToolConfig } from "../config/tool-config"
 import { ToolHealthMonitor } from "../bridge/tool-health"
@@ -37,13 +34,6 @@ export interface PhaseExecutor {
   execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult>
 }
 
-export interface BrowserVerifierDeps {
-  evidenceCollector: EvidenceCollector
-  engine: BrowserEngine
-  credentials: Record<string, { username: string; password: string }>
-  targetUrl: string
-}
-
 const RECOVERY_LABELS: Record<ErrorRecovery, string> = {
   retry_once_then_skip: "retry once then skip",
   skip_and_continue: "skip and continue",
@@ -53,7 +43,6 @@ const RECOVERY_LABELS: Record<ErrorRecovery, string> = {
 export class InProcessExecutor implements PhaseExecutor {
   private approvalService: ApprovalService
   private requiredGates: ApprovalGate[] = []
-  private browserDeps: BrowserVerifierDeps | null = null
   private featureFlags: FeatureFlags | null = null
   private toolConfig: ToolConfig = new ToolConfig()
   private phaseCount = 0
@@ -71,10 +60,6 @@ export class InProcessExecutor implements PhaseExecutor {
 
   getToolHealth(): ToolHealthRecord[] {
     return this.toolHealth.getStatus()
-  }
-
-  setBrowserVerifierDeps(deps: BrowserVerifierDeps): void {
-    this.browserDeps = deps
   }
 
   setFeatureFlags(flags: FeatureFlags): void {
@@ -270,21 +255,6 @@ export class InProcessExecutor implements PhaseExecutor {
       }
     }
 
-    // Run browser verifiers if phase requires BROWSER_VERIFICATION capability
-    // Task 4.1: Feature flag gate — BROWSER_VERIFICATION must be enabled
-    if (
-      this.browserDeps &&
-      this.isFeatureEnabled(Feature.BROWSER_VERIFICATION) &&
-      phase.requiredCapabilities.includes(Capability.BROWSER_VERIFICATION)
-    ) {
-      try {
-        const browserFindings = await this.runBrowserVerifiers(phase.target)
-        findings.push(...browserFindings)
-      } catch (error) {
-        errors.push(`Browser verification failed: ${(error as Error).message}`)
-      }
-    }
-
     return {
       phaseId: phase.phaseId,
       status: errors.length > 0 && findings.length > 0 ? "partial" : errors.length > 0 && findings.length === 0 ? "failed" : findings.length > 0 ? "completed" : "partial",
@@ -414,20 +384,6 @@ export class InProcessExecutor implements PhaseExecutor {
       }
     }
 
-    // Run browser verifiers if phase requires BROWSER_VERIFICATION capability
-    if (
-      this.browserDeps &&
-      this.isFeatureEnabled(Feature.BROWSER_VERIFICATION) &&
-      phase.requiredCapabilities.includes(Capability.BROWSER_VERIFICATION)
-    ) {
-      try {
-        const browserFindings = await this.runBrowserVerifiers(phase.target)
-        findings.push(...browserFindings)
-      } catch (error) {
-        errors.push(`Browser verification failed: ${(error as Error).message}`)
-      }
-    }
-
     return {
       phaseId: phase.phaseId,
       status: errors.length > 0 && findings.length === 0 ? "failed" : "completed",
@@ -436,103 +392,6 @@ export class InProcessExecutor implements PhaseExecutor {
       errors,
       durationMs: Date.now() - startTime,
     }
-  }
-
-  private async runBrowserVerifiers(target: string): Promise<NormalizedFinding[]> {
-    const { evidenceCollector, engine, credentials, targetUrl } = this.browserDeps!
-    const findings: NormalizedFinding[] = []
-    const { BOLAVerifier } = await import("../browser/verifiers/bola")
-    const { StoredXSSVerifier } = await import("../browser/verifiers/xss")
-    const { PrivilegeEscalationVerifier } = await import("../browser/verifiers/priv-esc")
-    const { VerificationRunner } = await import("../browser/verifiers/runner")
-
-    const verifiers: { verifier: import("../browser/types").VerificationScenario; roleName: string }[] = []
-
-    // BOLA verifier — needs attacker + victim roles
-    if (credentials.attacker && credentials.victim) {
-      verifiers.push({
-        verifier: new BOLAVerifier(engine, targetUrl, "/api/resource", credentials.attacker, credentials.victim),
-        roleName: "bola",
-      })
-    }
-
-    // Stored XSS verifier — needs at least one set of creds
-    if (credentials.user || credentials.admin) {
-      const creds = credentials.user ?? credentials.admin!
-      verifiers.push({
-        verifier: new StoredXSSVerifier(engine, targetUrl, targetUrl, "<script>alert('xss')</script>"),
-        roleName: "xss",
-      })
-    }
-
-    // Privilege escalation verifier — needs low-priv user + admin target
-    if (credentials.user) {
-      verifiers.push({
-        verifier: new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], credentials.user),
-        roleName: "priv-esc",
-      })
-    }
-
-    if (verifiers.length === 0) {
-      return findings
-    }
-
-    const runner = new VerificationRunner()
-    for (const { verifier, roleName } of verifiers) {
-      try {
-        const result = runner.run(verifier)
-        const vResult = await result
-
-        // Capture evidence after verifier runs (engine still alive at this point)
-        const evidencePkg = await verifier.collectEvidence()
-        const findingId = `find-${roleName}-${Date.now()}`
-        const artifacts: import("../evidence/types").ArtifactEntry[] = []
-
-        // Take a final evidence screenshot of the target
-        try {
-          const ctx = await engine.createContext()
-          const page = await ctx.newPage()
-          await page.goto(targetUrl, { waitUntil: "networkidle" })
-          const shot = await engine.captureScreenshot(page)
-          const entry = await evidenceCollector.captureScreenshot(target, findingId, shot)
-          artifacts.push(entry)
-          await page.close()
-          await ctx.close()
-        } catch { console.warn("[executor] evidence screenshot failed") }
-
-        if (artifacts.length > 0) {
-          await evidenceCollector.createPackage(target, findingId, artifacts)
-        }
-
-        if (vResult.passed) {
-          const finding: NormalizedFinding = {
-            id: findingId,
-            title: `${verifier.name}: ${vResult.summary}`,
-            severity: 3, // HIGH
-            confidence: vResult.confidence,
-            status: "CONFIRMED",
-            description: vResult.summary,
-            evidence: [{
-              packageId: `pkg-${roleName}-${Date.now()}`,
-              findingId,
-              artifacts: artifacts.map(a => ({ path: a.path, type: a.type })),
-              packageHash: "",
-              createdAt: evidencePkg.createdAt,
-            }],
-            tool: `browser-verifier/${roleName}`,
-            phase: "verification",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-          findings.push(finding)
-        }
-      } catch (error) {
-        console.warn(`[executor] verifier error: ${(error as Error).message}`)
-        continue
-      }
-    }
-
-    return findings
   }
 
   private resolveErrorRecovery(phase: PhaseExecutionRequest, toolName: string): ErrorRecovery {

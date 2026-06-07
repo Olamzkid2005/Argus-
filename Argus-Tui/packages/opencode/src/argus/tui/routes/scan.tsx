@@ -2,30 +2,19 @@
  * Scan Dashboard — Real-time assessment progress and results.
  *
  * Shows live phase progress, finding severity breakdown, and
- * a detailed finding list. Polls the EngagementStore while
- * the assessment is running.
+ * a detailed finding list. Uses reactive ScanStore signals for
+ * instant updates instead of SQLite polling.
+ *
+ * On mount, pre-populates ScanStore from SQLite for persistence
+ * recovery (e.g. reconnecting to a running engagement).
  */
 import { createMemo, createSignal, onMount, For, Show, onCleanup } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Toast } from "@tui/ui/toast"
 import { useRouteData } from "@tui/context/route"
-import { handleProgressEvent as scanHandleProgress } from "../scan-store"
+import { getScanState, initScan, addPhase, completePhase, resetScan } from "../scan-store"
 
-interface EngPhase { id: string; name: string; status: string; error?: string }
-interface EngFinding { title: string; severity: number; confidence: number; tool: string; description?: string }
-interface EngagementData {
-  id: string; target: string; status: string
-  phases: Array<{ name: string; status: string; errors: string[] }>
-  findings: EngFinding[]
-}
-
-function sevLabel(s: number): string {
-  return ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][s] ?? "UNKNOWN"
-}
-
-function sevShort(s: number): string {
-  return ["I", "L", "M", "H", "C"][s] ?? "?"
-}
+const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 function phaseIcon(status: string): string {
   switch (status) {
@@ -37,88 +26,111 @@ function phaseIcon(status: string): string {
   }
 }
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const m = Math.floor(ms / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
+  return `${m}m ${s}s`
+}
+
 export function ScanDashboard() {
   const route = useRouteData("scan")
   const { theme } = useTheme()
-  const [data, setData] = createSignal<EngagementData | null>(null)
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
 
-  const loadData = async () => {
+  // Reactive reads from ScanStore — updates instantly on mutation
+  const scanState = getScanState()
+
+  onMount(async () => {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       const engagement = store.getEngagement(route.engagementId)
-      if (!engagement) { setError("Engagement not found"); setLoading(false); return }
-      const engPhases = store.getPhases(route.engagementId) as EngPhase[]
-      const engFindings = store.getFindings(route.engagementId) as EngFinding[]
-      setData({
-        id: engagement.id, target: engagement.target, status: engagement.status,
-        phases: engPhases.map((p) => ({ name: p.name || p.id, status: p.status, errors: p.error ? [p.error] : [] })),
-        findings: engFindings.map((f) => ({
-          title: f.title, severity: f.severity ?? 0, confidence: f.confidence ?? 0,
-          tool: f.tool, description: (f.description ?? "").slice(0, 300),
-        })),
-      })
-      setLoading(false)
-      if (engagement.status === "RUNNING") {
-        let pollCount = 0
-        const interval = setInterval(async () => {
-          pollCount++
-          try {
-            const updated = store.getEngagement(route.engagementId)
-            if (!updated) return
-            const uPhases = store.getPhases(route.engagementId) as EngPhase[]
-            const uFindings = store.getFindings(route.engagementId) as EngFinding[]
-            setData((prev) => prev ? {
-              ...prev, status: updated.status,
-              phases: uPhases.map((p) => ({ name: p.name || p.id, status: p.status, errors: p.error ? [p.error] : [] })),
-              findings: uFindings.map((f) => ({
-                title: f.title, severity: f.severity ?? 0, confidence: f.confidence ?? 0,
-                tool: f.tool, description: (f.description ?? "").slice(0, 300),
-              })),
-            } : null)
-            if (updated.status === "COMPLETED" || updated.status === "FAILED") clearInterval(interval)
-          } catch (e) { console.error("Poll error:", e) }
-        }, pollCount < 5 ? 1000 : 5000)
-        onCleanup(() => clearInterval(interval))
+      if (!engagement) {
+        setError("Engagement not found")
+        setLoading(false)
+        return
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "Failed to load"); setLoading(false) }
-  }
-  onMount(loadData)
 
-  const severityColor = (s: number) =>
-    s >= 4 ? theme.error : s >= 3 ? theme.warning : s >= 2 ? theme.primary : theme.textMuted
+      // Pre-populate ScanStore from SQLite for persistence recovery
+      resetScan()
+      initScan(engagement.target, engagement.id)
+
+      const engPhases = store.getPhases(route.engagementId) as Array<{ id: string; name: string; status: string; error?: string }>
+      const totalFindings = store.getFindings(route.engagementId).length
+
+      for (let i = 0; i < engPhases.length; i++) {
+        const p = engPhases[i]
+        addPhase({ id: p.id, name: p.name || p.id, index: i, total: engPhases.length })
+        if (p.status === "COMPLETED" || p.status === "FAILED") {
+          completePhase(i, 0, p.error ? [p.error] : [])
+        }
+      }
+
+      // Set total findings count and scan status directly
+      const { completeScan, setTotalFindings } = await import("../scan-store")
+      setTotalFindings(totalFindings)
+      if (engagement.status === "COMPLETED" || engagement.status === "FAILED") {
+        completeScan(engagement.status !== "FAILED")
+      }
+
+      setLoading(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load")
+      setLoading(false)
+    }
+  })
+
+  onCleanup(() => {
+    // Don't reset on cleanup — keeps last state visible
+  })
+
   const statusColor = (s: string) =>
     s === "COMPLETED" || s === "PASS" ? theme.success : s === "RUNNING" ? theme.primary : s === "FAILED" ? theme.error : theme.textMuted
 
-  const completedPhases = createMemo(() => data()?.phases.filter((p) => p.status === "COMPLETED").length ?? 0)
-  const totalPhases = createMemo(() => data()?.phases.length ?? 0)
+  // Derived memos from reactive ScanStore
+  const completedPhases = createMemo(() => scanState.phases.filter((p) => p.status === "completed").length)
+  const totalPhases = createMemo(() => scanState.phases.length)
   const progressPct = createMemo(() => totalPhases() > 0 ? Math.round((completedPhases() / totalPhases()) * 100) : 0)
 
-  const critical = createMemo(() => data()?.findings.filter((f) => f.severity >= 4).length ?? 0)
-  const high = createMemo(() => data()?.findings.filter((f) => f.severity === 3).length ?? 0)
-  const medium = createMemo(() => data()?.findings.filter((f) => f.severity === 2).length ?? 0)
-  const low = createMemo(() => data()?.findings.filter((f) => f.severity <= 1).length ?? 0)
-  const totalFindingCount = createMemo(() => data()?.findings.length ?? 0)
+  // Animated spinner for running phases
+  const [spinnerIdx, setSpinnerIdx] = createSignal(0)
+  onMount(() => {
+    const interval = setInterval(() => {
+      setSpinnerIdx((prev) => (prev + 1) % SPINNER_CHARS.length)
+    }, 120)
+    onCleanup(() => clearInterval(interval))
+  })
+  const spinner = createMemo(() => SPINNER_CHARS[spinnerIdx()])
 
   // Progress bar characters
   const barWidth = 30
   const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth))
   const emptyBars = createMemo(() => barWidth - filledBars())
-  const barFilled = "█".repeat(filledBars())
-  const barEmpty = "░".repeat(emptyBars())
+  const barFilled = createMemo(() => "█".repeat(filledBars()))
+  const barEmpty = createMemo(() => "░".repeat(emptyBars()))
+
+  // Running phase for highlighting
+  const runningPhaseIndex = createMemo(() =>
+    scanState.phases.findIndex((p) => p.status === "running")
+  )
 
   return (
     <box flexDirection="column" paddingX={2} paddingTop={1} flexGrow={1}>
       {/* Header row: assessment title + status */}
       <box flexDirection="row" gap={1} paddingBottom={1}>
         <text fg={theme.text} bold>Assessment</text>
-        <text fg={theme.textMuted}>{data()?.target ?? route.target}</text>
-        <Show when={data()}>
-          <text fg={statusColor(data()!.status)}>
-            {phaseIcon(data()!.status)} {data()!.status.toLowerCase()}
-          </text>
+        <text fg={theme.textMuted}>{scanState.target || route.target}</text>
+        <Show when={scanState.status === "running"}>
+          <text fg={theme.primary}>{spinner()} Running</text>
+        </Show>
+        <Show when={scanState.status === "completed"}>
+          <text fg={theme.success}>✓ Complete</text>
+        </Show>
+        <Show when={scanState.status === "failed"}>
+          <text fg={theme.error}>✗ Failed</text>
         </Show>
       </box>
 
@@ -127,10 +139,13 @@ export function ScanDashboard() {
       }>
         {/* Progress bar */}
         <box flexDirection="row" gap={1} paddingBottom={1}>
-          <text fg={theme.primary}>{barFilled}</text>
-          <text fg={theme.textMuted}>{barEmpty}</text>
+          <text fg={theme.primary}>{barFilled()}</text>
+          <text fg={theme.textMuted}>{barEmpty()}</text>
           <text fg={theme.text}>{progressPct()}%</text>
           <text fg={theme.textMuted}>({completedPhases()}/{totalPhases()} phases)</text>
+          <Show when={scanState.durationMs > 0}>
+            <text fg={theme.textMuted}>• {formatDuration(scanState.durationMs)}</text>
+          </Show>
         </box>
 
         {/* Finding severity summary box */}
@@ -142,75 +157,77 @@ export function ScanDashboard() {
         >
           <box flexDirection="row" gap={2}>
             <box flexDirection="column" alignItems="center">
-              <text fg={theme.error} bold>{critical()}</text>
-              <text fg={theme.textMuted}>critical</text>
-            </box>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.warning} bold>{high()}</text>
-              <text fg={theme.textMuted}>high</text>
-            </box>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.primary} bold>{medium()}</text>
-              <text fg={theme.textMuted}>medium</text>
-            </box>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.text} bold>{low()}</text>
-              <text fg={theme.textMuted}>low</text>
-            </box>
-            <box border={{ type: "left", fg: theme.textMuted }} paddingLeft={1} flexDirection="column" alignItems="center">
-              <text fg={theme.text} bold>{totalFindingCount()}</text>
-              <text fg={theme.textMuted}>total</text>
+              <text fg={theme.error} bold>{scanState.totalFindings}</text>
+              <text fg={theme.textMuted}>findings</text>
             </box>
           </box>
         </box>
 
-        {/* Phase list with workflow icons */}
-        <text fg={theme.textMuted}>Workflow Phases</text>
-        <For each={data()?.phases ?? []}>
-          {(phase) => (
-            <box flexDirection="row" gap={1}>
-              <text fg={statusColor(phase.status)}>{phaseIcon(phase.status)}</text>
-              <text fg={theme.text}>{phase.name}</text>
-              <text fg={statusColor(phase.status)}>{phase.status.toLowerCase()}</text>
-              <Show when={phase.errors.length > 0}>
-                <text fg={theme.error}>⚠ {phase.errors.join("; ")}</text>
-              </Show>
-            </box>
-          )}
-        </For>
+        {/* AI Analysis progress indicator */}
+        <Show when={scanState.analysisTotal > 0}>
+          <box flexDirection="row" gap={1} paddingBottom={1}>
+            <Show
+              when={scanState.analysisCurrent < scanState.analysisTotal}
+              fallback={
+                <text fg={theme.success}>✓ AI analysis complete ({scanState.analysisTotal} findings)</text>
+              }
+            >
+              <text fg={theme.primary}>{spinner()} Analyzing findings: {scanState.analysisCurrent}/{scanState.analysisTotal}</text>
+            </Show>
+          </box>
+        </Show>
 
-        {/* Finding entries with severity badges */}
-        <Show when={totalFindingCount() > 0}>
-          <text fg={theme.textMuted} paddingTop={1}>Findings ({totalFindingCount()})</text>
-          <For each={data()?.findings.slice(0, 15) ?? []}>
-            {(finding) => (
-              <box flexDirection="column" paddingTop={1}>
+        {/* Phase list with enhanced visualization */}
+        <text fg={theme.textMuted} paddingBottom={1}>Workflow Phases</text>
+        <For each={scanState.phases}>
+          {(phase, idx) => {
+            const isRunning = idx() === runningPhaseIndex()
+            const statusUpper = phase.status.toUpperCase()
+            return (
+              <box
+                flexDirection="column"
+                paddingLeft={1}
+                border={{
+                  type: "left",
+                  fg: isRunning ? theme.primary : statusColor(statusUpper),
+                }}
+              >
                 <box flexDirection="row" gap={1}>
-                  <text
-                    fg={severityColor(finding.severity)}
-                    bold
-                  >
-                    [{sevShort(finding.severity)}]
+                  <text fg={isRunning ? theme.primary : statusColor(statusUpper)}>
+                    {isRunning ? spinner() : phaseIcon(statusUpper)}
                   </text>
-                  <text fg={severityColor(finding.severity)}>
-                    {sevLabel(finding.severity)}
-                  </text>
-                  <text fg={theme.text}>{finding.title}</text>
-                  <text fg={theme.textMuted}>({finding.tool})</text>
+                  <text fg={theme.text} bold={isRunning}>{phase.name}</text>
+                  <Show when={isRunning}>
+                    <text fg={theme.primary}>running</text>
+                  </Show>
+                  <Show when={phase.status === "completed"}>
+                    <text fg={theme.success}>completed</text>
+                    <Show when={phase.findings > 0}>
+                      <text fg={theme.textMuted}>{phase.findings} finding(s)</text>
+                    </Show>
+                  </Show>
+                  <Show when={phase.status === "failed"}>
+                    <text fg={theme.error}>failed</text>
+                  </Show>
                 </box>
-                <Show when={finding.description}>
-                  <text fg={theme.textMuted} paddingLeft={6}>
-                    {finding.description}
-                  </text>
+                <Show when={phase.errors.length > 0}>
+                  <box flexDirection="row" gap={1} paddingLeft={3}>
+                    <text fg={theme.error}>⚠ {phase.errors.join("; ")}</text>
+                  </box>
                 </Show>
               </box>
+            )
+          }}
+        </For>
+
+        {/* Log entries with timestamps */}
+        <Show when={scanState.log.length > 0}>
+          <text fg={theme.textMuted} paddingTop={1}>Activity Log</text>
+          <For each={scanState.log.slice(-8)}>
+            {(entry) => (
+              <text fg={theme.textMuted} wrap="wrap">{entry}</text>
             )}
           </For>
-          <Show when={totalFindingCount() > 15}>
-            <text fg={theme.textMuted} paddingTop={1}>
-              ... and {totalFindingCount() - 15} more findings
-            </text>
-          </Show>
         </Show>
       </Show>
 
