@@ -47,37 +47,41 @@ export function Workspace() {
         <box flexDirection="row" gap={2} paddingTop={2}>
           <box
             flexDirection="column"
-            border={{ type: "round", fg: theme.primary }}
+            borderStyle="rounded" border
+            borderColor={theme.primary}
             paddingX={2} paddingY={1} flexGrow={1}
           >
-            <text fg={theme.primary} bold>{engCount()}</text>
+            <text fg={theme.primary}><b>{engCount()}</b></text>
             <text fg={theme.primary}>Engagements</text>
             <text fg={theme.textMuted}>Total assessments</text>
           </box>
           <box
             flexDirection="column"
-            border={{ type: "round", fg: theme.warning }}
+            borderStyle="rounded" border
+            borderColor={theme.warning}
             paddingX={2} paddingY={1} flexGrow={1}
           >
-            <text fg={theme.warning} bold>{runningCount()}</text>
+            <text fg={theme.warning}><b>{runningCount()}</b></text>
             <text fg={theme.warning}>Running</text>
             <text fg={theme.textMuted}>Active scans</text>
           </box>
           <box
             flexDirection="column"
-            border={{ type: "round", fg: theme.error }}
+            borderStyle="rounded" border
+            borderColor={theme.error}
             paddingX={2} paddingY={1} flexGrow={1}
           >
-            <text fg={theme.error} bold>{findingCount()}</text>
+            <text fg={theme.error}><b>{findingCount()}</b></text>
             <text fg={theme.error}>Findings</text>
             <text fg={theme.textMuted}>Total discovered</text>
           </box>
           <box
             flexDirection="column"
-            border={{ type: "round", fg: theme.error }}
+            borderStyle="rounded" border
+            borderColor={theme.error}
             paddingX={2} paddingY={1} flexGrow={1}
           >
-            <text fg={theme.error} bold>{criticalCount()}</text>
+            <text fg={theme.error}><b>{criticalCount()}</b></text>
             <text fg={theme.error}>Critical</text>
             <text fg={theme.textMuted}>Severity 4+</text>
           </box>
@@ -87,16 +91,16 @@ export function Workspace() {
       {/* Quick navigation */}
       <text fg={theme.textMuted} paddingTop={2}>Quick Navigation</text>
       <box flexDirection="row" gap={1} paddingTop={1}>
-        <box border={{ type: "round", fg: theme.primary }} paddingX={1}>
+        <box borderStyle="rounded" border borderColor={theme.primary} paddingX={1}>
           <text fg={theme.primary}>/engagements</text>
         </box>
-        <box border={{ type: "round", fg: theme.error }} paddingX={1}>
+        <box borderStyle="rounded" border borderColor={theme.error} paddingX={1}>
           <text fg={theme.error}>/findings</text>
         </box>
-        <box border={{ type: "round", fg: theme.success }} paddingX={1}>
+        <box borderStyle="rounded" border borderColor={theme.success} paddingX={1}>
           <text fg={theme.success}>/doctor</text>
         </box>
-        <box border={{ type: "round", fg: theme.textMuted }} paddingX={1}>
+        <box borderStyle="rounded" border borderColor={theme.textMuted} paddingX={1}>
           <text fg={theme.textMuted}>/config</text>
         </box>
       </box>

@@ -22,7 +22,7 @@ const passingScenario: VerificationScenario = {
     responses: [],
     logs: [],
     createdAt: "",
-  }),
+  }) as any,
 }
 
 describe("VerificationRunner", () => {
@@ -56,7 +56,7 @@ describe("VerificationRunner", () => {
           responses: [],
           logs: [],
           createdAt: "",
-        }
+        } as any
       },
     }
     const runner = new VerificationRunner()
@@ -72,6 +72,8 @@ describe("VerificationRunner", () => {
       requests: [],
       responses: [],
       logs: [],
+      artifacts: [],
+      packageHash: "",
       createdAt: "2024-01-01",
     }
     const scenario: VerificationScenario = {
@@ -116,7 +118,7 @@ describe("VerificationRunner", () => {
         responses: [],
         logs: [],
         createdAt: "",
-      }),
+      }) as any,
     }
     const runner = new VerificationRunner()
     const result = await runner.run(scenario)
@@ -146,7 +148,7 @@ describe("VerificationRunner", () => {
         responses: [],
         logs: [],
         createdAt: "",
-      }),
+      }) as any,
     }
     const runner = new VerificationRunner()
     const result = await runner.run(scenario)

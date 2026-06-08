@@ -48,7 +48,7 @@ test("skips external tui plugins in pure mode", async () => {
       },
     ],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {

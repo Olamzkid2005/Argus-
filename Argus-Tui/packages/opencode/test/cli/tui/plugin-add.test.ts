@@ -35,7 +35,7 @@ test("adds tui plugin at runtime from spec", async () => {
   const config = createTuiResolvedConfig({
     plugin: [],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -77,7 +77,7 @@ test("retries runtime add for file plugins after dependency wait", async () => {
   const config = createTuiResolvedConfig({
     plugin: [],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockImplementation(async () => {
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockImplementation(async () => {
     await Bun.write(
       path.join(tmp.extra.mod, "index.ts"),
       `export default {

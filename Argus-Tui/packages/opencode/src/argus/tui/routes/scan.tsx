@@ -121,7 +121,7 @@ export function ScanDashboard() {
     <box flexDirection="column" paddingX={2} paddingTop={1} flexGrow={1}>
       {/* Header row: assessment title + status */}
       <box flexDirection="row" gap={1} paddingBottom={1}>
-        <text fg={theme.text} bold>Assessment</text>
+        <text fg={theme.text}><b>Assessment</b></text>
         <text fg={theme.textMuted}>{scanState.target || route.target}</text>
         <Show when={scanState.status === "running"}>
           <text fg={theme.primary}>{spinner()} Running</text>
@@ -150,14 +150,16 @@ export function ScanDashboard() {
 
         {/* Finding severity summary box */}
         <box
-          border={{ type: "round", fg: theme.textMuted }}
+          borderStyle="rounded"
+          border
+          borderColor={theme.textMuted}
           paddingX={1}
           paddingY={1}
           marginBottom={1}
         >
           <box flexDirection="row" gap={2}>
             <box flexDirection="column" alignItems="center">
-              <text fg={theme.error} bold>{scanState.totalFindings}</text>
+              <text fg={theme.error}><b>{scanState.totalFindings}</b></text>
               <text fg={theme.textMuted}>findings</text>
             </box>
           </box>
@@ -187,16 +189,14 @@ export function ScanDashboard() {
               <box
                 flexDirection="column"
                 paddingLeft={1}
-                border={{
-                  type: "left",
-                  fg: isRunning ? theme.primary : statusColor(statusUpper),
-                }}
+                border={["left"]}
+                borderColor={isRunning ? theme.primary : statusColor(statusUpper)}
               >
                 <box flexDirection="row" gap={1}>
                   <text fg={isRunning ? theme.primary : statusColor(statusUpper)}>
                     {isRunning ? spinner() : phaseIcon(statusUpper)}
                   </text>
-                  <text fg={theme.text} bold={isRunning}>{phase.name}</text>
+                  <text fg={theme.text}>{isRunning ? <b>{phase.name}</b> : phase.name}</text>
                   <Show when={isRunning}>
                     <text fg={theme.primary}>running</text>
                   </Show>
@@ -225,7 +225,7 @@ export function ScanDashboard() {
           <text fg={theme.textMuted} paddingTop={1}>Activity Log</text>
           <For each={scanState.log.slice(-8)}>
             {(entry) => (
-              <text fg={theme.textMuted} wrap="wrap">{entry}</text>
+              <text fg={theme.textMuted}>{entry}</text>
             )}
           </For>
         </Show>

@@ -94,7 +94,7 @@ describe("run runtime boot", () => {
   })
 
   test("reads footer keybinds from resolved keybind config", async () => {
-    spyOn(TuiConfig, "get").mockResolvedValue(
+    spyOn(TuiConfig as any, "get").mockResolvedValue(
       config({
         leader: "ctrl+g",
         bindings: {
@@ -125,7 +125,7 @@ describe("run runtime boot", () => {
   })
 
   test("falls back to default tui keymap config when config load fails", async () => {
-    spyOn(TuiConfig, "get").mockRejectedValue(new Error("boom"))
+    spyOn(TuiConfig as any, "get").mockRejectedValue(new Error("boom"))
 
     const result = await resolveRunTuiConfig()
 
@@ -143,7 +143,7 @@ describe("run runtime boot", () => {
   })
 
   test("preserves disabled leader from resolved tui config", async () => {
-    spyOn(TuiConfig, "get").mockResolvedValue(config({ leader: "none" }))
+    spyOn(TuiConfig as any, "get").mockResolvedValue(config({ leader: "none" }))
 
     const result = await resolveRunTuiConfig()
 
@@ -151,11 +151,11 @@ describe("run runtime boot", () => {
   })
 
   test("reads diff style and falls back to auto", async () => {
-    spyOn(TuiConfig, "get").mockResolvedValue(config({ diff_style: "stacked" }))
+    spyOn(TuiConfig as any, "get").mockResolvedValue(config({ diff_style: "stacked" }))
     await expect(resolveDiffStyle()).resolves.toBe("stacked")
 
     mock.restore()
-    spyOn(TuiConfig, "get").mockRejectedValue(new Error("boom"))
+    spyOn(TuiConfig as any, "get").mockRejectedValue(new Error("boom"))
     await expect(resolveDiffStyle()).resolves.toBe("auto")
   })
 

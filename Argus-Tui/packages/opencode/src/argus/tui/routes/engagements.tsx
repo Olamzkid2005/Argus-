@@ -34,7 +34,7 @@ export function EngagementBrowser() {
         const findings = store.getFindings(e.id)
         return {
           id: e.id, target: e.target, workflow: e.workflow, status: e.status,
-          findingCount: findings.length, createdAt: e.createdAt, updatedAt: e.updatedAt,
+          findingCount: findings.length, createdAt: +e.createdAt, updatedAt: +e.updatedAt,
         }
       })
       setEngagements(rows)
@@ -77,30 +77,26 @@ export function EngagementBrowser() {
 
       {/* Filter tabs */}
       <box flexDirection="row" gap={1} paddingTop={1}>
-        <text
-          fg={filter() === "all" ? theme.primary : theme.textMuted}
-          onClick={() => setFilter("all")}
-        >
-          All ({counts().all})
-        </text>
-        <text
-          fg={filter() === "running" ? theme.primary : theme.textMuted}
-          onClick={() => setFilter("running")}
-        >
-          Running ({counts().running})
-        </text>
-        <text
-          fg={filter() === "completed" ? theme.primary : theme.textMuted}
-          onClick={() => setFilter("completed")}
-        >
-          Completed ({counts().completed})
-        </text>
-        <text
-          fg={filter() === "failed" ? theme.primary : theme.textMuted}
-          onClick={() => setFilter("failed")}
-        >
-          Failed ({counts().failed})
-        </text>
+        <box {...({ onClick: () => setFilter("all") } as any)}>
+          <text fg={filter() === "all" ? theme.primary : theme.textMuted}>
+            All ({counts().all})
+          </text>
+        </box>
+        <box {...({ onClick: () => setFilter("running") } as any)}>
+          <text fg={filter() === "running" ? theme.primary : theme.textMuted}>
+            Running ({counts().running})
+          </text>
+        </box>
+        <box {...({ onClick: () => setFilter("completed") } as any)}>
+          <text fg={filter() === "completed" ? theme.primary : theme.textMuted}>
+            Completed ({counts().completed})
+          </text>
+        </box>
+        <box {...({ onClick: () => setFilter("failed") } as any)}>
+          <text fg={filter() === "failed" ? theme.primary : theme.textMuted}>
+            Failed ({counts().failed})
+          </text>
+        </box>
       </box>
 
       {/* Engagement list */}
@@ -114,12 +110,13 @@ export function EngagementBrowser() {
                 flexDirection="row"
                 gap={1}
                 paddingTop={1}
-                border={{ type: "bottom", fg: theme.textMuted }}
-                onClick={() => route.navigate({ type: "engagement", engagementId: eng.id } as any)}
+                border={["bottom"]}
+                borderColor={theme.textMuted}
+                {...({ onClick: () => route.navigate({ type: "engagement", engagementId: eng.id } as any) } as any)}
               >
                 <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
                 <text fg={theme.textMuted}>{eng.id}</text>
-                <text fg={theme.text} bold>{eng.target}</text>
+                <text fg={theme.text}><b>{eng.target}</b></text>
                 <text fg={theme.textMuted}>{eng.workflow}</text>
                 <text fg={statusColor(eng.status)}>{eng.status.toLowerCase()}</text>
                 <text fg={theme.textMuted}>{eng.findingCount} findings</text>

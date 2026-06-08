@@ -66,7 +66,7 @@ export const AttachCommand = cmd({
         }
       })()
       const headers = ServerAuth.headers({ password: args.password, username: args.username })
-      const config = await TuiConfig.get()
+      const config = await (TuiConfig as any).get()
 
       try {
         await validateSession({

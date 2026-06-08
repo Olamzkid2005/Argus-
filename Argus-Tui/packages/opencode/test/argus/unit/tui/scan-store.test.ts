@@ -73,7 +73,7 @@ describe("scan-store", () => {
 
   it("addPhase() adds phase to list with status=running", () => {
     initScan("https://test.com", "eng-1")
-    addPhase({ name: "recon", index: 0, total: 3 })
+    addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
     const state = getScanState()
     expect(state.phases).toHaveLength(1)
     expect(state.phases[0].name).toBe("recon")
@@ -87,7 +87,7 @@ describe("scan-store", () => {
 
   it("completePhase() sets phase to completed, updates findings", () => {
     initScan("https://test.com", "eng-1")
-    addPhase({ name: "recon", index: 0, total: 3 })
+    addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
     completePhase(0, 5, [])
     const state = getScanState()
     expect(state.phases[0].status).toBe("completed")
@@ -97,7 +97,7 @@ describe("scan-store", () => {
 
   it("completePhase() sets phase to failed when errors present", () => {
     initScan("https://test.com", "eng-1")
-    addPhase({ name: "recon", index: 0, total: 3 })
+    addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
     completePhase(0, 0, ["connection error"])
     const state = getScanState()
     expect(state.phases[0].status).toBe("failed")
@@ -129,7 +129,7 @@ describe("scan-store", () => {
 
   it("resetScan() resets to initial state", () => {
     initScan("https://test.com", "eng-1")
-    addPhase({ name: "recon", index: 0, total: 3 })
+    addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
     appendLog("something")
     resetScan()
     const state = getScanState()

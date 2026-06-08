@@ -44,7 +44,7 @@ export function mockTuiRuntime(dir: string, plugin: PluginSpec[], opts?: { plugi
     scope: "local" as const,
     source: path.join(dir, "tui.json"),
   }))
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => dir)
 
   const config = createTuiResolvedConfig({

@@ -45,7 +45,7 @@ function statusIcon(status: string): string {
   }
 }
 
-function statusColor(status: string, theme: ReturnType<typeof useTheme>["theme"]): string {
+function statusColor(status: string, theme: ReturnType<typeof useTheme>["theme"]) {
   switch (status.toUpperCase()) {
     case "CONFIRMED": return theme.success
     case "REJECTED": return theme.error
@@ -68,13 +68,14 @@ export function FindingCard(props: { finding: FindingRow; theme: ReturnType<type
       flexDirection="column"
       paddingX={1}
       paddingY={1}
-      border={{ type: "round", fg: sevColor }}
-      onClick={() => navigateTo({ type: "finding", findingId: finding.id })}
+      border={["round"]}
+      borderColor={sevColor}
+      {...({ onClick: () => navigateTo({ type: "finding", findingId: finding.id }) } as any)}
     >
       {/* Header: severity badge + title + status */}
       <box flexDirection="row" gap={1}>
-        <text fg={sevColor} bold>[{sevLabel}]</text>
-        <text fg={theme.text} bold>{finding.title}</text>
+        <text fg={sevColor}><b>[{sevLabel}]</b></text>
+        <text fg={theme.text}><b>{finding.title}</b></text>
         <Show when={finding.status !== "PENDING"}>
           <text fg={statusColor(finding.status, theme)}>{statusIcon(finding.status)} {finding.status.toLowerCase()}</text>
         </Show>
@@ -117,7 +118,7 @@ export function FindingCard(props: { finding: FindingRow; theme: ReturnType<type
 
       {/* Description preview */}
       <Show when={finding.description}>
-        <text fg={theme.text} wrap="wrap" paddingTop={1}>
+        <text fg={theme.text} paddingTop={1}>
           {finding.description.slice(0, 200)}{finding.description.length > 200 ? "..." : ""}
         </text>
       </Show>
@@ -200,36 +201,31 @@ export function FindingsViewer() {
 
       {/* Severity filter chips */}
       <box flexDirection="row" gap={1} paddingTop={1} flexWrap="wrap">
-        <text
-          fg={filterSev() === null ? theme.primary : theme.textMuted}
-          onClick={() => { setFilterSev(null); setPage(1) }}
-        >
-          All ({allFindings().length})
-        </text>
-        <text
-          fg={filterSev() === 4 ? theme.error : theme.textMuted}
-          onClick={() => { setFilterSev(4); setPage(1) }}
-        >
-          Critical ({counts().critical})
-        </text>
-        <text
-          fg={filterSev() === 3 ? theme.warning : theme.textMuted}
-          onClick={() => { setFilterSev(3); setPage(1) }}
-        >
-          High ({counts().high})
-        </text>
-        <text
-          fg={filterSev() === 2 ? theme.info : theme.textMuted}
-          onClick={() => { setFilterSev(2); setPage(1) }}
-        >
-          Medium ({counts().medium})
-        </text>
-        <text
-          fg={filterSev() === 1 ? theme.text : theme.textMuted}
-          onClick={() => { setFilterSev(1); setPage(1) }}
-        >
-          Low ({counts().low})
-        </text>
+        <box {...({ onClick: () => { setFilterSev(null); setPage(1) } } as any)}>
+          <text fg={filterSev() === null ? theme.primary : theme.textMuted}>
+            All ({allFindings().length})
+          </text>
+        </box>
+        <box {...({ onClick: () => { setFilterSev(4); setPage(1) } } as any)}>
+          <text fg={filterSev() === 4 ? theme.error : theme.textMuted}>
+            Critical ({counts().critical})
+          </text>
+        </box>
+        <box {...({ onClick: () => { setFilterSev(3); setPage(1) } } as any)}>
+          <text fg={filterSev() === 3 ? theme.warning : theme.textMuted}>
+            High ({counts().high})
+          </text>
+        </box>
+        <box {...({ onClick: () => { setFilterSev(2); setPage(1) } } as any)}>
+          <text fg={filterSev() === 2 ? theme.info : theme.textMuted}>
+            Medium ({counts().medium})
+          </text>
+        </box>
+        <box {...({ onClick: () => { setFilterSev(1); setPage(1) } } as any)}>
+          <text fg={filterSev() === 1 ? theme.text : theme.textMuted}>
+            Low ({counts().low})
+          </text>
+        </box>
       </box>
 
       <Show when={!loading()} fallback={<text fg={theme.primary}>⠋ Loading...</text>}>
@@ -250,11 +246,11 @@ export function FindingsViewer() {
           <Show when={totalPages() > 1}>
             <box flexDirection="row" gap={1} paddingTop={1} justifyContent="center">
               <Show when={page() > 1}>
-                <text fg={theme.primary} onClick={() => setPage((p) => Math.max(1, p - 1))}>◀ Prev</text>
+                <box {...({ onClick: () => setPage((p) => Math.max(1, p - 1)) } as any)}><text fg={theme.primary}>◀ Prev</text></box>
               </Show>
               <text fg={theme.textMuted}>Page {page()}/{totalPages()}</text>
               <Show when={page() < totalPages()}>
-                <text fg={theme.primary} onClick={() => setPage((p) => Math.min(totalPages(), p + 1))}>Next ▶</text>
+                <box {...({ onClick: () => setPage((p) => Math.min(totalPages(), p + 1)) } as any)}><text fg={theme.primary}>Next ▶</text></box>
               </Show>
             </box>
           </Show>

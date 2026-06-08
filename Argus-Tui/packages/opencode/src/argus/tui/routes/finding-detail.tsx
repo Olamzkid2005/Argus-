@@ -88,15 +88,15 @@ export function FindingDetail(props: FindingDetailProps) {
           <>
             {/* Header */}
             <box flexDirection="row" gap={1}>
-              <text fg={sevColor(f().severity)} bold>[{SEV_LABELS[f().severity] ?? "UNKNOWN"}]</text>
-              <text fg={theme.text} bold>{f().title}</text>
+              <text fg={sevColor(f().severity)}><b>[{SEV_LABELS[f().severity] ?? "UNKNOWN"}]</b></text>
+              <text fg={theme.text}><b>{f().title}</b></text>
             </box>
             <text fg={theme.textMuted}>ID: {f().id}</text>
             <text fg={theme.textMuted}>Status: {CONF_LABELS[f().confidence] ?? "UNKNOWN"}</text>
 
             {/* Details section */}
-            <box flexDirection="column" paddingTop={1} border={{ type: "bottom", fg: theme.textMuted }}>
-              <text fg={theme.text} bold>Details</text>
+            <box flexDirection="column" paddingTop={1} border={["bottom"]} borderColor={theme.textMuted}>
+              <text fg={theme.text}><b>Details</b></text>
               <box flexDirection="row" gap={2} paddingTop={1}>
                 <text fg={theme.textMuted}>Tool: {f().tool}</text>
                 <text fg={theme.textMuted}>Phase: {f().phase}</text>
@@ -115,22 +115,22 @@ export function FindingDetail(props: FindingDetailProps) {
             {/* Description */}
             <Show when={f().description}>
               <box flexDirection="column" paddingTop={1}>
-                <text fg={theme.text} bold>Description</text>
-                <text fg={theme.text} wrap="wrap" paddingTop={1}>{f().description}</text>
+                <text fg={theme.text}><b>Description</b></text>
+                <text fg={theme.text} paddingTop={1}>{f().description}</text>
               </box>
             </Show>
 
             {/* Remediation */}
             <Show when={f().remediation}>
               <box flexDirection="column" paddingTop={1}>
-                <text fg={theme.text} bold>Remediation</text>
-                <text fg={theme.text} wrap="wrap" paddingTop={1}>{f().remediation}</text>
+                <text fg={theme.text}><b>Remediation</b></text>
+                <text fg={theme.text} paddingTop={1}>{f().remediation}</text>
               </box>
             </Show>
 
             {/* AI Analysis */}
-            <box flexDirection="column" paddingTop={1} border={{ type: "bottom", fg: theme.textMuted }}>
-              <text fg={theme.text} bold>AI Analysis</text>
+            <box flexDirection="column" paddingTop={1} border={["bottom"]} borderColor={theme.textMuted}>
+              <text fg={theme.text}><b>AI Analysis</b></text>
               <Show when={analysis()} fallback={
                 <Show when={!analysisLoading()} fallback={
                   <text fg={theme.primary}>⠋ Generating AI analysis...</text>
@@ -141,9 +141,9 @@ export function FindingDetail(props: FindingDetailProps) {
                         LLM analysis disabled. Enable with `features.llm_finding_analysis: true` in config.
                       </text>
                     }>
-                      <text fg={theme.primary} onClick={generateAnalysis} paddingTop={1}>
-                        [Generate AI Analysis]
-                      </text>
+                      <box {...({ onClick: generateAnalysis } as any)} paddingTop={1}>
+                        <text fg={theme.primary}>[Generate AI Analysis]</text>
+                      </box>
                     </Show>
                   }>
                     <text fg={theme.error} paddingTop={1}>{analysisError()}</text>
@@ -152,32 +152,32 @@ export function FindingDetail(props: FindingDetailProps) {
               }>
                 {(a) => (
                   <>
-                    <text fg={theme.text} wrap="wrap" paddingTop={1}>{a().explanation}</text>
+                    <text fg={theme.text} paddingTop={1}>{a().explanation}</text>
                     <Show when={a().impact?.length > 0}>
-                      <text fg={theme.warning} bold paddingTop={1}>Impact:</text>
+                      <text fg={theme.warning} paddingTop={1}><b>Impact:</b></text>
                       <For each={a().impact}>
                         {(item: string) => (
                           <box flexDirection="row" gap={1}>
                             <text fg={theme.warning}>•</text>
-                            <text fg={theme.text} wrap="wrap">{item}</text>
+                            <text fg={theme.text}>{item}</text>
                           </box>
                         )}
                       </For>
                     </Show>
                     <Show when={a().remediation?.length > 0}>
-                      <text fg={theme.success} bold paddingTop={1}>Remediation:</text>
+                      <text fg={theme.success} paddingTop={1}><b>Remediation:</b></text>
                       <For each={a().remediation}>
                         {(item: string) => (
                           <box flexDirection="row" gap={1}>
                             <text fg={theme.success}>•</text>
-                            <text fg={theme.text} wrap="wrap">{item}</text>
+                            <text fg={theme.text}>{item}</text>
                           </box>
                         )}
                       </For>
                     </Show>
                     <box flexDirection="row" gap={1} paddingTop={1}>
                       <text fg={theme.textMuted}>Generated by: {a().model}</text>
-                      <text fg={theme.primary} onClick={generateAnalysis}>[Regenerate]</text>
+                      <box {...({ onClick: generateAnalysis } as any)}><text fg={theme.primary}>[Regenerate]</text></box>
                     </box>
                   </>
                 )}
@@ -186,7 +186,7 @@ export function FindingDetail(props: FindingDetailProps) {
 
             {/* Evidence */}
             <box flexDirection="column" paddingTop={1}>
-              <text fg={theme.text} bold>Evidence ({evidenceCount()} artifacts)</text>
+              <text fg={theme.text}><b>Evidence ({evidenceCount()} artifacts)</b></text>
               <EvidenceViewer findingId={f().id} />
             </box>
           </>

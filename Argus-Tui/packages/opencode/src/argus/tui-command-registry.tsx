@@ -36,7 +36,7 @@ export function ArgusCommandRegistry() {
   // Also register directly on the keymap as a fallback
   onMount(() => {
     for (const cmd of argusCommands) {
-      keymap.registerCommand?.(cmd)
+      ;(keymap as any).registerCommand?.(cmd)
     }
   })
 

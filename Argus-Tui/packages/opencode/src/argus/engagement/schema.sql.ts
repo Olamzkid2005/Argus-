@@ -114,7 +114,7 @@ export const finding_analysis = sqliteTable("finding_analysis", {
   generated_at: integer().notNull(),
   finding_updated_at: integer().notNull(),
 }, (table) => [
-  foreignKey({ columns: [table.finding_id], foreignColumns: [findings.id], onDelete: "cascade" }),
+  foreignKey({ columns: [table.finding_id], foreignColumns: [findings.id], onDelete: "cascade" } as any),
 ])
 
 export const audit_log = sqliteTable("audit_log", {

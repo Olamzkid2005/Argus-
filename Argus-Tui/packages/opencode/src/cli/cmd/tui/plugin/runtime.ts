@@ -886,7 +886,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
     state.pending.delete(spec)
     return true
   }
-  const ready = await resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()).catch((error) => {
+  const ready = await resolveExternalPlugins([cfg], () => (TuiConfig as any).waitForDependencies()).catch((error) => {
     fail("failed to add tui plugin", { path: next, error })
     return [] as PluginLoad[]
   })
@@ -1111,7 +1111,7 @@ async function load(input: { api: Api; config: TuiConfig.Resolved; dispose?: () 
       })
     }
 
-    const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
+    const ready = await resolveExternalPlugins(records, () => (TuiConfig as any).waitForDependencies())
     await addExternalPluginEntries(next, ready)
 
     applyInitialPluginEnabledState(next, config)

@@ -444,7 +444,7 @@ export default {
     },
   })
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
 
   try {
     expect(addTheme(tmp.extra.preloadedThemeName, { theme: { primary: "#303030" } })).toBe(true)
@@ -644,7 +644,7 @@ test("continues loading when a plugin is missing config metadata", async () => {
       },
     ],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -697,7 +697,7 @@ test("does not wait on permanent tui plugin startup failures", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -954,7 +954,7 @@ test("auto-disposes plugin keymap layers", async () => {
       }
     },
   } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -1000,7 +1000,7 @@ test("plugin keymap proxy preserves real keymap receiver", async () => {
   })
 
   const harness = createTestKeymap({ defaultKeys: true })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -1070,7 +1070,7 @@ test("auto-disposes plugin attention sound packs and resolves sound paths", asyn
       },
     },
   }
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -1142,7 +1142,7 @@ test("auto-disposes plugin keymap transformers", async () => {
     prependCommandTransformer: track,
     appendCommandTransformer: track,
   } as unknown as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -1199,7 +1199,7 @@ test("manual onDispose for plugin keymap layers stays idempotent", async () => {
       }
     },
   } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["keymap"]
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -1270,7 +1270,7 @@ test("updates installed theme when plugin metadata changes", async () => {
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const wait = (spyOn(TuiConfig as any, "waitForDependencies") as any).mockResolvedValue()
 
   const mkApi = () =>
     createTuiPluginApi({

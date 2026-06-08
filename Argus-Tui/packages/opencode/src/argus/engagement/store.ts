@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { eq, desc, sql, leftJoin } from "drizzle-orm"
+import { eq, desc, sql } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync, readFileSync } from "fs"

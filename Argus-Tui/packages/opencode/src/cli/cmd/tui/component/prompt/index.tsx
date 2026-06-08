@@ -1226,7 +1226,7 @@ export function Prompt(props: PromptProps) {
                   target: arg,
                   engagementId: scanEngagementId,
                   useLLM: cmdName === "assess" || cmdName === "scan",
-                  onProgress: (status) => {
+                  onProgress: (status: any) => {
                     progressMessages.push(status)
                     // Batch progress updates into the session
                     if (progressMessages.length >= 3) {
@@ -1324,7 +1324,7 @@ export function Prompt(props: PromptProps) {
                 target: intent.target,
                 engagementId: nlEngagementId,
                 useLLM: intent.useLLM,
-                onProgress: (status) => {
+                onProgress: (status: any) => {
                   progressMessages.push(status)
                   if (progressMessages.length >= 3) {
                     const batch = progressMessages.splice(0, 3).join("\n")

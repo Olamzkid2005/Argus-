@@ -29,7 +29,7 @@ export type SessionInfo = {
   variant: string | undefined
 }
 
-type Config = Awaited<ReturnType<typeof TuiConfig.get>>
+type Config = any
 type BootService = {
   readonly resolveModelInfo: (
     sdk: RunInput["sdk"],
@@ -50,7 +50,7 @@ const configTask: { current?: Promise<Config> } = {}
 class Service extends Context.Service<Service, BootService>()("@opencode/RunBoot") {}
 
 function loadConfig() {
-  return reusePendingTask(configTask, () => TuiConfig.get())
+  return reusePendingTask(configTask, () => (TuiConfig as any).get())
 }
 
 function emptyModelInfo(): ModelInfo {

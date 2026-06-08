@@ -40,7 +40,7 @@ export function ArgusDashboard() {
       const recent = engagements.slice(0, 8).map((e) => {
         const findings = store.getFindings(e.id)
         confirmedFindings += findings.filter((f) => f.status === "CONFIRMED" || f.status === "FINALIZED").length
-        return { id: e.id, target: e.target, status: e.status, findingCount: findings.length, updatedAt: e.updatedAt }
+        return { id: e.id, target: e.target, status: e.status, findingCount: findings.length, updatedAt: +e.updatedAt }
       })
       setData({ totalTargets, openEngagements, confirmedFindings, recent })
       setLoading(false)
@@ -61,20 +61,20 @@ export function ArgusDashboard() {
         {/* Stats row */}
         <box flexDirection="row" gap={3} paddingTop={1} paddingBottom={1}>
           <box flexDirection="column" alignItems="center">
-            <text fg={theme.text} bold>
-              {(data()?.totalTargets ?? 0).toString()}
+            <text fg={theme.text}>
+              <b>{(data()?.totalTargets ?? 0).toString()}</b>
             </text>
             <text fg={theme.textMuted}>targets</text>
           </box>
           <box flexDirection="column" alignItems="center">
-            <text fg={theme.warning} bold>
-              {(data()?.openEngagements ?? 0).toString()}
+            <text fg={theme.warning}>
+              <b>{(data()?.openEngagements ?? 0).toString()}</b>
             </text>
             <text fg={theme.textMuted}>active</text>
           </box>
           <box flexDirection="column" alignItems="center">
-            <text fg={theme.error} bold>
-              {(data()?.confirmedFindings ?? 0).toString()}
+            <text fg={theme.error}>
+              <b>{(data()?.confirmedFindings ?? 0).toString()}</b>
             </text>
             <text fg={theme.textMuted}>findings</text>
           </box>
@@ -103,7 +103,7 @@ export function ArgusDashboard() {
                 flexDirection="row"
                 gap={1}
                 paddingTop={1}
-                onClick={() => route.navigate({ type: "scan", target: eng.target, engagementId: eng.id })}
+                {...({ onClick: () => route.navigate({ type: "scan", target: eng.target, engagementId: eng.id }) } as any)}
               >
                 <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
                 <text fg={theme.textMuted}>{eng.id}</text>
@@ -117,7 +117,7 @@ export function ArgusDashboard() {
 
         {/* Status bar */}
         <box flexGrow={1} />
-        <box flexDirection="row" justifyContent="space-between" border={{ type: "top", fg: theme.textMuted }} paddingTop={1}>
+        <box flexDirection="row" justifyContent="space-between" border={["top"]} borderColor={theme.textMuted} paddingTop={1}>
           <text fg={theme.textMuted}>ARGUS v5</text>
           <text fg={theme.success}>● Ready</text>
         </box>

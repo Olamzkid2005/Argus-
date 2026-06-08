@@ -77,7 +77,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
       }>
         {(eng) => (
           <>
-            <text fg={theme.text} bold>{eng().id}</text>
+            <text fg={theme.text}><b>{eng().id}</b></text>
             <text fg={theme.textMuted}>Target: {eng().target}</text>
             <text fg={theme.textMuted}>Status: {eng().status.toLowerCase()}</text>
 
@@ -85,16 +85,14 @@ export function EngagementDetail(props: EngagementDetailProps) {
             <box flexDirection="row" gap={1} paddingTop={2}>
               <For each={tabs}>
                 {(tab) => (
-                  <text
-                    fg={activeTab() === tab.id ? theme.primary : theme.textMuted}
-                    bold={activeTab() === tab.id}
-                    onClick={() => {
-                      setActiveTab(tab.id)
-                      route.navigate({ type: "engagement-detail", engagementId: props.engagementId, tab: tab.id })
-                    }}
-                  >
-                    {tab.label}
-                  </text>
+                  <box {...({ onClick: () => {
+                    setActiveTab(tab.id)
+                    route.navigate({ type: "engagement-detail", engagementId: props.engagementId, tab: tab.id })
+                  } } as any)}>
+                    <text fg={activeTab() === tab.id ? theme.primary : theme.textMuted}>
+                      {activeTab() === tab.id ? <b>{tab.label}</b> : tab.label}
+                    </text>
+                  </box>
                 )}
               </For>
             </box>
@@ -110,8 +108,8 @@ export function EngagementDetail(props: EngagementDetailProps) {
                     {(f) => (
                       <box flexDirection="column" paddingTop={1}>
                         <box flexDirection="row" gap={1}>
-                          <text fg={severityColor(f.severity)} bold>
-                            [{SEV_LABELS[f.severity]}]
+                          <text fg={severityColor(f.severity)}>
+                            <b>[{SEV_LABELS[f.severity]}]</b>
                           </text>
                           <text fg={theme.text}>{f.title}</text>
                           <text fg={theme.textMuted}>({f.tool})</text>
@@ -136,7 +134,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
                   <For each={evidence()}>
                     {(ev) => (
                       <box flexDirection="column" paddingTop={1}>
-                        <text fg={theme.text} bold>{ev.findingTitle}</text>
+                        <text fg={theme.text}><b>{ev.findingTitle}</b></text>
                         <text fg={theme.textMuted}>{ev.packages.length} evidence package(s)</text>
                         <For each={ev.packages}>
                           {(pkg) => (
@@ -175,14 +173,11 @@ export function EngagementDetail(props: EngagementDetailProps) {
               <Show when={activeTab() === "reports"}>
                 <box flexDirection="column" gap={1}>
                   <text fg={theme.textMuted}>Report status: Not generated</text>
-                  <text
-                    fg={theme.primary}
-                    onClick={() => {
-                      route.navigate({ type: "report", engagementId: props.engagementId })
-                    }}
-                  >
-                    Generate report →
-                  </text>
+                  <box {...({ onClick: () => {
+                    route.navigate({ type: "report", engagementId: props.engagementId })
+                  } } as any)}>
+                    <text fg={theme.primary}>Generate report →</text>
+                  </box>
                 </box>
               </Show>
             </box>

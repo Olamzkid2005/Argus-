@@ -8,7 +8,7 @@ describe("ArgusAssessCommand", () => {
 
   test("handler catches errors", async () => {
     const { ArgusAssessCommand } = await import("../../../src/argus/cli")
-    const spy = mock(() => {})
+    const spy = mock(() => {}) as any
     const orig = process.stderr.write
     process.stderr.write = spy
     try {
@@ -38,7 +38,7 @@ describe("ArgusReportCommand", () => {
 describe("ArgusResumeCommand", () => {
   test("handler catches errors gracefully", async () => {
     const { ArgusResumeCommand } = await import("../../../src/argus/cli")
-    const spy = mock(() => {})
+    const spy = mock(() => {}) as any
     const orig = process.stderr.write
     process.stderr.write = spy
     try {

@@ -393,7 +393,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       } else if (r.type === "engagements") {
         route.navigate({ type: "engagements" })
       } else if (r.type === "engagement") {
-        route.navigate({ type: "engagement", engagementId: r.engagementId, tab: (r as any).tab })
+        route.navigate({ type: "engagement-detail", engagementId: r.engagementId, tab: (r as any).tab })
       } else if (r.type === "workspace") {
         route.navigate({ type: "workspace" })
       }
@@ -1128,10 +1128,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             <Match when={route.data.type === "findings"}>
               <FindingsViewer />
             </Match>
-            <Match when={route.data.type === "finding"}>
+            <Match when={route.data.type === "finding-detail"}>
               <FindingDetail findingId={(route.data as any).findingId} />
             </Match>
-            <Match when={route.data.type === "engagement"}>
+            <Match when={route.data.type === "engagement-detail"}>
               <EngagementDetail
                 engagementId={(route.data as any).engagementId}
                 initialTab={(route.data as any).tab}

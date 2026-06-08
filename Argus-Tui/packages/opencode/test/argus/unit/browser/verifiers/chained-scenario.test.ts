@@ -37,11 +37,11 @@ const failingScenario = {
 const errorScenario = {
   name: "error",
   description: "Throws error",
-  setup: mock(() => { throw new Error("Setup error") }),
-  execute: mock(() => { throw new Error("Execute error") }),
-  verify: mock(() => { throw new Error("Verify error") }),
-  collectEvidence: mock(() => { throw new Error("Collect error") }),
-  cleanup: mock(() => { throw new Error("Cleanup error") }),
+  setup: mock(() => { throw new Error("Setup error") }) as any,
+  execute: mock(() => { throw new Error("Execute error") }) as any,
+  verify: mock(() => { throw new Error("Verify error") }) as any,
+  collectEvidence: mock(() => { throw new Error("Collect error") }) as any,
+  cleanup: mock(() => { throw new Error("Cleanup error") }) as any,
 }
 
 describe("ChainedScenario", () => {

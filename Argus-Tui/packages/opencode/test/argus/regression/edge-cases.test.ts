@@ -311,7 +311,7 @@ describe("VerificationRunner edge cases", () => {
       async setup() { throw new Error("Setup failed") },
       async execute() {},
       async verify(): Promise<VerifierResult> { return { passed: true, confidence: 5, evidence: [], summary: "ok" } },
-      async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], createdAt: "" } },
+      async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], artifacts: [], packageHash: "", createdAt: "" } as any },
     }
     const result = await runner.run(scenario)
     expect(result.passed).toBe(false)
@@ -325,7 +325,7 @@ describe("VerificationRunner edge cases", () => {
       async setup() {},
       async execute() { throw new Error("Execute failed") },
       async verify(): Promise<VerifierResult> { return { passed: true, confidence: 5, evidence: [], summary: "ok" } },
-      async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], createdAt: "" } },
+      async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], artifacts: [], packageHash: "", createdAt: "" } as any },
     }
     const result = await runner.run(scenario)
     expect(result.passed).toBe(false)
@@ -338,7 +338,7 @@ describe("VerificationRunner edge cases", () => {
       async setup() {},
       async execute() {},
       async verify(): Promise<VerifierResult> { return { passed: true, confidence: 3, evidence: [], summary: "passed" } },
-      async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], createdAt: "" } },
+      async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], artifacts: [], packageHash: "", createdAt: "" } as any },
     }
     const result = await runner.run(scenario)
     expect(result.passed).toBe(true)

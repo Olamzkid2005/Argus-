@@ -138,7 +138,7 @@ export function EvidenceViewer(props: EvidenceViewerProps) {
           <For each={pagedArtifacts()}>
             {(artifact) => (
               <box flexDirection="column" paddingTop={1}>
-                <box flexDirection="row" gap={1} onClick={() => toggleExpand(artifact)}>
+                <box flexDirection="row" gap={1} {...({ onClick: () => toggleExpand(artifact) } as any)}>
                   <text fg={theme.primary}>{expanded().has(artifact.id) ? "▼" : "▶"}</text>
                   <text>{artifactTypeIcon(artifact.type)}</text>
                   <text fg={theme.textMuted}>{artifact.type}</text>
@@ -160,7 +160,7 @@ export function EvidenceViewer(props: EvidenceViewerProps) {
                             <Show when={contents()[artifact.id].length > 2000}>
                               <text fg={theme.textMuted}>[First 2000 of {contents()[artifact.id].length} chars]</text>
                             </Show>
-                            <text fg={theme.text} wrap="wrap">{contents()[artifact.id].slice(0, 2000)}</text>
+                            <text fg={theme.text}>{contents()[artifact.id].slice(0, 2000)}</text>
                           </box>
                         </Show>
                       </Show>
@@ -177,11 +177,11 @@ export function EvidenceViewer(props: EvidenceViewerProps) {
           <Show when={totalPages() > 1}>
             <box flexDirection="row" gap={1} paddingTop={1}>
               <Show when={page() > 1}>
-                <text fg={theme.primary} onClick={() => setPage((p) => Math.max(1, p - 1))}>◀ Prev</text>
+                <box {...({ onClick: () => setPage((p) => Math.max(1, p - 1)) } as any)}><text fg={theme.primary}>◀ Prev</text></box>
               </Show>
               <text fg={theme.textMuted}>Page {page()}/{totalPages()}</text>
               <Show when={page() < totalPages()}>
-                <text fg={theme.primary} onClick={() => setPage((p) => Math.min(totalPages(), p + 1))}>Next ▶</text>
+                <box {...({ onClick: () => setPage((p) => Math.min(totalPages(), p + 1)) } as any)}><text fg={theme.primary}>Next ▶</text></box>
               </Show>
             </box>
           </Show>

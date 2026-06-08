@@ -60,7 +60,7 @@ function launchTui() {
 
   child.on("error", (err) => {
     // #region debug log
-    fetch('http://127.0.0.1:50797/ingest/argus-debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'argus-debug',location:'index.ts:launchTui',message:'spawn error',data:{error:err.message,entry,code:err.code},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:50797/ingest/argus-debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'argus-debug',location:'index.ts:launchTui',message:'spawn error',data:{error:err.message,entry,code:(err as any).code},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     console.error("Failed to launch TUI:", err.message)
     process.exit(1)
