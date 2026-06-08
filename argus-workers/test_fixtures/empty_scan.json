@@ -1,0 +1,11 @@
+{
+  "finding_type": "NO_FINDINGS",
+  "severity": "INFO",
+  "confidence": 1.0,
+  "endpoint": "https://secure-example.com",
+  "title": "Clean scan — no vulnerabilities detected",
+  "description": "Scan completed without finding any vulnerabilities on the target.",
+  "evidence": {},
+  "source_tool": "nuclei",
+  "remediation": "Continue monitoring and conducting regular security assessments."
+}

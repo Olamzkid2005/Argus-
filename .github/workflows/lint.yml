@@ -310,6 +310,9 @@ jobs:
       - name: Check generated tools match YAML definitions
         run: python3 scripts/generate_tool_defs.py --check
 
+      - name: Validate tool definition alignment (Python vs TUI)
+        run: python3 scripts/validate_tool_alignment.py --check
+
   yaml-lint:
     name: YAML validation
     runs-on: ubuntu-latest

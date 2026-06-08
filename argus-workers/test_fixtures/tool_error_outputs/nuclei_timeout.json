@@ -1,0 +1,6 @@
+{
+  "tool": "nuclei",
+  "exit_code": -1,
+  "stderr": "Error: execution timed out after 300 seconds. Consider increasing timeout with -timeout flag.",
+  "stdout": ""
+}

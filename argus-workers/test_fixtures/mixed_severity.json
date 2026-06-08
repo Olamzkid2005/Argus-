@@ -1,0 +1,47 @@
+[
+  {
+    "finding_type": "SQL_INJECTION",
+    "severity": "CRITICAL",
+    "confidence": 0.98,
+    "endpoint": "https://example.com/api/login",
+    "title": "Blind SQL Injection in login",
+    "source_tool": "sqlmap",
+    "cwe": "CWE-89"
+  },
+  {
+    "finding_type": "RCE",
+    "severity": "CRITICAL",
+    "confidence": 0.92,
+    "endpoint": "https://example.com/upload",
+    "title": "Remote code execution via file upload",
+    "source_tool": "nuclei",
+    "cwe": "CWE-78"
+  },
+  {
+    "finding_type": "XSS",
+    "severity": "HIGH",
+    "confidence": 0.88,
+    "endpoint": "https://example.com/search",
+    "title": "Stored XSS in search history",
+    "source_tool": "dalfox",
+    "cwe": "CWE-79"
+  },
+  {
+    "finding_type": "INSECURE_COOKIE",
+    "severity": "MEDIUM",
+    "confidence": 0.95,
+    "endpoint": "https://example.com/session",
+    "title": "Session cookie missing Secure flag",
+    "source_tool": "web_scanner",
+    "cwe": "CWE-614"
+  },
+  {
+    "finding_type": "INFO_LEAK",
+    "severity": "LOW",
+    "confidence": 0.75,
+    "endpoint": "https://example.com/robots.txt",
+    "title": "Disallowed admin paths exposed in robots.txt",
+    "source_tool": "httpx",
+    "cwe": "CWE-200"
+  }
+]

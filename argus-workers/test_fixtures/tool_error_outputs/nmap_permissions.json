@@ -1,0 +1,6 @@
+{
+  "tool": "nmap",
+  "exit_code": 1,
+  "stderr": "You don't have root privileges. Nmap SYN scan requires root. Use sudo or try a different scan type (-sT).",
+  "stdout": ""
+}
