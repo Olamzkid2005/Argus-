@@ -98,13 +98,14 @@ export function EvidenceViewer(props: EvidenceViewerProps) {
 
     setArtifacts((prev) => prev.map((a) => a.id === artifact.id ? { ...a, loading: true } : a))
     try {
-      const { readFileSync, existsSync } = await import("fs")
+      const { realpathSync, readFileSync, existsSync } = await import("fs")
       const { homedir } = await import("os")
       const { join, resolve } = await import("path")
-      const baseDir = join(homedir(), ".argus", "artifacts")
-      const resolvedPath = resolve(baseDir, artifact.path)
-      // Path traversal protection
-      if (!resolvedPath.startsWith(baseDir + "/") && resolvedPath !== baseDir) {
+      const rawBaseDir = join(homedir(), ".argus", "artifacts")
+      const baseDir = existsSync(rawBaseDir) ? realpathSync(rawBaseDir) : rawBaseDir
+      const joinedPath = resolve(baseDir, artifact.path)
+      const resolvedPath = existsSync(joinedPath) ? realpathSync(joinedPath) : joinedPath
+      if (!resolvedPath.startsWith(baseDir + "/")) {
         setContents((prev) => ({ ...prev, [artifact.id]: "[Security: Invalid artifact path]" }))
       } else if (existsSync(resolvedPath)) {
         const content = readFileSync(resolvedPath, "utf-8")
