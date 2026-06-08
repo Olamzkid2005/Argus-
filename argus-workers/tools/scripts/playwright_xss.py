@@ -14,7 +14,10 @@ def _check_auth_success(page, target: str) -> bool:
     return "/login" not in current.lower()
 
 
-def check_stored_xss(target: str, credentials: dict, form_path: str, payload: str) -> list[dict]:
+def check_stored_xss(target: str, credentials: dict, form_path: str, payload: str,
+                      username_selector: str = "input[name=username]",
+                      password_selector: str = "input[name=password]",
+                      submit_selector: str = "button[type=submit]") -> list[dict]:
     findings = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -23,9 +26,9 @@ def check_stored_xss(target: str, credentials: dict, form_path: str, payload: st
         page = context.new_page()
         page.goto(f"{target}/login")
         page.wait_for_load_state("networkidle")
-        page.fill("input[name=username]", credentials["username"])
-        page.fill("input[name=password]", credentials["password"])
-        page.click("button[type=submit]")
+        page.fill(username_selector, credentials["username"])
+        page.fill(password_selector, credentials["password"])
+        page.click(submit_selector)
         page.wait_for_load_state("networkidle")
 
         if not _check_auth_success(page, target):
@@ -64,6 +67,12 @@ if __name__ == "__main__":
                         help="Path to JSON file with login credentials")
     parser.add_argument("--form-page", default="/feedback")
     parser.add_argument("--payload", default=XSS_PAYLOAD)
+    parser.add_argument("--username-selector", default="input[name=username]",
+                        help="CSS selector for username field")
+    parser.add_argument("--password-selector", default="input[name=password]",
+                        help="CSS selector for password field")
+    parser.add_argument("--submit-selector", default="button[type=submit]",
+                        help="CSS selector for submit button")
     args = parser.parse_args()
 
     with open(args.creds_file) as f:
@@ -74,6 +83,9 @@ if __name__ == "__main__":
         creds,
         args.form_page,
         args.payload,
+        args.username_selector,
+        args.password_selector,
+        args.submit_selector,
     )
     for f in findings:
         print(json.dumps(f))

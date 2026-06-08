@@ -13,7 +13,10 @@ def _check_auth_success(page, target: str) -> bool:
 
 
 def check_bola(target: str, attacker: dict, victim: dict,
-               resource_pattern: str = "/api/users/{username}/details") -> list[dict]:
+               resource_pattern: str = "/api/users/{username}/details",
+               username_selector: str = "input[name=username]",
+               password_selector: str = "input[name=password]",
+               submit_selector: str = "button[type=submit]") -> list[dict]:
     findings = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -22,9 +25,9 @@ def check_bola(target: str, attacker: dict, victim: dict,
         page = context.new_page()
         page.goto(f"{target}/login")
         page.wait_for_load_state("networkidle")
-        page.fill("input[name=username]", attacker["username"])
-        page.fill("input[name=password]", attacker["password"])
-        page.click("button[type=submit]")
+        page.fill(username_selector, attacker["username"])
+        page.fill(password_selector, attacker["password"])
+        page.click(submit_selector)
         page.wait_for_load_state("networkidle")
 
         if not _check_auth_success(page, target):
@@ -58,6 +61,12 @@ if __name__ == "__main__":
                         help="Path to JSON file with attacker/victim credentials")
     parser.add_argument("--resource-pattern", default="/api/users/{username}/details",
                         help="URL pattern for victim resource (use {username} placeholder)")
+    parser.add_argument("--username-selector", default="input[name=username]",
+                        help="CSS selector for username field")
+    parser.add_argument("--password-selector", default="input[name=password]",
+                        help="CSS selector for password field")
+    parser.add_argument("--submit-selector", default="button[type=submit]",
+                        help="CSS selector for submit button")
     args = parser.parse_args()
 
     with open(args.creds_file) as f:
@@ -68,6 +77,9 @@ if __name__ == "__main__":
         creds["attacker"],
         creds["victim"],
         args.resource_pattern,
+        args.username_selector,
+        args.password_selector,
+        args.submit_selector,
     )
     for f in findings:
         print(json.dumps(f))

@@ -24,6 +24,24 @@ parameters:
     type: string
     required: false
     description: Comma-separated admin endpoints to probe
+  - name: username-selector
+    flag: --username-selector
+    type: string
+    required: false
+    default: "input[name=username]"
+    description: CSS selector for username input field
+  - name: password-selector
+    flag: --password-selector
+    type: string
+    required: false
+    default: "input[name=password]"
+    description: CSS selector for password input field
+  - name: submit-selector
+    flag: --submit-selector
+    type: string
+    required: false
+    default: "button[type=submit]"
+    description: CSS selector for submit button
 capabilities:
   - browser_verification
 signal_quality: CONFIRMED
