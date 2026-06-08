@@ -31,16 +31,6 @@ async function runBunEval(code: string): Promise<{ stdout: string; stderr: strin
   return { stdout, stderr, exitCode }
 }
 
-async function runBunEval(code: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const proc = Bun.spawn(["bun", "-e", code], {
-    cwd: path.resolve(import.meta.dirname, "../.."),
-    env: { ...process.env, ARGUS_MODE: "0" },
-  })
-  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
-  const exitCode = await proc.exited
-  return { stdout, stderr, exitCode }
-}
-
 describe("CLI entry point", () => {
   it("--help exits 0 and prints output", async () => {
     const { exitCode, stdout, stderr } = await runArgus(["--help"])
