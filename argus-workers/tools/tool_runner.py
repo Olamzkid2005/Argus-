@@ -18,12 +18,15 @@ from pathlib import Path
 
 from cache import cache
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
+from error_classifier import ErrorCode
+from streaming import emit_error_hint
 from tool_core.result import ToolStatus, UnifiedToolResult
 from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
 )
 from tracing import ExecutionSpan, StructuredLogger
+from utils.error_hints import build_error_hint
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -496,6 +499,19 @@ class ToolRunner:
                     return_code=-1,
                 )
 
+                # Generate and emit error hint (must never crash the tool)
+                try:
+                    hint = build_error_hint(
+                        TimeoutError(f"Tool {tool} timed out after {timeout}s"),
+                        error_code=ErrorCode.TOOL_TIMED_OUT,
+                        tool_name=tool,
+                        task_name=f"tool_runner.run.{tool}",
+                    )
+                    if hint and self.engagement_id:
+                        emit_error_hint(self.engagement_id, hint)
+                except Exception:
+                    logger.warning("Failed to generate error hint for timeout", exc_info=True)
+
                 return UnifiedToolResult(
                     tool_name=tool,
                     command=[tool_path] + args,
@@ -527,6 +543,20 @@ class ToolRunner:
                     success=False,
                     return_code=-1,
                 )
+
+                # Generate and emit error hint (must never crash the tool)
+                try:
+                    hint = build_error_hint(
+                        e,
+                        error_code=None,
+                        tool_name=tool,
+                        stderr=str(e),
+                        task_name=f"tool_runner.run.{tool}",
+                    )
+                    if hint and self.engagement_id:
+                        emit_error_hint(self.engagement_id, hint)
+                except Exception:
+                    logger.warning("Failed to generate error hint for exception", exc_info=True)
 
                 return UnifiedToolResult(
                     tool_name=tool,

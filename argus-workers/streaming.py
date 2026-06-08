@@ -24,6 +24,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+from utils.error_hints import ErrorHint
+
 logger = logging.getLogger(__name__)
 
 # ── Transactional event stream support ──
@@ -104,6 +106,7 @@ class EventType:
     STATE_CHANGE = "state_change"
     PROGRESS = "progress"
     ERROR = "error"
+    ERROR_HINT = "error_hint"
     COMPLETE = "complete"
     REPORT_CHUNK = "report_chunk"
     REPORT_COMPLETE = "report_complete"
@@ -461,6 +464,26 @@ def emit_error(engagement_id: str, error: str, phase: str = ""):
         type=EventType.ERROR,
         engagement_id=engagement_id,
         data={"error": error, "phase": phase},
+    ))
+
+
+def emit_error_hint(
+    engagement_id: str,
+    hint: ErrorHint,
+) -> None:
+    """Emit a user-facing error hint to the UI.
+
+    ERROR_HINT is a separate event type from ERROR — they are independently
+    consumable by consumers (e.g., TUI can render hints differently from errors).
+
+    Args:
+        engagement_id: Engagement UUID.
+        hint: ErrorHint object with summary, detail, remediation, etc.
+    """
+    get_stream_manager().publish(Event(
+        type=EventType.ERROR_HINT,
+        engagement_id=engagement_id,
+        data=hint.to_dict(),
     ))
 
 
