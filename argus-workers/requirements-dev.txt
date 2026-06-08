@@ -1,0 +1,17 @@
+# Argus Workers - Development/Test Dependencies
+#
+# Install with: pip install -r requirements-dev.txt
+#
+# These are separated from requirements.txt to avoid bloating production
+# images with ~400MB of browser binaries and test-only packages.
+#
+# Pinned for reproducible CI runs. Update versions with care.
+
+pytest>=8.3.4
+pytest-asyncio>=0.25.2
+pytest-timeout>=2.3.1
+pytest-mock>=3.14.0
+pytest-cov>=6.1.1
+
+# Runtime dependencies needed to import and test production code
+PyYAML>=6.0.2

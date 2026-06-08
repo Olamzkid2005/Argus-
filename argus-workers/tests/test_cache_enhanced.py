@@ -179,7 +179,13 @@ class TestWorkerCache:
             assert cache.set("key", "value") is False
             assert cache.delete("key") is False
             assert cache.clear_pattern("*") == 0
-            assert cache.get_stats() == {"status": "unavailable"}
+            stats = cache.get_stats()
+            assert stats["status"] == "unavailable"
+            assert "bypass_count" in stats
+            assert "hit_count" in stats
+            assert "miss_count" in stats
+            assert "refresh_count" in stats
+            assert "hit_rate" in stats
 
 
 class TestCachedDecorator:

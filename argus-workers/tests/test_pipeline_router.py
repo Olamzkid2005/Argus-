@@ -23,7 +23,7 @@ class TestExecuteReconPipeline:
             findings, rctx = execute_recon_pipeline(ctx, "https://example.com", {}, "normal")
             assert len(findings) == 1
             assert rctx == "recon_context"
-            mock_recon.assert_called_with(ctx, "https://example.com", {}, "normal")
+            mock_recon.assert_called_with(ctx, "https://example.com", {}, "normal", cache_mode=None)
 
 
 class TestExecuteScanPipeline:

@@ -271,6 +271,26 @@ jobs:
       - name: Lint with ruff
         run: ruff check . --output-format=github
 
+  python-tests:
+    name: Python Workers (tests)
+    needs: [argus-workers-lint]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r requirements-dev.txt -q
+
+      - name: Run existing test suite (excluding DB/Redis/E2E)
+        run: python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=60
+
   tool-defs-check:
     name: Tool definitions consistency check
     runs-on: ubuntu-latest
