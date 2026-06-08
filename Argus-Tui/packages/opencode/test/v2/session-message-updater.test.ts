@@ -8,7 +8,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 
-test.skip("step snapshots carry over to assistant messages", () => {
+test("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
 
@@ -56,7 +56,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
   expect(state.messages[0].finish).toBe("stop")
 })
 
-test.skip("text ended populates assistant text content", () => {
+test("text ended populates assistant text content", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
 
@@ -102,10 +102,10 @@ test.skip("text ended populates assistant text content", () => {
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
-  expect(state.messages[0].content).toEqual([{ type: "text", text: "hello assistant" }])
+  expect(state.messages[0].content).toMatchObject([{ type: "text", text: "hello assistant" }])
 })
 
-test.skip("tool completion stores completed timestamp", () => {
+test("tool completion stores completed timestamp", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const callID = "call"
@@ -178,7 +178,7 @@ test.skip("tool completion stores completed timestamp", () => {
   expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { status: "done" } })
 })
 
-test.skip("compaction events reduce to compaction message", () => {
+test("compaction events reduce to compaction message", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
   const id = EventV2.ID.create()

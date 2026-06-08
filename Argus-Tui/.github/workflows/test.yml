@@ -8,8 +8,6 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Keep every run on dev so cancelled checks do not pollute the default branch
-  # commit history. PRs and other branches still share a group and cancel stale runs.
   group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
   cancel-in-progress: true
 
@@ -21,8 +19,27 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  lint:
+    name: lint
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./.github/actions/setup-bun
+      - name: Run oxlint
+        run: bun lint
+
+  typecheck:
+    name: typecheck
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./.github/actions/setup-bun
+      - name: Run typecheck
+        run: bun typecheck
+
   unit:
     name: unit (${{ matrix.settings.name }})
+    needs: [typecheck]
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +86,6 @@ jobs:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Run HttpApi exerciser gates
-        if: runner.os == 'Linux'
         working-directory: packages/opencode
         run: bun run test:httpapi
 
@@ -92,6 +108,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
           path: packages/*/.artifacts/unit/junit.xml
+
+  coverage:
+    name: coverage
+    needs: [typecheck]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./.github/actions/setup-bun
+      - name: Run tests with coverage
+        working-directory: packages/opencode
+        run: mkdir -p .artifacts/coverage && bun test --timeout 30000 --coverage --reporter=junit --reporter-outfile=.artifacts/coverage/junit.xml 2>&1 | tail -20
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+          path: packages/opencode/.artifacts/coverage/
+
+  bench:
+    name: bench
+    needs: [typecheck]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./.github/actions/setup-bun
+      - name: Run benchmarks
+        working-directory: packages/opencode
+        run: bun run bench:test
+        continue-on-error: true
 
   e2e:
     name: e2e (${{ matrix.settings.name }})

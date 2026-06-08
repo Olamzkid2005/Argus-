@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -196,8 +196,6 @@ describe("Instruction.resolve", () => {
       }),
     ),
   )
-
-  test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
 })
 
 describe("Instruction.system", () => {
@@ -235,6 +233,41 @@ describe("Instruction.system", () => {
         provideInstance(projectTmp),
         provideInstruction({ home: globalTmp, config: globalTmp }, { disableClaudeCodePrompt: true }),
       )
+    }),
+  )
+
+  it.live("fetches remote instructions from config URLs via HttpClient", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({})
+      const projectTmp = yield* tmpdirScoped()
+
+      const mockHttpClient = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response("# Remote Instructions", { status: 200 }))),
+      )
+
+      const remoteConfig = TestConfig.layer({
+        get: () =>
+          Effect.succeed({
+            instructions: ["http://example.com/instructions.md"],
+          }),
+      })
+
+      const mockClientLayer = Layer.succeed(HttpClient.HttpClient, mockHttpClient)
+
+      const testLayer = Instruction.layer.pipe(
+        Layer.provide(remoteConfig),
+        Layer.provide(FSUtil.defaultLayer),
+        Layer.provide(mockClientLayer),
+        Layer.provide(Global.layerWith({ home: globalTmp, config: globalTmp })),
+        Layer.provide(RuntimeFlags.layer({})),
+      )
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rules = yield* svc.system()
+        expect(rules).toHaveLength(1)
+        expect(rules[0]).toBe("Instructions from: http://example.com/instructions.md\n# Remote Instructions")
+      }).pipe(provideInstance(projectTmp), Effect.provide(testLayer))
     }),
   )
 })
