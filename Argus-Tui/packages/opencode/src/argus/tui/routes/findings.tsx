@@ -142,15 +142,12 @@ export function FindingsViewer() {
       const all = store.listEngagements() as Array<{ id: string; target: string }>
       const engId = route.engagementId ?? (all.length > 0 ? all[all.length - 1].id : null)
       if (engId) {
-        const findings = store.getFindings(engId)
+        const [findings, evidenceCounts] = await Promise.all([
+          Promise.resolve(store.getFindings(engId)),
+          Promise.resolve(store.getEvidenceCountsByEngagement(engId)),
+        ])
         const rows: FindingRow[] = []
         for (const f of findings) {
-          // Count evidence packages for each finding
-          const packages = store.getEvidencePackages(f.id)
-          let evidenceCount = 0
-          for (const pkg of packages) {
-            evidenceCount += store.getArtifacts(pkg.id).length
-          }
           rows.push({
             id: f.id ?? "",
             title: f.title,
@@ -164,7 +161,7 @@ export function FindingsViewer() {
             owasp: f.owasp,
             remediation: f.remediation,
             createdAt: f.created_at ?? "",
-            evidenceCount,
+            evidenceCount: evidenceCounts[f.id] ?? 0,
           })
         }
         setAllFindings(rows)

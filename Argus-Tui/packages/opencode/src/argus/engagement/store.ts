@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { eq, desc, sql } from "drizzle-orm"
+import { eq, desc, sql, leftJoin } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync, readFileSync } from "fs"
@@ -408,6 +408,25 @@ export class EngagementStore {
       .where(eq(artifacts.package_id, packageId))
       .all()
     return rows.map((r) => ({ id: r.id, path: r.path, sha256: r.sha256, sizeBytes: r.size_bytes, type: r.type }))
+  }
+
+  getEvidenceCountsByEngagement(engagementId: string): Record<string, number> {
+    const rows = this.db
+      .select({
+        findingId: findingsTable.id,
+        count: sql<number>`count(${artifacts.id})`.as("artifact_count"),
+      })
+      .from(findingsTable)
+      .leftJoin(evidence_packages, eq(evidence_packages.finding_id, findingsTable.id))
+      .leftJoin(artifacts, eq(artifacts.package_id, evidence_packages.id))
+      .where(eq(findingsTable.engagement_id, engagementId))
+      .groupBy(findingsTable.id)
+      .all()
+    const result: Record<string, number> = {}
+    for (const row of rows) {
+      result[row.findingId] = row.count
+    }
+    return result
   }
 
   saveWorkflowSnapshot(id: string, engagementId: string, workflowName: string, workflowVersion: number, workflowYaml: string): void {
