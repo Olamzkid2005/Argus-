@@ -16,7 +16,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cache import cache
+from cache import CacheMode, cache
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
 from streaming import emit_error_hint
@@ -338,7 +338,7 @@ class ToolRunner:
             i += 1
         return sanitized_args, env
 
-    def run(self, tool: str, args: list[str], timeout: int = 180) -> UnifiedToolResult:
+    def run(self, tool: str, args: list[str], timeout: int = 180, cache_mode: CacheMode = CacheMode.NORMAL) -> UnifiedToolResult:
         """
         Execute tool with safety validation
 
@@ -346,6 +346,9 @@ class ToolRunner:
             tool: Tool name/path to execute
             args: List of arguments
             timeout: Timeout in seconds (default: 180)
+            cache_mode: Cache execution mode (default: NORMAL).
+                        NO_CACHE skips both reads and writes.
+                        REFRESH skips reads but still writes results.
 
         Returns:
             UnifiedToolResult with stdout, stderr, exit_code, status
@@ -354,13 +357,20 @@ class ToolRunner:
             SecurityError: If dangerous payload detected
             subprocess.TimeoutExpired: If execution times out
         """
-        # Cache check
+        # Cache check — skip on NO_CACHE and REFRESH modes
         import hashlib
         args_key = str(tuple(args))
         cache_key = f"tool_result:{tool}:{hashlib.md5(args_key.encode(), usedforsecurity=False).hexdigest()}"
-        cached_result = cache.get(cache_key)
-        if cached_result is not None:
-            return UnifiedToolResult.from_legacy_dict(cached_result, tool_name_hint=tool)
+        if cache_mode == CacheMode.NORMAL:
+            cached_result = cache.get(cache_key)
+            if cached_result is not None:
+                return UnifiedToolResult.from_legacy_dict(cached_result, tool_name_hint=tool)
+        else:
+            if cache_mode == CacheMode.NO_CACHE:
+                cache.record_bypass()
+            elif cache_mode == CacheMode.REFRESH:
+                cache.record_refresh()
+            logger.debug("Cache %s for %s (mode=%s)", "skipped" if cache_mode == CacheMode.NO_CACHE else "refreshing", tool, cache_mode.value)
 
         # Safety check
         if self.is_dangerous(tool, args):
@@ -471,8 +481,11 @@ class ToolRunner:
                 )
                 tool_result.mark_finished()
 
-                cache.set(cache_key, tool_result.to_legacy_dict(), ttl=300)
-                slog.info(f"Tool cache set for {tool}")
+                if cache_mode != CacheMode.NO_CACHE:
+                    cache.set(cache_key, tool_result.to_legacy_dict(), ttl=300)
+                    slog.info(f"Tool cache set for {tool}")
+                else:
+                    slog.info(f"Tool cache skipped for {tool} (no_cache mode)")
                 return tool_result
 
             except subprocess.TimeoutExpired:
@@ -685,6 +698,7 @@ class ToolRunner:
         severity: str | None = None,
         tags: str | None = None,
         timeout: int = 600,
+        cache_mode: CacheMode = CacheMode.NORMAL,
     ) -> UnifiedToolResult:
         """
         Execute Nuclei with optional template path and filters
@@ -695,6 +709,7 @@ class ToolRunner:
             severity: Comma-separated severity levels (info,low,medium,high,critical)
             tags: Comma-separated tags to filter templates
             timeout: Execution timeout in seconds
+            cache_mode: Cache execution mode
 
         Returns:
             Tool execution result dictionary
@@ -710,7 +725,7 @@ class ToolRunner:
         if tags:
             args.extend(["-tags", tags])
 
-        return self.run("nuclei", args, timeout=timeout)
+        return self.run("nuclei", args, timeout=timeout, cache_mode=cache_mode)
 
     def run_naabu(
         self,
@@ -718,6 +733,7 @@ class ToolRunner:
         top_ports: str | None = None,
         port_range: str | None = None,
         timeout: int = 300,
+        cache_mode: CacheMode = CacheMode.NORMAL,
     ) -> UnifiedToolResult:
         """
         Execute Naabu port scanner
@@ -727,6 +743,7 @@ class ToolRunner:
             top_ports: Number of top ports to scan (e.g., "1000")
             port_range: Specific port range (e.g., "1-65535")
             timeout: Execution timeout in seconds
+            cache_mode: Cache execution mode
 
         Returns:
             Tool execution result dictionary
@@ -738,13 +755,14 @@ class ToolRunner:
         elif top_ports:
             args.extend(["-top-ports", top_ports])
 
-        return self.run("naabu", args, timeout=timeout)
+        return self.run("naabu", args, timeout=timeout, cache_mode=cache_mode)
 
     def run_gospider(
         self,
         target: str,
         depth: int = 3,
         timeout: int = 300,
+        cache_mode: CacheMode = CacheMode.NORMAL,
     ) -> UnifiedToolResult:
         """
         Execute Gospider for JavaScript file and endpoint discovery
@@ -753,12 +771,13 @@ class ToolRunner:
             target: Target URL
             depth: Crawling depth
             timeout: Execution timeout in seconds
+            cache_mode: Cache execution mode
 
         Returns:
             Tool execution result dictionary
         """
         args = ["-s", target, "-q", "-j", "-d", str(depth)]
-        return self.run("gospider", args, timeout=timeout)
+        return self.run("gospider", args, timeout=timeout, cache_mode=cache_mode)
 
     def run_wpscan(
         self,
@@ -766,6 +785,7 @@ class ToolRunner:
         api_token: str | None = None,
         enumerate_options: list[str] | None = None,
         timeout: int = 600,
+        cache_mode: CacheMode = CacheMode.NORMAL,
     ) -> UnifiedToolResult:
         """
         Execute WPScan for WordPress security scanning
@@ -775,6 +795,7 @@ class ToolRunner:
             api_token: WPScan API token for vulnerability database access
             enumerate_options: List of enumeration options (e.g., ["p", "t", "u"])
             timeout: Execution timeout in seconds
+            cache_mode: Cache execution mode
 
         Returns:
             Tool execution result dictionary
@@ -788,7 +809,7 @@ class ToolRunner:
             for opt in enumerate_options:
                 args.extend(["--enumerate", opt])
 
-        return self.run("wpscan", args, timeout=timeout)
+        return self.run("wpscan", args, timeout=timeout, cache_mode=cache_mode)
 
     def cleanup(self):
         """Clean up sandbox directory"""
@@ -840,7 +861,7 @@ class ToolRunner:
         slog.warn(f"Circuit breaker failure recorded for {tool}")
 
     def run_with_circuit_breaker(
-        self, tool: str, args: list[str], timeout: int = 180
+        self, tool: str, args: list[str], timeout: int = 180, cache_mode: CacheMode = CacheMode.NORMAL
     ) -> UnifiedToolResult:
         """
         Execute tool with circuit breaker protection.
@@ -851,6 +872,7 @@ class ToolRunner:
             tool: Tool name/path to execute
             args: List of arguments
             timeout: Timeout in seconds
+            cache_mode: Cache execution mode
 
         Returns:
             Dictionary with stdout, stderr, returncode, tool
@@ -869,7 +891,7 @@ class ToolRunner:
             )
 
         try:
-            result = self.run(tool, args, timeout)
+            result = self.run(tool, args, timeout, cache_mode=cache_mode)
             breaker.record_success()
             return result
         except SecurityError:

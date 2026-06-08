@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 def execute_recon_pipeline(
-    ctx, target: str, budget: dict, aggressiveness: str | None = None
+    ctx, target: str, budget: dict, aggressiveness: str | None = None,
+    cache_mode: str | None = None,
 ) -> tuple[list, object]:
     """
     Execute reconnaissance tools.
@@ -20,6 +21,7 @@ def execute_recon_pipeline(
         target: Target URL
         budget: Budget config
         aggressiveness: Scan aggressiveness
+        cache_mode: Cache execution mode ("normal", "no_cache", "refresh")
 
     Returns:
         (findings list, ReconContext)
@@ -31,7 +33,7 @@ def execute_recon_pipeline(
     slog = ScanLogger("pipeline_router")
     slog.info(f"execute_recon_pipeline: target={target}, aggressiveness={aggressiveness}")
     from orchestrator_pkg.recon import execute_recon_tools
-    return execute_recon_tools(ctx, target, budget, aggressiveness)
+    return execute_recon_tools(ctx, target, budget, aggressiveness, cache_mode=cache_mode)
 
 
 def execute_scan_pipeline(
@@ -40,6 +42,7 @@ def execute_scan_pipeline(
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
     recon_context=None,
+    cache_mode: str | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools.
@@ -53,6 +56,7 @@ def execute_scan_pipeline(
         dual_auth_config: Optional second user auth configuration for BOLA testing
         tech_stack: Detected technology stack (triggers browser scanner for SPAs)
         skip_tools: Set of tool names to skip
+        cache_mode: Cache execution mode ("normal", "no_cache", "refresh")
 
     Returns:
         List of findings
@@ -61,4 +65,4 @@ def execute_scan_pipeline(
     slog = ScanLogger("pipeline_router")
     slog.info(f"execute_scan_pipeline: {len(targets)} target(s), aggressiveness={aggressiveness}, skip_tools={skip_tools}")
     from orchestrator_pkg.scan import execute_scan_tools
-    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, dual_auth_config, tech_stack, skip_tools, recon_context=recon_context)
+    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, dual_auth_config, tech_stack, skip_tools, recon_context=recon_context, cache_mode=cache_mode)

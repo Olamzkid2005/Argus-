@@ -12,6 +12,12 @@ import { ToolConfig } from "../config/tool-config"
 import { ToolHealthMonitor } from "../bridge/tool-health"
 import type { ToolHealthRecord } from "../bridge/tool-health"
 
+export type CacheMode = "normal" | "no_cache" | "refresh"
+
+export interface ExecutionOptions {
+  cacheMode?: CacheMode
+}
+
 /**
  * Map a tool's signal_quality tier to a baseline confidence level.
  * This gives the ConfidenceEngine a smarter starting point than always INFORMATIONAL.

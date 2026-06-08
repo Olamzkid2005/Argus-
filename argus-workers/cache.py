@@ -9,7 +9,9 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from collections.abc import Callable
+from enum import Enum
 from functools import wraps
 from typing import Any
 
@@ -56,6 +58,35 @@ def _get_redis():
         return None
 
 
+class CacheMode(Enum):
+    """Cache execution modes for controlling read/write behavior.
+
+    Enforced at the execution layer (tool_runner), not inside cache.py itself.
+    cache.py remains a dumb storage layer.
+    """
+    NORMAL = "normal"       # Read cache, write cache (standard behavior)
+    NO_CACHE = "no_cache"   # Skip reads AND writes (truly fresh scan)
+    REFRESH = "refresh"     # Skip reads, still write (refresh stale data)
+
+
+class CachePolicy:
+    """Named TTL constants for per-data-type cache expiry.
+
+    These are used as ttl values when calling WorkerCache.set(key, value, ttl=<policy>).
+    The existing WorkerCache.set() API already supports per-call TTL overrides —
+    this class just provides named constants for consistency.
+
+    Sentinel values:
+        -1 — No expiry (use Redis SET instead of SETEX).
+             TTL values <= 0 are treated as sentinel and stored without expiry.
+    """
+    TOOL_QUERY = 300              # 5 min — tool results (quick-changing)
+    TOOL_DETAIL = 86400 * 7       # 7 days — tool definitions/metadata (stable)
+    ADVISORY_QUERY = 1800         # 30 min — advisory lookups (cve-lite-cli compat)
+    ADVISORY_DETAIL = -1          # No expiry — advisory records are immutable
+    ENGAGEMENT_STATE = 300        # 5 min — engagement state (existing default)
+
+
 class WorkerCache:
     """Enhanced cache using Redis with query result caching and invalidation"""
 
@@ -69,6 +100,12 @@ class WorkerCache:
 
     def __init__(self, ttl: int = 300):
         self.ttl = ttl
+        # Cache observability counters (thread-safe)
+        self._lock = threading.Lock()
+        self._hit_count = 0
+        self._miss_count = 0
+        self._bypass_count = 0
+        self._refresh_count = 0
 
     def _sanitize_key_component(self, component: str) -> str:
         """Sanitize a key component to prevent Redis key injection.
@@ -92,7 +129,7 @@ class WorkerCache:
         return f"{self.KEY_PREFIX}{self._sanitize_key_component(k)}"
 
     def get(self, key: str) -> Any | None:
-        """Get value from cache"""
+        """Get value from cache. Tracks hit/miss counters."""
         client = _get_redis()
         if not client:
             return None
@@ -100,21 +137,44 @@ class WorkerCache:
         try:
             value = client.get(self._key(key))
             if value:
+                with self._lock:
+                    self._hit_count += 1
                 return json.loads(value)
         except Exception as e:
             logger.error(f"Cache get error: {e}")
 
+        with self._lock:
+            self._miss_count += 1
         return None
 
     def set(self, key: str, value: Any, ttl: int | None = None) -> bool:
-        """Set value in cache"""
+        """Set value in cache.
+
+        Supports TTL sentinel: ttl <= 0 means no expiry (uses Redis SET
+        instead of SETEX). For ADVISORY_DETAIL and other immutable data
+        that should never expire.
+
+        Args:
+            key: Cache key.
+            value: Value to cache (serialized to JSON).
+            ttl: TTL in seconds. If None, uses instance default.
+                 If <= 0, stores without expiry (Redis SET, no TTL).
+
+        Returns:
+            True if cached successfully.
+        """
         client = _get_redis()
         if not client:
             return False
 
         try:
-            ttl = ttl or self.ttl
-            client.setex(self._key(key), ttl, json.dumps(value))
+            ttl = ttl if ttl is not None else self.ttl
+            serialized = json.dumps(value)
+            if ttl <= 0:
+                # No-expiry sentinel — use SET instead of SETEX
+                client.set(self._key(key), serialized)
+            else:
+                client.setex(self._key(key), ttl, serialized)
             return True
         except Exception as e:
             logger.error(f"Cache set error: {e}")
@@ -227,11 +287,37 @@ class WorkerCache:
         hash_value = hashlib.sha256(key_data.encode()).hexdigest()[:16]
         return f"query:{hash_value}"
 
+    def record_bypass(self) -> None:
+        """Increment NO_CACHE mode bypass counter."""
+        with self._lock:
+            self._bypass_count += 1
+
+    def record_refresh(self) -> None:
+        """Increment REFRESH mode refresh counter."""
+        with self._lock:
+            self._refresh_count += 1
+
+    def get_metrics(self) -> dict:
+        """Get cache access metrics (hit/miss/bypass/refresh).
+
+        Returns in-memory counters, not cluster-level Redis stats.
+        """
+        with self._lock:
+            total = self._hit_count + self._miss_count
+            return {
+                "hit_count": self._hit_count,
+                "miss_count": self._miss_count,
+                "bypass_count": self._bypass_count,
+                "refresh_count": self._refresh_count,
+                "hit_rate": round(self._hit_count / total, 4) if total > 0 else 0.0,
+            }
+
     def get_stats(self) -> dict:
-        """Get cache statistics"""
+        """Get cache statistics (Redis keyspace + local metrics)."""
+        metrics = self.get_metrics()
         client = _get_redis()
         if not client:
-            return {"status": "unavailable"}
+            return {"status": "unavailable", **metrics}
 
         try:
             info = client.info("keyspace")
@@ -240,10 +326,11 @@ class WorkerCache:
                 "status": "available",
                 "keys": db_info.get("keys", 0),
                 "expires": db_info.get("expires", 0),
+                **metrics,
             }
         except Exception as e:
             logger.error(f"Cache stats error: {e}")
-            return {"status": "error", "error": str(e)}
+            return {"status": "error", "error": str(e), **metrics}
 
 
 # Global cache instance
