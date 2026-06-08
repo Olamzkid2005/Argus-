@@ -19,6 +19,24 @@ env:
   BUN_INSTALL_FLAGS: --frozen-lockfile --ignore-scripts
 
 jobs:
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run smoke tests
+        working-directory: Argus-Tui/packages/opencode
+        run: bun test --timeout 30000 test/argus/smoke.test.ts
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
