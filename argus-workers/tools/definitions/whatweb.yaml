@@ -3,6 +3,7 @@ command: whatweb
 description: "WhatWeb technology detection and fingerprinting"
 args:
   - "--color=never"
+  - "--log-json=/dev/stdout"
 parameters:
   - name: target
     type: string

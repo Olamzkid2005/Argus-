@@ -193,7 +193,7 @@ def generate(output_path: str, tools_dir: str) -> str:
         lines.append(_build_tool_registration(data))
 
     content = "\n".join(lines) + "\n"
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
     return content
 

@@ -1092,7 +1092,7 @@ _register(ToolDefinition(
     name="whatweb",
     description="WhatWeb technology detection and fingerprinting",
     phases=["recon"],
-    default_args=["--color=never"],
+    default_args=["--color=never", "--log-json=/dev/stdout"],
     parameters=[
     ToolParameter(name="target", description="Target URL to fingerprint", required=True),
 ],
