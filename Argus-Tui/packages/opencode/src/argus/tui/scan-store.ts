@@ -9,7 +9,7 @@
  */
 
 import { createStore } from "solid-js/store"
-import type { ProgressEvent } from "../shared/progress"
+import type { ErrorHintData, ProgressEvent } from "../shared/progress"
 
 export interface ScanPhase {
   id: string
@@ -33,6 +33,7 @@ export interface ScanState {
   durationMs: number
   analysisCurrent: number
   analysisTotal: number
+  errorHints: ErrorHintData[]
 }
 
 const initialState: ScanState = {
@@ -47,6 +48,7 @@ const initialState: ScanState = {
   durationMs: 0,
   analysisCurrent: 0,
   analysisTotal: 0,
+  errorHints: [] as ErrorHintData[],
 }
 
 // Module-level store — shared across all components
@@ -94,6 +96,14 @@ export function setTotalFindings(count: number) {
   setScanState("totalFindings", count)
 }
 
+export function addErrorHint(hint: ErrorHintData) {
+  setScanState("errorHints", (prev) => [...prev, hint])
+}
+
+export function clearErrorHints() {
+  setScanState("errorHints", [])
+}
+
 export function resetScan() {
   setScanState({ ...initialState })
 }
@@ -133,6 +143,18 @@ export function handleProgressEvent(event: ProgressEvent) {
     case "scan_complete":
       setScanState("status", "completed")
       setScanState("durationMs", Date.now() - scanState.startTime)
+      break
+    case "error_hint":
+      addErrorHint({
+        tool: event.tool,
+        summary: event.summary,
+        detail: event.detail,
+        remediation: event.remediation,
+        hintCommand: event.hintCommand,
+        docsUrl: event.docsUrl,
+        errorId: event.errorId,
+      })
+      appendLog(`[!] ${event.summary}`)
       break
   }
 }

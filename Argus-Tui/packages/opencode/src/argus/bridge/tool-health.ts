@@ -6,6 +6,8 @@
  * If a tool is circuit-broken, the LLM is informed about alternatives.
  */
 
+import type { ErrorHintData } from "../shared/progress"
+
 export interface ToolHealthRecord {
   toolName: string
   lastSuccess: number
@@ -48,12 +50,19 @@ export class ToolHealthMonitor {
     }
   }
 
-  recordFailure(tool: string, error: string): void {
+  /** Callback invoked when a failure includes an error hint. */
+  onErrorHint?: (hint: ErrorHintData) => void
+
+  recordFailure(tool: string, error: string, hint?: ErrorHintData): void {
     const r = this.getOrCreate(tool)
     r.lastFailure = Date.now()
     r.consecutiveFailures++
     r.totalCalls++
     r.totalFailures++
+
+    if (hint) {
+      this.onErrorHint?.(hint)
+    }
 
     if (r.consecutiveFailures >= this.config.maxConsecutiveFailures && !r.circuitOpen) {
       r.circuitOpen = true

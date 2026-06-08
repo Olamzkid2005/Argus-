@@ -1,3 +1,13 @@
+export interface ErrorHintData {
+  tool: string
+  errorId?: string
+  summary: string
+  detail: string
+  remediation?: string
+  hintCommand?: string
+  docsUrl?: string
+}
+
 export type ProgressEvent =
   | { type: "phase_start"; phaseId: string; name: string; total: number }
   | { type: "phase_complete"; phaseId: string; name: string; findings: number; status: string }
@@ -7,5 +17,6 @@ export type ProgressEvent =
   | { type: "finding"; phaseId: string; severity: string; title: string }
   | { type: "analysis_progress"; current: number; total: number }
   | { type: "scan_complete"; totalFindings: number }
+  | { type: "error_hint"; tool: string; summary: string; detail: string; remediation?: string; hintCommand?: string; docsUrl?: string; errorId?: string }
 
 export type ProgressCallback = (event: ProgressEvent) => void
