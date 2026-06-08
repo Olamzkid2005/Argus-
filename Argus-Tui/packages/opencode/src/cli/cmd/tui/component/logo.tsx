@@ -34,25 +34,25 @@ type ShimmerConfig = {
 }
 
 const shimmerConfig: ShimmerConfig = {
-  period: 4600,
+  period: 3800,
   rings: 2,
   sweepFraction: 1,
   coreWidth: 1.2,
-  coreAmp: 1.9,
-  softWidth: 10,
-  softAmp: 1.6,
-  tail: 5,
-  tailAmp: 0.64,
-  haloWidth: 4.3,
-  haloOffset: 0.6,
-  haloAmp: 0.16,
-  breathBase: 0.04,
-  noise: 0.1,
-  ambientAmp: 0.36,
+  coreAmp: 2.4,
+  softWidth: 8,
+  softAmp: 1.8,
+  tail: 4,
+  tailAmp: 0.72,
+  haloWidth: 3.8,
+  haloOffset: 0.5,
+  haloAmp: 0.2,
+  breathBase: 0.06,
+  noise: 0.12,
+  ambientAmp: 0.42,
   ambientCenter: 0.5,
-  ambientWidth: 0.34,
-  shadowMix: 0.1,
-  primaryMix: 0.3,
+  ambientWidth: 0.30,
+  shadowMix: 0.15,
+  primaryMix: 0.4,
   originX: 4.5,
   originY: 13.5,
 }
@@ -551,6 +551,10 @@ function buildIdleState(t: number, ctx: LogoContext): IdleState {
   return { cfg, reach, rings, active }
 }
 
+const STAGGER_MS = 30
+const REVEAL_DURATION = 600
+const REVEAL_HOLD = 800
+
 export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = {}) {
   const ctx = props.shape ? build(props.shape) : DEFAULT
   const { theme } = useTheme()
@@ -560,6 +564,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   const [release, setRelease] = createSignal<Release>()
   const [glow, setGlow] = createSignal<Glow>()
   const [now, setNow] = createSignal(0)
+  const [startTime, setStartTime] = createSignal(0)
   let box: BoxRenderable | undefined
   let timer: ReturnType<typeof setInterval> | undefined
 
@@ -602,9 +607,10 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   })
 
   onMount(() => {
-    if (!props.idle) return
-    setNow(performance.now())
-    start()
+    const ts = performance.now()
+    setNow(ts)
+    setStartTime(ts)
+    if (props.idle) start()
   })
 
   const hit = (x: number, y: number) => {
@@ -677,6 +683,8 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   const idleState = createMemo(() => (props.idle ? buildIdleState(frame().t, ctx) : undefined))
   const useSubpixelBlocks = () => renderer.capabilities?.rgb === true
 
+  let revealCharIndex = 0
+
   const renderLine = (
     line: string,
     y: number,
@@ -686,11 +694,16 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     frame: Frame,
     dusk: Frame,
     state: IdleState | undefined,
+    startTs: number,
   ): JSX.Element[] => {
     const shadow = tint(theme.background, ink, 0.25)
     const attrs = bold ? TextAttributes.BOLD : undefined
+    const startupPhase = startTs > 0 && frame.t - startTs < REVEAL_HOLD
 
     return Array.from(line).map((char, i) => {
+      const charIndex = revealCharIndex++
+      const revealElapsed = frame.t - startTs - charIndex * STAGGER_MS
+      const reveal = startupPhase ? Math.min(1, Math.max(0, revealElapsed / REVEAL_DURATION)) : 1
       if (char === " ") {
         return (
           <text fg={ink} attributes={attrs} selectable={false}>
@@ -704,10 +717,10 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
       // Sub-pixel sampling: cells are 2 pixels tall. Sample at top (y*2) and bottom (y*2+1) pixel rows.
       const pulseTop = state ? idle(off + i, y * 2, frame, ctx, state) : { glow: 0, peak: 0, primary: 0 }
       const pulseBot = state ? idle(off + i, y * 2 + 1, frame, ctx, state) : { glow: 0, peak: 0, primary: 0 }
-      const peakMixTop = charLit ? Math.min(1, pulseTop.peak) : 0
-      const peakMixBot = charLit ? Math.min(1, pulseBot.peak) : 0
-      const primaryMixTop = charLit ? Math.min(1, pulseTop.primary) : 0
-      const primaryMixBot = charLit ? Math.min(1, pulseBot.primary) : 0
+      const peakMixTop = charLit ? Math.min(1, pulseTop.peak) * reveal : 0
+      const peakMixBot = charLit ? Math.min(1, pulseBot.peak) * reveal : 0
+      const primaryMixTop = charLit ? Math.min(1, pulseTop.primary) * reveal : 0
+      const primaryMixBot = charLit ? Math.min(1, pulseBot.primary) * reveal : 0
       // Layer primary tint first, then white peak on top — so the halo/tail pulls toward primary,
       // while the bright core stays pure white
       const inkTopTint = primaryMixTop > 0 ? tint(ink, theme.primary, primaryMixTop) : ink
@@ -720,8 +733,8 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
         peak: (pulseTop.peak + pulseBot.peak) / 2,
         primary: (pulseTop.primary + pulseBot.primary) / 2,
       }
-      const peakMix = charLit ? Math.min(1, pulse.peak) : 0
-      const primaryMix = charLit ? Math.min(1, pulse.primary) : 0
+      const peakMix = charLit ? Math.min(1, pulse.peak) * reveal : 0
+      const primaryMix = charLit ? Math.min(1, pulse.primary) * reveal : 0
       const inkPrimary = primaryMix > 0 ? tint(ink, theme.primary, primaryMix) : ink
       const inkTinted = peakMix > 0 ? tint(inkPrimary, PEAK, peakMix) : inkPrimary
       const shadowMixCfg = state?.cfg.shadowMix ?? shimmerConfig.shadowMix
@@ -731,7 +744,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
       const shadowBot = shadowMixBot > 0 ? tint(shadow, PEAK, shadowMixBot) : shadow
       const shadowMix = Math.min(1, pulse.peak * shadowMixCfg)
       const shadowTinted = shadowMix > 0 ? tint(shadow, PEAK, shadowMix) : shadow
-      const n = wave(off + i, y, frame, charLit, ctx) + h
+      const n = (wave(off + i, y, frame, charLit, ctx) + h) * reveal
       const s = wave(off + i, y, dusk, false, ctx) + h
       const p = charLit ? pick(off + i, y, frame, ctx) : 0
       const e = charLit ? trace(off + i, y, frame, ctx) : 0
@@ -853,11 +866,12 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
         zIndex={1}
         onMouse={mouse}
       />
+      {revealCharIndex = 0}
       <For each={ctx.shape.left}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
             <box flexDirection="row">
-              {renderLine(line, index(), props.ink ?? theme.textMuted, !!props.ink, 0, frame(), dusk(), idleState())}
+              {renderLine(line, index(), props.ink ?? theme.textMuted, !!props.ink, 0, frame(), dusk(), idleState(), startTime())}
             </box>
             <box flexDirection="row">
               {renderLine(
@@ -869,6 +883,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
                 frame(),
                 dusk(),
                 idleState(),
+                startTime(),
               )}
             </box>
           </box>

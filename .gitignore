@@ -37,6 +37,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Reference designs
+Kimi_Agent_Argus Security Splash/
+
 # IDE
 .idea/
 .vscode/
