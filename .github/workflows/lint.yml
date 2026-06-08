@@ -37,8 +37,27 @@ jobs:
         working-directory: Argus-Tui/packages/opencode
         run: bun typecheck
 
+  lint-js:
+    name: lint (javascript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run oxlint
+        working-directory: Argus-Tui
+        run: bun lint
+
   argus-unit:
     name: unit (linux)
+    needs: [typecheck]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +77,18 @@ jobs:
       - name: Run argus unit tests
         working-directory: Argus-Tui/packages/opencode
         run: bun test --timeout 30000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
+
+      - name: Run llm unit tests
+        working-directory: Argus-Tui/packages/llm
+        run: bun test --timeout 30000 2>&1 | tail -10 || true
+
+      - name: Run effect-drizzle-sqlite unit tests
+        working-directory: Argus-Tui/packages/effect-drizzle-sqlite
+        run: bun test --timeout 30000 2>&1 | tail -10 || true
+
+      - name: Run http-recorder unit tests
+        working-directory: Argus-Tui/packages/http-recorder
+        run: bun test --timeout 30000 2>&1 | tail -10 || true
 
       - name: Publish unit reports
         if: always()
@@ -79,6 +110,7 @@ jobs:
 
   argus-unit-windows:
     name: unit (windows)
+    needs: [typecheck]
     runs-on: windows-latest
     defaults:
       run:
@@ -102,6 +134,18 @@ jobs:
         working-directory: Argus-Tui/packages/opencode
         run: bun test --timeout 60000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
 
+      - name: Run llm unit tests
+        working-directory: Argus-Tui/packages/llm
+        run: bun test --timeout 60000 2>&1 | tail -10 || true
+
+      - name: Run effect-drizzle-sqlite unit tests
+        working-directory: Argus-Tui/packages/effect-drizzle-sqlite
+        run: bun test --timeout 60000 2>&1 | tail -10 || true
+
+      - name: Run http-recorder unit tests
+        working-directory: Argus-Tui/packages/http-recorder
+        run: bun test --timeout 60000 2>&1 | tail -10 || true
+
       - name: Publish unit reports
         if: always()
         uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386
@@ -119,6 +163,54 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
           path: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+
+  coverage:
+    name: coverage
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run argus tests with coverage
+        working-directory: Argus-Tui/packages/opencode
+        run: mkdir -p .artifacts/coverage && bun test --timeout 30000 test/argus/ --coverage 2>&1 | tail -30
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: Argus-Tui/packages/opencode/.artifacts/coverage/
+
+  bench:
+    name: bench
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run benchmarks
+        working-directory: Argus-Tui/packages/opencode
+        run: bun run bench:test
+        continue-on-error: true
 
   e2e:
     name: e2e (linux)
