@@ -1,4 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test"
+import { EOL } from "os"
 
 const { Style, println, print, empty, error, logo, markdown, dashboard } = await import("../../../src/argus/ui")
 
@@ -37,7 +38,7 @@ describe("print/println/empty/error", () => {
 
   it("println() writes to stderr with newline", () => {
     println("hello", "world")
-    expect(writes).toEqual(["hello world", "\n"])
+    expect(writes).toEqual(["hello world", EOL])
   })
 
   it("print() writes to stderr without newline", () => {
@@ -50,14 +51,14 @@ describe("print/println/empty/error", () => {
     empty()
     expect(writes).toHaveLength(2)
     expect(writes[0]).toBe("\x1b[0m")
-    expect(writes[1]).toBe("\n")
+    expect(writes[1]).toBe(EOL)
   })
 
   it("error() strips \"Error: \" prefix and writes with danger style", () => {
     error("Error: something broke")
     expect(writes).toHaveLength(2)
     expect(writes[0]).toBe("\x1b[91m\x1b[1mError: \x1b[0msomething broke")
-    expect(writes[1]).toBe("\n")
+    expect(writes[1]).toBe(EOL)
   })
 
   it("error() does not strip non-prefixed messages", () => {
