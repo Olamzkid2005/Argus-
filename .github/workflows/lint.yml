@@ -5,6 +5,8 @@ on:
     branches: [dev, Argus-cli]
   pull_request:
     branches: [dev]
+  schedule:
+    - cron: '0 6 * * *'   # Nightly at 06:00 UTC — full fixture matrix
   workflow_dispatch:
 
 concurrency:
@@ -312,6 +314,64 @@ jobs:
 
       - name: Validate tool definition alignment (Python vs TUI)
         run: python3 scripts/validate_tool_alignment.py --check
+
+  fixture-smoke:
+    name: Python Workers (fixture smoke)
+    needs: [python-tests]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements-dev.txt flask -q
+
+      - name: Run fixture smoke tests (excluding those requiring the full argus CLI)
+        run: |
+          python -m pytest tests/test_fixture_e2e_smoke.py \
+            -m smoke -v --timeout=120 --log-cli-level=INFO
+
+  fixture-full:
+    name: Python Workers (fixture full matrix)
+    # No `needs:` dependency on python-tests — nightly runs should detect
+    # regressions independently. If unit tests fail, we still want to know
+    # whether fixture tests pass or fail.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements-dev.txt flask -q
+
+      - name: Run full fixture matrix
+        run: |
+          python -m pytest tests/test_fixture_comprehensive.py \
+            tests/test_fixture_pipeline.py \
+            tests/test_fixture_e2e_smoke.py \
+            -m "full or smoke" -v --timeout=120 --log-cli-level=INFO
+
+      - name: Upload fixture test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-full-report-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: argus-workers/reports/
 
   yaml-lint:
     name: YAML validation

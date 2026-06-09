@@ -1,0 +1,19 @@
+{
+  "finding_type": "RCE",
+  "severity": "CRITICAL",
+  "confidence": 0.96,
+  "endpoint": "https://example.com/cgi-bin/status",
+  "title": "Remote Code Execution via Shellshock in CGI endpoint",
+  "description": "Remote code execution vulnerability detected in the /cgi-bin/status endpoint. A Shellshock-style payload in the User-Agent header caused the server to execute the 'id' command and return its output in the HTTP response headers ('X-Exec-Result: uid=33(www-data) gid=33(www-data)').",
+  "evidence": {
+    "payload": "User-Agent: () { :;}; /bin/bash -c 'id'",
+    "vulnerability_class": "Shellshock",
+    "response_header_evidence": "X-Exec-Result: uid=33(www-data) gid=33(www-data)",
+    "command_executed": "id",
+    "response_status": 200,
+    "affected_script": "/cgi-bin/status"
+  },
+  "source_tool": "nuclei",
+  "cwe": "CWE-78",
+  "remediation": "Upgrade Bash to a patched version (4.3+), disable unnecessary CGI scripts, and implement strict input validation on all HTTP headers passed to CGI processes."
+}
