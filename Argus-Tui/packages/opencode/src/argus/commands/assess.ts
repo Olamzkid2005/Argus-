@@ -6,6 +6,7 @@ import type { NormalizedFinding } from "../shared/types"
 import type { PhaseRecord } from "../engagement/types"
 import type { ProgressEvent } from "../shared/progress"
 import { WorkersBridge } from "../bridge/mcp-client"
+import type { CacheMode } from "../bridge/types"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { ConfidenceEngine } from "../engagement/confidence"
@@ -19,6 +20,7 @@ export async function assessCommand(target: string, options?: {
   toolsPath?: string
   useLLM?: boolean
   credsPath?: string
+  cacheMode?: CacheMode
   features?: Partial<Record<Feature, boolean>>
   onProgress?: (event: ProgressEvent | string) => void
 }): Promise<void> {
@@ -70,6 +72,11 @@ export async function assessCommand(target: string, options?: {
     store.appendAuditLog(engagement.id, "CREDS_LOADED", `Loaded credentials for roles: ${credStore.listRoles().join(", ")}`)
   }
   credStore.clear()
+
+  // Apply cache mode to executor
+  if (options?.cacheMode) {
+    executor.setExecutionOptions({ cacheMode: options.cacheMode })
+  }
 
   const plan = await planner.plan(target, undefined, { useLLM: options?.useLLM })
   executor.loadGates(plan.workflow)

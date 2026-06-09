@@ -21,6 +21,7 @@ import type { NormalizedFinding } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
 import type { ProgressEvent } from "./shared/progress"
 import { handleProgressEvent } from "./tui/scan-store"
+import type { CacheMode } from "./bridge/types"
 
 export interface WorkflowRunOptions {
   target: string
@@ -28,6 +29,13 @@ export interface WorkflowRunOptions {
   workersPath?: string
   workflowsDir?: string
   credsPath?: string
+  /**
+   * Cache execution mode.
+   * - "normal": read cache, write cache (default)
+   * - "no_cache": skip cache reads AND writes
+   * - "refresh": skip cache reads, still write results
+   */
+  cacheMode?: CacheMode
   /**
    * Called with status updates during assessment execution.
    * Accepts both structured ProgressEvent objects and plain strings
@@ -188,6 +196,9 @@ export class WorkflowRunner {
     const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
     const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
     executor.loadGates(plan.workflow)
+    if (options.cacheMode) {
+      executor.setExecutionOptions({ cacheMode: options.cacheMode })
+    }
 
     // ── 6. Execute phases ──
     const allFindings: NormalizedFinding[] = []

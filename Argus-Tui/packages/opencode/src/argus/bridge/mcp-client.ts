@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from "child_process"
 import { createInterface } from "readline"
 import { accessSync, constants } from "fs"
-import type { ToolDefinition, ToolResult, MCPError, DriftReport } from "./types"
+import type { ToolDefinition, ToolResult, MCPError, DriftReport, CacheMode } from "./types"
 import { LLMUnavailableError } from "./types"
 import { WorkerSupervisor } from "./supervisor"
 
@@ -280,7 +280,7 @@ export class WorkersBridge {
     }
   }
 
-  async callTool(name: string, args: unknown, timeoutMs?: number): Promise<ToolResult> {
+  async callTool(name: string, args: unknown, timeoutMs?: number, cacheMode?: CacheMode): Promise<ToolResult> {
     // Circuit breaker check
     const now = Date.now()
     if (this.circuitOpenUntil > now) {
@@ -289,7 +289,7 @@ export class WorkersBridge {
     }
 
     try {
-      const raw = await this.sendRequest("call_tool", { name, arguments: args }, timeoutMs ?? 600000) // default 10min for security tools
+      const raw = await this.sendRequest("call_tool", { name, arguments: args, cache_mode: cacheMode }, timeoutMs ?? 600000) // default 10min for security tools
       // Success — reset circuit breaker
       if (this.circuitFailures > 0) {
         this.circuitFailures = 0

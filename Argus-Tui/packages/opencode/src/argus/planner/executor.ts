@@ -1,7 +1,7 @@
 import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding, ErrorRecovery } from "./types"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { WorkersBridge } from "../bridge/mcp-client"
-import type { SignalQuality } from "../bridge/types"
+import type { SignalQuality, CacheMode } from "../bridge/types"
 import { Confidence } from "../shared/types"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
@@ -11,8 +11,6 @@ import { Feature, type FeatureFlags } from "../config/feature-flags"
 import { ToolConfig } from "../config/tool-config"
 import { ToolHealthMonitor } from "../bridge/tool-health"
 import type { ToolHealthRecord } from "../bridge/tool-health"
-
-export type CacheMode = "normal" | "no_cache" | "refresh"
 
 export interface ExecutionOptions {
   cacheMode?: CacheMode
@@ -37,7 +35,7 @@ function baselineConfidence(signalQuality: SignalQuality | undefined): number {
 }
 
 export interface PhaseExecutor {
-  execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult>
+  execute(phase: PhaseExecutionRequest, options?: ExecutionOptions): Promise<PhaseExecutionResult>
 }
 
 const RECOVERY_LABELS: Record<ErrorRecovery, string> = {
@@ -54,6 +52,8 @@ export class InProcessExecutor implements PhaseExecutor {
   private phaseCount = 0
   private toolHealth: ToolHealthMonitor
 
+  private executionOptions: ExecutionOptions = {}
+
   constructor(
     private toolRegistry: ToolRegistry,
     private bridge: WorkersBridge,
@@ -62,6 +62,10 @@ export class InProcessExecutor implements PhaseExecutor {
   ) {
     this.approvalService = new ApprovalService()
     this.toolHealth = new ToolHealthMonitor()
+  }
+
+  setExecutionOptions(options: ExecutionOptions): void {
+    this.executionOptions = options
   }
 
   getToolHealth(): ToolHealthRecord[] {
@@ -94,9 +98,10 @@ export class InProcessExecutor implements PhaseExecutor {
     this.gatesLoaded = true
   }
 
-  async execute(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
+  async execute(phase: PhaseExecutionRequest, options?: ExecutionOptions): Promise<PhaseExecutionResult> {
+    const execOptions = { ...this.executionOptions, ...options }
     if (phase.execution === "llm_driven") {
-      return this.executeHybrid(phase)
+      return this.executeHybrid(phase, execOptions)
     }
 
     if (!this.gatesLoaded) {
@@ -174,7 +179,7 @@ export class InProcessExecutor implements PhaseExecutor {
               target: phase.target,
               capability: cap,
               config: phase.config,
-            })
+            }, undefined, execOptions.cacheMode)
 
             if (result.success && result.data) {
               const data = result.data
@@ -271,7 +276,8 @@ export class InProcessExecutor implements PhaseExecutor {
     }
   }
 
-  async executeHybrid(phase: PhaseExecutionRequest): Promise<PhaseExecutionResult> {
+  async executeHybrid(phase: PhaseExecutionRequest, options?: ExecutionOptions): Promise<PhaseExecutionResult> {
+    const execOptions = { ...this.executionOptions, ...options }
     const startTime = Date.now()
     const findings: NormalizedFinding[] = []
     const errors: string[] = []
@@ -325,7 +331,7 @@ export class InProcessExecutor implements PhaseExecutor {
           target: phase.target,
           capability: cap,
           config: phase.config,
-        })
+        }, undefined, execOptions.cacheMode)
         const durationMs = Date.now() - toolStartTime
 
         if (result.success) {

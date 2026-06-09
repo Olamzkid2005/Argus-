@@ -47,9 +47,18 @@ const commands: ArgusTuiCommand[] = [
     description: "Run a full autonomous security assessment against a target URL",
     slashes: ["assess", "scan"],
     needsTarget: true,
-    handler: async (target: string) => {
-      await assessCommand(target, { useLLM: true })
-      return `Assessment completed against ${target}`
+    handler: async (args: string) => {
+      // Parse flags from the argument string
+      // e.g., /assess https://target.com --no-cache
+      const parts = args.trim().split(/\s+/)
+      const target = parts.find(p => !p.startsWith("--")) ?? parts[0]
+      const noCache = parts.includes("--no-cache")
+      const refreshCache = parts.includes("--refresh-cache")
+      await assessCommand(target, {
+        useLLM: true,
+        cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
+      })
+      return `Assessment completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
     },
   },
   {
@@ -79,9 +88,16 @@ const commands: ArgusTuiCommand[] = [
     description: "Run reconnaissance workflow against a target",
     slashes: ["recon"],
     needsTarget: true,
-    handler: async (target: string) => {
-      await assessCommand(target, { useLLM: false })
-      return `Recon completed against ${target}`
+    handler: async (args: string) => {
+      const parts = args.trim().split(/\s+/)
+      const target = parts.find(p => !p.startsWith("--")) ?? parts[0]
+      const noCache = parts.includes("--no-cache")
+      const refreshCache = parts.includes("--refresh-cache")
+      await assessCommand(target, {
+        useLLM: false,
+        cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
+      })
+      return `Recon completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
     },
   },
   {

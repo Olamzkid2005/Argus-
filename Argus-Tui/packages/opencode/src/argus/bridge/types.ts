@@ -55,3 +55,5 @@ export interface DriftReport {
 }
 
 export type LLMStatus = "AVAILABLE" | "DEGRADED" | "UNAVAILABLE"
+
+export type CacheMode = "normal" | "no_cache" | "refresh"

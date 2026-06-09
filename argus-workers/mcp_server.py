@@ -301,7 +301,7 @@ class MCPServer:
                     f"Argument at position {i} contains shell metacharacters: {arg!r}"
                 )
 
-    def call_tool(self, name: str, arguments: dict = None, timeout: int = None) -> dict:
+    def call_tool(self, name: str, arguments: dict = None, timeout: int = None, cache_mode: str | None = None) -> dict:
         """
         Execute a tool by name with arguments (mcp.tools/call equivalent).
 
@@ -309,6 +309,11 @@ class MCPServer:
             name: Tool name
             arguments: Tool parameters (will be mapped to CLI args based on schema)
             timeout: Execution timeout in seconds
+            cache_mode: Cache execution mode ("normal", "no_cache", "refresh").
+                        Passed through to tool execution when using the pipeline
+                        router path. For direct subprocess calls, cache_mode is
+                        accepted but not enforced (the cache lives in ToolRunner,
+                        which is used by the orchestrator path).
 
         Returns:
             MCP-formatted result dict
@@ -615,7 +620,8 @@ def main():
         name = params.get("name", "")
         arguments = params.get("arguments", {})
         timeout = params.get("timeout")
-        return server.call_tool(name, arguments, timeout)
+        cache_mode = params.get("cache_mode")
+        return server.call_tool(name, arguments, timeout, cache_mode)
 
     transport.register("list_tools", handle_list_tools)
     transport.register("call_tool", handle_call_tool)
