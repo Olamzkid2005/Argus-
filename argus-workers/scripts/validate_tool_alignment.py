@@ -144,15 +144,6 @@ def validate() -> list[str]:
                 f"TUI destructive={ts_risky}"
             )
 
-        # Validate risk level classification consistency
-        py_risky = _is_destructive(py)
-        ts_risky = ts.get("destructive", False)
-        if py_risky != ts_risky:
-            errors.append(
-                f"RISK_MISMATCH [{name}]: Python risk_level={py.get('risk_level', 'unknown')}, "
-                f"TUI destructive={ts_risky}"
-            )
-
     return errors
 
 
