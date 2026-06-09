@@ -15,6 +15,7 @@ parameters:
     required: false
 capabilities:
   - security_analysis
+  - report_generation
 signal_quality: CONFIRMED
 priority: 90
 cost: low

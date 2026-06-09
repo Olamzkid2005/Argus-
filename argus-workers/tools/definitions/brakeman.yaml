@@ -17,6 +17,7 @@ parameters:
     default: "2"
 capabilities:
   - vulnerability_scanning
+  - sast
 signal_quality: PROBABLE
 requires:
   tech_contains:

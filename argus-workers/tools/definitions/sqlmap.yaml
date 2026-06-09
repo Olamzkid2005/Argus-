@@ -30,5 +30,6 @@ requires:
     - parameterized_forms
 priority: 90
 cost: high
+risk_level: high
 enabled: true
 timeout: 600

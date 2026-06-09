@@ -8,6 +8,7 @@ parameters:
     required: true
 capabilities:
   - vulnerability_scanning
+  - s3_scanning
 signal_quality: PROBABLE
 priority: 50
 cost: low

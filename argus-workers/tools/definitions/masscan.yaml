@@ -22,5 +22,6 @@ capabilities:
 signal_quality: CANDIDATE
 priority: 50
 cost: high
+risk_level: high
 enabled: true
 timeout: 600

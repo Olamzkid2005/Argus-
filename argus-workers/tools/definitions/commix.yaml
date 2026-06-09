@@ -17,5 +17,6 @@ requires:
     - has_file_upload
 priority: 70
 cost: medium
+risk_level: high
 enabled: true
 timeout: 300

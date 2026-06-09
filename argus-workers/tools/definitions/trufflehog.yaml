@@ -22,6 +22,7 @@ parameters:
     flag: "--max-depth"
 capabilities:
   - vulnerability_scanning
+  - secret_detection
 signal_quality: PROBABLE
 priority: 70
 cost: medium

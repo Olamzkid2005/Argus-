@@ -376,6 +376,7 @@ tools:
     label: TruffleHog Secret Scanner
     capabilities:
       - secret_detection
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -389,6 +390,7 @@ tools:
     label: GoSec Security Scanner
     capabilities:
       - sast
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -402,6 +404,7 @@ tools:
     label: Brakeman Rails Scanner
     capabilities:
       - sast
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -415,6 +418,7 @@ tools:
     label: ESLint Security Linter
     capabilities:
       - sast
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -428,6 +432,7 @@ tools:
     label: SpotBugs Bytecode Scanner
     capabilities:
       - sast
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -441,6 +446,7 @@ tools:
     label: PHPCS Security Scanner
     capabilities:
       - sast
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -454,6 +460,7 @@ tools:
     label: Govulncheck Dependency Scanner
     capabilities:
       - sca
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -467,6 +474,7 @@ tools:
     label: OWASP Dependency Check
     capabilities:
       - sca
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: false
@@ -480,6 +488,7 @@ tools:
     label: NPM Audit Scanner
     capabilities:
       - sca
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: true
@@ -523,6 +532,7 @@ tools:
     label: Cloud Enumeration Tool
     capabilities:
       - cloud_enum
+      - web_recon
     requires_auth: false
     destructive: false
     supports_api: true
@@ -536,6 +546,7 @@ tools:
     label: S3 Bucket Scanner
     capabilities:
       - s3_scanning
+      - web_recon
     requires_auth: false
     destructive: false
     supports_api: true
@@ -549,6 +560,7 @@ tools:
     label: Bucket Upload Tester
     capabilities:
       - s3_scanning
+      - vulnerability_scanning
     requires_auth: false
     destructive: false
     supports_api: true
@@ -692,6 +704,7 @@ tools:
     label: Browser Security Operator
     capabilities:
       - browser_verification
+      - security_analysis
     requires_auth: true
     destructive: false
     supports_api: false
@@ -708,6 +721,7 @@ tools:
     label: Attack Surface Mapper
     capabilities:
       - web_recon
+      - security_analysis
     requires_auth: false
     destructive: false
     supports_api: true
@@ -740,6 +754,7 @@ tools:
     label: Executive Report Generator
     capabilities:
       - report_generation
+      - security_analysis
     requires_auth: false
     destructive: false
     supports_api: true
@@ -788,6 +803,7 @@ tools:
     label: Secure Code Intelligence Engine
     capabilities:
       - sast
+      - security_analysis
     requires_auth: false
     destructive: false
     supports_api: false
@@ -852,6 +868,7 @@ tools:
     label: Engagement Analytics Engine
     capabilities:
       - report_generation
+      - security_analysis
     requires_auth: false
     destructive: false
     supports_api: true

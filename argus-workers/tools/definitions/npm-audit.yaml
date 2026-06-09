@@ -11,6 +11,7 @@ parameters:
     required: false
 capabilities:
   - vulnerability_scanning
+  - sca
 signal_quality: CANDIDATE
 requires:
   tech_contains:

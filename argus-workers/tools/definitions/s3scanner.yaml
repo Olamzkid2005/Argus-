@@ -10,6 +10,7 @@ parameters:
     required: true
 capabilities:
   - web_recon
+  - s3_scanning
 signal_quality: CANDIDATE
 priority: 35
 cost: low

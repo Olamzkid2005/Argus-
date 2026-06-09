@@ -11,6 +11,7 @@ parameters:
     flag: "-k"
 capabilities:
   - web_recon
+  - cloud_enum
 signal_quality: CANDIDATE
 priority: 30
 cost: low

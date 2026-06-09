@@ -17,6 +17,7 @@ parameters:
     default: ".js,.jsx,.ts,.tsx"
 capabilities:
   - vulnerability_scanning
+  - sast
 signal_quality: PROBABLE
 requires:
   tech_contains:
