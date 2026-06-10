@@ -287,8 +287,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpq-dev
+
       - name: Install test dependencies
-        run: pip install -r requirements-dev.txt -q
+        run: pip install -r requirements.txt -r requirements-dev.txt -q
 
       - name: Run existing test suite (excluding DB/Redis/E2E)
         run: python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=60
