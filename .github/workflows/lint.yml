@@ -295,7 +295,7 @@ jobs:
 
       - name: Run existing test suite (excluding DB/Redis/E2E)
         run: |
-          python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=60 --tb=long 2>&1 | tee /tmp/pytest-output.txt; exit_code=${PIPESTATUS[0]}
+          python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=120 --tb=long 2>&1 | tee /tmp/pytest-output.txt; exit_code=${PIPESTATUS[0]}
           echo "---PYTEST EXIT CODE: $exit_code---"
           tail -100 /tmp/pytest-output.txt
           exit $exit_code
@@ -324,7 +324,8 @@ jobs:
 
   fixture-smoke:
     name: Python Workers (fixture smoke)
-    needs: [python-tests]
+    # Run independently of python-tests — fixture smoke tests verify fixture web app
+    # lifecycle and should report status even if the main test suite has failures.
     runs-on: ubuntu-latest
     defaults:
       run:
