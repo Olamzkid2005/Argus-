@@ -294,7 +294,11 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt -q
 
       - name: Run existing test suite (excluding DB/Redis/E2E)
-        run: python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=60
+        run: |
+          python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=60 --tb=long 2>&1 | tee /tmp/pytest-output.txt; exit_code=${PIPESTATUS[0]}
+          echo "---PYTEST EXIT CODE: $exit_code---"
+          tail -100 /tmp/pytest-output.txt
+          exit $exit_code
 
   tool-defs-check:
     name: Tool definitions consistency check
