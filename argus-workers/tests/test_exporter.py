@@ -9,8 +9,6 @@ Verifies:
 - Error handling for missing files
 """
 
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,10 +16,10 @@ import pytest
 
 from reporting.exporter import (
     ExportResult,
-    save_report,
-    open_in_browser,
-    _generate_filename,
     _ensure_report_dir,
+    _generate_filename,
+    open_in_browser,
+    save_report,
 )
 
 

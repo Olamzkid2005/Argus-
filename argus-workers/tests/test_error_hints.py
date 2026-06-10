@@ -15,7 +15,6 @@ from error_classifier import (
     ErrorCategory,
     ErrorCode,
     ErrorSeverity,
-    classify_error_with_code,
 )
 from utils.error_hints import (
     ErrorHint,

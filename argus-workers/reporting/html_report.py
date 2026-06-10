@@ -9,7 +9,6 @@ Architecture (ADR-007): Pure renderers at library layer; side effects at CLI bou
 """
 
 import datetime
-import json
 from html import escape
 from typing import Any
 
@@ -272,7 +271,6 @@ def _findings_rows(findings: list[dict]) -> str:
     rows = ""
     for i, f in enumerate(findings):
         sev = (f.get("severity") or "INFO").upper()
-        style = _SEVERITY_STYLE.get(sev, _SEVERITY_STYLE["INFO"])
         finding_type = _escape(f.get("finding_type") or f.get("type") or "Unknown")
         endpoint = _escape(f.get("endpoint") or "N/A")
         title = _escape(f.get("title") or finding_type)
@@ -283,18 +281,24 @@ def _findings_rows(findings: list[dict]) -> str:
 
         detail_html = ""
         if description or remediation or cwe:
-            detail_html = (
-                f'<tr id="{detail_id}-row" class="finding-detail" style="display:none">'
-                f'<td colspan="5">'
-                f'<div class="finding-detail open">'
-                f'{"<h4>Description</h4><p>" + description + "</p>" if description else ""}'
-                f'{"<h4>CWE</h4><p>" + cwe + "</p>" if cwe else ""}'
-                f'{"<h4>Remediation</h4><p>" + remediation + "</p>" if remediation else ""}'
-                f'{"<button class=\"copy-btn\" onclick=\"copyFix(\\'" + _escape(remediation) + "\\', this)\">Copy Fix</button>" if remediation else ""}'
-                f"</div>"
-                f"</td>"
-                f"</tr>"
-            )
+            parts = [
+                f'<tr id="{detail_id}-row" class="finding-detail" style="display:none">',
+                '<td colspan="5">',
+                '<div class="finding-detail open">',
+            ]
+            if description:
+                parts.append(f"<h4>Description</h4><p>{description}</p>")
+            if cwe:
+                parts.append(f"<h4>CWE</h4><p>{cwe}</p>")
+            if remediation:
+                parts.append(f"<h4>Remediation</h4><p>{remediation}</p>")
+            if remediation:
+                btn_click = "copyFix(" + chr(34) + _escape(remediation) + chr(34) + ", this)"
+                parts.append(
+                    '<button class="copy-btn" onclick="' + btn_click + '">Copy Fix</button>'
+                )
+            parts.extend(["</div>", "</td>", "</tr>"])
+            detail_html = "".join(parts)
 
         rows += (
             f'<tr>'

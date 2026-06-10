@@ -16,15 +16,13 @@ Architecture (ADR-001):
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from error_classifier import (
     CodeBasedClassification,
     ErrorCategory,
     ErrorCode,
-    ErrorSeverity,
     classify_error_with_code,
-    tag_error,
 )
 
 logger = logging.getLogger(__name__)

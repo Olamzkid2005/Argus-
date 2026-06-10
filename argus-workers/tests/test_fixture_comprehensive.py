@@ -13,7 +13,6 @@ Run alongside the daily test suite:
 
 import json
 from html import escape
-from pathlib import Path
 
 import pytest
 

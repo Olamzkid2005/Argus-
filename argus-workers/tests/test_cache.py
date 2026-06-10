@@ -5,8 +5,6 @@ Tests for cache.py — CacheMode, CachePolicy, TTL sentinel, and metrics.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from cache import CacheMode, CachePolicy, WorkerCache
 
 
@@ -23,7 +21,7 @@ class TestCacheMode:
         assert CacheMode.REFRESH.value == "refresh"
 
     def test_all_modes_distinct(self):
-        modes = set(m.value for m in CacheMode)
+        modes = {m.value for m in CacheMode}
         assert len(modes) == 3
 
 

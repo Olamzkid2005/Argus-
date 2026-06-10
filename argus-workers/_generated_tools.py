@@ -100,7 +100,7 @@ _register(ToolDefinition(
     name="attack_surface_mapper",
     description="attack_surface_mapper - security assessment tool",
     binary="python3",
-    phases=["analyze"],
+    phases=["analyze", "recon"],
     default_args=["argus-workers/tools/run_agent_tool.py", "attack_surface_mapper"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True),
@@ -135,7 +135,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="brakeman",
     description="Ruby on Rails security scanner for static analysis",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["--format", "json"],
     parameters=[
     ToolParameter(name="target", description="Target Rails application path", required=True),
@@ -154,7 +154,7 @@ _register(ToolDefinition(
     name="browser_security_operator",
     description="browser_security_operator - security assessment tool",
     binary="python3",
-    phases=["analyze"],
+    phases=["analyze", "scan", "deep_scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "browser_security_operator"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True),
@@ -202,7 +202,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="cloud_enum",
     description="Cloud asset enumeration tool (AWS, Azure, GCP)",
-    phases=["recon"],
+    phases=["recon", "scan"],
     default_args=["--json"],
     parameters=[
     ToolParameter(name="target", description="Target domain or keyword", required=True, flag="-k"),
@@ -228,7 +228,7 @@ _register(ToolDefinition(
     requires=ToolRequires(recon_signals=["has_file_upload"]),
     priority=70,
     cost="medium",
-    risk_level="low",
+    risk_level="high",
 ))
 
 # ── dalfox (from dalfox.yaml) ──
@@ -254,7 +254,7 @@ _register(ToolDefinition(
     name="dependency_check",
     description="OWASP Dependency-Check for known vulnerability scanning in dependencies",
     binary="dependency-check",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["--format", "JSON"],
     parameters=[
     ToolParameter(name="target", description="Target project directory", required=True, flag="--scan"),
@@ -287,7 +287,7 @@ _register(ToolDefinition(
     name="engagement_analytics_engine",
     description="engagement_analytics_engine - security assessment tool",
     binary="python3",
-    phases=["analyze"],
+    phases=["analyze", "report"],
     default_args=["argus-workers/tools/run_agent_tool.py", "engagement_analytics_engine"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True),
@@ -304,7 +304,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="eslint",
     description="JavaScript/TypeScript linter with security plugins",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["--format", "json"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),
@@ -341,7 +341,7 @@ _register(ToolDefinition(
     name="executive_report_generator",
     description="executive_report_generator - security assessment tool",
     binary="python3",
-    phases=["analyze"],
+    phases=["analyze", "report"],
     default_args=["argus-workers/tools/run_agent_tool.py", "executive_report_generator"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True),
@@ -443,7 +443,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="gosec",
     description="Go security code scanner",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["-fmt=json", "-quiet"],
     parameters=[
     ToolParameter(name="target", description="Target Go package path", required=True),
@@ -477,7 +477,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="govulncheck",
     description="Go vulnerability scanner for dependencies",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["./...", "-json"],
     parameters=[
     ToolParameter(name="target", description="Target Go module path", required=True),
@@ -590,7 +590,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CANDIDATE,
     priority=50,
     cost="high",
-    risk_level="medium",
+    risk_level="high",
 ))
 
 # ── naabu (from naabu.yaml) ──
@@ -649,7 +649,7 @@ _register(ToolDefinition(
     name="npm-audit",
     description="Node.js dependency vulnerability scanner",
     binary="npm",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["audit", "--json"],
     parameters=[
     ToolParameter(name="target", description="Target project directory (must contain package.json)"),
@@ -685,7 +685,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="phpcs",
     description="PHP CodeSniffer with security audit rules",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["--standard=Security", "--extensions=php", "--report=json"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),
@@ -811,7 +811,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="s3scanner",
     description="Amazon S3 bucket discovery and enumeration",
-    phases=["recon"],
+    phases=["recon", "scan"],
     default_args=["--json"],
     parameters=[
     ToolParameter(name="target", description="Bucket name or domain", required=True),
@@ -828,7 +828,7 @@ _register(ToolDefinition(
     name="secure_code_intelligence_engine",
     description="secure_code_intelligence_engine - security assessment tool",
     binary="python3",
-    phases=["analyze"],
+    phases=["analyze", "repo_scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "secure_code_intelligence_engine"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True),
@@ -887,14 +887,14 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CANDIDATE,
     priority=40,
     cost="high",
-    risk_level="medium",
+    risk_level="high",
 ))
 
 # ── spotbugs (from spotbugs.yaml) ──
 _register(ToolDefinition(
     name="spotbugs",
     description="Java/Kotlin bytecode security scanner with find-sec-bugs plugin",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["-textui", "-low", "-effort:max"],
     parameters=[
     ToolParameter(name="target", description="Target path (JAR/WAR/class directory)", required=True),
@@ -923,7 +923,7 @@ _register(ToolDefinition(
     requires=ToolRequires(recon_signals=["parameterized_forms"]),
     priority=90,
     cost="high",
-    risk_level="medium",
+    risk_level="high",
 ))
 
 # ── subfinder (from subfinder.yaml) ──
@@ -998,7 +998,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="trufflehog",
     description="High-entropy secret scanner for git history and filesystems",
-    phases=["scan", "deep_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["git", "--json", "--no-update"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),

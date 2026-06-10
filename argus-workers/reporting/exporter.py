@@ -26,7 +26,6 @@ Usage:
 """
 
 import datetime
-import json
 import logging
 import os
 import subprocess
@@ -188,7 +187,7 @@ def save_report(
     try:
         out_path.write_text(content, encoding="utf-8")
     except OSError as e:
-        raise IOError(f"Failed to write report to {out_path}: {e}") from e
+        raise OSError(f"Failed to write report to {out_path}: {e}") from e
 
     size_bytes = out_path.stat().st_size
     opened = False
