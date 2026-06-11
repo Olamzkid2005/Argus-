@@ -1158,9 +1158,12 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      iife(() => {
+      iife(async () => {
         const firstLine = inputText.split("\n")[0]
         const command = firstLine.split(" ")[0].slice(1)
+        // Skip server command dispatch if this is an Argus TUI command
+        const { findArgusTuiCommand } = await import("@/argus/tui-commands")
+        if (findArgusTuiCommand(command)) return false
         return sync.data.command.some((x) => x.name === command)
       })
     ) {

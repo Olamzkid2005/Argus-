@@ -15,23 +15,10 @@ import { useTheme } from "@tui/context/theme"
 import { logo as argusLogo } from "@/argus/logo"
 
 let once = false
+
 const placeholder = {
-  normal: ["/assess https://example.com", "/recon https://testphp.vulnweb.com", "/doctor — run health checks"],
+  normal: ["/assess https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
   shell: ["argus doctor", "argus status", "argus --help"],
-}
-
-function SectionLabel(props: { children: any }) {
-  const { theme } = useTheme()
-  return (
-    <box flexDirection="row" paddingBottom={1} marginBottom={1}>
-      <text fg={theme.textMuted}>{props.children}</text>
-    </box>
-  )
-}
-
-function Separator() {
-  const { theme } = useTheme()
-  return <text fg={theme.border}>──────────────────────────────────────────────</text>
 }
 
 export function Home() {
@@ -51,8 +38,8 @@ export function Home() {
     return configured ?? 85
   })
 
-  const [engagements, setEngagements] = createSignal<Array<{ id: string; target: string; status: string }>>([])
-  const [stats, setStats] = createSignal<{ targets: number; active: number; critical: number; high: number; medium: number; total: number } | null>(null)
+  const [engagements, setEngagements] = createSignal<Array<{ id: string; target: string; status: string; findings: number }>>([])
+  const [stats, setStats] = createSignal<{ targets: number; active: number; findings: number; critical: number; high: number; medium: number } | null>(null)
   const [services, setServices] = createSignal<Record<string, boolean>>({})
 
   onMount(async () => {
@@ -60,21 +47,25 @@ export function Home() {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       const all = store.listEngagements()
-      setEngagements(all.slice(-5).reverse() as Array<{ id: string; target: string; status: string }>)
+      const recent = all.slice(-5).reverse()
+      const enriched = recent.map((e: any) => {
+        const findings = store.getFindings(e.id)
+        return { id: e.id, target: e.target, status: e.status, findings: findings.length }
+      })
+      setEngagements(enriched as any)
       const totalTargets = new Set(all.map((e: any) => e.target)).size
       const openEngagements = all.filter((e: any) => e.status === "RUNNING" || e.status === "CREATED").length
-      let critical = 0; let high = 0; let medium = 0; let total = 0
+      let critical = 0; let high = 0; let medium = 0; let totalF = 0
       for (const e of all.slice(0, 20)) {
         const findings = store.getFindings(e.id)
-        total += findings.length
+        totalF += findings.length
         for (const f of findings) {
-          const sev = String(f.severity ?? "").toUpperCase()
-          if (sev === "CRITICAL") critical++
-          else if (sev === "HIGH") high++
-          else if (sev === "MEDIUM") medium++
+          if (f.severity >= 4) critical++
+          else if (f.severity === 3) high++
+          else if (f.severity === 2) medium++
         }
       }
-      setStats({ targets: totalTargets, active: openEngagements, critical, high, medium, total })
+      setStats({ targets: totalTargets, active: openEngagements, findings: totalF, critical, high, medium })
     } catch {}
     Promise.resolve().then(async () => {
       try {
@@ -109,139 +100,121 @@ export function Home() {
     sent = true; r.submit()
   })
 
+  const sevColor = (s: number) =>
+    s >= 4 ? theme.error : s === 3 ? theme.warning : s >= 1 ? theme.info : theme.success
+
+  const statusIcon = (s: string) =>
+    s === "COMPLETED" ? "\u2713" : s === "RUNNING" ? "\u27F3" : s === "FAILED" ? "\u2717" : "\u25CB"
+
+  const statusColor = (s: string) =>
+    s === "COMPLETED" ? theme.success : s === "RUNNING" ? theme.primary : s === "FAILED" ? theme.error : theme.textMuted
+
   const sec = (name: string) => services()[name]
 
   return (
     <>
       <box flexGrow={1} flexDirection="column" paddingLeft={2} paddingRight={2}>
-        {/* Splash Banner */}
+        {/* Logo */}
         <box alignItems="center" paddingTop={2}>
           <Logo shape={argusLogo} idle />
         </box>
         <box alignItems="center" paddingTop={1}>
           <text fg={theme.text}>Autonomous Security Assessment Platform</text>
         </box>
-        <box alignItems="center" paddingTop={1}>
-          <text fg={theme.primary}>● Ready for assessment operations</text>
+        <box alignItems="center">
+          <text fg={theme.success}>● Operational</text>
         </box>
 
-        {/* Summary Stats */}
+        <box height={1} />
+
+        {/* Stats bar */}
         <Show when={stats()}>
-          <box flexDirection="row" gap={3} paddingTop={1} paddingBottom={1}>
-            <box flexDirection="column" alignItems="center">
+          <box flexDirection="row" gap={2} paddingTop={1} paddingBottom={1}>
+            <box flexDirection="column" alignItems="center" minWidth={8}>
               <text fg={theme.text}><b>{stats()!.targets.toString()}</b></text>
               <text fg={theme.textMuted}>targets</text>
             </box>
-            <box flexDirection="column" alignItems="center">
+            <text fg={theme.textMuted}>|</text>
+            <box flexDirection="column" alignItems="center" minWidth={8}>
               <text fg={theme.warning}><b>{stats()!.active.toString()}</b></text>
               <text fg={theme.textMuted}>active</text>
             </box>
-            <box flexDirection="column" alignItems="center">
+            <text fg={theme.textMuted}>|</text>
+            <box flexDirection="column" alignItems="center" minWidth={10}>
+              <text fg={theme.error}><b>{stats()!.findings.toString()}</b></text>
+              <text fg={theme.textMuted}>findings</text>
+            </box>
+            <text fg={theme.textMuted}>|</text>
+            <box flexDirection="column" alignItems="center" minWidth={8}>
               <text fg={theme.error}><b>{stats()!.critical.toString()}</b></text>
               <text fg={theme.textMuted}>critical</text>
             </box>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.error}><b>{stats()!.high.toString()}</b></text>
+            <box flexDirection="column" alignItems="center" minWidth={6}>
+              <text fg={sevColor(3)}><b>{stats()!.high.toString()}</b></text>
               <text fg={theme.textMuted}>high</text>
             </box>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.warning}><b>{stats()!.medium.toString()}</b></text>
+            <box flexDirection="column" alignItems="center" minWidth={8}>
+              <text fg={sevColor(2)}><b>{stats()!.medium.toString()}</b></text>
               <text fg={theme.textMuted}>medium</text>
-            </box>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.primary}><b>{stats()!.total.toString()}</b></text>
-              <text fg={theme.textMuted}>total</text>
             </box>
           </box>
         </Show>
 
-        <Separator />
-
-        {/* Two-column: Quick Actions | Recent Engagements */}
-        <box flexDirection="row" maxWidth={promptMaxWidth()} paddingTop={1}>
-          {/* Quick Actions */}
-          <box flexDirection="column" flexGrow={1} paddingRight={1}>
-            <SectionLabel>Quick Actions</SectionLabel>
-            <box flexDirection="column" gap={0}>
-              <text fg={theme.primary}>/assess {'<target>'}    Run full assessment</text>
-              <text fg={theme.primary}>/recon  {'<target>'}    Recon only</text>
-              <text fg={theme.primary}>/report {'<id>'}        Generate report</text>
-              <text fg={theme.info}>/verify {'<finding>'}    Browser verification</text>
-              <text fg={theme.textMuted}>/status              System status</text>
-              <text fg={theme.error}>/doctor              Health diagnostics</text>
-            </box>
-          </box>
-
-          {/* Recent Engagements */}
-          <box flexDirection="column" flexGrow={1} paddingLeft={1}>
-            <SectionLabel>Recent Engagements</SectionLabel>
-            <Show when={engagements().length > 0}
-              fallback={
-                <box flexDirection="column" gap={0}>
-                  <text fg={theme.textMuted}>No engagements found. Run:</text>
-                  <text fg={theme.primary}>/assess https://target.com</text>
-                </box>
-              }
-            >
-              <For each={engagements()}>
-                {(eng) => (
-                  <box flexDirection="row" gap={1}>
-                    <text fg={theme.textMuted}>{eng.target}</text>
-                    <text fg={eng.status === "COMPLETED" ? theme.success : eng.status === "RUNNING" ? theme.primary : theme.textMuted}>
-                      {eng.status.toLowerCase()}
-                    </text>
-                  </box>
-                )}
-              </For>
-            </Show>
-          </box>
+        <text fg={theme.textMuted}>Quick Actions</text>
+        <box flexDirection="row" gap={1} paddingTop={1}>
+          <text fg={theme.primary}>/assess {"<target>"}</text>
+          <text fg={theme.textMuted}>|</text>
+          <text fg={theme.primary}>/recon {"<target>"}</text>
+          <text fg={theme.textMuted}>|</text>
+          <text fg={theme.warning}>/report {"<id>"}</text>
+          <text fg={theme.textMuted}>|</text>
+          <text fg={theme.info}>/verify {"<finding>"}</text>
+          <text fg={theme.textMuted}>|</text>
+          <text fg={theme.textMuted}>/status</text>
+          <text fg={theme.textMuted}>|</text>
+          <text fg={theme.error}>/doctor</text>
         </box>
 
-        {/* System Status */}
-        <box paddingTop={1}>
-          <SectionLabel>System Status</SectionLabel>
-          <box flexDirection="row" gap={2}>
-            <For each={[
-              { label: "Planner", key: "planner" },
-              { label: "Workflow Engine", key: "workflow" },
-              { label: "MCP Bridge", key: "mcp" },
-            ]}>
-              {(svc) => (
-                <box flexDirection="row" gap={1}>
-                  <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
-                  <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
-                </box>
-              )}
-            </For>
-          </box>
-          <box flexDirection="row" gap={2}>
-            <For each={[
-              { label: "Evidence Store", key: "evidence" },
-              { label: "Report Generator", key: "report" },
-              { label: "Browser Verify", key: "verify" },
-            ]}>
-              {(svc) => (
-                <box flexDirection="row" gap={1}>
-                  <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
-                  <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
-                </box>
-              )}
-            </For>
-          </box>
-        </box>
+        <box height={1} />
 
-        {/* Example Prompts */}
-        <box paddingTop={1}>
-          <SectionLabel>Examples</SectionLabel>
-          <box flexDirection="row" gap={2}>
-            <text fg={theme.textMuted}>/assess https://testphp.vulnweb.com</text>
-          </box>
-          <box flexDirection="row" gap={2}>
-            <text fg={theme.textMuted}>/recon https://example.com</text>
-          </box>
-          <box flexDirection="row" gap={2}>
-            <text fg={theme.textMuted}>Find vulnerabilities in https://example.com</text>
-          </box>
+        {/* Recent engagements */}
+        <text fg={theme.textMuted}>Recent Activity</text>
+        <Show when={engagements().length > 0}
+          fallback={<text fg={theme.textMuted}>No engagements yet. Run /assess to get started.</text>}
+        >
+          <For each={engagements()}>
+            {(eng) => (
+              <box flexDirection="row" gap={1} paddingTop={1}>
+                <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
+                <text fg={theme.textMuted}>{eng.id}</text>
+                <text fg={theme.text}>{eng.target}</text>
+                <text fg={statusColor(eng.status)}>{eng.status.toLowerCase()}</text>
+                <text fg={theme.textMuted}>({eng.findings} findings)</text>
+              </box>
+            )}
+          </For>
+        </Show>
+
+        <box height={1} />
+
+        {/* System Health */}
+        <text fg={theme.textMuted}>System Status</text>
+        <box flexDirection="row" gap={2} paddingTop={1}>
+          <For each={[
+            { label: "Planner", key: "planner" },
+            { label: "Workflow", key: "workflow" },
+            { label: "MCP Bridge", key: "mcp" },
+            { label: "Evidence Store", key: "evidence" },
+            { label: "Report Gen", key: "report" },
+            { label: "Browser Verify", key: "verify" },
+          ]}>
+            {(svc) => (
+              <box flexDirection="row" gap={1}>
+                <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
+                <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
+              </box>
+            )}
+          </For>
         </box>
 
         <box paddingTop={2} width="100%" maxWidth={promptMaxWidth()}>
@@ -252,9 +225,9 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
-      {/* Footer with version */}
-      <box width="100%" flexShrink={0} paddingX={2} paddingY={1} justifyContent="space-between" flexDirection="row">
-        <text fg={theme.textMuted}>ARGUS v5</text>
+      <box width="100%" flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} justifyContent="space-between" flexDirection="row">
+        <text fg={theme.primary}>ARGUS v5</text>
+        <text fg={theme.textMuted}>Security Assessment Platform</text>
         <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
       </box>
     </>
