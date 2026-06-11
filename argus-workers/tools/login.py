@@ -23,6 +23,7 @@ class LoginTool(AbstractTool):
         http_session = requests.Session()
         email = getattr(ctx, "_email", None)
         password = getattr(ctx, "_password", None)
+        login_url = getattr(ctx, "_login_url", None)
         result, _auth_ctx = run_login(
             target=ctx.target,
             http_session=http_session,
@@ -30,5 +31,6 @@ class LoginTool(AbstractTool):
             email=email,
             password=password,
             recon_crawled_paths=getattr(ctx, "_recon_paths", None),
+            login_url=login_url,
         )
         return result
