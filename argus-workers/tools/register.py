@@ -26,5 +26,6 @@ class RegisterTool(AbstractTool):
             http_session=http_session,
             auth_context=None,
             recon_crawled_paths=getattr(ctx, "_recon_paths", None),
+            register_url=getattr(ctx, "_register_url", None),
         )
         return result

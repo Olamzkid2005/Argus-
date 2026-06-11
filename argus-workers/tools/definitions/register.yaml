@@ -9,6 +9,7 @@ parameters:
     type: string
     description: "Target URL or scope"
     required: true
+    flag: "--target"
   - name: extra
     type: string
     description: 'JSON-encoded extra parameters (e.g. {"email":"test@example.com","password":"test123"})'
@@ -19,4 +20,4 @@ signal_quality: CONFIRMED
 priority: 95
 cost: low
 enabled: true
-timeout: 120
+timeout: 300
