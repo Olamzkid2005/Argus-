@@ -51,9 +51,7 @@ def _verify_csrf(token: str | None) -> bool:
     (which extracts the CSRF value once and reuses it) continues to
     work across multiple attempts.
     """
-    if token and token in _CSRF_TOKENS:
-        return True
-    return False
+    return bool(token and token in _CSRF_TOKENS)
 
 
 # ── Login ──

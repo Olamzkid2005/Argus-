@@ -149,6 +149,8 @@ describe("WorkflowRunner", () => {
         durationMs: 42,
       })),
       loadGates: mock(() => {}),
+      setFeatureFlags: mock(() => {}),
+      setExecutionOptions: mock(() => {}),
     }
 
     const mockBridge = {
