@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 
 logger = logging.getLogger(__name__)
 
 
 class URLDiscovery:
-    """Discover URLs using multiple sources."""
+    """Discover URLs using multiple sources.
+
+    Falls back to direct subprocess calls when no tool_runner is provided,
+    so the mapper works standalone without orchestrator context.
+    """
 
     def __init__(self, tool_runner=None):
         self._tool_runner = tool_runner
@@ -25,8 +30,40 @@ class URLDiscovery:
             urls.update(self._run_katana(target, timeout))
             urls.update(self._run_gau(target, timeout))
             urls.update(self._run_waybackurls(target, timeout))
+        else:
+            # Standalone fallback — run subprocess directly
+            urls.update(self._run_katana_direct(target, timeout))
 
         return sorted(urls)
+
+    def _run_katana_direct(self, target: str, timeout: int) -> list[str]:
+        """Fallback: run katana via direct subprocess when no tool_runner."""
+        try:
+            result = subprocess.run(
+                ["katana", "-u", target, "-jsonl", "-silent", "-d", "3"],
+                capture_output=True, text=True, timeout=timeout,
+            )
+            if result.returncode != 0:
+                return []
+            urls = []
+            for line in result.stdout.strip().splitlines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    url = data.get("url", "")
+                    if url:
+                        urls.append(url)
+                except json.JSONDecodeError:
+                    if line.startswith("http"):
+                        urls.append(line.strip())
+            return urls
+        except FileNotFoundError:
+            logger.debug("katana not installed, skipping")
+            return []
+        except Exception as e:
+            logger.debug("katana direct failed: %s", e)
+            return []
 
     def _run_katana(self, target: str, timeout: int) -> list[str]:
         if not self._tool_runner:

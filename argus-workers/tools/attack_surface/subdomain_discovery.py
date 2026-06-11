@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,9 @@ class SubdomainDiscovery:
     def discover(self, domain: str, timeout: int = 300) -> list[str]:
         """Discover subdomains using available tools.
 
+        Falls back to direct subprocess calls when no tool_runner is provided,
+        so the mapper works standalone without orchestrator context.
+
         Returns list of unique subdomains.
         """
         subdomains: set[str] = set()
@@ -24,9 +28,38 @@ class SubdomainDiscovery:
         if self._tool_runner:
             subdomains.update(self._run_subfinder(domain, timeout))
             subdomains.update(self._run_amass(domain, timeout))
+        else:
+            # Standalone fallback — run subprocess directly
+            subdomains.update(self._run_subfinder_direct(domain, timeout))
 
         subdomains.add(domain)
         return sorted(subdomains)
+
+    def _run_subfinder_direct(self, domain: str, timeout: int) -> list[str]:
+        """Fallback: run subfinder via direct subprocess when no tool_runner."""
+        try:
+            result = subprocess.run(
+                ["subfinder", "-d", domain, "-silent", "-json"],
+                capture_output=True, text=True, timeout=timeout,
+            )
+            if result.returncode != 0:
+                return []
+            subs = []
+            for line in result.stdout.strip().splitlines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    subs.append(data.get("host", line.strip()))
+                except json.JSONDecodeError:
+                    subs.append(line.strip())
+            return subs
+        except FileNotFoundError:
+            logger.debug("subfinder not installed, skipping")
+            return []
+        except Exception as e:
+            logger.debug("subfinder direct failed: %s", e)
+            return []
 
     def _run_subfinder(self, domain: str, timeout: int) -> list[str]:
         if not self._tool_runner:

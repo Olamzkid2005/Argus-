@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
+import xml.etree.ElementTree as ET
 
 logger = logging.getLogger(__name__)
 
 
 class PortDiscovery:
-    """Discover open ports using available tools."""
+    """Discover open ports using available tools.
+
+    Falls back to direct subprocess calls when no tool_runner is provided,
+    so the mapper works standalone without orchestrator context.
+    """
 
     def __init__(self, tool_runner=None):
         self._tool_runner = tool_runner
@@ -33,8 +39,45 @@ class PortDiscovery:
                     ports[key].update(port)
                 else:
                     ports[key] = port
+        else:
+            # Standalone fallback — run naabu directly
+            for port in self._run_naabu_direct(host, timeout):
+                key = port["port"]
+                if key not in ports:
+                    ports[key] = port
 
         return sorted(ports.values(), key=lambda p: p.get("port", 0))
+
+    def _run_naabu_direct(self, host: str, timeout: int) -> list[dict]:
+        """Fallback: run naabu via direct subprocess when no tool_runner."""
+        try:
+            result = subprocess.run(
+                ["naabu", "-host", host, "-json", "-silent"],
+                capture_output=True, text=True, timeout=timeout,
+            )
+            if result.returncode != 0:
+                return []
+            ports = []
+            for line in result.stdout.strip().splitlines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    ports.append({
+                        "port": int(data.get("port", 0)),
+                        "protocol": "tcp",
+                        "service": data.get("service", ""),
+                        "source": "naabu",
+                    })
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            return ports
+        except FileNotFoundError:
+            logger.debug("naabu not installed, skipping")
+            return []
+        except Exception as e:
+            logger.debug("naabu direct failed: %s", e)
+            return []
 
     def _run_naabu(self, host: str, timeout: int) -> list[dict]:
         if not self._tool_runner:
@@ -76,7 +119,6 @@ class PortDiscovery:
             )
             if not result.status.is_ok:
                 return []
-            import xml.etree.ElementTree as ET
             try:
                 root = ET.fromstring(result.stdout)
                 ports = []
