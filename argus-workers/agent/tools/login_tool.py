@@ -246,13 +246,12 @@ def run_login(
                 continue  # next attempt toggles content type
 
             # 401/403 with invalid/incorrect in body = wrong credentials
-            if resp.status_code in (401, 403):
-                if "invalid" in body_text or "incorrect" in body_text:
-                    if attempt < MAX_RETRIES - 1:
-                        last_error = ERROR_CODES["INVALID_CREDENTIALS"]
-                        _rate_limit_backoff(attempt)
-                        continue
-                    return _fail_result("INVALID_CREDENTIALS", last_error, ctx)
+            if resp.status_code in (401, 403) and ("invalid" in body_text or "incorrect" in body_text):
+                if attempt < MAX_RETRIES - 1:
+                    last_error = ERROR_CODES["INVALID_CREDENTIALS"]
+                    _rate_limit_backoff(attempt)
+                    continue
+                return _fail_result("INVALID_CREDENTIALS", last_error, ctx)
 
             if "rate" in body_text and "limit" in body_text:
                 last_error = ERROR_CODES["RATE_LIMITED"]

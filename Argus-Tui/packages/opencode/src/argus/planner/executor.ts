@@ -2,6 +2,7 @@ import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding, Er
 import type { PipelineStep } from "./pipeline"
 import { ToolRegistry } from "../workflows/tool-registry"
 import type { SignalQuality, CacheMode } from "../bridge/types"
+import type { WorkersBridge } from "../bridge/mcp-client"
 import type { ToolDef } from "../workflows/tool-registry"
 import type { Capability } from "../shared/capabilities"
 
@@ -224,7 +225,7 @@ export class InProcessExecutor implements PhaseExecutor {
     }
 
     // Execute tools: parallel for `parallel` phases, sequential for `sequential` phases
-    if (phase.execution === "parallel") {
+    if (phase.toolExecution === "parallel") {
       // Run tools in batches of MAX_PARALLEL_TOOLS to avoid resource starvation
       for (let i = 0; i < toolConfigs.length; i += MAX_PARALLEL_TOOLS) {
         const batch = toolConfigs.slice(i, i + MAX_PARALLEL_TOOLS)

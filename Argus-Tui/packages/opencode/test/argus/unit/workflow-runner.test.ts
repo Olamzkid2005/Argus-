@@ -21,12 +21,13 @@ describe("formatFindingsSummary", () => {
   test("returns correct critical/high/medium/low counts", async () => {
     const { formatFindingsSummary } =
       await import("../../../src/argus/workflow-runner")
+    const ts = new Date().toISOString()
     const findings = [
-      { title: "XSS", severity: 4, confidence: 3, tool: "scanner", phase: "recon" },
-      { title: "SQLi", severity: 3, confidence: 2, tool: "scanner", phase: "recon" },
-      { title: "Info Leak", severity: 1, confidence: 1, tool: "scanner", phase: "recon" },
-      { title: "Cookie", severity: 2, confidence: 2, tool: "scanner", phase: "recon" },
-      { title: "Low Issue", severity: 0, confidence: 0, tool: "scanner", phase: "recon" },
+      { id: "f1", title: "XSS", severity: 4, confidence: 3, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "xss", created_at: ts, updated_at: ts },
+      { id: "f2", title: "SQLi", severity: 3, confidence: 2, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "sqli", created_at: ts, updated_at: ts },
+      { id: "f3", title: "Info Leak", severity: 1, confidence: 1, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "info", created_at: ts, updated_at: ts },
+      { id: "f4", title: "Cookie", severity: 2, confidence: 2, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "cookie", created_at: ts, updated_at: ts },
+      { id: "f5", title: "Low Issue", severity: 0, confidence: 0, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "low", created_at: ts, updated_at: ts },
     ]
     const result = formatFindingsSummary(findings, "ENG-001", "https://target.test")
 
@@ -39,13 +40,14 @@ describe("formatFindingsSummary", () => {
   test("includes top 5 findings ordered by severity", async () => {
     const { formatFindingsSummary } =
       await import("../../../src/argus/workflow-runner")
+    const ts = new Date().toISOString()
     const findings = [
-      { title: "Critical A", severity: 4, confidence: 3, tool: "t1", phase: "p1" },
-      { title: "High A", severity: 3, confidence: 2, tool: "t2", phase: "p2" },
-      { title: "High B", severity: 3, confidence: 2, tool: "t2", phase: "p2" },
-      { title: "Medium A", severity: 2, confidence: 2, tool: "t3", phase: "p3" },
-      { title: "Medium B", severity: 2, confidence: 1, tool: "t3", phase: "p3" },
-      { title: "Low A", severity: 1, confidence: 1, tool: "t4", phase: "p4" },
+      { id: "f1", title: "Critical A", severity: 4, confidence: 3, tool: "t1", phase: "p1", status: "PENDING" as const, description: "crit", created_at: ts, updated_at: ts },
+      { id: "f2", title: "High A", severity: 3, confidence: 2, tool: "t2", phase: "p2", status: "PENDING" as const, description: "high", created_at: ts, updated_at: ts },
+      { id: "f3", title: "High B", severity: 3, confidence: 2, tool: "t2", phase: "p2", status: "PENDING" as const, description: "high", created_at: ts, updated_at: ts },
+      { id: "f4", title: "Medium A", severity: 2, confidence: 2, tool: "t3", phase: "p3", status: "PENDING" as const, description: "med", created_at: ts, updated_at: ts },
+      { id: "f5", title: "Medium B", severity: 2, confidence: 1, tool: "t3", phase: "p3", status: "PENDING" as const, description: "med", created_at: ts, updated_at: ts },
+      { id: "f6", title: "Low A", severity: 1, confidence: 1, tool: "t4", phase: "p4", status: "PENDING" as const, description: "low", created_at: ts, updated_at: ts },
     ]
     const result = formatFindingsSummary(findings, "ENG-002", "https://target.test")
 

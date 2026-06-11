@@ -51,6 +51,9 @@ export interface PhaseExecutionRequest {
   previousPhaseResults: PhaseExecutionResult[]
   approvalGateName?: string
   execution?: "deterministic" | "llm_driven"
+  /** Whether tools in this phase execute in parallel or sequentially.
+   *  Drawn from the workflow YAML `execution` property. */
+  toolExecution?: "parallel" | "sequential"
 }
 
 export interface PhaseExecutionResult {

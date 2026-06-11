@@ -18,6 +18,15 @@ import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
+
+// Slash commands handled by the Argus TUI directly (not dispatched to server).
+// Must be kept in sync with the `slashes` array in src/argus/tui-commands.ts
+const ARGUS_TUI_COMMANDS = new Set([
+  "assess", "scan", "recon", "doctor", "health",
+  "status", "findings", "engagements", "report",
+  "verify", "evidence", "workspace", "tools",
+  "workflows", "config", "resume", "help", "open",
+])
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
@@ -1158,13 +1167,11 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      iife(async () => {
+      iife(() => {
         const firstLine = inputText.split("\n")[0]
         const command = firstLine.split(" ")[0].slice(1)
         // Skip server command dispatch if this is an Argus TUI command
-        const { findArgusTuiCommand } = await import("@/argus/tui-commands")
-        if (findArgusTuiCommand(command)) return false
-        return sync.data.command.some((x) => x.name === command)
+        return !ARGUS_TUI_COMMANDS.has(command) && sync.data.command.some((x) => x.name === command)
       })
     ) {
       // Parse command from first line, preserve multi-line content in arguments

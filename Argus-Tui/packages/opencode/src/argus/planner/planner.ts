@@ -112,6 +112,7 @@ export class WorkflowPlanner {
         },
         previousPhaseResults: [],
         approvalGateName: def.approval_gate,
+        toolExecution: def.execution,
       })
     }
 

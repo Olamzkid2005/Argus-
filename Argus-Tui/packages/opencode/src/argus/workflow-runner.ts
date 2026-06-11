@@ -29,7 +29,6 @@ export interface WorkflowRunOptions {
   useLLM?: boolean
   workersPath?: string
   workflowsDir?: string
-  credsPath?: string
   /**
    * Cache execution mode.
    * - "normal": read cache, write cache (default)

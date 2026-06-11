@@ -19,6 +19,7 @@ parameters:
     required: false
     flag: "--deep-dom"
 capabilities:
+  - vulnerability_scanning
   - sqli_detection
 signal_quality: PROBABLE
 priority: 75

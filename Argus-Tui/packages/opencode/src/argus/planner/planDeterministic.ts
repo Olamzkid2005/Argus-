@@ -50,6 +50,7 @@ function createPhase(
     requiredCapabilities: capabilities,
     config: {},
     previousPhaseResults: [],
+    toolExecution: execution,
   }
 }
 
