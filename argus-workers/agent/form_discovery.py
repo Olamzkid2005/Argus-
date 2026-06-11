@@ -79,6 +79,10 @@ def discover_auth_endpoints(
     1. Check recon crawl data for auth-related paths.
     2. Fall back to scanning common auth endpoints.
 
+    Detects both HTML-form-based and API-style (JSON) login endpoints.
+    For API endpoints, the ``login_fields`` dict will be empty and
+    ``login_mode`` will be ``"api"``.
+
     Args:
         target: Base URL of the target application.
         session: Requests session for HTTP calls.
@@ -90,12 +94,16 @@ def discover_auth_endpoints(
             login_url (str | None): Discovered login page URL.
             register_fields (dict): Mapping of logical field names to HTML ``name`` attrs.
             login_fields (dict): Mapping of logical field names to HTML ``name`` attrs.
+            login_mode (str): ``"form"`` for HTML forms, ``"api"`` for API-style.
+            login_content_type (str | None): Content-Type of the login page response.
     """
     result: dict[str, Any] = {
         "register_url": None,
         "login_url": None,
         "register_fields": {},
         "login_fields": {},
+        "login_mode": "form",
+        "login_content_type": None,
     }
 
     # Phase 1: Check recon crawl data
@@ -112,7 +120,7 @@ def discover_auth_endpoints(
     # Extract form fields from discovered pages
     if result["register_url"]:
         try:
-            resp = session.get(result["register_url"], timeout=15)
+            resp = session.get(result["register_url"], timeout=5)
             if resp.ok:
                 result["register_fields"] = _extract_form_fields(resp.text, "register")
         except requests.RequestException as exc:
@@ -120,11 +128,17 @@ def discover_auth_endpoints(
 
     if result["login_url"]:
         try:
-            resp = session.get(result["login_url"], timeout=15)
+            resp = session.get(result["login_url"], timeout=5)
             if resp.ok:
                 result["login_fields"] = _extract_form_fields(resp.text, "login")
+                if result["login_fields"]:
+                    result["login_mode"] = "form"
         except requests.RequestException as exc:
             logger.debug("Failed to fetch login page for field extraction: %s", exc)
+
+    # If no HTML fields were extracted but we have a login URL, mark as API mode
+    if result["login_url"] and not result["login_fields"]:
+        result["login_mode"] = "api"
 
     return result
 
@@ -161,17 +175,56 @@ def _scan_common_paths(
     result: dict[str, Any],
     form_type: str,
 ) -> None:
-    """Probe common auth endpoints to find registration/login forms."""
+    """Probe common auth endpoints to find registration/login forms.
+
+    Detects both HTML forms and API-style endpoints.
+    """
     key = f"{form_type}_url"
 
     for path in paths:
         url = f"{target.rstrip('/')}/{path.lstrip('/')}"
         try:
-            resp = session.get(url, timeout=15)
-            if resp.ok and ("<input" in resp.text or "<form" in resp.text):
+            resp = session.get(url, timeout=5)
+
+            if resp.ok:
+                content_type = resp.headers.get("Content-Type", "").lower()
+
+                # HTML form with input fields (existing behavior)
+                if "<input" in resp.text or "<form" in resp.text:
+                    result[key] = url
+                    result[f"{form_type}_content_type"] = content_type
+                    logger.debug("Form discovery: found %s URL (HTML form) at %s", form_type, url)
+                    return
+
+                # JSON API endpoint (no HTML form)
+                if "json" in content_type or resp.text.strip().startswith("{"):
+                    result[key] = url
+                    result[f"{form_type}_content_type"] = content_type
+                    result[f"{form_type}_mode"] = "api"
+                    logger.debug("Form discovery: found %s API endpoint at %s", form_type, url)
+                    return
+
+                # Page has auth-related keywords (require at least 2 to reduce false positives)
+                body_lower = resp.text.lower()
+                auth_keywords = {"login", "signin", "password", "username", "email", "token", "auth"}
+                matches = sum(1 for kw in auth_keywords if kw in body_lower)
+                if matches >= 2:
+                    result[key] = url
+                    result[f"{form_type}_content_type"] = content_type
+                    logger.debug(
+                        "Form discovery: found %s page (%d auth keywords) at %s",
+                        form_type, matches, url,
+                    )
+                    return
+
+            # 405 Method Not Allowed — strong signal the endpoint exists but needs POST
+            if resp.status_code == 405:
                 result[key] = url
-                logger.debug("Form discovery: found %s URL at %s", form_type, url)
+                result[f"{form_type}_content_type"] = resp.headers.get("Content-Type", "").lower()
+                result[f"{form_type}_mode"] = "api"
+                logger.debug("Form discovery: found %s endpoint (405 -> POST required) at %s", form_type, url)
                 return
+
         except requests.RequestException:
             continue
 
