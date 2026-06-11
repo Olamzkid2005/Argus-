@@ -16,6 +16,7 @@ import { WorkersBridge } from "./bridge/mcp-client"
 import { EngagementStore } from "./engagement/store"
 import { CredentialStore } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
+import { FeatureFlags, Feature } from "./config/feature-flags"
 import { join } from "path"
 import type { NormalizedFinding } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
@@ -48,6 +49,14 @@ export interface WorkflowRunOptions {
    * the ID here. If omitted, a new engagement is created automatically.
    */
   engagementId?: string
+  /**
+   * Path to credentials JSON file to load for authenticated testing.
+   */
+  credsPath?: string
+  /**
+   * Feature flag overrides.
+   */
+  features?: Partial<Record<Feature, boolean>>
 }
 
 export interface WorkflowRunResult {
@@ -59,13 +68,7 @@ export interface WorkflowRunResult {
   low: number
   durationMs: number
   /** All findings with promoted confidence, for rendering summaries */
-  allFindings: Array<{
-    title: string
-    severity: number
-    confidence: number
-    tool: string
-    phase: string
-  }>
+  allFindings: NormalizedFinding[]
 }
 
 /**
@@ -138,10 +141,14 @@ export class WorkflowRunner {
 
     emit(`✓ Target validated: ${target}`)
 
-    // Resolve paths relative to this file (src/argus/)
-    const _dirname = new URL(".", import.meta.url).pathname
+    // Resolve paths relative to this file (src/argus/workflow-runner.ts)
+    // File location:  Argus-Tui/packages/opencode/src/argus/workflow-runner.ts
+    // Project root:   Argus Cli/  (parent of Argus-Tui/ and argus-workers/)
+    // From src/argus/ to project root: 5 levels up
+    // Use decodeURIComponent to handle spaces in path (e.g. "Argus Cli" → "Argus%20Cli" in file:// URL)
+    const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
 
-    const workersPath = options.workersPath ?? join(_dirname, "../../../../../../argus-workers/mcp_server.py")
+    const workersPath = options.workersPath ?? join(_dirname, "../../../../../argus-workers/mcp_server.py")
     const workflowsDir = options.workflowsDir ?? join(_dirname, "./workflows")
     const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
@@ -163,19 +170,46 @@ export class WorkflowRunner {
       emit(`✓ Engagement created: \`${engagementId}\``)
     }
 
-    // ── 2. Load registries ──
+    // ── 2. Load credentials & feature flags ──
+    const featureFlags = new FeatureFlags(options.features)
+    try {
+      const { readFileSync } = await import("fs")
+      const { parse: YAML } = await import("yaml")
+      const configPath = join(process.cwd(), "argus.config.yaml")
+      const raw = readFileSync(configPath, "utf-8")
+      const parsed = YAML(raw) as { features?: Record<string, boolean> } | undefined
+      if (parsed?.features) {
+        featureFlags.loadFromConfig(parsed.features)
+      }
+    } catch { /* config file missing or invalid — use defaults */ }
+    featureFlags.loadFromEnv()
+
+    const credStore = this.deps?.credStore ?? new CredentialStore()
+    const creds = options.credsPath ? credStore.load(options.credsPath) : credStore.load()
+    const defaultCreds = credStore.getDefaultCredentials()
+    if (defaultCreds) {
+      store.appendAuditLog(engagementId, "CREDS_LOADED", `Loaded credentials for roles: ${credStore.listRoles().join(", ")}`)
+    }
+    credStore.clear()
+
+    // ── 3. Load registries ──
     const workflowRegistry = this.deps?.workflowRegistry ?? new WorkflowRegistry(workflowsDir)
     workflowRegistry.loadAll()
     const toolRegistry = this.deps?.toolRegistry ?? new ToolRegistry()
     toolRegistry.load(toolsPath)
 
-    // ── 3. Plan ──
+    // ── 4. Plan ──
     emit(`⠋ Planning assessment...`)
     const planner = this.deps?.planner ?? new WorkflowPlanner(workflowRegistry, toolRegistry)
-    const plan = await planner.plan(target, undefined, { useLLM: options.useLLM ?? true })
+    const plan = await planner.plan(target, defaultCreds ? { authState: "basic" } : undefined, { useLLM: options.useLLM ?? true })
     emit(`✓ Plan created: ${plan.phases.length} phase(s)`)
+    if (defaultCreds) {
+      for (const phase of plan.phases) {
+        phase.config.credentials = defaultCreds
+      }
+    }
 
-    // ── 4. Create phase records ──
+    // ── 5. Create phase records ──
     const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({
       id: p.phaseId,
       engagementId,
@@ -195,6 +229,7 @@ export class WorkflowRunner {
 
     const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
     const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
+    executor.setFeatureFlags(featureFlags)
     executor.loadGates(plan.workflow)
     if (options.cacheMode) {
       executor.setExecutionOptions({ cacheMode: options.cacheMode })

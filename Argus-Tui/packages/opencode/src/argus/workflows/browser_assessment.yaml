@@ -6,6 +6,7 @@ phases:
     required_capabilities:
       - web_recon
       - technology_detection
+      - http_probe
     execution: parallel
     error_recovery: retry_once_then_skip
 
