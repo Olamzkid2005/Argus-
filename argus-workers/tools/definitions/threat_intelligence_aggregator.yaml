@@ -9,6 +9,7 @@ parameters:
     type: string
     description: "Target URL or scope"
     required: true
+    flag: "--target"
   - name: extra
     type: string
     description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'

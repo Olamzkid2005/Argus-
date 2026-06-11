@@ -350,6 +350,26 @@ class MCPServer:
         for param in tool.parameters:
             if param.name in arguments:
                 value = arguments[param.name]
+                # Strip URL scheme for tools that expect bare hostnames/domains
+                # Tools like nikto (-h), nmap, subfinder (-d), amass (-d),
+                # naabu (-host), dnsx (-d), gau, waybackurls don't handle URL schemes.
+                # Tools like nuclei (-u), httpx (-u), dalfox, sqlmap, ffuf (-u),
+                # gospider (-s), katana (-u) DO expect full URLs with paths.
+                if isinstance(value, str) and (value.startswith("http://") or value.startswith("https://")):
+                    _HOSTNAME_TOOLS = frozenset({"nmap", "nikto", "subfinder", "amass",
+                        "dnsx", "naabu", "masscan", "gau", "waybackurls",
+                        "chaos", "shuffledns", "alterx", "github-endpoints",
+                        "cloud_enum", "s3scanner", "bucket_upload"})
+                    should_strip = tool.name in _HOSTNAME_TOOLS
+                    if should_strip:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(value)
+                        stripped = parsed.hostname or value.split("://", 1)[1].split("/")[0]
+                    else:
+                        stripped = value  # keep full URL for URL-expecting tools
+                    if should_strip:
+                        logger.debug("Stripped scheme from target '%s' -> '%s' for tool '%s'", value, stripped, tool.name)
+                        value = stripped
                 if hasattr(param, 'flag') and param.flag:
                     cmd.append(param.flag)
                     cmd.append(str(value))

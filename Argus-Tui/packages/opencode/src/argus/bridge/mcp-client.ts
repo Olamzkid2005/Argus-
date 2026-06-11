@@ -332,13 +332,12 @@ export class WorkersBridge {
 
   async getTools(): Promise<ToolDefinition[]> {
     try {
-      const result = await this.sendRequest("list_tools", {})
-      return result as ToolDefinition[]
+      const result = await this.sendRequest("list_tools", {}) as { tools: ToolDefinition[] }
+      return result.tools ?? []
     } catch {
       return this.toolsCache
     }
   }
-
   /** Reset circuit breaker — called after cooldown or manual recovery */
   resetCircuitBreaker(): void {
     this.circuitFailures = 0

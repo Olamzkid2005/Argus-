@@ -67,7 +67,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "assessment_orchestrator"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -85,7 +85,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "attack_path_generator"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -103,7 +103,7 @@ _register(ToolDefinition(
     phases=["analyze", "recon"],
     default_args=["argus-workers/tools/run_agent_tool.py", "attack_surface_mapper"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -157,7 +157,7 @@ _register(ToolDefinition(
     phases=["analyze", "scan", "deep_scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "browser_security_operator"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -290,7 +290,7 @@ _register(ToolDefinition(
     phases=["analyze", "report"],
     default_args=["argus-workers/tools/run_agent_tool.py", "engagement_analytics_engine"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -326,7 +326,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "evidence_intelligence_engine"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -344,7 +344,7 @@ _register(ToolDefinition(
     phases=["analyze", "report"],
     default_args=["argus-workers/tools/run_agent_tool.py", "executive_report_generator"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -380,7 +380,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "finding_correlation_engine"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -514,7 +514,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "infrastructure_security_analyzer"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -566,7 +566,7 @@ _register(ToolDefinition(
     phases=["scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "login"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"email\":\"test@example.com\",\"password\":\"test123\"})"),
 ],
     timeout=120,
@@ -616,7 +616,7 @@ _register(ToolDefinition(
     name="nikto",
     description="Nikto web server scanner for known vulnerabilities and misconfigurations",
     phases=["recon", "scan", "deep_scan"],
-    default_args=["-Format", "json", "-Tuning", "123456", "-timeout", "10", "-max-time", "60"],
+    default_args=["-Format", "json", "-Tuning", "123456", "-timeout", "10"],
     parameters=[
     ToolParameter(name="target", description="Target URL or host", required=True, flag="-h"),
 ],
@@ -797,10 +797,10 @@ _register(ToolDefinition(
     phases=["scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "register"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"email\":\"test@example.com\",\"password\":\"test123\"})"),
 ],
-    timeout=120,
+    timeout=300,
     signal_quality=SignalQuality.CONFIRMED,
     priority=95,
     cost="low",
@@ -831,7 +831,7 @@ _register(ToolDefinition(
     phases=["analyze", "repo_scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "secure_code_intelligence_engine"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -967,7 +967,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "threat_intelligence_aggregator"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -1036,7 +1036,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "verification_agent"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -1054,7 +1054,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "vulnerability_knowledge_engine"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,
@@ -1120,7 +1120,7 @@ _register(ToolDefinition(
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "workflow_intelligence_engine"],
     parameters=[
-    ToolParameter(name="target", description="Target URL or scope", required=True),
+    ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
     ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})"),
 ],
     timeout=300,

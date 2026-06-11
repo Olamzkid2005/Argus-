@@ -8,8 +8,6 @@ args:
   - "123456"
   - "-timeout"
   - "10"
-  - "-max-time"
-  - "60"
 parameters:
   - name: target
     type: string
