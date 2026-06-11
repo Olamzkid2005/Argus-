@@ -33,17 +33,30 @@ class ThreatIntelligenceAggregator(AbstractTool):
 
         intel = {"domain": domain, "certificates": [], "dns_records": []}
 
+        # Check if domain resolves before querying WHOIS to avoid TLD registry fallthrough
+        domain_resolves = self._check_dns_resolution(domain)
+
         try:
             certs = self._query_crtsh(domain)
             intel["certificates"] = certs
         except Exception as e:
             logger.debug("crt.sh failed: %s", e)
 
-        try:
-            whois_data = self._query_whois(domain)
-            intel["dns_records"] = whois_data
-        except Exception as e:
-            logger.debug("WHOIS failed: %s", e)
+        if domain_resolves:
+            try:
+                whois_data = self._query_whois(domain)
+                intel["dns_records"] = whois_data
+            except Exception as e:
+                logger.debug("WHOIS failed: %s", e)
+        else:
+            intel["dns_records"] = [{"key": "status", "value": "Domain does not resolve — WHOIS skipped"}]
+            builder.vulnerability(
+                "DOMAIN_NOT_RESOLVED",
+                "INFO",
+                ctx.target,
+                {"domain": domain, "detail": "Domain does not resolve in DNS — it may not be registered or may be offline"},
+                confidence=0.9,
+            )
 
         builder.info("THREAT_INTELLIGENCE", ctx.target, intel)
         for cert in intel.get("certificates", [])[:10]:
@@ -54,6 +67,22 @@ class ThreatIntelligenceAggregator(AbstractTool):
         result.status = ToolStatus.SUCCESS
         result.mark_finished()
         return result
+
+    def _check_dns_resolution(self, domain: str) -> bool:
+        """Check if a domain resolves to an IP address.
+
+        This prevents WHOIS queries from falling through to TLD registry
+        servers for non-existent domains (e.g., vulnbank.org → .org registry).
+        """
+        import socket
+        try:
+            socket.getaddrinfo(domain, 80, socket.AF_INET, socket.SOCK_STREAM)
+            return True
+        except socket.gaierror:
+            return False
+        except Exception as e:
+            logger.debug("DNS resolution check failed for %s: %s", domain, e)
+            return False
 
     def _query_crtsh(self, domain: str) -> list[dict]:
         try:
