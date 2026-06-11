@@ -22,23 +22,79 @@ class InfrastructureSecurityAnalyzer(AbstractTool):
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         result = UnifiedToolResult(tool_name=self.tool_name, target=ctx.target)
         builder = FindingBuilder(self.tool_name, engagement_id=ctx.engagement_id)
-        target_path = Path(ctx.target)
 
-        if not target_path.is_dir():
+        target_path = Path(ctx.target)
+        is_url = ctx.target.startswith(("http://", "https://"))
+
+        if target_path.is_dir():
+            self._scan_terraform(target_path, builder)
+            self._scan_kubernetes(target_path, builder)
+            self._scan_docker(target_path, builder)
+        elif is_url:
+            # URL target — check infrastructure via HTTP response headers
+            self._scan_url_headers(ctx.target, builder)
+        else:
             result.status = ToolStatus.SKIPPED
-            result.error_message = f"Target is not a directory: {ctx.target}"
+            result.error_message = f"Target is not a directory or URL: {ctx.target}"
             result.mark_finished()
             return result
-
-        self._scan_terraform(target_path, builder)
-        self._scan_kubernetes(target_path, builder)
-        self._scan_docker(target_path, builder)
 
         result.findings = builder.findings
         result.findings_count = len(builder.findings)
         result.status = ToolStatus.SUCCESS
         result.mark_finished()
         return result
+
+    def _scan_url_headers(self, target: str, builder: FindingBuilder) -> None:
+        """Scan a URL target for infrastructure-level security issues via HTTP response headers."""
+        import ssl
+        import urllib.request
+
+        if not target.startswith(("http://", "https://")):
+            target = "https://" + target
+
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(
+                target,
+                method="HEAD",
+                headers={"User-Agent": "Argus/1.0 (Infrastructure Analyzer)"},
+            )
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                headers = {k.lower(): v for k, v in resp.headers.items()}
+                server = headers.get("server", "")
+                if server:
+                    builder.info(
+                        "INFRA_SERVER_HEADER",
+                        target,
+                        {"header": "Server", "value": server},
+                    )
+                via = headers.get("via", "")
+                if via:
+                    builder.info(
+                        "INFRA_VIA_HEADER",
+                        target,
+                        {"header": "Via", "value": via},
+                    )
+                x_powered = headers.get("x-powered-by", "")
+                if x_powered:
+                    builder.vulnerability(
+                        "INFRA_INFO_DISCLOSURE",
+                        "LOW",
+                        target,
+                        {"header": "X-Powered-By", "value": x_powered},
+                        confidence=0.6,
+                    )
+                if server.lower() in ("apache", "nginx", "iis", "cloudflare", "aws cloudfront"):
+                    builder.info(
+                        "INFRA_WEB_SERVER",
+                        target,
+                        {"server": server, "status_code": resp.status},
+                    )
+        except Exception as e:
+            logger.debug("URL header scan failed for %s: %s", target, e)
 
     def _scan_terraform(self, path: Path, builder: FindingBuilder) -> None:
         for tf_file in path.glob("**/*.tf"):

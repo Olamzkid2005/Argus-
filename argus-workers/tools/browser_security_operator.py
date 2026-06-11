@@ -8,6 +8,8 @@ XSS/CSRF verification, and privilege escalation testing.
 from __future__ import annotations
 
 import logging
+import ssl
+import urllib.request
 from urllib.parse import urlparse
 
 from tool_core.base import AbstractTool, ToolContext
@@ -99,11 +101,19 @@ class BrowserSecurityOperator(AbstractTool):
         return findings
 
     def _analyze_headers(self, ctx: ToolContext, builder: FindingBuilder) -> list[dict]:
-        """Analyze response headers for security issues."""
-        findings = []
-        headers = getattr(ctx, "_browser_headers", {})
+        """Analyze response headers for security issues.
 
-        csp = headers.get("content-security-policy", "")
+        When called standalone (no _browser_headers context), fetches headers
+        via direct HTTP request so the tool always produces meaningful output.
+        """
+        findings = []
+        headers = getattr(ctx, "_browser_headers", None)
+
+        # Standalone fallback: fetch headers directly if no browser context
+        if not headers:
+            headers = self._fetch_headers_direct(ctx.target)
+
+        csp = (headers or {}).get("content-security-policy", "")
         if not csp:
             builder.vulnerability(
                 "MISSING_CSP",
@@ -113,7 +123,7 @@ class BrowserSecurityOperator(AbstractTool):
                 confidence=0.9,
             )
 
-        x_frame = headers.get("x-frame-options", "")
+        x_frame = (headers or {}).get("x-frame-options", "")
         if not x_frame:
             builder.vulnerability(
                 "MISSING_X_FRAME_OPTIONS",
@@ -123,4 +133,50 @@ class BrowserSecurityOperator(AbstractTool):
                 confidence=0.9,
             )
 
+        # Additional headers to check
+        hsts = (headers or {}).get("strict-transport-security", "")
+        if not hsts:
+            builder.vulnerability(
+                "MISSING_HSTS",
+                "LOW",
+                ctx.target,
+                {"header": "Strict-Transport-Security"},
+                confidence=0.7,
+            )
+
+        x_content_type = (headers or {}).get("x-content-type-options", "")
+        if not x_content_type:
+            builder.vulnerability(
+                "MISSING_X_CONTENT_TYPE_OPTIONS",
+                "LOW",
+                ctx.target,
+                {"header": "X-Content-Type-Options"},
+                confidence=0.7,
+            )
+
         return findings
+
+    def _fetch_headers_direct(self, target: str) -> dict:
+        """Fallback: fetch HTTP response headers directly via urllib.
+
+        Used when the tool is called standalone without browser context.
+        """
+
+        # Ensure URL has scheme
+        if not target.startswith(("http://", "https://")):
+            target = "https://" + target
+
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(
+                target,
+                method="GET",
+                headers={"User-Agent": "Argus/1.0 (Security Scanner)"},
+            )
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                return {k.lower(): v for k, v in resp.headers.items()}
+        except Exception as e:
+            logger.debug("Direct header fetch failed for %s: %s", target, e)
+            return {}
