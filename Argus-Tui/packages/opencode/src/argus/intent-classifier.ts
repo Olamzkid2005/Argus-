@@ -66,14 +66,18 @@ export function detectSlashCommand(input: string): ClassifiedIntent | null {
  *   "assess https://example.com"
  *   "find vulnerabilities in example.com"
  *   "scan juice-shop.herokuapp.com"
+ *
+ * Two modes:
+ *   1. EXACT patterns — require pattern match at start of input
+ *   2. CATCH-ALL — triggers when input contains BOTH a domain AND security keywords
  */
 const ASSESSMENT_PATTERNS = [
-  // Direct command patterns
+  // Direct command patterns (start-anchored)
   /^(?:please\s+)?(?:run\s+)?assess\s+/i,
   /^(?:please\s+)?(?:run\s+)?scan\s+/i,
   /^(?:please\s+)?(?:run\s+)?recon\s+/i,
   /^(?:please\s+)?(?:run\s+)?audit\s+/i,
-  // Natural language patterns
+  // Natural language patterns (start-anchored)
   /find\s+vulnerabilit(?:y|ies)\s+(?:in|for|on)\s+/i,
   /test\s+\S+\s+for\s+vulnerabilit/i,
   /check\s+security\s+(?:of|for|on)\s+/i,
@@ -83,7 +87,65 @@ const ASSESSMENT_PATTERNS = [
   /is\s+\S+\s+vulnerable/i,
   /pentest\s+/i,
   /security\s+audit\s+/i,
+  // Mid-sentence patterns (not start-anchored)
+  /can\s+you\s+(?:assess|scan|audit)\s+/i,
+  /i\s+(?:need|want|would\s+like)\s+(?:to\s+)?(?:assess|scan|audit|test)\s+/i,
+  /could\s+you\s+(?:assess|scan|audit|test)\s+/i,
+  /we\s+(?:should|need\s+to)\s+(?:assess|scan|audit|test)\s+/i,
+  /please\s+(?:assess|scan|audit|test|check)\s+/i,
 ]
+
+/**
+ * Security keywords used by the catch-all heuristic.
+ * If the input contains a domain AND any of these keywords, it's treated as an assessment.
+ */
+const SECURITY_KEYWORDS = [
+  "vulnerability", "vulnerabilities", "vulnerable",
+  "assess", "assessment", "assessed",
+  "security", "secure",
+  "scan", "scanning", "scanner",
+  "penetration test", "pentest",
+  "audit", "auditing",
+  "recon", "reconnaissance",
+  "sql injection", "sqli",
+  "xss", "cross.site",
+  "csrf", "cross.site.request",
+  "injection", "exploit", "exploitation",
+  "weakness", "weak", "hack", "hacking",
+  "check.*security", "security.*check",
+  "test.*security", "security.*test",
+  "find.*issue", "find.*problem",
+]
+
+/**
+ * Check if text contains a domain name (for catch-all assessment detection).
+ */
+function containsDomain(text: string): boolean {
+  return /(?:\w[\w-]*\.)+[a-zA-Z]{2,}(?::\d+)?(?:\/[\w\-./]*)?/.test(text)
+}
+
+/**
+ * Count how many unique security-assessment-related keywords match in text.
+ */
+function countSecurityKeywords(text: string): number {
+  const lower = text.toLowerCase()
+  let count = 0
+  for (const kw of SECURITY_KEYWORDS) {
+    if (kw.includes(".*")) {
+      if (new RegExp(kw, "i").test(lower)) count++
+    } else if (lower.includes(kw)) {
+      count++
+    }
+  }
+  return count
+}
+
+/**
+ * Check if text contains any security-assessment-related keyword.
+ */
+function containsSecurityKeyword(text: string): boolean {
+  return countSecurityKeywords(text) > 0
+}
 
 /**
  * Patterns that should ALWAYS go to LLM chat (never assessment).
@@ -153,22 +215,27 @@ export function classify(input: string): ClassifiedIntent {
     if (pattern.test(trimmed)) return { type: "chat" }
   }
 
-  // Stage 2: Check assessment patterns
-  let matchedAssessment = false
+  // Stage 2: Check assessment patterns (exact match first)
+  const target = extractUrl(trimmed)
+
+  // Check exact patterns
   for (const pattern of ASSESSMENT_PATTERNS) {
     if (pattern.test(trimmed)) {
-      matchedAssessment = true
+      if (target) {
+        const useLLM = /^assess\b/i.test(trimmed) && !/deterministic/i.test(trimmed)
+        return { type: "assessment", target, useLLM }
+      }
       break
     }
   }
 
-  if (matchedAssessment) {
-    const target = extractUrl(trimmed)
-    if (target) {
-      // "recon" and "scan" are deterministic; "assess" uses LLM by default
-      const useLLM = /^assess\b/i.test(trimmed) && !/deterministic/i.test(trimmed)
-      return { type: "assessment", target, useLLM }
-    }
+  // Stage 3: Catch-all — URL + 2+ security keywords = assessment
+  // This catches phrasings that don't match exact patterns but clearly
+  // intend an assessment (e.g. "I need to test example.com for vulns").
+  // Requiring 2+ keywords reduces false positives from casual chat
+  // that happens to mention a domain and a single security term.
+  if (target && containsDomain(trimmed) && countSecurityKeywords(trimmed) >= 2) {
+    return { type: "assessment", target, useLLM: true }
   }
 
   return { type: "chat" }

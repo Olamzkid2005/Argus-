@@ -366,6 +366,42 @@ const commands: ArgusTuiCommand[] = [
       return `No engagement or finding found with ID: ${id}.`
     },
   },
+  {
+    name: "workspace",
+    title: "Open assessment workspace",
+    description: "Open the assessment workspace showing active engagements and progress",
+    slashes: ["workspace"],
+    needsTarget: false,
+    handler: async () => {
+      const { navigateTo } = await import("./tui/navigator")
+      navigateTo({ type: "workspace" })
+      return "Opened workspace view."
+    },
+  },
+  {
+    name: "verify",
+    title: "Verify a finding",
+    description: "Re-run browser verification for a specific finding",
+    slashes: ["verify"],
+    needsTarget: true,
+    handler: async (args: string) => {
+      const { verifyCommand } = await import("./commands/verify")
+      return await verifyCommand(args.trim())
+    },
+  },
+  {
+    name: "evidence",
+    title: "Browse evidence",
+    description: "Browse and manage captured evidence for findings",
+    slashes: ["evidence"],
+    needsTarget: false,
+    handler: async (args: string) => {
+      const { evidenceCommand } = await import("./commands/evidence")
+      const tokens = args.trim().split(/\s+/).filter(Boolean)
+      const action = (tokens[0] ?? "list") as "list" | "show" | "prune" | "verify-package"
+      return await evidenceCommand(action, tokens.slice(1))
+    },
+  },
 ]
 
 export function getArgusTuiCommands(): ArgusTuiCommand[] {
