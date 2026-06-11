@@ -201,6 +201,7 @@ tools:
   - name: dalfox
     label: Dalfox XSS Scanner
     capabilities:
+      - vulnerability_scanning
       - sqli_detection
     requires_auth: false
     destructive: false

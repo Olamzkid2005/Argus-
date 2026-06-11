@@ -1,7 +1,51 @@
 import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding, ErrorRecovery } from "./types"
+import type { PipelineStep } from "./pipeline"
 import { ToolRegistry } from "../workflows/tool-registry"
-import { WorkersBridge } from "../bridge/mcp-client"
 import type { SignalQuality, CacheMode } from "../bridge/types"
+import type { ToolDef } from "../workflows/tool-registry"
+import type { Capability } from "../shared/capabilities"
+
+/**
+ * Default per-tool timeout in milliseconds for external binary tools.
+ * Most security scanners should complete within 120 seconds.
+ * Tools that time out are handled by error recovery (retry then skip).
+ */
+const PER_TOOL_TIMEOUT_MS = 120_000
+
+/**
+ * Extended per-tool timeout for agent-internal tools (register, login, etc.).
+ * These are Python scripts that perform HTTP interactions with retries and
+ * need more time to discover forms, submit, and verify.
+ */
+const AGENT_TOOL_TIMEOUT_MS = 300_000
+
+/**
+ * Set of agent-internal tools that use the extended timeout.
+ */
+const AGENT_INTERNAL_TOOLS = new Set([
+  "register",
+  "login",
+  "finding_correlation_engine",
+  "attack_path_generator",
+  "verification_agent",
+  "browser_security_operator",
+  "attack_surface_mapper",
+  "evidence_intelligence_engine",
+  "executive_report_generator",
+  "threat_intelligence_aggregator",
+  "vulnerability_knowledge_engine",
+  "secure_code_intelligence_engine",
+  "infrastructure_security_analyzer",
+  "assessment_orchestrator",
+  "workflow_intelligence_engine",
+  "engagement_analytics_engine",
+])
+
+/**
+ * Maximum parallelism for phases marked with `execution: parallel`.
+ * Limits concurrent subprocess/network tool execution to avoid resource starvation.
+ */
+const MAX_PARALLEL_TOOLS = 4
 import { Confidence } from "../shared/types"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
@@ -148,120 +192,72 @@ export class InProcessExecutor implements PhaseExecutor {
     const errors: string[] = []
     const calledTools = new Set<string>()
 
-    for (const cap of phase.requiredCapabilities) {
-      const tools = this.toolRegistry.getToolsByCapability(cap)
-      if (tools.length === 0) {
-        errors.push(`No tools available for capability: ${cap}`)
-        continue
-      }
-
-      for (const tool of tools) {
-        if (calledTools.has(tool.name)) continue
-        calledTools.add(tool.name)
-
-        if (!this.toolHealth.isHealthy(tool.name)) {
-          const alternatives = this.toolRegistry
-            .getToolsByCapability(cap)
-            .filter(t => t.name !== tool.name)
-            .map(t => t.name)
-          errors.push(`Tool ${tool.name} is temporarily unavailable (circuit breaker). Available alternatives: ${alternatives.join(", ") || "none"}`)
+    const toolConfigs: { tool: ToolDef; cap: Capability }[] = []
+    const pipelineSteps = phase.config.pipelineSteps as PipelineStep[] | undefined
+    if (pipelineSteps && pipelineSteps.length > 0) {
+      // Use pre-computed pipeline steps from planner (gates already applied via selectBest)
+      for (const step of pipelineSteps) {
+        if (calledTools.has(step.tool)) continue
+        calledTools.add(step.tool)
+        const tool = this.toolRegistry.getTool(step.tool)
+        if (!tool) {
+          errors.push(`Tool ${step.tool} not found in registry`)
           continue
         }
-
-        const errorRecovery = this.resolveErrorRecovery(phase, tool.name)
-        let lastError: Error | null = null
-        let success = false
-
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          const attemptStartTime = Date.now()
-          try {
-            const result = await this.bridge.callTool(tool.name, {
-              target: phase.target,
-              capability: cap,
-              config: phase.config,
-            }, undefined, execOptions.cacheMode)
-
-            if (result.success && result.data) {
-              const data = result.data
-              const baseConfidence = baselineConfidence(result.signalQuality)
-              if (Array.isArray(data)) {
-                // Structured findings from tool (expected format)
-                // Apply signal_quality as a baseline floor for each finding
-                for (const finding of data) {
-                  finding.confidence = Math.max(finding.confidence ?? 0, baseConfidence)
-                  const promoted = this.confidenceEngine.promote(finding)
-                  findings.push({ ...finding, confidence: promoted })
-                }
-                this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
-                success = true
-                break
-              } else if (typeof data === "string" && data.length > 0) {
-                // Raw text output — create a basic finding from the tool output
-                const truncated = data.length > 500 ? data.substring(0, 500) + "..." : data
-                const finding: NormalizedFinding = {
-                  id: `find-${tool.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  title: `${tool.name} scan against ${phase.target}`,
-                  severity: 2,
-                  confidence: baseConfidence,
-                  status: "PENDING",
-                  description: truncated,
-                  tool: tool.name,
-                  phase: phase.phaseId,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                }
-                const promoted = this.confidenceEngine.promote(finding)
-                findings.push({ ...finding, confidence: promoted })
-                this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
-                success = true
-                break
-              }
-            }
-
-            lastError = new Error(result.error ?? "Tool returned unsuccessful result")
-            this.toolHealth.recordFailure(tool.name, lastError.message)
-            if (errorRecovery === "fail_fast") {
-              errors.push(`Tool ${tool.name} failed (fail_fast): ${lastError.message}`)
-              return {
-                phaseId: phase.phaseId,
-                status: "failed",
-                findings,
-                artifacts: [],
-                errors,
-                durationMs: Date.now() - startTime,
-              }
-            }
-
-            if (errorRecovery === "retry_once_then_skip" && attempt === 1) {
-              continue
-            }
-
-            break
-          } catch (error) {
-            lastError = error as Error
-            this.toolHealth.recordFailure(tool.name, lastError.message)
-            if (errorRecovery === "fail_fast") {
-              errors.push(`Tool ${tool.name} failed (fail_fast): ${lastError.message}`)
-              return {
-                phaseId: phase.phaseId,
-                status: "failed",
-                findings,
-                artifacts: [],
-                errors,
-                durationMs: Date.now() - startTime,
-              }
-            }
-
-            if (errorRecovery === "retry_once_then_skip" && attempt === 1) {
-              continue
-            }
-
-            break
-          }
+        const cap = (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability
+        toolConfigs.push({ tool, cap })
+      }
+    } else {
+      // Fallback: select tools by capability (legacy path)
+      for (const cap of phase.requiredCapabilities) {
+        const tools = this.toolRegistry.getToolsByCapability(cap)
+        if (tools.length === 0) {
+          errors.push(`No tools available for capability: ${cap}`)
+          continue
         }
+        for (const tool of tools) {
+          if (calledTools.has(tool.name)) continue
+          calledTools.add(tool.name)
+          toolConfigs.push({ tool, cap })
+        }
+      }
+    }
 
-        if (!success && lastError) {
-          errors.push(`Tool ${tool.name} failed after ${errorRecovery === "retry_once_then_skip" ? "1 retry" : "no retry"} (${RECOVERY_LABELS[errorRecovery]}): ${lastError.message}`)
+    // Execute tools: parallel for `parallel` phases, sequential for `sequential` phases
+    if (phase.execution === "parallel") {
+      // Run tools in batches of MAX_PARALLEL_TOOLS to avoid resource starvation
+      for (let i = 0; i < toolConfigs.length; i += MAX_PARALLEL_TOOLS) {
+        const batch = toolConfigs.slice(i, i + MAX_PARALLEL_TOOLS)
+        const results = await Promise.all(
+          batch.map(async ({ tool, cap }) =>
+            this.executeTool(tool, cap, phase, startTime, execOptions),
+          ),
+        )
+        for (const r of results) {
+          findings.push(...r.findings)
+          errors.push(...r.errors)
+        }
+        // In parallel mode, never abort the phase on individual tool failures.
+        // Tools are independent — one tool's failure has no bearing on others.
+        // Accumulate all findings and errors, then continue to the next batch.
+        // The fail_fast concept only applies in sequential mode (below) where
+        // a destructive tool could leave the target in a compromised state.
+      }
+    } else {
+      // Sequential execution
+      for (const { tool, cap } of toolConfigs) {
+        const result = await this.executeTool(tool, cap, phase, startTime, execOptions)
+        findings.push(...result.findings)
+        errors.push(...result.errors)
+        if (result.failFast) {
+          return {
+            phaseId: phase.phaseId,
+            status: "failed",
+            findings,
+            artifacts: [],
+            errors,
+            durationMs: Date.now() - startTime,
+          }
         }
       }
     }
@@ -404,6 +400,89 @@ export class InProcessExecutor implements PhaseExecutor {
       errors,
       durationMs: Date.now() - startTime,
     }
+  }
+
+  private async executeTool(
+    tool: ToolDef,
+    cap: Capability,
+    phase: PhaseExecutionRequest,
+    phaseStartTime: number,
+    execOptions: ExecutionOptions,
+  ): Promise<{ findings: NormalizedFinding[]; errors: string[]; failFast: boolean }> {
+    if (!this.toolHealth.isHealthy(tool.name)) {
+      return { findings: [], errors: [`Tool ${tool.name} is temporarily unavailable (circuit breaker)`], failFast: false }
+    }
+
+    const errorRecovery = this.resolveErrorRecovery(phase, tool.name)
+    let lastError: Error | null = null
+    let success = false
+    const findings: NormalizedFinding[] = []
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const attemptStartTime = Date.now()
+      const toolTimeout = AGENT_INTERNAL_TOOLS.has(tool.name) ? AGENT_TOOL_TIMEOUT_MS : PER_TOOL_TIMEOUT_MS
+      try {
+        const result = await this.bridge.callTool(tool.name, {
+          target: phase.target,
+          capability: cap,
+          config: phase.config,
+        }, toolTimeout, execOptions.cacheMode)
+
+        if (result.success && result.data) {
+          const data = result.data
+          const baseConfidence = baselineConfidence(result.signalQuality)
+          if (Array.isArray(data)) {
+            for (const finding of data) {
+              finding.confidence = Math.max(finding.confidence ?? 0, baseConfidence)
+              const promoted = this.confidenceEngine.promote(finding)
+              findings.push({ ...finding, confidence: promoted })
+            }
+            this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
+            success = true
+            break
+          } else if (typeof data === "string" && data.length > 0) {
+            const truncated = data.length > 500 ? data.substring(0, 500) + "..." : data
+            findings.push({
+              id: `find-${tool.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              title: `${tool.name} scan against ${phase.target}`,
+              severity: 2,
+              confidence: baseConfidence,
+              status: "PENDING",
+              description: truncated,
+              tool: tool.name,
+              phase: phase.phaseId,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
+            success = true
+            break
+          }
+        }
+
+        lastError = new Error(result.error ?? "Tool returned unsuccessful result")
+        this.toolHealth.recordFailure(tool.name, lastError.message)
+        if (errorRecovery === "fail_fast") {
+          return { findings, errors: [`Tool ${tool.name} failed (fail_fast): ${lastError.message}`], failFast: true }
+        }
+        if (errorRecovery === "retry_once_then_skip" && attempt === 1) continue
+        break
+      } catch (error) {
+        lastError = error as Error
+        this.toolHealth.recordFailure(tool.name, lastError.message)
+        if (errorRecovery === "fail_fast") {
+          return { findings, errors: [`Tool ${tool.name} failed (fail_fast): ${lastError.message}`], failFast: true }
+        }
+        if (errorRecovery === "retry_once_then_skip" && attempt === 1) continue
+        break
+      }
+    }
+
+    if (!success && lastError) {
+      return { findings, errors: [`Tool ${tool.name} failed after ${errorRecovery === "retry_once_then_skip" ? "1 retry" : "no retry"} (${RECOVERY_LABELS[errorRecovery]}): ${lastError.message}`], failFast: false }
+    }
+
+    return { findings, errors: [], failFast: false }
   }
 
   private resolveErrorRecovery(phase: PhaseExecutionRequest, toolName: string): ErrorRecovery {
