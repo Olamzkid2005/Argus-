@@ -104,13 +104,17 @@ class TestDeadLetterQueue:
             "failed_at": datetime.now(UTC).isoformat(),
             "engagement_id": "ENG-001",
         }
-        mock_redis.zrevrange.return_value = [json.dumps(task_data)]
+        # Sorted sets now hold task IDs, not full JSON (C3 fix)
+        mock_redis.zrevrange.return_value = [b"task-001"]
+        # Data is looked up from the TASK_INDEX_KEY hash
+        mock_redis.hmget.return_value = [json.dumps(task_data)]
 
         tasks = dlq.get_failed_tasks(limit=10)
 
         assert len(tasks) == 1
         assert tasks[0]["task_id"] == "task-001"
         mock_redis.zrevrange.assert_called_once_with("dlq:task:tasks", 0, 9)
+        mock_redis.hmget.assert_called_once_with("dlq:task:index", ["task-001"])
 
     def test_get_failed_tasks_by_engagement(self, dlq, mock_redis):
         """Test retrieving failed tasks filtered by engagement"""
@@ -126,8 +130,9 @@ class TestDeadLetterQueue:
             "failed_at": datetime.now(UTC).isoformat(),
             "engagement_id": "ENG-001",
         }
-        # The engagement-specific key stores full task JSON (not just task_id)
-        mock_redis.zrevrange.return_value = [json.dumps(task_data).encode()]
+        # Sorted sets now hold task IDs (C3 fix)
+        mock_redis.zrevrange.return_value = [b"task-001"]
+        mock_redis.hmget.return_value = [json.dumps(task_data)]
 
         tasks = dlq.get_failed_tasks(engagement_id="ENG-001", limit=10)
 
@@ -205,23 +210,29 @@ class TestDeadLetterQueue:
     def test_purge_by_engagement(self, dlq, mock_redis):
         """Test purging tasks for specific engagement"""
         mock_redis.zcard.return_value = 3
+        mock_redis.zrange.return_value = [b"task-001", b"task-002", b"task-003"]
 
         count = dlq.purge(engagement_id="ENG-001")
 
         assert count == 3
-        # Also cleans up the index key
-        mock_redis.delete.assert_any_call("dlq:task:engagement:ENG-001")
-        mock_redis.delete.assert_any_call("dlq:task:index")
+        # Now cleans up main key + engagement key + selective index cleanup
+        mock_redis.delete.assert_called_once_with("dlq:task:engagement:ENG-001")
+        # Should remove from main key too
+        assert mock_redis.zrem.call_count == 3
+        # Should selectively clean the index (hdel) instead of deleting entire key
+        mock_redis.hdel.assert_called_once_with("dlq:task:index", "task-001", "task-002", "task-003")
 
     def test_purge_older_than(self, dlq, mock_redis):
         """Test purging tasks older than specified hours"""
-        mock_redis.zcount.return_value = 5
+        mock_redis.zrangebyscore.return_value = [b"task-001", b"task-002"]
 
         count = dlq.purge(older_than_hours=24)
 
-        assert count == 5
-        mock_redis.zcount.assert_called_once()
+        assert count == 2
+        mock_redis.zrangebyscore.assert_called_once()
         mock_redis.zremrangebyscore.assert_called_once()
+        # Should selectively clean the index (hdel)
+        mock_redis.hdel.assert_called_once_with("dlq:task:index", "task-001", "task-002")
 
     def test_purge_error(self, dlq, mock_redis):
         """Test purge handles errors"""

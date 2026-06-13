@@ -772,17 +772,26 @@ class LLMClient:
     def is_available(self) -> bool:
         """Check if the LLM client is configured and potentially reachable.
 
-        Also checks the circuit breaker — if it's open, the client is
-        considered unavailable even though an API key is configured.
+        Implements proper circuit breaker pattern (H5):
+        - CLOSED: normal operation, allow calls
+        - OPEN: too many failures, reject calls until cooldown expires
+        - HALF-OPEN: cooldown expired, allow a single probe call.
+          On success → CLOSED (failures=0). On failure → OPEN again.
+
+        Does NOT reset _circuit_failures to 0 here — that only happens
+        on actual successful API responses, ensuring proper half-open
+        semantics.
         """
         if not self.api_key:
             return False
         with self._circuit_lock:
             if self._circuit_failures >= self._circuit_threshold:
                 if time.time() < self._circuit_open_until:
-                    return False
-                # Cooldown expired — reset so next call can try again
-                self._circuit_failures = 0
+                    return False  # Circuit is OPEN
+                # Cooldown expired — transition to HALF-OPEN.
+                # The next call will be a probe; if it succeeds, failures
+                # reset to 0. If it fails, the circuit opens again.
+                # Do NOT reset _circuit_failures here (H5 fix).
         return True
 
     async def is_available_async(self) -> bool:

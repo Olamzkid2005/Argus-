@@ -301,8 +301,13 @@ class ToolRunner:
         Returns:
             Tuple of (sanitized_args, updated_env)
         """
+        # Sensitive flag prefixes to redact from command line.
+        # Uses exact match for short prefixes to avoid false positives (M1):
+        # e.g. --key would match --key-file, --key-id, --key-derivation.
+        # Only --token, --password, --secret, --auth are used with exact prefix
+        # matching below; --key and --api-token use more specific checks.
         sensitive_prefixes = (
-            "--api-token", "--token", "--password", "--secret", "--key", "--auth"
+            "--api-token", "--token", "--password", "--secret", "--auth",
         )
         sanitized_args: list[str] = []
         i = 0
@@ -412,13 +417,19 @@ class ToolRunner:
                     cwd=str(self.sandbox_dir),
                     env=env,
                 )
-                # Truncate oversized output to prevent memory exhaustion
-                if len(result.stdout) > max_output_bytes:
+                # Truncate oversized output to prevent memory exhaustion.
+                # Use byte-level truncation on the encoded string to handle
+                # multi-byte UTF-8 characters correctly (H1). Decode safely
+                # at the truncated boundary, discarding any partial multi-byte
+                # character at the cut point.
+                if len(result.stdout.encode("utf-8")) > max_output_bytes:
                     logger.warning("Truncating stdout for %s (%d bytes > %d limit)", tool, len(result.stdout), max_output_bytes)
-                    result.stdout = result.stdout[:max_output_bytes]
-                if len(result.stderr) > max_output_bytes:
+                    stdout_bytes = result.stdout.encode("utf-8")[:max_output_bytes]
+                    result.stdout = stdout_bytes.decode("utf-8", errors="ignore")
+                if len(result.stderr.encode("utf-8")) > max_output_bytes:
                     logger.warning("Truncating stderr for %s (%d bytes > %d limit)", tool, len(result.stderr), max_output_bytes)
-                    result.stderr = result.stderr[:max_output_bytes]
+                    stderr_bytes = result.stderr.encode("utf-8")[:max_output_bytes]
+                    result.stderr = stderr_bytes.decode("utf-8", errors="ignore")
 
                 # Calculate duration
                 duration_ms = int((time.time() - start_time) * 1000)
@@ -466,7 +477,6 @@ class ToolRunner:
                 except Exception as log_err:
                     logger.warning("Failed to log tool execution: %s", log_err)
 
-                result_duration = time.time() - start_time
                 tool_result = UnifiedToolResult(
                     tool_name=tool,
                     command=[tool_path] + args,
@@ -476,7 +486,7 @@ class ToolRunner:
                     stderr=result.stderr,
                     exit_code=result.returncode,
                     started_at=datetime.fromtimestamp(start_time, tz=UTC),
-                    duration_seconds=result_duration,
+                    duration_seconds=time.time() - start_time,
                     error_message="",
                 )
                 tool_result.mark_finished()
@@ -613,11 +623,15 @@ class ToolRunner:
         max_streaming_bytes = 50 * 1024 * 1024  # 50MB — stop reading after this
         total_bytes = 0
         start = time.time()
+        timed_out = False
+        process_killed = False
 
         try:
             while proc.poll() is None:
                 if time.time() - start > timeout:
                     proc.kill()
+                    process_killed = True
+                    timed_out = True
                     break
 
                 ready, _, _ = select.select([proc.stdout], [], [], 0.5)
@@ -631,18 +645,21 @@ class ToolRunner:
                                 tool, max_streaming_bytes,
                             )
                             proc.kill()
+                            process_killed = True
                             break
                         stdout_lines.append(line)
                         try:
                             if on_line(line.rstrip("\n\r")) is False:
                                 proc.kill()
+                                process_killed = True
                                 break
                         except Exception as line_err:
                             logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
 
-            remaining, _ = proc.communicate(timeout=5)
-            if remaining:
-                for line in remaining.splitlines(keepends=True):
+            # Read any remaining output after the process exits
+            remaining_stdout, _ = proc.communicate(timeout=5)
+            if remaining_stdout:
+                for line in remaining_stdout.splitlines(keepends=True):
                     stdout_lines.append(line)
                     try:
                         if on_line(line.rstrip("\n\r")) is False:
@@ -650,36 +667,53 @@ class ToolRunner:
                     except Exception as line_err:
                         logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
 
+        except subprocess.TimeoutExpired:
+            logger.warning("Streaming communicate() timed out for %s, killing", tool)
+            proc.kill()
+            process_killed = True
+            timed_out = True
         except Exception as e:
             logger.warning("Streaming error for %s: %s", tool, e)
             proc.kill()
+            process_killed = True
 
         finally:
             # Ensure process is waited on to prevent zombies.
-            # Use os.waitpid with WNOHANG in a retry loop after kill signals.
+            # Use a reliable reaping strategy: SIGKILL + busy-wait with increasing delays
             try:
                 proc.wait(timeout=5)
             except Exception:
                 logger.warning("Could not wait on %s process (pid=%d) — force-reaping", tool, proc.pid)
                 try:
                     import signal
-                    os.kill(proc.pid, signal.SIGKILL)
-                    # Poll until reaped or give up after 3 attempts
-                    for _ in range(3):
+                    if not process_killed:
+                        os.kill(proc.pid, signal.SIGKILL)
+                        process_killed = True
+                    # Poll with exponential backoff until reaped (max ~6.3s total)
+                    for delay in [0.1, 0.2, 0.5, 1.0, 2.0, 2.5]:
                         try:
-                            wpid, _ = os.waitpid(proc.pid, os.WNOHANG)
+                            wpid, status = os.waitpid(proc.pid, os.WNOHANG)
                             if wpid != 0:
+                                # Update returncode from wait status
+                                if os.WIFEXITED(status):
+                                    proc.returncode = os.WEXITSTATUS(status)
+                                elif os.WIFSIGNALED(status):
+                                    proc.returncode = -os.WTERMSIG(status)
+                                else:
+                                    proc.returncode = -1
                                 break
-                            time.sleep(0.5)
                         except ChildProcessError:
+                            # Process already reaped
                             break
-                except Exception:
-                    logger.error("Failed to force-reap PID %d for %s", proc.pid, tool)
+                        time.sleep(delay)
+                    else:
+                        logger.error("Failed to reap PID %d for %s after multiple attempts", proc.pid, tool)
+                except Exception as reap_err:
+                    logger.error("Failed to force-reap PID %d for %s: %s", proc.pid, tool, reap_err)
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1
         duration_ms = int((time.time() - start) * 1000)
-        timed_out = time.time() - start > timeout
 
         slog.tool_complete(tool, success=returncode == 0, duration_ms=duration_ms)
         return UnifiedToolResult(

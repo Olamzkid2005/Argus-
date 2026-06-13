@@ -166,7 +166,9 @@ def is_valid_transition(from_state: str, to_state: str) -> bool:
 def get_phase_order(phase_id: str) -> int:
     """Get the display order for a phase (for frontend progress bars).
 
-    Returns -1 for non-initialized/unknown phases.
+    Returns a sentinel value for non-initialized/unknown phases (H8).
+    Unknown phases get order 999 so they render at the end,
+    not mixed with paused/failed phases that use order -1.
 
     Args:
         phase_id: Phase ID.
@@ -175,7 +177,9 @@ def get_phase_order(phase_id: str) -> int:
         Numerical order value.
     """
     phase = _PHASE_MAP.get(phase_id)
-    return phase.order if phase else -1
+    if phase is None:
+        return 999  # Unknown phases go at the end (H8 fix: was -1)
+    return phase.order
 
 
 def get_phase_by_step_id(step_id: str) -> Phase | None:

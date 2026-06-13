@@ -107,6 +107,31 @@ function writeTimelineCache(id: string, keys: readonly string[], handle: Virtual
 
 function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
   if (!previous?.length) return rows
+  if (previous.length !== rows.length) {
+    // Length changed — rebuild map and return new array
+    const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
+    return rows.map((row) => {
+      const existing = byKey.get(TimelineRow.key(row))
+      if (!existing) return row
+      return TimelineRow.equals(existing, row) ? existing : row
+    })
+  }
+  // Same length — check if all rows are unchanged to avoid
+  // unnecessary array recreation (H6). If every row in `rows`
+  // maps to a reference-equal entry in `previous`, return the
+  // previous array to preserve referential stability.
+  let allSame = true
+  for (let i = 0; i < rows.length; i++) {
+    const p = previous[i]
+    const r = rows[i]
+    if (p === r) continue
+    if (TimelineRow.key(p) === TimelineRow.key(r) && TimelineRow.equals(p, r)) continue
+    allSame = false
+    break
+  }
+  if (allSame) return previous
+
+  // Build map only for entries that actually changed
   const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
   return rows.map((row) => {
     const existing = byKey.get(TimelineRow.key(row))

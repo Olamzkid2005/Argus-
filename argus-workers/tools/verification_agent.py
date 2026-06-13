@@ -8,15 +8,11 @@ scores confidence, and promotes or rejects findings.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
-
-from .verification.confidence_scorer import score_confidence
-from .verification.evidence_collector import VerificationEvidenceCollector
-from .verification.finding_promoter import promote_finding
-from .verification.reproduction_engine import ReproductionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +35,12 @@ class VerificationAgent(AbstractTool):
             return result
 
         builder = FindingBuilder(self.tool_name, engagement_id=ctx.engagement_id)
+        # Lazy imports for verification subpackage (L5)
+        from .verification.confidence_scorer import score_confidence
+        from .verification.evidence_collector import VerificationEvidenceCollector
+        from .verification.finding_promoter import promote_finding
+        from .verification.reproduction_engine import ReproductionEngine
+
         engine = ReproductionEngine()
         collector = VerificationEvidenceCollector()
 
@@ -53,7 +55,18 @@ class VerificationAgent(AbstractTool):
             confidence = score_confidence(finding, reproduction, evidence)
             promoted = promote_finding(finding, confidence, reproduction.get("reproduced", False))
 
-            verified_findings.append(promoted)
+            # Normalize promoted findings to standard FindingBuilder format (M3)
+            normalized = {
+                "type": promoted.get("type", finding.get("type", "UNKNOWN")),
+                "severity": promoted.get("severity", finding.get("severity", "INFO")),
+                "endpoint": promoted.get("endpoint", finding.get("endpoint", ctx.target)),
+                "evidence": promoted.get("evidence", evidence),
+                "confidence": promoted.get("confidence", confidence),
+                "source_tool": self.tool_name,
+                "verification_status": promoted.get("status", "PENDING"),
+                "verification_reason": promoted.get("reason", ""),
+            }
+            verified_findings.append(normalized)
 
             status = promoted.get("status", "PENDING")
             if status == "CONFIRMED":

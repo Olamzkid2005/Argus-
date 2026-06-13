@@ -198,6 +198,10 @@ class StreamManager(EventBus):
         self._queues: dict[str, list[queue.Queue]] = {}
         self._history: dict[str, list[Event]] = {}
         self._dropped_count: dict[str, int] = {}
+        # Periodic eviction counter — triggers stale cleanup every 500
+        # publishes to prevent unbounded history growth (M2).
+        self._publish_count = 0
+        self._eviction_interval = 500
 
     def subscribe(self, engagement_id: str) -> queue.Queue:
         q = queue.Queue(maxsize=1000)
@@ -212,8 +216,12 @@ class StreamManager(EventBus):
     def unsubscribe(self, engagement_id: str, q: queue.Queue):
         with self._lock:
             if engagement_id in self._queues:
-                with contextlib.suppress(ValueError):
-                    self._queues[engagement_id].remove(q)
+                queues = self._queues[engagement_id]
+                # Use a copy for iteration safety — publish() also iterates
+                # _queues[engagement_id] under the same lock, so this is safe
+                # as long as both methods hold the lock. (C4)
+                if q in queues:
+                    queues.remove(q)
 
     def publish(self, event: Event | StreamEvent) -> None:
         """Publish an event to all subscribers.
@@ -236,6 +244,11 @@ class StreamManager(EventBus):
                 self._history[engagement_id].append(event)
                 if len(self._history[engagement_id]) > 500:
                     self._history[engagement_id] = self._history[engagement_id][-500:]
+
+            # Periodic stale engagement eviction (M2)
+            self._publish_count += 1
+            if self._publish_count % self._eviction_interval == 0:
+                self._evict_stale_engagements_inline()
 
             # Publish to all subscriber queues
             if engagement_id in self._queues:
@@ -281,22 +294,26 @@ class StreamManager(EventBus):
     def evict_stale_engagements(self, max_engagement_age_seconds: int = 86400):
         """Evict history for engagements older than the given age."""
         with self._lock:
-            cutoff = datetime.now(UTC).timestamp() - max_engagement_age_seconds
-            stale = []
-            for eid, events in self._history.items():
-                if events and events[-1].timestamp:
-                    try:
-                        ts = datetime.fromisoformat(events[-1].timestamp).timestamp()
-                        if ts < cutoff:
-                            stale.append(eid)
-                    except (ValueError, OSError):
-                        pass
-            for eid in stale:
-                self._queues.pop(eid, None)
-                self._history.pop(eid, None)
-                self._dropped_count.pop(eid, None)
-            if stale:
-                logger.debug("Evicted %d stale engagement histories", len(stale))
+            self._evict_stale_engagements_inline(max_engagement_age_seconds)
+
+    def _evict_stale_engagements_inline(self, max_engagement_age_seconds: int = 86400):
+        """Evict stale engagements (must hold self._lock)."""
+        cutoff = datetime.now(UTC).timestamp() - max_engagement_age_seconds
+        stale = []
+        for eid, events in self._history.items():
+            if events and events[-1].timestamp:
+                try:
+                    ts = datetime.fromisoformat(events[-1].timestamp).timestamp()
+                    if ts < cutoff:
+                        stale.append(eid)
+                except (ValueError, OSError):
+                    pass
+        for eid in stale:
+            self._queues.pop(eid, None)
+            self._history.pop(eid, None)
+            self._dropped_count.pop(eid, None)
+        if stale:
+            logger.debug("Evicted %d stale engagement histories", len(stale))
 
 
 # Convenience functions for publishing common events

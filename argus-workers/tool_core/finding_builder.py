@@ -125,8 +125,26 @@ class FindingBuilder:
 
     @findings.setter
     def findings(self, value: list[dict]) -> None:
-        """Allow direct assignment for backward compat during migration."""
-        self._findings = list(value)
+        """Allow direct assignment for backward compat during migration.
+
+        Applies sanitization to each finding to ensure consistent schema (L2).
+        """
+        self._findings = []
+        for item in value:
+            if isinstance(item, dict):
+                finding = {
+                    "type": item.get("type", "UNKNOWN"),
+                    "severity": item.get("severity", "INFO").upper(),
+                    "endpoint": item.get("endpoint", ""),
+                    "evidence": self._sanitize(item.get("evidence", {})),
+                    "confidence": min(max(item.get("confidence", 0.8), 0.0), 1.0),
+                    "source_tool": item.get("source_tool", self.source_tool),
+                }
+                # Pass through extra keys
+                for k, v in item.items():
+                    if k not in finding:
+                        finding[k] = v
+                self._findings.append(finding)
 
     def clear(self) -> None:
         """Clear all collected findings."""

@@ -352,24 +352,31 @@ class MCPServer:
                 value = arguments[param.name]
                 # Strip URL scheme for tools that expect bare hostnames/domains
                 # Tools like nikto (-h), nmap, subfinder (-d), amass (-d),
-                # naabu (-host), dnsx (-d), gau, waybackurls don't handle URL schemes.
+                # dnsx (-d), naabu (-host) don't handle URL schemes.
                 # Tools like nuclei (-u), httpx (-u), dalfox, sqlmap, ffuf (-u),
                 # gospider (-s), katana (-u) DO expect full URLs with paths.
+                # gau and waybackurls are ambiguous - they accept URLs but work
+                # better with bare domains. Keep them in the URL group (H3).
                 if isinstance(value, str) and (value.startswith("http://") or value.startswith("https://")):
-                    _HOSTNAME_TOOLS = frozenset({"nmap", "nikto", "subfinder", "amass",
-                        "dnsx", "naabu", "masscan", "gau", "waybackurls",
-                        "chaos", "shuffledns", "alterx", "github-endpoints",
-                        "cloud_enum", "s3scanner", "bucket_upload"})
-                    should_strip = tool.name in _HOSTNAME_TOOLS
-                    if should_strip:
-                        from urllib.parse import urlparse
-                        parsed = urlparse(value)
+                    from urllib.parse import urlparse
+                    parsed = urlparse(value)
+                    # Tools that strictly expect bare hostnames/domains
+                    _HOSTNAME_TOOLS = frozenset({
+                        "nmap", "nikto", "subfinder", "amass",
+                        "dnsx", "naabu", "masscan",
+                        "shuffledns", "alterx", "github-endpoints",
+                        "cloud_enum", "s3scanner", "bucket_upload",
+                    })
+                    # Tools that accept domains but usually expect URLs -
+                    # these are NOT in _HOSTNAME_TOOLS so they keep the full URL
+                    _URL_TOOLS = frozenset({
+                        "gau", "waybackurls", "chaos",
+                    })
+                    if tool.name in _HOSTNAME_TOOLS:
                         stripped = parsed.hostname or value.split("://", 1)[1].split("/")[0]
-                    else:
-                        stripped = value  # keep full URL for URL-expecting tools
-                    if should_strip:
                         logger.debug("Stripped scheme from target '%s' -> '%s' for tool '%s'", value, stripped, tool.name)
                         value = stripped
+                    # For URL-expecting tools and ambiguous tools, keep full URL
                 if hasattr(param, 'flag') and param.flag:
                     cmd.append(param.flag)
                     cmd.append(str(value))
@@ -513,17 +520,24 @@ class MCPServer:
             elif tool_name:
                 logger.warning("Pipeline references unknown tool '%s', skipping", tool_name)
 
-        # If no pipeline, use a sensible default ordering
+        # If no pipeline, use a sensible default ordering.
+        # Import from assessment_orchestrator to keep a single source of truth (P2).
         if not tool_order:
+            from tools.assessment_orchestrator import PHASE_PIPELINE_TOOLS
             phase = session.phase
-            if phase in ("recon", "reconnaissance"):
-                tool_order = ["subfinder", "httpx", "whatweb", "nmap", "gospider"]
-            elif phase in ("scan", "vulnerability_scanning"):
-                tool_order = ["nuclei", "nikto", "dalfox", "wafw00f"]
-            elif phase in ("deep_scan", "deep"):
-                tool_order = ["nuclei", "sqlmap", "testssl", "commix"]
-            else:
-                tool_order = []
+            # Map legacy phase names to canonical keys
+            phase_map = {
+                "reconnaissance": "recon",
+                "scan": "scan",
+                "vulnerability_scanning": "scan",
+                "deep_scan": "deep_scan",
+                "deep": "deep_scan",
+                "repo_scan": "repo_scan",
+                "analyze": "analyze",
+                "report": "report",
+            }
+            canonical = phase_map.get(phase, phase)
+            tool_order = list(PHASE_PIPELINE_TOOLS.get(canonical, []))
 
         return {
             "tool_order": tool_order,

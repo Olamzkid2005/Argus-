@@ -189,28 +189,32 @@ class DeadLetterQueue:
                 engagement_id=engagement_id,
             )
 
-            # Store in Redis sorted set by timestamp
+            # Store in Redis sorted set by timestamp.
+            # Use task_id as the sorted set member (not full JSON) so that
+            # cross-key operations (purge, cleanup) always match correctly
+            # regardless of JSON serialization ordering (C3).
             score = datetime.now(UTC).timestamp()
+            task_json = json.dumps(asdict(failed_task))
             key = f"{self.REDIS_KEY_PREFIX}:tasks"
 
-            self.redis.zadd(key, {json.dumps(asdict(failed_task)): score})
+            self.redis.zadd(key, {task_id: score})
             # Auto-expiry for main DLQ (M-v3-08): prevent unbounded growth
             self.redis.expire(key, 86400 * 7)
 
             # Maintain secondary hash index for O(1) task-by-id lookups
-            self.redis.hset(self.TASK_INDEX_KEY, task_id, json.dumps(asdict(failed_task)))
+            # AND as the canonical JSON data store (the sorted sets hold only IDs)
+            self.redis.hset(self.TASK_INDEX_KEY, task_id, task_json)
             self.redis.expire(self.TASK_INDEX_KEY, 86400 * 7)
 
-            # Trim to max size
+            # Trim to max size (based on main key)
             self.redis.zremrangebyrank(key, 0, -(self.MAX_DLQ_SIZE + 1))
 
             # Add to engagement-specific DLQ if applicable.
-            # Store full task JSON (not just task_id) so engagement-filtered
-            # retrieval doesn't need to scan the entire main key (bug #27).
+            # Store task_id (not full JSON) as member for consistent cross-key operations.
             if engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                self.redis.zadd(eng_key, {json.dumps(asdict(failed_task)): score})
+                self.redis.zadd(eng_key, {task_id: score})
                 self.redis.expire(eng_key, 86400 * 7)  # 7 days
 
             logger.warning(
@@ -240,12 +244,25 @@ class DeadLetterQueue:
             if engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                raw_tasks = self.redis.zrevrange(key, offset, offset + limit - 1)
-                return [json.loads(t) for t in raw_tasks]
+                task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
-                raw_tasks = self.redis.zrevrange(key, offset, offset + limit - 1)
-                return [json.loads(t) for t in raw_tasks]
+                task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
+
+            if not task_ids:
+                return []
+
+            # Look up full task data from the index hash (sorted sets hold only IDs)
+            decoded_ids = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in task_ids]
+            raw_data = self.redis.hmget(self.TASK_INDEX_KEY, decoded_ids)
+            tasks = []
+            for raw in raw_data:
+                if raw:
+                    try:
+                        tasks.append(json.loads(raw))
+                    except (json.JSONDecodeError, TypeError):
+                        logger.debug("Failed to decode DLQ task data for ID", exc_info=True)
+            return tasks
 
         except Exception as e:
             logger.error(f"Failed to retrieve DLQ tasks: {e}")
@@ -286,6 +303,20 @@ class DeadLetterQueue:
             logger.error(f"Failed to look up task {task_id}: {e}")
             return None
 
+    def _remove_from_index(self, task_ids: list[str]) -> None:
+        """Remove specific task IDs from the secondary hash index.
+
+        Unlike the old approach of deleting the entire TASK_INDEX_KEY (M4),
+        this selectively removes only the purged entries so that lookups
+        via get_task_by_id() continue to work for non-purged tasks.
+        """
+        if not task_ids:
+            return
+        try:
+            self.redis.hdel(self.TASK_INDEX_KEY, *task_ids)
+        except Exception:
+            logger.debug("Failed to selectively clean TASK_INDEX_KEY", exc_info=True)
+
     def purge(
         self, engagement_id: str | None = None, older_than_hours: int | None = None
     ) -> int:
@@ -304,51 +335,50 @@ class DeadLetterQueue:
             if older_than_hours:
                 cutoff = datetime.now(UTC).timestamp() - (older_than_hours * 3600)
 
+            main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
+
             if engagement_id and cutoff is not None:
                 # Both filters: purge old tasks for a specific engagement.
-                # Engagement-index key stores task_ids → iterate and check
-                # timestamps against the main key.
                 safe_id = self._sanitize_engagement_key(engagement_id)
-                main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
+                # Get task IDs within the score range (members are now task_ids, not JSON)
                 eng_task_ids = self.redis.zrangebyscore(eng_key, 0, cutoff)
                 count = len(eng_task_ids)
                 if count > 0:
+                    decoded = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in eng_task_ids]
                     # Remove from both the main key and the engagement index
                     for tid in eng_task_ids:
                         self.redis.zrem(main_key, tid)
                     self.redis.zremrangebyscore(eng_key, 0, cutoff)
-                    # Best-effort index cleanup
-                    try:
-                        self.redis.delete(self.TASK_INDEX_KEY)
-                    except Exception:
-                        pass
+                    # Selective index cleanup (M4 fix: don't delete entire index)
+                    self._remove_from_index(decoded)
                 return count
             elif engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
-                key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                count = self.redis.zcard(key)
-                self.redis.delete(key)
-                # Best-effort index cleanup
-                try:
-                    self.redis.delete(self.TASK_INDEX_KEY)
-                except Exception:
-                    pass
+                eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
+                # Get all task IDs from the engagement key before removing
+                all_ids = self.redis.zrange(eng_key, 0, -1)
+                decoded_ids = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in all_ids]
+                count = self.redis.zcard(eng_key)
+                self.redis.delete(eng_key)
+                # Remove from main key too
+                for tid in all_ids:
+                    self.redis.zrem(main_key, tid)
+                # Selective index cleanup (M4 fix: don't delete entire index)
+                self._remove_from_index(decoded_ids)
                 return count
             elif cutoff is not None:
-                key = f"{self.REDIS_KEY_PREFIX}:tasks"
-                count = self.redis.zcount(key, 0, cutoff)
-                self.redis.zremrangebyscore(key, 0, cutoff)
-                # Best-effort index cleanup — remove stale entries
-                try:
-                    self.redis.delete(self.TASK_INDEX_KEY)
-                except Exception:
-                    logger.debug("Failed to clean up TASK_INDEX_KEY during purge", exc_info=True)
+                # Get task IDs in the score range before removing them
+                task_ids = self.redis.zrangebyscore(main_key, 0, cutoff)
+                decoded_ids = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in task_ids]
+                count = len(decoded_ids)
+                self.redis.zremrangebyscore(main_key, 0, cutoff)
+                # Selective index cleanup (M4 fix: don't delete entire index)
+                self._remove_from_index(decoded_ids)
                 return count
             else:
-                key = f"{self.REDIS_KEY_PREFIX}:tasks"
-                count = self.redis.zcard(key)
-                self.redis.delete(key)
+                count = self.redis.zcard(main_key)
+                self.redis.delete(main_key)
                 self.redis.delete(self.TASK_INDEX_KEY)
                 return count
 

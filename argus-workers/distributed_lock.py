@@ -34,13 +34,49 @@ class DistributedLock:
             redis_url: Redis connection URL
             worker_id: Unique worker identifier (generated if not provided)
         """
-        self.redis_client = redis.Redis.from_url(
-            redis_url,
-            socket_connect_timeout=5,
-            socket_timeout=5,
-        )
+        self.redis_url = redis_url
+        self._redis_client = None
         self.worker_id = worker_id or str(uuid.uuid4())
         self.held_locks = {}  # engagement_id -> lock_key mapping
+
+    @property
+    def redis_client(self) -> redis.Redis:
+        """Lazy Redis client with auto-reconnect (M6 fix).
+
+        On ConnectionError, recreates the client to recover from
+        transient Redis outages. The old client is discarded so the
+        next call establishes a fresh connection.
+        """
+        if self._redis_client is None:
+            self._redis_client = redis.Redis.from_url(
+                self.redis_url,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                retry_on_timeout=True,
+            )
+        return self._redis_client
+
+    @redis_client.setter
+    def redis_client(self, client: redis.Redis) -> None:
+        self._redis_client = client
+
+    def _with_reconnect(self, operation, *args, **kwargs):
+        """Execute a Redis operation with auto-reconnect on failure (M6).
+
+        Attempts the operation once. If it fails with a connection error,
+        discards the stale client and retries once. If both attempts fail,
+        propagates the exception.
+        """
+        try:
+            return operation(*args, **kwargs)
+        except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
+            logger.warning("Redis connection lost, attempting reconnect: %s", e)
+            self._redis_client = None  # Discard stale client
+            try:
+                return operation(*args, **kwargs)
+            except (redis.ConnectionError, redis.TimeoutError, OSError) as e2:
+                logger.error("Redis reconnect failed: %s", e2)
+                raise
 
     def acquire(self, engagement_id: str, ttl_override: int | None = None) -> bool:
         """
@@ -59,7 +95,8 @@ class DistributedLock:
         ttl = ttl_override or self.LOCK_TTL_SECONDS
 
         # Try to acquire lock with NX flag and expiration
-        acquired = self.redis_client.set(
+        acquired = self._with_reconnect(
+            self.redis_client.set,
             lock_key,
             self.worker_id,
             nx=True,  # Only set if not exists
@@ -75,7 +112,7 @@ class DistributedLock:
             return True
 
         # Check if we already hold this lock
-        current_holder = self.redis_client.get(lock_key)
+        current_holder = self._with_reconnect(self.redis_client.get, lock_key)
         if current_holder and current_holder.decode('utf-8') == self.worker_id:
             # We already hold this lock — extend it to prevent expiry during long operations
             self.extend(engagement_id)
@@ -100,6 +137,10 @@ class DistributedLock:
         Uses Lua script to verify ownership before deletion.
         Ensures locks are released even on cancellation.
 
+        Only removes from held_locks when Redis confirms ownership (H4).
+        If the lock expired or another worker owns it, we keep it in
+        held_locks so release_all() can attempt cleanup later.
+
         Args:
             engagement_id: Engagement ID to unlock
 
@@ -117,20 +158,30 @@ class DistributedLock:
         end
         """
 
-        # Execute Lua script
-        result = self.redis_client.eval(lua_script, 1, lock_key, self.worker_id)
+        # Execute Lua script with auto-reconnect (M6)
+        try:
+            result = self._with_reconnect(self.redis_client.eval, lua_script, 1, lock_key, self.worker_id)
+        except Exception:
+            # Redis unavailable — don't touch held_locks, attempt to close cleanly
+            logger.warning("Redis unavailable during release of engagement %s", engagement_id)
+            return False
 
-        # Remove from held locks
-        if engagement_id in self.held_locks:
-            del self.held_locks[engagement_id]
+        if result == 1:
+            # Lock successfully released — remove from held_locks
+            if engagement_id in self.held_locks:
+                del self.held_locks[engagement_id]
+            return True
 
-        if result != 1:
-            logger.warning(
-                "Failed to release lock for engagement %s — lock may have expired or is held by another worker",
-                engagement_id,
-            )
-
-        return result == 1
+        # Lock not owned by us (expired or another worker holds it)
+        # Keep it in held_locks for diagnostic purposes (H4) — release_all()
+        # will still try to clean up, and the stale entry will be overwritten
+        # on next acquire() for this engagement.
+        logger.warning(
+            "Failed to release lock for engagement %s — lock may have expired or is held by another worker. "
+            "Keeping held_locks entry for diagnostics.",
+            engagement_id,
+        )
+        return False
 
     def extend(self, engagement_id: str) -> bool:
         """
@@ -149,7 +200,8 @@ class DistributedLock:
 
         # Use SET with XX (update only if exists) to refresh TTL atomically
         # This is simpler and safer than the Lua script approach
-        result = self.redis_client.set(
+        result = self._with_reconnect(
+            self.redis_client.set,
             lock_key,
             self.worker_id,
             xx=True,  # Only update if key exists
@@ -178,7 +230,11 @@ class DistributedLock:
             True if locked (by any worker)
         """
         lock_key = f"engagement_lock:{engagement_id}"
-        return self.redis_client.exists(lock_key) > 0
+        try:
+            return self._with_reconnect(self.redis_client.exists, lock_key) > 0
+        except Exception:
+            logger.debug("Failed to check lock for %s", engagement_id)
+            return False
 
     def get_lock_holder(self, engagement_id: str) -> str | None:
         """
@@ -191,7 +247,11 @@ class DistributedLock:
             Worker ID or None if not locked
         """
         lock_key = f"engagement_lock:{engagement_id}"
-        holder = self.redis_client.get(lock_key)
+        try:
+            holder = self._with_reconnect(self.redis_client.get, lock_key)
+        except Exception:
+            logger.debug("Failed to get lock holder for %s", engagement_id)
+            return None
 
         if holder:
             return holder.decode('utf-8')
@@ -229,15 +289,22 @@ class DistributedLock:
                 )
                 if consecutive_failures >= 3:
                     logger.error(
-                        "Lost lock for engagement %s after %d failed extend attempts — force-deleting stale key",
+                        "Lost lock for engagement %s after %d failed extend attempts — "
+                        "re-acquiring with ownership check",
                         engagement_id, consecutive_failures,
                     )
-                    force_key = f"engagement_lock:{engagement_id}"
-                    try:
-                        self.redis_client.delete(force_key)
-                        logger.info("Force-deleted stale lock key for engagement %s", engagement_id)
-                    except Exception as del_err:
-                        logger.error("Failed to force-delete stale lock key for %s: %s", engagement_id, del_err)
+                    # Re-acquire with NX flag and ownership verification to avoid
+                    # force-deleting another worker's lock. If the original TTL is
+                    # still valid, the lock belongs to us and we can extend it via
+                    # SET XX. If it expired and another worker took it, acquire()
+                    # will fail cleanly.
+                    if not self.acquire(engagement_id):
+                        logger.error(
+                            "Lost lock for engagement %s — another worker has acquired it",
+                            engagement_id,
+                        )
+                    else:
+                        logger.info("Re-acquired lock for engagement %s", engagement_id)
                     break
                 # Retry more frequently after failure
                 interval = max(5, interval // 2)

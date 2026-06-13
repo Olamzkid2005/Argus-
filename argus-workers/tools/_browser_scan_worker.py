@@ -70,18 +70,19 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
         try:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            console_errors = []
-            page.on('console', lambda msg: console_errors.append(msg.text) if msg.type == 'error' else None)
+            # Use a fresh list per payload to avoid TOCTOU race between
+            # collecting errors and checking them (M7 fix)
             page.goto(target_url, timeout=30000, wait_until='networkidle')
             for payload in ['<img src=x onerror=alert(1)>', 'javascript:alert(1)']:
-                pre_test_count = len(console_errors)
+                # Create a fresh error collector for each payload navigation
+                # to isolate errors from previous navigations (M7)
+                payload_errors = []
+                page.on('console', lambda msg: payload_errors.append(msg.text) if msg.type == 'error' else None)
                 payload_url = f'{target_url}?q={payload}'
                 if not payload_url.startswith(("http://", "https://")):
                     continue
                 page.goto(payload_url, timeout=10000)
-                # Only check errors that appeared AFTER this payload navigation
-                new_errors = console_errors[pre_test_count:]
-                if any('alert' in e.lower() for e in new_errors):
+                if any('alert' in e.lower() for e in payload_errors):
                     findings.append({
                         'type': 'DOM_XSS',
                         'severity': 'HIGH',

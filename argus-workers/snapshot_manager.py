@@ -9,7 +9,7 @@ from decimal import Decimal
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 
-from database.connection import connect
+from database.connection import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +19,41 @@ class SnapshotManager:
     Creates and manages immutable state snapshots for Intelligence Engine
     """
 
-    def __init__(self, db_connection_string: str):
+    def __init__(self, db_connection_string: str = ""):
         """
         Initialize Snapshot Manager
 
         Args:
-            db_connection_string: PostgreSQL connection string
+            db_connection_string: Deprecated — connection pooling is used instead.
         """
         self.db_conn_string = db_connection_string
+        if db_connection_string:
+            logger.warning(
+                "db_connection_string is deprecated for SnapshotManager — "
+                "connection pooling is preferred. Remove this parameter."
+            )
+
+    def _get_connection(self):
+        """Get a database connection from the pool (C5 fix)."""
+        return get_db().get_connection()
+
+    def _release_connection(self, conn):
+        """Release connection back to pool (C5 fix).
+        Resets isolation level before returning to avoid side effects."""
+        if conn is None:
+            return
+        try:
+            # Reset isolation level to default before returning to pool
+            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
+        except Exception:
+            pass
+        try:
+            get_db().release_connection(conn)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def create_snapshot(self, engagement_id: str) -> dict:
         """
@@ -49,7 +76,7 @@ class SnapshotManager:
 
         for attempt in range(max_retries):
             try:
-                conn = connect(self.db_conn_string)
+                conn = self._get_connection()
                 # Set SERIALIZABLE isolation level
                 conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
 
@@ -157,7 +184,7 @@ class SnapshotManager:
                     cursor.close()
                     cursor = None
                 if conn:
-                    conn.close()
+                    self._release_connection(conn)
                     conn = None
 
     def _to_jsonable(self, value):
@@ -216,6 +243,25 @@ class SnapshotManager:
 
         return snapshot_id
 
+    def _execute_query(self, query: str, params: tuple, fetch: str = "all") -> list[dict] | dict | None:
+        """Execute a read-only query using pool connections (C5 fix)."""
+        conn = None
+        cursor = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(query, params)
+            if fetch == "one":
+                row = cursor.fetchone()
+                return dict(row) if row else None
+            else:
+                return [dict(row) for row in cursor.fetchall()]
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self._release_connection(conn)
+
     def get_snapshot(self, snapshot_id: str) -> dict | None:
         """
         Retrieve snapshot by ID
@@ -226,33 +272,16 @@ class SnapshotManager:
         Returns:
             Snapshot data or None if not found
         """
-        conn = None
-        cursor = None
-
-        try:
-            conn = connect(self.db_conn_string)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(
-                """
-                SELECT id, engagement_id, version, snapshot_data, created_at
-                FROM decision_snapshots
-                WHERE id = %s
-                """,
-                (snapshot_id,)
-            )
-
-            row = cursor.fetchone()
-
-            if row:
-                return dict(row)
-
-            return None
-
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        result = self._execute_query(
+            """
+            SELECT id, engagement_id, version, snapshot_data, created_at
+            FROM decision_snapshots
+            WHERE id = %s
+            """,
+            (snapshot_id,),
+            fetch="one",
+        )
+        return result
 
     def get_latest_snapshot(self, engagement_id: str) -> dict | None:
         """
@@ -264,35 +293,18 @@ class SnapshotManager:
         Returns:
             Latest snapshot data or None
         """
-        conn = None
-        cursor = None
-
-        try:
-            conn = connect(self.db_conn_string)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(
-                """
-                SELECT id, engagement_id, version, snapshot_data, created_at
-                FROM decision_snapshots
-                WHERE engagement_id = %s
-                ORDER BY version DESC
-                LIMIT 1
-                """,
-                (engagement_id,)
-            )
-
-            row = cursor.fetchone()
-
-            if row:
-                return dict(row)
-
-            return None
-
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        result = self._execute_query(
+            """
+            SELECT id, engagement_id, version, snapshot_data, created_at
+            FROM decision_snapshots
+            WHERE engagement_id = %s
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (engagement_id,),
+            fetch="one",
+        )
+        return result
 
     def list_snapshots(self, engagement_id: str) -> list[dict]:
         """
@@ -304,27 +316,15 @@ class SnapshotManager:
         Returns:
             List of snapshot metadata (without full data)
         """
-        conn = None
-        cursor = None
-
-        try:
-            conn = connect(self.db_conn_string)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(
-                """
-                SELECT id, engagement_id, version, created_at
-                FROM decision_snapshots
-                WHERE engagement_id = %s
-                ORDER BY version DESC
-                LIMIT 100
-                """,
-                (engagement_id,)
-            )
-
-            return [dict(row) for row in cursor.fetchall()]
-
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        result = self._execute_query(
+            """
+            SELECT id, engagement_id, version, created_at
+            FROM decision_snapshots
+            WHERE engagement_id = %s
+            ORDER BY version DESC
+            LIMIT 100
+            """,
+            (engagement_id,),
+            fetch="all",
+        )
+        return result if result else []

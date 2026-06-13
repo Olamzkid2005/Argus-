@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from psycopg2.extras import Json, RealDictCursor
 
-from database.connection import get_db
+from database.connection import DatabaseConnectionError, get_db
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,20 @@ class CheckpointManager:
 
     def __init__(self, db_connection_string: str = ""):
         self.db_conn_string = db_connection_string
+
+    @staticmethod
+    def _ensure_db() -> None:
+        """Verify the database connection pool is initialized (M5).
+        Raises RuntimeError if get_db() is not ready."""
+        try:
+            db = get_db()
+            if db is None:
+                raise RuntimeError("Database pool is not initialized (get_db() returned None)")
+            # Quick connectivity check
+            conn = db.get_connection()
+            db.release_connection(conn)
+        except (DatabaseConnectionError, RuntimeError, Exception) as e:
+            raise RuntimeError(f"Cannot access database for checkpoint operations: {e}") from e
 
     def save_checkpoint(self, engagement_id: str, phase: str, data: dict) -> str:
         """
@@ -33,6 +47,7 @@ class CheckpointManager:
         Returns:
             Checkpoint ID
         """
+        self._ensure_db()  # M5: verify DB is initialized before proceeding
         conn = None
         cursor = None
 
@@ -214,6 +229,31 @@ class CheckpointManager:
             if conn:
                 get_db().release_connection(conn)
 
+    def _get_engagement_current_phase(self, engagement_id: str) -> str | None:
+        """Get the current phase/state of an engagement from the DB.
+
+        Returns None if not found.
+        """
+        conn = None
+        cursor = None
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT status FROM engagements WHERE id = %s",
+                (engagement_id,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception:
+            logger.debug("Could not read engagement status for %s", engagement_id, exc_info=True)
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
     def resume_from_checkpoint(self, engagement_id: str) -> dict | None:
         """
         Resume execution from last checkpoint
@@ -234,6 +274,17 @@ class CheckpointManager:
             logger.info(
                 "Checkpoint for %s is in terminal phase '%s' — skipping resume",
                 engagement_id, checkpoint["phase"],
+            )
+            return None
+
+        # P3: Verify that the checkpoint phase matches the current engagement
+        # phase to avoid resuming from stale/superseded checkpoint data.
+        current_phase = self._get_engagement_current_phase(engagement_id)
+        if current_phase and checkpoint.get("phase") == "scan" and current_phase == "recon":
+            logger.info(
+                "Checkpoint for %s is from phase '%s' but engagement is now '%s' — "
+                "engagement was reset after checkpoint was created, skipping resume",
+                engagement_id, checkpoint["phase"], current_phase,
             )
             return None
 
