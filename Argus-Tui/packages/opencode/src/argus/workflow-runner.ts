@@ -264,7 +264,7 @@ export class WorkflowRunner {
           allFindings.push({ ...finding, confidence: promoted })
         }
 
-        const phaseStatus = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : "COMPLETED"
+        const phaseStatus = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : result.status === "skipped" ? "SKIPPED" : "COMPLETED"
         phaseRecords[i].status = phaseStatus
         phaseRecords[i].completedAt = new Date().toISOString()
         if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")

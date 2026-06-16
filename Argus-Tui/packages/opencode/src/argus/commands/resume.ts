@@ -135,7 +135,7 @@ export async function resumeCommand(
         allFindings.push(finding)
       }
 
-      phaseRecord.status = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : "COMPLETED"
+      phaseRecord.status = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : result.status === "skipped" ? "SKIPPED" : "COMPLETED"
       phaseRecord.completedAt = new Date().toISOString()
       if (result.errors.length > 0) phaseRecord.error = result.errors.join("; ")
       store.savePhase(engagementId, phaseRecord)
