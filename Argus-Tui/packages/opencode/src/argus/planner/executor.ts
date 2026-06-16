@@ -2,6 +2,7 @@ import type { PhaseExecutionRequest, PhaseExecutionResult, NormalizedFinding, Er
 import type { PipelineStep } from "./pipeline"
 import { ToolRegistry } from "../workflows/tool-registry"
 import type { SignalQuality, CacheMode } from "../bridge/types"
+import { LLMUnavailableError } from "../bridge/types"
 import type { WorkersBridge } from "../bridge/mcp-client"
 import type { ToolDef } from "../workflows/tool-registry"
 import { Capability } from "../shared/capabilities"
@@ -386,6 +387,17 @@ export class InProcessExecutor implements PhaseExecutor {
           })
         }
       } catch (error) {
+        if (error instanceof LLMUnavailableError) {
+          errors.push(`Tool ${next.tool} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`)
+          this.bridge.resetCircuitBreaker()
+          await this.bridge.agentObserve({
+            session_id: session.session_id,
+            tool: next.tool,
+            success: false,
+            summary: `LLM ${error.status} — skipping`,
+          })
+          continue
+        }
         const errorMsg = (error as Error).message
         this.toolHealth.recordFailure(next.tool, errorMsg)
         errors.push(`Tool ${next.tool} error: ${errorMsg}`)
@@ -481,6 +493,11 @@ export class InProcessExecutor implements PhaseExecutor {
         if (errorRecovery === "retry_once_then_skip" && attempt === 1) continue
         break
       } catch (error) {
+        if (error instanceof LLMUnavailableError) {
+          errors.push(`Tool ${tool.name} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`)
+          this.bridge.resetCircuitBreaker()
+          break
+        }
         lastError = error as Error
         this.toolHealth.recordFailure(tool.name, lastError.message)
         if (errorRecovery === "fail_fast") {
