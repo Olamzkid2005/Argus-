@@ -72,7 +72,7 @@ export async function resumeCommand(
   const existingPhases = store.getPhases(engagementId)
   const existingFindings = store.getFindings(engagementId)
   const completedPhaseNames = new Set(
-    existingPhases.filter((p) => p.status === "COMPLETED").map((p) => p.name),
+    existingPhases.filter((p) => p.status === "COMPLETED" || p.status === "PARTIAL").map((p) => p.name),
   )
 
   // Find the first incomplete phase in the plan
@@ -118,7 +118,7 @@ export async function resumeCommand(
 
       // Check if phase was already completed
       const phaseRecord = allPhaseRecords[i]
-      if (phaseRecord.status === "COMPLETED") continue
+      if (phaseRecord.status === "COMPLETED" || phaseRecord.status === "PARTIAL") continue
 
       // Failed/skipped phases fall through to be retried (canRetryPhase always
       // returns true for these statuses, so the inner check was dead code)
@@ -147,7 +147,7 @@ export async function resumeCommand(
     store.appendAuditLog(engagementId, "RESUME_ERROR",
       `Resume error: ${(error as Error).message}`)
   } finally {
-    const allPhasesCompleted = allPhaseRecords.every((p) => p.status === "COMPLETED")
+    const allPhasesCompleted = allPhaseRecords.every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
     store.updateStatus(engagementId, executionError ? "FAILED" : allPhasesCompleted ? "COMPLETED" : "PAUSED")
     store.saveFindings(engagementId, allFindings)
     store.appendAuditLog(engagementId, "RESUME_COMPLETE",
