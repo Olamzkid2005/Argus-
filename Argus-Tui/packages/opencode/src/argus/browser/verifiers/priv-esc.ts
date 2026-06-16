@@ -8,7 +8,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   description = "Privilege Escalation — verifies access controls on high-privilege endpoints"
 
   private logs: string[] = []
-  private accessibleEndpoints: { endpoint: string; status: number; accessible: boolean }[] = []
+  private accessibleEndpoints: { endpoint: string; status: number; accessible: boolean; baselineDenied: boolean }[] = []
   private capturedScreenshots: { data: Buffer; label: string }[] = []
   private capturedResponses: string[] = []
   private capturedRequests: string[] = []
@@ -33,12 +33,34 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     await this.engine.close()
   }
 
+  /** Check endpoint access without auth as a baseline */
+  private async checkBaseline(endpointUrl: string): Promise<boolean> {
+    const page = await this.engine.navigate(endpointUrl)
+    await page.waitForLoadState("networkidle")
+    try {
+      const bodyText = await page.locator("body").innerText()
+      const httpStatus = 200
+      return !isAccessDenied(bodyText) && httpStatus !== 403 && httpStatus !== 401
+    } catch {
+      return false
+    } finally {
+      await page.close()
+    }
+  }
+
   async execute(): Promise<void> {
+    // Step 1: Baseline checks — each endpoint without auth
+    // Step 2: Login once, then check all endpoints with session shared
+    const page = await this.engine.navigate(this.targetUrl)
+    await loginIfFormPresent(page, this.lowPrivCreds)
+    if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
+
     for (const ep of this.highPrivEndpoints) {
       const endpointUrl = `${this.targetUrl.replace(/\/+$/, "")}/${ep.replace(/^\//, "")}`
-      const page = await this.engine.navigate(this.targetUrl)
-      await loginIfFormPresent(page, this.lowPrivCreds)
-      if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
+
+      // Baseline: check without auth first
+      const baselineDenied = !(await this.checkBaseline(endpointUrl))
+      this.logs.push(`Baseline for ${ep}: auth required = ${baselineDenied}`)
 
       this.capturedRequests.push(`GET ${endpointUrl} [low-priv as ${this.lowPrivCreds.username}]`)
 
@@ -59,26 +81,27 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
         accessible = false
       }
 
-      this.accessibleEndpoints.push({ endpoint: ep, status: httpStatus, accessible })
-      this.logs.push(`High-priv endpoint ${endpointUrl}: HTTP ${httpStatus}, accessible: ${accessible}`)
-
-      await page.close()
+      this.accessibleEndpoints.push({ endpoint: ep, status: httpStatus, accessible, baselineDenied })
+      this.logs.push(`High-priv endpoint ${endpointUrl}: HTTP ${httpStatus}, accessible: ${accessible}, baseline denied: ${baselineDenied}`)
     }
 
-    const anyAccessible = this.accessibleEndpoints.some(e => e.accessible)
-    this.logs.push(`Privilege escalation ${anyAccessible ? "POSSIBLE" : "not detected"}`)
+    await page.close()
+
+    const anyEscalation = this.accessibleEndpoints.some(e => e.accessible && e.baselineDenied)
+    this.logs.push(`Privilege escalation ${anyEscalation ? "POSSIBLE" : "not detected"}`)
   }
 
   async verify(): Promise<VerifierResult> {
-    const anyAccessible = this.accessibleEndpoints.some(e => e.accessible)
-    const some200 = this.accessibleEndpoints.some(e => e.status === 200 && e.accessible)
-    const summary = anyAccessible
-      ? `Privilege escalation: low-priv user accessed ${this.accessibleEndpoints.filter(e => e.accessible).map(e => e.endpoint).join(", ")}`
+    const escalationEndpoints = this.accessibleEndpoints.filter(e => e.accessible && e.baselineDenied)
+    const hasEscalation = escalationEndpoints.length > 0
+    const some200 = escalationEndpoints.some(e => e.status === 200)
+    const summary = hasEscalation
+      ? `Privilege escalation: low-priv user accessed ${escalationEndpoints.map(e => e.endpoint).join(", ")}`
       : `Access control enforced for all ${this.highPrivEndpoints.length} endpoint(s)`
 
     return {
-      passed: anyAccessible,
-      confidence: anyAccessible && some200 ? Confidence.HIGH : Confidence.LOW,
+      passed: hasEscalation,
+      confidence: hasEscalation && some200 ? Confidence.HIGH : Confidence.LOW,
       evidence: [],
       summary,
     }

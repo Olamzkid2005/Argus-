@@ -3,13 +3,15 @@ import type { VerificationScenario, VerifierResult, EvidencePackage } from "../t
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent } from "../login"
 
-const XSS_MARKERS = [
+const XSS_ATTR_MARKERS = [
   "<img src=x onerror=",
+  "onload=",
+  "javascript:",
+].map(m => m.toLowerCase())
+const XSS_TAG_MARKERS = [
   "<script>",
   "prompt(",
   "alert(",
-  "onload=",
-  "javascript:",
 ].map(m => m.toLowerCase())
 
 export class StoredXSSVerifier implements VerificationScenario {
@@ -82,17 +84,26 @@ export class StoredXSSVerifier implements VerificationScenario {
 
     const pageContent = (await victimPage.content()).toLowerCase()
     this.domOnVictim = pageContent
-    const markersFound = XSS_MARKERS.filter(m => pageContent.includes(m))
-    const payloadInDom = pageContent.includes(this.payload.toLowerCase())
-    this.payloadExecuted = markersFound.length > 0 || payloadInDom
+    // Check raw innerHTML (unescaped) for attribute-based XSS markers
+    const innerHtml = (await victimPage.evaluate(() => document.body?.innerHTML ?? "")).toLowerCase()
+    const attrMarkersFound = XSS_ATTR_MARKERS.filter(m => innerHtml.includes(m))
+    const tagMarkersFound = XSS_TAG_MARKERS.filter(m => innerHtml.includes(m))
+    // Also check if the payload text content appears anywhere (escaped is safe)
+    const payloadTextInDom = pageContent.includes(this.payload.toLowerCase())
+    // Only consider XSS confirmed if markers found in unescaped innerHTML
+    // or if the payload appears in raw attribute/tag context
+    const confirmedExecution = tagMarkersFound.length > 0
+    const probableExecution = attrMarkersFound.length > 0
+    this.payloadExecuted = confirmedExecution || probableExecution
 
     try {
       const victimShot = await this.engine.captureScreenshot(victimPage)
       this.capturedScreenshots.push({ data: victimShot, label: "victim-view" })
     } catch { /* screenshot best-effort */ }
 
-    this.logs.push(`XSS markers found in DOM: ${markersFound.length > 0 ? markersFound.join(", ") : "none"}`)
-    this.logs.push(`Payload string in DOM: ${payloadInDom}`)
+    this.logs.push(`XSS tag markers in innerHTML: ${tagMarkersFound.length > 0 ? tagMarkersFound.join(", ") : "none"}`)
+    this.logs.push(`XSS attr markers in innerHTML: ${attrMarkersFound.length > 0 ? attrMarkersFound.join(", ") : "none"}`)
+    this.logs.push(`Payload text in DOM (may be escaped): ${payloadTextInDom}`)
     this.logs.push(`XSS ${this.payloadExecuted ? "DETECTED" : "not detected"}`)
 
     await victimPage.close()
