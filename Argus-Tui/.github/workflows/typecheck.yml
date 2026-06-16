@@ -2,9 +2,9 @@ name: typecheck
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, Argus-Tui]
   pull_request:
-    branches: [dev]
+    branches: [dev, Argus-Tui]
   workflow_dispatch:
 
 jobs:

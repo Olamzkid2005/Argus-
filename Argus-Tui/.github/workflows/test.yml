@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - dev
+      - Argus-Tui
   pull_request:
   workflow_dispatch:
 
