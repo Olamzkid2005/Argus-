@@ -1,4 +1,4 @@
-import { WorkflowRunner } from "../workflow-runner"
+import { WorkflowRunner, type WorkflowRunResult } from "../workflow-runner"
 import { ReportGenerator } from "../reporting/generator"
 import type { Feature } from "../config/feature-flags"
 import type { ProgressEvent } from "../shared/progress"
@@ -45,7 +45,7 @@ export async function assessCommand(target: string, options?: {
   cacheMode?: "normal" | "no_cache" | "refresh"
   features?: Partial<Record<Feature, boolean>>
   onProgress?: (event: ProgressEvent | string) => void
-}): Promise<void> {
+}): Promise<WorkflowRunResult> {
   const runner = new WorkflowRunner()
   const result = await runner.run({
     target,
@@ -62,4 +62,6 @@ export async function assessCommand(target: string, options?: {
     const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment")
     process.stdout.write(report + "\n")
   }
+
+  return result
 }

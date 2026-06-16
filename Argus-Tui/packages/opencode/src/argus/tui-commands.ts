@@ -54,10 +54,11 @@ const commands: ArgusTuiCommand[] = [
       const target = parts.find(p => !p.startsWith("--")) ?? parts[0]
       const noCache = parts.includes("--no-cache")
       const refreshCache = parts.includes("--refresh-cache")
-      await assessCommand(target, {
+      const result = await assessCommand(target, {
         useLLM: true,
         cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
       })
+      if (!result.success) throw new Error(result.error ?? "Assessment failed")
       return `Assessment completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
     },
   },
@@ -93,10 +94,11 @@ const commands: ArgusTuiCommand[] = [
       const target = parts.find(p => !p.startsWith("--")) ?? parts[0]
       const noCache = parts.includes("--no-cache")
       const refreshCache = parts.includes("--refresh-cache")
-      await assessCommand(target, {
+      const result = await assessCommand(target, {
         useLLM: false,
         cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
       })
+      if (!result.success) throw new Error(result.error ?? "Recon failed")
       return `Recon completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
     },
   },

@@ -66,6 +66,8 @@ export interface WorkflowRunResult {
   medium: number
   low: number
   durationMs: number
+  success: boolean
+  error?: string
   /** All findings with promoted confidence, for rendering summaries */
   allFindings: NormalizedFinding[]
 }
@@ -310,6 +312,8 @@ export class WorkflowRunner {
       medium: allFindings.filter((f) => f.severity === 2).length,
       low: allFindings.filter((f) => f.severity <= 1).length,
       durationMs: Date.now() - startTime,
+      success: !executionError,
+      error: executionError?.message,
       allFindings,
     }
   }
