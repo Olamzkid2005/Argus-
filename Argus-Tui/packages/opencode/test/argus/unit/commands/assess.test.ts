@@ -272,9 +272,9 @@ describe("assessCommand", () => {
 
   test("passes features option to runner", async () => {
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com", { features: { ai_analysis: false } })
+    await assessCommand("https://example.com", { features: { llm_finding_analysis: false } })
 
-    expect(capturedRunOptions.features).toEqual({ ai_analysis: false })
+    expect(capturedRunOptions.features).toEqual({ llm_finding_analysis: false })
   })
 
   test("returns the workflow result directly", async () => {

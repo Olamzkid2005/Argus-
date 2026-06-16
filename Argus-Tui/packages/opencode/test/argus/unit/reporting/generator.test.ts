@@ -316,6 +316,7 @@ describe("ReportGenerator", () => {
         remediation: ["Use parameterized queries"],
         model: "gpt-4",
         generatedAt: Date.now(),
+        findingUpdatedAt: Date.now(),
       }])
       const markdown = generator.generateMarkdown(
         [makeFinding({ id: "test-1" })],
@@ -337,6 +338,7 @@ describe("ReportGenerator", () => {
         remediation: ["Fix 1"],
         model: "gpt-4",
         generatedAt: Date.now(),
+        findingUpdatedAt: Date.now(),
       }])
       const html = generator.generateHTML(
         [makeFinding({ id: "test-1" })],

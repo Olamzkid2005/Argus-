@@ -212,10 +212,11 @@ describe("EngagementStore — phase CRUD", () => {
       id: `phase-${index}-test`,
       engagementId,
       name: `phase-${index}`,
-      status: "PENDING" as const,
+      status: "PENDING" as "PENDING" | "RUNNING" | "COMPLETED" | "PARTIAL" | "FAILED" | "SKIPPED",
       capabilities: ["web_recon"],
       executionMode: "sequential" as const,
       replanCycle: false,
+      startedAt: undefined as string | undefined,
     }
   }
 
