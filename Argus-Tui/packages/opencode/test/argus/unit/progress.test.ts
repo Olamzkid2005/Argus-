@@ -3,11 +3,12 @@ import type { ProgressEvent, ProgressCallback } from "../../../src/argus/shared/
 
 describe("ProgressEvent types", () => {
   test("phase_start event has correct shape", () => {
-    const event: ProgressEvent = { type: "phase_start", phaseId: "p1", name: "recon", total: 5 }
+    const event: ProgressEvent = { type: "phase_start", phaseId: "p1", name: "recon", total: 5, phaseIndex: 0 }
     expect(event.type).toBe("phase_start")
     expect(event.phaseId).toBe("p1")
     expect(event.name).toBe("recon")
     expect(event.total).toBe(5)
+    expect(event.phaseIndex).toBe(0)
   })
 
   test("phase_complete event has correct shape", () => {

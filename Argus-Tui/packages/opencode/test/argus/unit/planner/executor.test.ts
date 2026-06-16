@@ -40,6 +40,7 @@ const mockWorkflowRegistry = {
 function makePhase(overrides?: Partial<PhaseExecutionRequest>): PhaseExecutionRequest {
   return {
     phaseId: "phase-0-test",
+    name: "test",
     workflowName: "test",
     target: "https://example.com",
     requiredCapabilities: [Capability.WEB_RECON],

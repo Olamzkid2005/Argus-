@@ -6,6 +6,7 @@ import type { PhaseExecutionRequest } from "../../../../src/argus/planner/types"
 function makePhase(caps: Capability[], gateName?: string): PhaseExecutionRequest {
   return {
     phaseId: "test-phase",
+    name: "test",
     workflowName: "test-workflow",
     target: "https://example.com",
     requiredCapabilities: caps,

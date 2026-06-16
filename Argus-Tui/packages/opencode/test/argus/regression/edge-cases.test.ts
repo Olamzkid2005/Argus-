@@ -402,7 +402,7 @@ describe("ApprovalService edge cases", () => {
 
   test("needsApproval with duplicated capabilities", () => {
     const phase: PhaseExecutionRequest = {
-      phaseId: "test", workflowName: "test", target: "https://example.com",
+      phaseId: "test", name: "test", workflowName: "test", target: "https://example.com",
       requiredCapabilities: [Capability.AUTH_DETECTION, Capability.AUTH_DETECTION],
       config: {}, previousPhaseResults: [],
       approvalGateName: "auth_testing",
@@ -415,7 +415,7 @@ describe("ApprovalService edge cases", () => {
 
   test("Multiple gates match the same phase", () => {
     const phase: PhaseExecutionRequest = {
-      phaseId: "test", workflowName: "test", target: "https://example.com",
+      phaseId: "test", name: "test", workflowName: "test", target: "https://example.com",
       requiredCapabilities: [Capability.VULNERABILITY_SCANNING, Capability.AUTH_DETECTION, Capability.BROWSER_VERIFICATION],
       config: {}, previousPhaseResults: [],
       approvalGateName: "destructive_tools",

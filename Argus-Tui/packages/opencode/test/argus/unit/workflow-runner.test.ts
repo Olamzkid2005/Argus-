@@ -126,6 +126,7 @@ describe("WorkflowRunner", () => {
         phases: [
           {
             phaseId: "phase-0-recon",
+            name: "recon",
             workflowName: "test-workflow",
             target: "https://example.com",
             requiredCapabilities: ["recon"],

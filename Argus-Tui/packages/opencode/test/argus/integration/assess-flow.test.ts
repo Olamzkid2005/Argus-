@@ -96,7 +96,7 @@ describe("Assess Flow", () => {
     const phaseRecords = plan.phases.map((p, i) => ({
       id: p.phaseId,
       engagementId: eng.id,
-      name: p.phaseId.split("-")[2] ?? p.phaseId,
+      name: p.name,
       status: "PENDING" as const,
       capabilities: p.requiredCapabilities,
       executionMode: "sequential" as const,

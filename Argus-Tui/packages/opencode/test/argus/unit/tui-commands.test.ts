@@ -59,7 +59,7 @@ describe("tui-commands", () => {
 
   describe("assess command handler", () => {
     it("calls assessCommand and returns message", async () => {
-      assessMock.mockResolvedValue(undefined)
+      assessMock.mockResolvedValue({ success: true, engagementId: "ENG-1", findings: 0, critical: 0, high: 0, medium: 0, low: 0, durationMs: 100, error: undefined, allFindings: [] })
       const cmd = findArgusTuiCommand("assess")!
       const result = await cmd.handler("https://test.com")
       expect(assessMock).toHaveBeenCalledWith("https://test.com", { useLLM: true })
@@ -88,7 +88,7 @@ describe("tui-commands", () => {
 
   describe("recon command handler", () => {
     it("calls assessCommand with useLLM=false", async () => {
-      assessMock.mockResolvedValue(undefined)
+      assessMock.mockResolvedValue({ success: true, engagementId: "ENG-1", findings: 0, critical: 0, high: 0, medium: 0, low: 0, durationMs: 100, error: undefined, allFindings: [] })
       const cmd = findArgusTuiCommand("recon")!
       const result = await cmd.handler("https://test.com")
       expect(assessMock).toHaveBeenCalledWith("https://test.com", { useLLM: false })
