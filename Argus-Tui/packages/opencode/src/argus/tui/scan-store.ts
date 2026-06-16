@@ -1,11 +1,9 @@
 /**
- * ScanStore — Shared reactive state for active assessments.
+ * ScanStore — Engagement-scoped reactive state for assessments.
  *
- * Uses SolidJS-style signals so TUI components can subscribe
- * to live progress updates during an assessment.
- *
- * The WorkflowRunner writes to this store; the scan dashboard
- * route reads from it reactively.
+ * Maintains separate ScanState per engagementId so concurrent assessments
+ * don't contaminate each other's progress. The TUI reads from the
+ * currently active engagement's state via getScanState().
  */
 
 import { createStore } from "solid-js/store"
@@ -51,14 +49,55 @@ const initialState: ScanState = {
   errorHints: [] as ErrorHintData[],
 }
 
-// Module-level store — shared across all components
 const [scanState, setScanState] = createStore<ScanState>({ ...initialState })
+
+const savedStates = new Map<string, ScanState>()
+
+let activeEngagementId: string | null = null
+
+function snapshot(): ScanState {
+  return {
+    target: scanState.target,
+    engagementId: scanState.engagementId,
+    status: scanState.status,
+    phases: [...scanState.phases],
+    totalFindings: scanState.totalFindings,
+    currentPhase: scanState.currentPhase,
+    log: [...scanState.log],
+    startTime: scanState.startTime,
+    durationMs: scanState.durationMs,
+    analysisCurrent: scanState.analysisCurrent,
+    analysisTotal: scanState.analysisTotal,
+    errorHints: [...scanState.errorHints],
+  }
+}
+
+function persistActive() {
+  if (activeEngagementId) savedStates.set(activeEngagementId, snapshot())
+}
+
+function restore(id: string) {
+  const saved = savedStates.get(id)
+  if (saved) {
+    setScanState(saved)
+  } else {
+    setScanState({ ...initialState, target: scanState.target, engagementId: id })
+  }
+  activeEngagementId = id
+}
 
 export function getScanState() {
   return scanState
 }
 
+export function setActiveEngagement(engagementId: string) {
+  persistActive()
+  restore(engagementId)
+}
+
 export function initScan(target: string, engagementId: string) {
+  persistActive()
+  savedStates.delete(engagementId)
   setScanState({
     ...initialState,
     target,
@@ -66,9 +105,11 @@ export function initScan(target: string, engagementId: string) {
     status: "running",
     startTime: Date.now(),
   })
+  activeEngagementId = engagementId
 }
 
 export function addPhase(phase: { id: string; name: string; index: number; total: number }) {
+  persistActive()
   setScanState("phases", (prev) => [
     ...prev,
     { ...phase, status: "running" as const, findings: 0, errors: [] },
@@ -78,6 +119,7 @@ export function addPhase(phase: { id: string; name: string; index: number; total
 
 export function completePhase(index: number, findings: number, errors: string[], status?: "completed" | "partial" | "failed") {
   if (scanState.phases[index]?.status === "completed" || scanState.phases[index]?.status === "partial" || scanState.phases[index]?.status === "failed") return
+  persistActive()
   const resolvedStatus = status ?? (errors.length > 0 && findings > 0 ? "partial" : errors.length > 0 ? "failed" : "completed")
   setScanState("phases", index, "status", resolvedStatus)
   setScanState("phases", index, "findings", findings)
@@ -86,35 +128,47 @@ export function completePhase(index: number, findings: number, errors: string[],
 }
 
 export function appendLog(msg: string) {
+  persistActive()
   setScanState("log", (prev) => [...prev, msg])
 }
 
 export function completeScan(success: boolean) {
+  persistActive()
   setScanState("status", success ? "completed" : "failed")
   setScanState("durationMs", Date.now() - scanState.startTime)
 }
 
 export function setTotalFindings(count: number) {
+  persistActive()
   setScanState("totalFindings", count)
 }
 
 export function addErrorHint(hint: ErrorHintData) {
+  persistActive()
   setScanState("errorHints", (prev) => [...prev, hint])
 }
 
 export function clearErrorHints() {
+  persistActive()
   setScanState("errorHints", [])
 }
 
 export function resetScan() {
+  persistActive()
   setScanState({ ...initialState })
+  activeEngagementId = null
 }
 
 function findPhaseIndex(phaseId: string): number {
   return scanState.phases.findIndex((p) => p.id === phaseId)
 }
 
-export function handleProgressEvent(event: ProgressEvent) {
+export function handleProgressEvent(event: ProgressEvent, engagementId?: string) {
+  const prevActive = activeEngagementId
+  if (engagementId && engagementId !== activeEngagementId) {
+    persistActive()
+    restore(engagementId)
+  }
   switch (event.type) {
     case "phase_start":
       addPhase({ id: event.phaseId, name: event.name, index: scanState.phases.length, total: event.total })
@@ -159,5 +213,9 @@ export function handleProgressEvent(event: ProgressEvent) {
       })
       appendLog(`[!] ${event.summary}`)
       break
+  }
+  if (engagementId && engagementId !== prevActive) {
+    persistActive()
+    if (prevActive) restore(prevActive)
   }
 }

@@ -142,7 +142,7 @@ export class WorkflowRunner {
     const userEmit = options.onProgress
     const emit = (event: ProgressEvent | string) => {
       userEmit?.(event)
-      if (typeof event !== "string") handleProgressEvent(event)
+      if (typeof event !== "string") handleProgressEvent(event, engagementId)
     }
 
     emit(`✓ Target validated: ${target}`)
