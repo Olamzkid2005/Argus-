@@ -1,0 +1,23 @@
+name: phpcs
+command: phpcs
+description: "PHP CodeSniffer with security audit rules"
+args:
+  - "--standard=Security"
+  - "--extensions=php"
+  - "--report=json"
+parameters:
+  - name: target
+    type: string
+    description: "Target path"
+    required: true
+capabilities:
+  - vulnerability_scanning
+  - sast
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - php
+priority: 60
+cost: low
+enabled: true
+timeout: 600

@@ -1,0 +1,16 @@
+name: bucket_upload
+command: bucket_upload
+description: "Cloud storage bucket upload testing for permission misconfigurations"
+parameters:
+  - name: target
+    type: string
+    description: "Bucket URL or name"
+    required: true
+capabilities:
+  - vulnerability_scanning
+  - s3_scanning
+signal_quality: PROBABLE
+priority: 50
+cost: low
+enabled: true
+timeout: 120

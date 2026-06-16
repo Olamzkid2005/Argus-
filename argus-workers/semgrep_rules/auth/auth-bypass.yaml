@@ -1,0 +1,54 @@
+rules:
+  - id: idor-direct-object-access
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Direct object access from user input without ownership check.
+      Verify the user owns or has permission to access the resource.
+    metadata:
+      cwe: "CWE-639"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: db.get($TABLE, request.args.get(...))
+      - pattern: db.get($TABLE, request.json.get(...))
+      - pattern: db.get($TABLE, req.params.$FIELD)
+      - pattern: db.get($TABLE, req.body.$FIELD)
+      - pattern: db.$TABLE.find(req.params.$FIELD)
+      - pattern: db.$TABLE.findOne(req.params.$FIELD)
+
+  - id: missing-role-check
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Admin endpoint accessed without role/permission check.
+      Add role-based access control (RBAC).
+    metadata:
+      cwe: "CWE-862"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: |
+          $USER = get_current_user()
+          ...
+          db.delete(...)
+      - pattern: |
+          $USER = req.user
+          ...
+          db.$TABLE.delete(...)
+
+  - id: session-fixation
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    message: >-
+      Session value set without regeneration. Enable session fixation protection.
+    metadata:
+      cwe: "CWE-384"
+      owasp: "A01:2021-Broken Access Control"
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: session[$KEY] = $VALUE
+      - pattern: req.session.$KEY = $VALUE

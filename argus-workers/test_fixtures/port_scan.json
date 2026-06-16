@@ -1,0 +1,16 @@
+{
+  "finding_type": "OPEN_PORT",
+  "severity": "MEDIUM",
+  "confidence": 1.0,
+  "endpoint": "https://example.com:443",
+  "title": "Open port 443 (HTTPS)",
+  "description": "Port 443 was found open running HTTPS service.",
+  "evidence": {
+    "port": 443,
+    "protocol": "tcp",
+    "service": "https",
+    "banner": "Apache/2.4.41 (Ubuntu)"
+  },
+  "source_tool": "nmap",
+  "remediation": "Ensure the service is properly secured and up to date."
+}

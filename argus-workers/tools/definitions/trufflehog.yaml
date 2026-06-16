@@ -1,0 +1,30 @@
+name: trufflehog
+command: trufflehog
+description: "High-entropy secret scanner for git history and filesystems"
+args:
+  - "git"
+  - "--json"
+  - "--no-update"
+parameters:
+  - name: target
+    type: string
+    description: "Target path"
+    required: true
+  - name: since_commit
+    type: string
+    description: "Scan from specific commit"
+    required: false
+    flag: "--since-commit"
+  - name: max_depth
+    type: integer
+    description: "Max commit depth"
+    required: false
+    flag: "--max-depth"
+capabilities:
+  - vulnerability_scanning
+  - secret_detection
+signal_quality: PROBABLE
+priority: 70
+cost: medium
+enabled: true
+timeout: 600

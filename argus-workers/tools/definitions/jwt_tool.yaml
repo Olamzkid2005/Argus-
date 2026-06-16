@@ -1,0 +1,23 @@
+name: jwt_tool
+command: jwt_tool
+description: "JWT security testing toolkit"
+args:
+  - "-C"
+  - "-d"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "-u"
+capabilities:
+  - jwt_analysis
+signal_quality: PROBABLE
+requires:
+  recon_signals:
+    - has_api
+    - has_login_page
+priority: 70
+cost: low
+enabled: true
+timeout: 120

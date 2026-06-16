@@ -1,0 +1,26 @@
+name: katana
+command: katana
+description: "Web crawling and endpoint discovery tool"
+args:
+  - "-jsonl"
+  - "-silent"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "-u"
+  - name: depth
+    type: integer
+    description: "Crawl depth"
+    required: false
+    flag: "-d"
+    default: 3
+capabilities:
+  - content_discovery
+  - web_recon
+signal_quality: CANDIDATE
+priority: 60
+cost: medium
+enabled: true
+timeout: 300

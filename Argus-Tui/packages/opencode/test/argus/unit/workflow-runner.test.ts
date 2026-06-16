@@ -1,0 +1,347 @@
+import { describe, expect, test, mock } from "bun:test"
+
+// ── Pure function tests ──
+
+describe("formatFindingsSummary", () => {
+  test("returns formatted string with all zeros when no findings", async () => {
+    const { formatFindingsSummary } =
+      await import("../../../src/argus/workflow-runner")
+    const result = formatFindingsSummary([], "ENG-000", "https://example.com")
+
+    expect(result).toContain("Assessment Complete: https://example.com")
+    expect(result).toContain("ENG-000")
+    expect(result).toContain("Critical: 0")
+    expect(result).toContain("High:     0")
+    expect(result).toContain("Medium:   0")
+    expect(result).toContain("Low:      0")
+    expect(result).not.toContain("Top Findings")
+    expect(result).toContain("/report ENG-000")
+  })
+
+  test("returns correct critical/high/medium/low counts", async () => {
+    const { formatFindingsSummary } =
+      await import("../../../src/argus/workflow-runner")
+    const ts = new Date().toISOString()
+    const findings = [
+      { id: "f1", title: "XSS", severity: 4, confidence: 3, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "xss", created_at: ts, updated_at: ts },
+      { id: "f2", title: "SQLi", severity: 3, confidence: 2, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "sqli", created_at: ts, updated_at: ts },
+      { id: "f3", title: "Info Leak", severity: 1, confidence: 1, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "info", created_at: ts, updated_at: ts },
+      { id: "f4", title: "Cookie", severity: 2, confidence: 2, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "cookie", created_at: ts, updated_at: ts },
+      { id: "f5", title: "Low Issue", severity: 1, confidence: 0, tool: "scanner", phase: "recon", status: "PENDING" as const, description: "low", created_at: ts, updated_at: ts },
+    ]
+    const result = formatFindingsSummary(findings, "ENG-001", "https://target.test")
+
+    expect(result).toContain("Critical: 1")
+    expect(result).toContain("High:     1")
+    expect(result).toContain("Medium:   1")
+    expect(result).toContain("Low:      2")
+  })
+
+  test("includes top 5 findings ordered by severity", async () => {
+    const { formatFindingsSummary } =
+      await import("../../../src/argus/workflow-runner")
+    const ts = new Date().toISOString()
+    const findings = [
+      { id: "f1", title: "Critical A", severity: 4, confidence: 3, tool: "t1", phase: "p1", status: "PENDING" as const, description: "crit", created_at: ts, updated_at: ts },
+      { id: "f2", title: "High A", severity: 3, confidence: 2, tool: "t2", phase: "p2", status: "PENDING" as const, description: "high", created_at: ts, updated_at: ts },
+      { id: "f3", title: "High B", severity: 3, confidence: 2, tool: "t2", phase: "p2", status: "PENDING" as const, description: "high", created_at: ts, updated_at: ts },
+      { id: "f4", title: "Medium A", severity: 2, confidence: 2, tool: "t3", phase: "p3", status: "PENDING" as const, description: "med", created_at: ts, updated_at: ts },
+      { id: "f5", title: "Medium B", severity: 2, confidence: 1, tool: "t3", phase: "p3", status: "PENDING" as const, description: "med", created_at: ts, updated_at: ts },
+      { id: "f6", title: "Low A", severity: 1, confidence: 1, tool: "t4", phase: "p4", status: "PENDING" as const, description: "low", created_at: ts, updated_at: ts },
+    ]
+    const result = formatFindingsSummary(findings, "ENG-002", "https://target.test")
+
+    expect(result).toContain("Top Findings")
+    expect(result).toContain("[CRITICAL] Critical A")
+    expect(result).toContain("[HIGH] High A")
+    expect(result).toContain("[HIGH] High B")
+    expect(result).toContain("[MEDIUM] Medium A")
+    expect(result).toContain("[MEDIUM] Medium B")
+    expect(result).not.toContain("Low A")
+  })
+
+  test("includes engagement ID and target in output", async () => {
+    const { formatFindingsSummary } =
+      await import("../../../src/argus/workflow-runner")
+    const result = formatFindingsSummary([], "ENG-CUSTOM-123", "https://myapp.test")
+
+    expect(result).toContain("ENG-CUSTOM-123")
+    expect(result).toContain("https://myapp.test")
+  })
+})
+
+// ── WorkflowRunner.run() tests ──
+
+describe("WorkflowRunner", () => {
+  function makeDeps() {
+    const mockEngagementStore = {
+      createEngagement: mock(() => ({ id: "ENG-test-001" })),
+      getEngagement: mock(() => ({ id: "ENG-test-001" })),
+      updateStatus: mock(() => {}),
+      savePhases: mock(() => {}),
+      savePhase: mock(() => {}),
+      saveFindings: mock(() => {}),
+      appendAuditLog: mock(() => {}),
+      listEngagements: mock(() => []),
+      getFindings: mock(() => []),
+      getPhases: mock(() => []),
+      getAuditLog: mock(() => []),
+      getEvidencePackages: mock(() => []),
+      getArtifacts: mock(() => []),
+      saveEvidencePackage: mock(() => {}),
+      saveArtifact: mock(() => {}),
+      saveFindingAnalysis: mock(() => {}),
+      getFindingAnalysis: mock(() => null),
+      deleteFindingAnalysis: mock(() => {}),
+      getValidAnalysis: mock(() => null),
+      saveWorkflowSnapshot: mock(() => {}),
+      getWorkflowSnapshots: mock(() => []),
+      getEvidenceByEngagement: mock(() => []),
+      getFinding: mock(() => null),
+    }
+
+    const mockWorkflowRegistry = {
+      loadAll: mock(() => []),
+      getWorkflow: mock(() => ({ name: "test-workflow", phases: [], approval_required: false })),
+      findByCapabilities: mock(() => null),
+      listWorkflows: mock(() => []),
+      addWorkflow: mock(() => {}),
+    }
+
+    const mockToolRegistry = {
+      load: mock(() => {}),
+      selectBest: mock(() => []),
+      getTool: mock(() => undefined),
+      getToolsByCapability: mock(() => []),
+      getCapabilities: mock(() => []),
+      listTools: mock(() => []),
+      findBestTools: mock(() => []),
+      setConfig: mock(() => {}),
+      getToolTimeout: mock(() => 120),
+    }
+
+    const mockPlanner = {
+      plan: mock(() => ({
+        workflow: "test-workflow",
+        phases: [
+          {
+            phaseId: "phase-0-recon",
+            workflowName: "test-workflow",
+            target: "https://example.com",
+            requiredCapabilities: ["recon"],
+            config: {},
+            previousPhaseResults: [],
+          },
+        ],
+        errorRecovery: { "phase-0-recon": "skip_and_continue" },
+        planCreatedAt: new Date().toISOString(),
+      })),
+      replan: mock(() => null),
+    }
+
+    const mockExecutor = {
+      execute: mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [],
+        artifacts: [],
+        errors: [],
+        durationMs: 42,
+      })),
+      loadGates: mock(() => {}),
+      setFeatureFlags: mock(() => {}),
+      setExecutionOptions: mock(() => {}),
+    }
+
+    const mockBridge = {
+      connect: mock(() => Promise.resolve()),
+      disconnect: mock(() => Promise.resolve()),
+      isHealthy: mock(() => Promise.resolve(true)),
+      killChild: mock(() => {}),
+      restartWorker: mock(() => Promise.resolve()),
+    }
+
+    const mockConfidenceEngine = {
+      promote: mock((finding: any) => finding.confidence ?? 0),
+      shouldFinalize: mock(() => false),
+    }
+
+    const mockCredStore = {
+      load: mock(() => {}),
+      getAllCredentials: mock(() => ({})),
+      clear: mock(() => {}),
+      getCredentials: mock(() => null),
+      listRoles: mock(() => []),
+      getDefaultRole: mock(() => undefined),
+      getDefaultCredentials: mock(() => null),
+    }
+
+    return {
+      mockEngagementStore,
+      mockWorkflowRegistry,
+      mockToolRegistry,
+      mockPlanner,
+      mockExecutor,
+      mockBridge,
+      mockConfidenceEngine,
+      mockCredStore,
+      deps: {
+        store: mockEngagementStore as any,
+        workflowRegistry: mockWorkflowRegistry as any,
+        toolRegistry: mockToolRegistry as any,
+        planner: mockPlanner as any,
+        executor: mockExecutor as any,
+        bridge: mockBridge as any,
+        confidenceEngine: mockConfidenceEngine as any,
+        credStore: mockCredStore as any,
+      },
+    }
+  }
+
+  test("creates new engagement and runs workflow successfully", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { mockEngagementStore, mockWorkflowRegistry, mockToolRegistry, mockPlanner, mockExecutor, mockBridge, deps } = makeDeps()
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({ target: "https://example.com" })
+
+    expect(mockEngagementStore.createEngagement).toHaveBeenCalledWith("https://example.com", "assessment")
+    expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "RUNNING")
+    expect(mockWorkflowRegistry.loadAll).toHaveBeenCalled()
+    expect(mockToolRegistry.load).toHaveBeenCalled()
+    expect(mockPlanner.plan).toHaveBeenCalledWith("https://example.com", undefined, { useLLM: true })
+    expect(mockEngagementStore.savePhases).toHaveBeenCalled()
+    expect(mockBridge.connect).toHaveBeenCalled()
+    expect(mockExecutor.loadGates).toHaveBeenCalledWith("test-workflow")
+    expect(mockExecutor.execute).toHaveBeenCalledTimes(1)
+    expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "COMPLETED")
+    expect(mockEngagementStore.saveFindings).toHaveBeenCalled()
+    expect(mockBridge.disconnect).toHaveBeenCalled()
+
+    expect(result.engagementId).toBe("ENG-test-001")
+    expect(result.findings).toBe(0)
+    expect(result.durationMs).toBeGreaterThanOrEqual(0)
+  })
+
+  test("uses existing engagementId when provided", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { mockEngagementStore, deps } = makeDeps()
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({
+      target: "https://example.com",
+      engagementId: "ENG-EXISTING-1",
+    })
+
+    expect(mockEngagementStore.getEngagement).toHaveBeenCalledWith("ENG-EXISTING-1")
+    expect(mockEngagementStore.createEngagement).not.toHaveBeenCalled()
+    expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-EXISTING-1", "RUNNING")
+  })
+
+  test("throws error when engagementId not found in store", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    deps.store.getEngagement = mock(() => null)
+
+    const runner = new WorkflowRunner(deps)
+
+    await expect(
+      runner.run({ target: "https://example.com", engagementId: "ENG-MISSING" }),
+    ).rejects.toThrow("Engagement ENG-MISSING not found in store")
+  })
+
+  test("calls onProgress callbacks during execution", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    const runner = new WorkflowRunner(deps)
+    const onProgress = mock(() => {})
+
+    await runner.run({ target: "https://example.com", onProgress })
+
+    expect(onProgress).toHaveBeenCalled()
+    const calls = onProgress.mock.calls.map((c: any[]) => String(c[0]))
+    expect(calls.some((s: string) => s.includes("Target validated"))).toBe(true)
+    expect(calls.some((s: string) => s.includes("Engagement created"))).toBe(true)
+    expect(calls.some((s: string) => s.includes("Planning assessment"))).toBe(true)
+    expect(calls.some((s: string) => s.includes("MCP workers connected"))).toBe(true)
+  })
+
+  test("handles execution error gracefully", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    deps.executor.execute = mock(() => { throw new Error("Phase crashed") })
+
+    const runner = new WorkflowRunner(deps)
+    const onProgress = mock(() => {})
+
+    const result = await runner.run({ target: "https://example.com", onProgress })
+
+    // Status set to FAILED
+    expect(deps.store.updateStatus).toHaveBeenCalledWith("ENG-test-001", "FAILED")
+    // Audit log appended
+    expect(deps.store.appendAuditLog).toHaveBeenCalledWith(
+      "ENG-test-001",
+      "RUNNER_ERROR",
+      expect.stringContaining("Phase crashed"),
+    )
+    // Result still returned
+    expect(result.engagementId).toBe("ENG-test-001")
+    expect(result.findings).toBe(0)
+    // Progress reported error
+    const calls = onProgress.mock.calls.map((c: any[]) => String(c[0]))
+    expect(calls.some((s: string) => s.includes("Error"))).toBe(true)
+    expect(calls.some((s: string) => s.includes("failed"))).toBe(true)
+  })
+
+  test("saves findings even when execution has error", async () => {
+    const partialFindings = [
+      {
+        id: "find-1",
+        title: "Found before crash",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "test",
+        tool: "scanner",
+        phase: "phase-0-recon",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]
+
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    deps.executor.execute = mock(() => ({
+      phaseId: "phase-0-recon",
+      status: "completed",
+      findings: partialFindings,
+      artifacts: [],
+      errors: [],
+      durationMs: 10,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({ target: "https://example.com" })
+
+    expect(deps.store.saveFindings).toHaveBeenCalled()
+    expect(result.findings).toBe(1)
+  })
+
+  test("disconnects bridge in finally block despite error", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    let disconnectCalled = false
+    deps.bridge.disconnect = mock(() => {
+      disconnectCalled = true
+      return Promise.resolve()
+    })
+    deps.executor.execute = mock(() => { throw new Error("Crash") })
+
+    const runner = new WorkflowRunner(deps)
+
+    await runner.run({ target: "https://example.com" })
+
+    expect(disconnectCalled).toBe(true)
+    expect(deps.bridge.disconnect).toHaveBeenCalledTimes(1)
+  })
+})

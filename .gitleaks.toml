@@ -1,0 +1,22 @@
+title = "Argus Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  # Test fixture data in bugbounty rule definitions
+  '''data_exposure\.yaml''',
+  '''bugbounty_rules/.*\.yaml''',
+  # Large generated directories to exclude
+  '''node_modules''',
+  '''tool_assets''',
+  '''\.git''',
+  '''venv''',
+  '''\.venv''',
+  '''__pycache__''',
+  '''\.egg-info''',
+  '''dist''',
+  '''build''',
+  '''\.next''',
+]

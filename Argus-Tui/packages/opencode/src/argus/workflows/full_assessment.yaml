@@ -1,0 +1,65 @@
+name: full_assessment
+label: Full Web Assessment
+version: 1
+phases:
+  - name: recon
+    required_capabilities:
+      - web_recon
+      - port_scanning
+      - technology_detection
+      - http_probe
+    execution: parallel
+    error_recovery: retry_once_then_skip
+
+  - name: auth_detection
+    required_capabilities:
+      - auth_detection
+      - credential_analysis
+    execution: sequential
+    error_recovery: skip_and_continue
+
+  - name: api_discovery
+    required_capabilities:
+      - content_discovery
+      - api_probing
+    execution: parallel
+    error_recovery: skip_and_continue
+
+  - name: vuln_scan
+    required_capabilities:
+      - vulnerability_scanning
+      - template_scanning
+    execution: parallel
+    error_recovery: retry_once_then_skip
+
+  - name: code_analysis
+    required_capabilities:
+      - sast
+      - secret_detection
+      - sca
+    execution: parallel
+    error_recovery: skip_and_continue
+
+  - name: cloud_enum
+    required_capabilities:
+      - cloud_enum
+      - s3_scanning
+    execution: parallel
+    error_recovery: skip_and_continue
+
+  - name: verification
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: skip_and_continue
+
+  - name: reporting
+    required_capabilities:
+      - report_generation
+    execution: sequential
+    error_recovery: skip_and_continue
+
+approval_required:
+  destructive_tools: true
+  auth_testing: false
+  privilege_escalation: true

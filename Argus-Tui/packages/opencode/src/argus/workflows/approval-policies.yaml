@@ -1,0 +1,13 @@
+approval_policies:
+  destructive_tools:
+    prompt: "Tool {tool} is potentially destructive. Continue?"
+    interactive_behavior: prompt    # prompt | skip | force
+    auto_behavior: skip             # prompt | skip | force
+  auth_testing:
+    prompt: "This test will attempt authenticated operations on {target}. Continue?"
+    interactive_behavior: prompt
+    auto_behavior: prompt           # Always prompt even in --auto for auth testing
+  privilege_escalation:
+    prompt: "Attempting privilege escalation on {target}. This may trigger alerts. Continue?"
+    interactive_behavior: prompt
+    auto_behavior: skip

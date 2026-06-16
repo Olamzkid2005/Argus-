@@ -1,0 +1,917 @@
+tools:
+  - name: nuclei
+    label: Nuclei Vulnerability Scanner
+    capabilities:
+      - vulnerability_scanning
+      - template_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    min_version: "3.0.0"
+    version_cmd: "nuclei --version"
+    version_regex: "\\d+\\.\\d+\\.\\d+"
+    consumes: [live_hosts, tech_stack]
+    provides: [vulnerabilities]
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+
+  - name: nikto
+    label: Nikto Web Scanner
+    capabilities:
+      - web_recon
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 70
+      coverage_score: 60
+
+  - name: nmap
+    label: Nmap Port Scanner
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+    consumes: [target]
+    provides: [open_ports]
+
+  - name: whatweb
+    label: WhatWeb Technology Detector
+    capabilities:
+      - technology_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 75
+    consumes: [live_hosts]
+    provides: [tech_stack]
+
+  - name: ffuf
+    label: FFUF Content Discovery
+    capabilities:
+      - content_discovery
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 80
+      coverage_score: 85
+
+  - name: httpx
+    label: HTTPX Probe
+    capabilities:
+      - http_probe
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 90
+      coverage_score: 80
+    consumes: [subdomains]
+    provides: [live_hosts]
+
+  - name: subfinder
+    label: Subfinder Subdomain Discovery
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    consumes: []
+    provides: [subdomains]
+
+  - name: katana
+    label: Katana Web Crawler
+    capabilities:
+      - content_discovery
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 80
+    consumes: [live_hosts]
+    provides: [endpoints]
+
+  - name: gau
+    label: GetAllURLs Archive Crawler
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 50
+      coverage_score: 70
+    consumes: [target]
+    provides: [historical_urls]
+
+  - name: waybackurls
+    label: Wayback Machine URL Fetcher
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 50
+      coverage_score: 65
+    consumes: [target]
+    provides: [historical_urls]
+
+  - name: amass
+    label: Amass Subdomain Enumeration
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 85
+    consumes: [target]
+    provides: [subdomains]
+
+  - name: naabu
+    label: Naabu Port Scanner
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    consumes: [target]
+    provides: [open_ports]
+
+  - name: gospider
+    label: GoSpider Web Spider
+    capabilities:
+      - content_discovery
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 70
+      coverage_score: 75
+    consumes: [live_hosts]
+    provides: [endpoints]
+
+  - name: dalfox
+    label: Dalfox XSS Scanner
+    capabilities:
+      - vulnerability_scanning
+      - sqli_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    consumes: [live_hosts, endpoints]
+    provides: [xss_findings]
+
+  - name: sqlmap
+    label: SQLMap SQL Injection Scanner
+    capabilities:
+      - sqli_detection
+      - database_exfiltration
+    requires_auth: false
+    destructive: true
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+
+  - name: arjun
+    label: Arjun HTTP Parameter Discovery
+    capabilities:
+      - api_probing
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 60
+      coverage_score: 70
+
+  - name: jwt_tool
+    label: JWT Security Toolkit
+    capabilities:
+      - jwt_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 60
+
+  - name: commix
+    label: Commix Command Injection Scanner
+    capabilities:
+      - ssrf_check
+    requires_auth: false
+    destructive: true
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 65
+
+  - name: testssl
+    label: TestSSL TLS Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+
+  - name: wafw00f
+    label: WAF Fingerprinter
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+
+  - name: semgrep
+    label: Semgrep Static Analysis
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+
+  - name: gitleaks
+    label: Gitleaks Secret Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+
+  - name: trivy
+    label: Trivy Vulnerability Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+
+  - name: bandit
+    label: Bandit Python Linter
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: pip-audit
+    label: PIP Audit Dependency Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 70
+      coverage_score: 65
+
+  # ── Security Code Analysis & Secret Detection ──────────────────
+
+  - name: wpscan
+    label: WPScan WordPress Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 65
+      coverage_score: 60
+
+  - name: trufflehog
+    label: TruffleHog Secret Scanner
+    capabilities:
+      - secret_detection
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+
+  - name: gosec
+    label: GoSec Security Scanner
+    capabilities:
+      - sast
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: brakeman
+    label: Brakeman Rails Scanner
+    capabilities:
+      - sast
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: eslint
+    label: ESLint Security Linter
+    capabilities:
+      - sast
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 70
+      coverage_score: 65
+
+  - name: spotbugs
+    label: SpotBugs Bytecode Scanner
+    capabilities:
+      - sast
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 70
+      coverage_score: 65
+
+  - name: phpcs
+    label: PHPCS Security Scanner
+    capabilities:
+      - sast
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 65
+      coverage_score: 60
+
+  - name: govulncheck
+    label: Govulncheck Dependency Scanner
+    capabilities:
+      - sca
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+
+  - name: dependency_check
+    label: OWASP Dependency Check
+    capabilities:
+      - sca
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+
+  - name: npm-audit
+    label: NPM Audit Scanner
+    capabilities:
+      - sca
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 55
+      coverage_score: 50
+
+  # ── Infrastructure Scanning ────────────────────────────────────
+
+  - name: sn1per
+    label: Sn1per Pentest Framework
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: true
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 50
+      coverage_score: 60
+
+  - name: masscan
+    label: Masscan Port Scanner
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: true
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 60
+      coverage_score: 80
+
+  # ── Cloud & Storage Scanning ───────────────────────────────────
+
+  - name: cloud_enum
+    label: Cloud Enumeration Tool
+    capabilities:
+      - cloud_enum
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 50
+      coverage_score: 60
+
+  - name: s3scanner
+    label: S3 Bucket Scanner
+    capabilities:
+      - s3_scanning
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 55
+      coverage_score: 60
+
+  - name: bucket_upload
+    label: Bucket Upload Tester
+    capabilities:
+      - s3_scanning
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 65
+      coverage_score: 55
+
+  # ── Advanced Recon & Discovery ─────────────────────────────────
+
+  - name: uncover
+    label: Uncover Asset Discovery
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 45
+      coverage_score: 55
+
+  - name: chaos
+    label: Chaos Subdomain Enumeration
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 50
+      coverage_score: 55
+
+  - name: dnsx
+    label: DNSX DNS Resolver
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 55
+      coverage_score: 60
+
+  - name: shuffledns
+    label: ShuffleDNS DNS Resolver
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 55
+      coverage_score: 65
+
+  - name: alterx
+    label: AlterX Subdomain Generator
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 40
+      coverage_score: 50
+
+  - name: github-endpoints
+    label: GitHub Endpoints Enumerator
+    capabilities:
+      - web_recon
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 50
+      coverage_score: 55
+
+  # ── Agent-Internal Tools (Planner-Callable) ──────────────────────────
+
+  - name: finding_correlation_engine
+    label: Finding Correlation Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 95
+    cost: low
+
+  - name: attack_path_generator
+    label: Attack Path Generator
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 90
+    cost: low
+
+  - name: verification_agent
+    label: Verification Agent
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+    signal_quality: CONFIRMED
+    priority: 85
+    cost: low
+
+  - name: browser_security_operator
+    label: Browser Security Operator
+    capabilities:
+      - browser_verification
+      - security_analysis
+    requires_auth: true
+    destructive: false
+    supports_api: false
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 85
+    cost: medium
+
+  - name: attack_surface_mapper
+    label: Attack Surface Mapper
+    capabilities:
+      - web_recon
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 80
+      coverage_score: 85
+    signal_quality: PROBABLE
+    priority: 80
+    cost: low
+
+  - name: evidence_intelligence_engine
+    label: Evidence Intelligence Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 75
+    cost: low
+
+  - name: executive_report_generator
+    label: Executive Report Generator
+    capabilities:
+      - report_generation
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: false
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 90
+      coverage_score: 90
+    signal_quality: CONFIRMED
+    priority: 70
+    cost: low
+
+  - name: threat_intelligence_aggregator
+    label: Threat Intelligence Aggregator
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: PROBABLE
+    priority: 70
+    cost: low
+
+  - name: vulnerability_knowledge_engine
+    label: Vulnerability Knowledge Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 65
+    cost: low
+
+  - name: secure_code_intelligence_engine
+    label: Secure Code Intelligence Engine
+    capabilities:
+      - sast
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 75
+    cost: low
+
+  - name: infrastructure_security_analyzer
+    label: Infrastructure Security Analyzer
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 70
+    cost: low
+
+  - name: assessment_orchestrator
+    label: Assessment Orchestrator
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 100
+    cost: low
+
+  - name: workflow_intelligence_engine
+    label: Workflow Intelligence Engine
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 65
+    cost: low
+
+  - name: engagement_analytics_engine
+    label: Engagement Analytics Engine
+    capabilities:
+      - report_generation
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 60
+    cost: low
+
+  # ── Auth Tools ───────────────────────────────────────────────
+
+  - name: register
+    label: Register (Auto Account Creation)
+    capabilities:
+      - auth_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: PROBABLE
+    priority: 95
+    cost: low
+
+  - name: login
+    label: Login (Auto Authentication)
+    capabilities:
+      - auth_detection
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 95
+    cost: low

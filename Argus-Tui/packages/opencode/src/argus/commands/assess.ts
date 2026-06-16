@@ -1,0 +1,65 @@
+import { WorkflowRunner } from "../workflow-runner"
+import { ReportGenerator } from "../reporting/generator"
+import type { Feature } from "../config/feature-flags"
+import type { ProgressEvent } from "../shared/progress"
+
+/**
+ * Default CLI progress callback — prints workflow phase info to stderr
+ * so the final report (stdout) stays clean for piping/redirecting.
+ */
+function cliProgress(event: ProgressEvent | string): void {
+  if (typeof event === "string") {
+    process.stderr.write(event + "\n")
+    return
+  }
+  switch (event.type) {
+    case "phase_start": {
+      const idx = parseInt(event.phaseId.split("-")[1] || "0", 10) + 1
+      process.stderr.write(`
+── Phase ${idx}/${event.total}: ${event.name} ──
+`)
+      break
+    }
+    case "phase_complete":
+      process.stderr.write(`  ✓ ${event.findings} finding(s)\n`)
+      break
+    case "phase_error":
+      process.stderr.write(`  ✗ ${event.error}\n`)
+      break
+    case "finding": {
+      const sevLabel = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"][parseInt(event.severity)] ?? event.severity
+      process.stderr.write(`  • [${sevLabel}] ${event.title}\n`)
+      break
+    }
+    case "scan_complete":
+      process.stderr.write(`
+✓ Assessment complete — ${event.totalFindings} total finding(s)\n`)
+      break
+  }
+}
+
+export async function assessCommand(target: string, options?: {
+  workersPath?: string
+  useLLM?: boolean
+  credsPath?: string
+  cacheMode?: "normal" | "no_cache" | "refresh"
+  features?: Partial<Record<Feature, boolean>>
+  onProgress?: (event: ProgressEvent | string) => void
+}): Promise<void> {
+  const runner = new WorkflowRunner()
+  const result = await runner.run({
+    target,
+    useLLM: options?.useLLM,
+    workersPath: options?.workersPath,
+    credsPath: options?.credsPath,
+    cacheMode: options?.cacheMode,
+    features: options?.features,
+    onProgress: options?.onProgress ?? cliProgress,
+  })
+
+  if (result.allFindings.length > 0) {
+    const reportGen = new ReportGenerator()
+    const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment")
+    process.stdout.write(report + "\n")
+  }
+}

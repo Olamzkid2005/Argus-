@@ -1,0 +1,6 @@
+{
+  "tool": "sqlmap",
+  "exit_code": 1,
+  "stderr": "Connection refused to target URL. Verify the target is reachable.",
+  "stdout": ""
+}

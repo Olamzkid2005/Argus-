@@ -1,0 +1,22 @@
+name: pip-audit
+command: pip-audit
+description: "Python dependency vulnerability scanner"
+args:
+  - "--format"
+  - "json"
+  - "--quiet"
+parameters:
+  - name: target
+    type: string
+    description: "Audit target path (project dir or requirements file)"
+    required: false
+capabilities:
+  - vulnerability_scanning
+signal_quality: CANDIDATE
+requires:
+  tech_contains:
+    - python
+priority: 55
+cost: low
+enabled: true
+timeout: 300

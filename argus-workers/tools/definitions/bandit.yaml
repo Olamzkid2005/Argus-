@@ -1,0 +1,27 @@
+name: bandit
+command: bandit
+description: "Python security linter"
+args:
+  - "-f"
+  - "json"
+parameters:
+  - name: target
+    type: string
+    description: "Target path (directory or file)"
+    required: true
+    flag: "-r"
+  - name: severity
+    type: string
+    description: "Severity filter level"
+    required: false
+    flag: "-ll"
+capabilities:
+  - vulnerability_scanning
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - python
+priority: 70
+cost: low
+enabled: true
+timeout: 300

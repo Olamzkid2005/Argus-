@@ -1,0 +1,24 @@
+name: spotbugs
+command: spotbugs
+description: "Java/Kotlin bytecode security scanner with find-sec-bugs plugin"
+args:
+  - "-textui"
+  - "-low"
+  - "-effort:max"
+parameters:
+  - name: target
+    type: string
+    description: "Target path (JAR/WAR/class directory)"
+    required: true
+capabilities:
+  - vulnerability_scanning
+  - sast
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - java
+    - kotlin
+priority: 60
+cost: medium
+enabled: true
+timeout: 600

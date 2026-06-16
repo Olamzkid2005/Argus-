@@ -1,0 +1,41 @@
+name: browser_assessment
+label: Browser-Based SPA Assessment
+version: 1
+phases:
+  - name: recon
+    required_capabilities:
+      - web_recon
+      - technology_detection
+      - http_probe
+    execution: parallel
+    error_recovery: retry_once_then_skip
+
+  - name: browser_scan
+    required_capabilities:
+      - browser_verification
+      - content_discovery
+    execution: sequential
+    error_recovery: skip_and_continue
+
+  - name: auth_detection
+    required_capabilities:
+      - auth_detection
+    execution: sequential
+    error_recovery: skip_and_continue
+
+  - name: verification
+    required_capabilities:
+      - browser_verification
+    execution: sequential
+    error_recovery: skip_and_continue
+
+  - name: reporting
+    required_capabilities:
+      - report_generation
+    execution: sequential
+    error_recovery: skip_and_continue
+
+approval_required:
+  destructive_tools: true
+  auth_testing: true
+  privilege_escalation: true

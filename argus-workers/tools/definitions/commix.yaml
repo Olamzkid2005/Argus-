@@ -1,0 +1,22 @@
+name: commix
+command: commix
+description: "Command injection detection tool"
+args:
+  - "--batch"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "--url"
+capabilities:
+  - ssrf_check
+signal_quality: PROBABLE
+requires:
+  recon_signals:
+    - has_file_upload
+priority: 70
+cost: medium
+risk_level: high
+enabled: true
+timeout: 300

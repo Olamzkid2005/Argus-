@@ -1,0 +1,23 @@
+name: register
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - register
+description: "register - security assessment tool"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+    flag: "--target"
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"email":"test@example.com","password":"test123"})'
+    required: false
+capabilities:
+  - auth_detection
+signal_quality: CONFIRMED
+priority: 95
+cost: low
+enabled: true
+timeout: 300

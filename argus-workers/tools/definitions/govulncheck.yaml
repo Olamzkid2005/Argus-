@@ -1,0 +1,22 @@
+name: govulncheck
+command: govulncheck
+description: "Go vulnerability scanner for dependencies"
+args:
+  - "./..."
+  - "-json"
+parameters:
+  - name: target
+    type: string
+    description: "Target Go module path"
+    required: true
+capabilities:
+  - vulnerability_scanning
+  - sca
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - go
+priority: 65
+cost: medium
+enabled: true
+timeout: 300

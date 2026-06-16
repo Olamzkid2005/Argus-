@@ -1,0 +1,17 @@
+{
+  "finding_type": "TECHNOLOGY_DETECTION",
+  "severity": "INFO",
+  "confidence": 0.9,
+  "endpoint": "https://example.com",
+  "title": "Technology detected: WordPress 6.4",
+  "description": "WordPress content management system detected along with 5 plugins and 3 themes.",
+  "evidence": {
+    "technologies": [
+      {"name": "WordPress", "version": "6.4", "confidence": 0.95},
+      {"name": "PHP", "version": "8.1", "confidence": 0.9},
+      {"name": "MySQL", "version": "8.0", "confidence": 0.7}
+    ]
+  },
+  "source_tool": "whatweb",
+  "remediation": "Keep all CMS components and plugins updated to latest versions."
+}

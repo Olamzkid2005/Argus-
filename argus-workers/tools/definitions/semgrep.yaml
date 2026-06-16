@@ -1,0 +1,22 @@
+name: semgrep
+command: semgrep
+description: "Static code analysis tool for finding security issues and code quality problems"
+args:
+  - "--json"
+parameters:
+  - name: target
+    type: string
+    description: "Target path"
+    required: true
+  - name: config
+    type: string
+    description: "Rule config path"
+    required: false
+    flag: "--config"
+capabilities:
+  - vulnerability_scanning
+signal_quality: CONFIRMED
+priority: 80
+cost: medium
+enabled: true
+timeout: 600

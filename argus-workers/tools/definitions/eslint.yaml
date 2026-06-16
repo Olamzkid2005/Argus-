@@ -1,0 +1,29 @@
+name: eslint
+command: eslint
+description: "JavaScript/TypeScript linter with security plugins"
+args:
+  - "--format"
+  - "json"
+parameters:
+  - name: target
+    type: string
+    description: "Target path"
+    required: true
+  - name: ext
+    type: string
+    description: "File extensions to lint"
+    required: false
+    flag: "--ext"
+    default: ".js,.jsx,.ts,.tsx"
+capabilities:
+  - vulnerability_scanning
+  - sast
+signal_quality: PROBABLE
+requires:
+  tech_contains:
+    - javascript
+    - typescript
+priority: 60
+cost: low
+enabled: true
+timeout: 600

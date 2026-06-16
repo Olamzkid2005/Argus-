@@ -1,0 +1,18 @@
+name: alterx
+command: alterx
+description: "Subdomain permutation generator for expanding recon surface"
+args:
+  - "-silent"
+parameters:
+  - name: domain
+    type: string
+    description: "Root domain to generate permutations for"
+    required: true
+    flag: "-d"
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 30
+cost: low
+enabled: true
+timeout: 120

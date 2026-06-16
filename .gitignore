@@ -1,0 +1,62 @@
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.defaults
+
+# Logs
+logs/
+*.log
+*.pid
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Node
+node_modules/
+.next/
+.npm/
+playwright-report/
+test-results/
+
+# Testing
+coverage/
+.nyc_output/
+*.testoutput/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scan artifacts
+nikto_*.json
+
+# Reference designs
+Kimi_Agent_Argus Security Splash/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+Argus_Improvement_Plan.docx
+# Generated documentation
+*.docx
+celerybeat-schedule*
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# L-01: nuclei-templates should be a git submodule (large YAML data ~1.5M LOC)
+# Convert with: git submodule add <repo_url> nuclei-templates && git rm --cached -r nuclei-templates/
+
+# L-02: Build artifacts that may have been tracked before gitignore was added.
+# Remove from tracking with: git rm --cached -r argus-platform/**/__pycache__/

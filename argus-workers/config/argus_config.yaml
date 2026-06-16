@@ -1,0 +1,83 @@
+# Argus Platform Configuration
+# Hot-reloadable via get_config().reload()
+# Mirrors CyberStrikeAI's single config.yaml pattern
+
+server:
+  host: "0.0.0.0"
+  port: 9000
+  workers: 4
+  log_level: "INFO"
+
+database:
+  pool_min: 2
+  pool_max: 20
+  slow_query_ms: 500
+
+redis:
+  url: "redis://localhost:6379/0"
+
+tools:
+  default_timeout: 300
+  long_timeout: 600
+  short_timeout: 60
+  
+  # Tool-specific timeouts (seconds)
+  timeouts:
+    nuclei: 600
+    naabu: 300
+    nikto: 600
+    testssl: 600
+    sqlmap: 600
+    semgrep: 600
+    gitleaks: 300
+    npm_audit: 300
+
+  # Circuit breaker settings
+  circuit_breaker:
+    failure_threshold: 3
+    cooldown_seconds: 300
+
+  # Retry settings
+  retry:
+    max_attempts: 3
+    base_delay: 1.0
+    max_delay: 60.0
+    backoff_multiplier: 2.0
+
+scanning:
+  max_pages_to_crawl: 20
+  max_parameters_to_fuzz: 20
+  rate_limit_delay_ms: 500
+  ssl_timeout: 10
+  default_aggressiveness: "default"
+
+  # Aggressiveness profiles
+  aggressiveness:
+    default:
+      clone_depth: 1
+      semgrep_timeout: 600
+      custom_rule_limit: 3
+    high:
+      clone_depth: 1
+      semgrep_timeout: 600
+      custom_rule_limit: 6
+    extreme:
+      clone_depth: 0  # Full clone
+      semgrep_timeout: 1200
+      custom_rule_limit: 999
+
+agent:
+  max_iterations: 20
+  enable_llm_decisions: false
+  memory_max_tokens: 8000
+
+streaming:
+  enabled: true
+  history_size: 500
+  backpressure_queue_size: 1000
+
+security:
+  ssl_verify: true
+  block_dangerous_patterns: true
+  allowed_schemes: ["https://", "http://"]
+  blocked_domains: []

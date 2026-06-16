@@ -1,0 +1,27 @@
+name: trivy
+command: trivy
+description: "Container and filesystem vulnerability scanner"
+args:
+  - "fs"
+  - "--format"
+  - "json"
+  - "--skip-dirs"
+  - "node_modules,vendor,dist,build,.git,coverage"
+parameters:
+  - name: target
+    type: string
+    description: "Image name or filesystem path"
+    required: true
+  - name: scanners
+    type: string
+    description: "Comma-separated scanners (vuln,misconfig,secret)"
+    required: false
+    flag: "--scanners"
+    default: "vuln,misconfig,secret"
+capabilities:
+  - vulnerability_scanning
+signal_quality: PROBABLE
+priority: 75
+cost: medium
+enabled: true
+timeout: 600

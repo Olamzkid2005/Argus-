@@ -1,0 +1,24 @@
+name: nikto
+command: nikto
+description: "Nikto web server scanner for known vulnerabilities and misconfigurations"
+args:
+  - "-Format"
+  - "json"
+  - "-Tuning"
+  - "123456"
+  - "-timeout"
+  - "10"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or host"
+    required: true
+    flag: "-h"
+capabilities:
+  - web_recon
+  - vulnerability_scanning
+signal_quality: CANDIDATE
+priority: 60
+cost: medium
+enabled: true
+timeout: 120

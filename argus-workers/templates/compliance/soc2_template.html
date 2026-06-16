@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.title }}</title>
+    <style>
+        :root {
+            --bg-void: #000000;
+            --bg-surface: #0A0A0F;
+            --border-structural: rgba(255, 255, 255, 0.08);
+            --text-primary: #F0F0F5;
+            --text-secondary: #8A8A9E;
+            --prism-cream: #FFFDD0;
+            --prism-cyan: #E9FFFF;
+            --pass: #00FF88;
+            --fail: #FF4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 40px;
+        }
+        .header {
+            border-bottom: 1px solid var(--border-structural);
+            padding-bottom: 24px;
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+        .meta {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-family: 'SF Mono', monospace;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .summary-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-structural);
+            padding: 20px;
+            text-align: center;
+        }
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .summary-card .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+        .section {
+            margin-bottom: 32px;
+        }
+        .section h2 {
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+            color: var(--prism-cream);
+            border-left: 3px solid var(--prism-cream);
+            padding-left: 12px;
+        }
+        .criteria-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-structural);
+            margin-bottom: 8px;
+        }
+        .criteria-item .status-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .status-pass .status-icon {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--pass);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+        .status-fail .status-icon {
+            background: rgba(255, 68, 68, 0.1);
+            color: var(--fail);
+            border: 1px solid rgba(255, 68, 68, 0.3);
+        }
+        .criteria-item .content {
+            flex: 1;
+        }
+        .criteria-item .criteria-id {
+            font-family: 'SF Mono', monospace;
+            font-size: 11px;
+            color: var(--prism-cyan);
+            margin-bottom: 2px;
+        }
+        .criteria-item .criteria-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .criteria-item .findings {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-structural);
+            color: var(--text-secondary);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-structural);
+            vertical-align: top;
+        }
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .severity {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border-structural);
+        }
+        .severity-critical { color: #FF4444; border-color: rgba(255,68,68,0.3); }
+        .severity-high { color: #FF8800; border-color: rgba(255,136,0,0.3); }
+        .severity-medium { color: var(--prism-cream); border-color: rgba(255,253,208,0.3); }
+        .severity-low { color: var(--text-secondary); border-color: rgba(138,138,158,0.3); }
+        .compliance-ref {
+            font-family: 'SF Mono', monospace;
+            font-size: 11px;
+            color: var(--prism-cyan);
+            background: rgba(233, 255, 255, 0.05);
+            padding: 2px 6px;
+        }
+        .description-box {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-structural);
+            padding: 16px;
+            margin-bottom: 24px;
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SOC 2 Type II Compliance Report</h1>
+        <div class="meta">
+            Engagement: {{ report.engagement_id }} | Generated: {{ generated_at }}
+        </div>
+    </div>
+
+    <div class="description-box">
+        This report evaluates the target infrastructure against SOC 2 Trust Services Criteria (TSC).
+        Each criterion is assessed based on vulnerability findings discovered during the engagement.
+        Failing criteria indicate areas where the organization must implement additional controls
+        to meet SOC 2 compliance requirements.
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="value" style="color: var(--pass)">{{ report.summary.passing_criteria }}</div>
+            <div class="label">Passing Criteria</div>
+        </div>
+        <div class="summary-card">
+            <div class="value" style="color: var(--fail)">{{ report.summary.failing_criteria }}</div>
+            <div class="label">Failing Criteria</div>
+        </div>
+        <div class="summary-card">
+            <div class="value" style="color: var(--text-primary)">{{ report.summary.total_criteria }}</div>
+            <div class="label">Total Criteria</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Trust Services Criteria Assessment</h2>
+        {% for criteria_id, criteria_data in report.summary.criteria_status.items() %}
+        <div class="criteria-item status-{{ criteria_data.status }}">
+            <div class="status-icon">{% if criteria_data.status == 'pass' %}&#10003;{% else %}&#10007;{% endif %}</div>
+            <div class="content">
+                <div class="criteria-id">{{ criteria_id }}</div>
+                <div class="criteria-name">{{ criteria_data.name or report.summary.criteria_status[criteria_id].name }}</div>
+                {% if criteria_data.findings %}
+                <div class="findings">{{ criteria_data.findings|length }} finding(s): {{ criteria_data.findings|join(', ')[:50] }}...</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="section">
+        <h2>Findings Detail</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Severity</th>
+                    <th>Type</th>
+                    <th>SOC 2 Ref</th>
+                    <th>Endpoint</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for finding in report.findings %}
+                <tr>
+                    <td>{{ finding.finding_id[:8] }}</td>
+                    <td><span class="severity severity-{{ finding.severity.lower() }}">{{ finding.severity }}</span></td>
+                    <td>{{ finding.type }}</td>
+                    <td><span class="compliance-ref">{{ finding.compliance_ref }}</span></td>
+                    <td style="font-family: monospace; font-size: 11px; color: var(--text-secondary);">{{ finding.endpoint }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

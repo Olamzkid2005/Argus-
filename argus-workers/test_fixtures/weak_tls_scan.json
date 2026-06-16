@@ -1,0 +1,32 @@
+{
+  "finding_type": "WEAK_TLS",
+  "severity": "MEDIUM",
+  "confidence": 1.0,
+  "endpoint": "https://example.com:443",
+  "title": "TLS 1.0 enabled — deprecated protocol version",
+  "description": "The server accepts TLS 1.0 connections, which is a deprecated protocol version susceptible to multiple attacks including BEAST and POODLE. The server also supports weak cipher suites (TLS_RSA_WITH_AES_128_CBC_SHA) that do not provide forward secrecy.",
+  "evidence": {
+    "tls_version": "1.0",
+    "supported_versions": ["TLSv1.0", "TLSv1.1", "TLSv1.2"],
+    "weak_ciphers": [
+      "TLS_RSA_WITH_AES_128_CBC_SHA",
+      "TLS_RSA_WITH_AES_256_CBC_SHA",
+      "TLS_DHE_RSA_WITH_AES_128_CBC_SHA"
+    ],
+    "missing_ciphers": [
+      "TLS_AES_256_GCM_SHA384",
+      "TLS_CHACHA20_POLY1305_SHA256",
+      "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+    ],
+    "certificate_info": {
+      "issuer": "CN=Example Self-Signed CA",
+      "subject": "CN=*.example.com",
+      "expiry_days": 45,
+      "self_signed": true
+    },
+    "vulnerabilities": ["BEAST", "POODLE", "LUCKY13"]
+  },
+  "source_tool": "testssl.sh",
+  "cwe": "CWE-326",
+  "remediation": "Disable TLS 1.0 and 1.1, enable TLS 1.2 and 1.3 only, remove weak cipher suites, obtain a certificate from a trusted CA, and enable HSTS with a min-age of at least 6 months."
+}

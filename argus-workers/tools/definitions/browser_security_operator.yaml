@@ -1,0 +1,24 @@
+name: browser_security_operator
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - browser_security_operator
+description: "browser_security_operator - security assessment tool"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+    flag: "--target"
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'
+    required: false
+capabilities:
+  - security_analysis
+  - browser_verification
+signal_quality: CONFIRMED
+priority: 90
+cost: low
+enabled: true
+timeout: 300

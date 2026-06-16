@@ -1,0 +1,25 @@
+name: gitleaks
+command: gitleaks
+description: "Git repository secret scanning for hardcoded credentials"
+args:
+  - "detect"
+  - "--verbose"
+  - "--no-color"
+parameters:
+  - name: target
+    type: string
+    description: "Target path"
+    required: true
+    flag: "--source"
+  - name: max_target_mb
+    type: integer
+    description: "Max target size in MB"
+    required: false
+    flag: "--max-target-megabytes"
+capabilities:
+  - vulnerability_scanning
+signal_quality: CONFIRMED
+priority: 85
+cost: medium
+enabled: true
+timeout: 300

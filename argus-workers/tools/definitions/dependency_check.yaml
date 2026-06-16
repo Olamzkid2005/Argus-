@@ -1,0 +1,20 @@
+name: dependency_check
+command: dependency-check
+description: "OWASP Dependency-Check for known vulnerability scanning in dependencies"
+args:
+  - "--format"
+  - "JSON"
+parameters:
+  - name: target
+    type: string
+    description: "Target project directory"
+    required: true
+    flag: "--scan"
+capabilities:
+  - vulnerability_scanning
+  - sca
+signal_quality: CONFIRMED
+priority: 70
+cost: medium
+enabled: true
+timeout: 600

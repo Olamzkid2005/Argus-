@@ -1,0 +1,21 @@
+{
+  "finding_type": "SSRF",
+  "severity": "HIGH",
+  "confidence": 0.9,
+  "endpoint": "https://example.com/api/fetch?url=http://internal.admin/secret",
+  "title": "Server-Side Request Forgery in url parameter",
+  "description": "SSRF vulnerability detected in the 'url' parameter. The server made a request to an internal address (169.254.169.254) and returned the response in the HTTP body, indicating the application can be used to probe internal services.",
+  "evidence": {
+    "payload": "url=http://169.254.169.254/latest/meta-data/",
+    "internal_host": "169.254.169.254",
+    "response_status": 200,
+    "response_preview": "HTTP 200 — metadata containing IAM role info was returned inline",
+    "redirect_chain": [
+      "https://example.com/api/fetch?url=http://169.254.169.254/latest/meta-data/",
+      "http://169.254.169.254/latest/meta-data/"
+    ]
+  },
+  "source_tool": "ffuf",
+  "cwe": "CWE-918",
+  "remediation": "Implement an allowlist of permitted outbound URLs, block RFC 1918 addresses, and use URL validation that rejects hostnames pointing to private IP ranges."
+}

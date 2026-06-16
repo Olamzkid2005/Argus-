@@ -1,0 +1,137 @@
+services:
+  # ── E2E Test Targets (Task 4.3) ──
+  juice-shop:
+    image: bkimminich/juice-shop:v17.1.1
+    ports:
+      - "127.0.0.1:3001:3000"
+    profiles: ["e2e"]
+    restart: unless-stopped
+
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    ports:
+      - "127.0.0.1:3002:80"
+    profiles: ["e2e"]
+    restart: unless-stopped
+
+  # PostgreSQL 16 with pgvector for similarity search
+  postgres:
+    image: pgvector/pgvector:0.7.4-pg16@sha256:3b5425af5eb30e2753a40a3c2cf1e22a7b4a20335a80b0e24b05bfca01b290ef
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-argus_user}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+      POSTGRES_DB: ${POSTGRES_DB:-argus_pentest}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./argus-platform/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./argus-platform/db/audit_logging.sql:/docker-entrypoint-initdb.d/02-audit.sql
+      - ./argus-platform/db/performance.sql:/docker-entrypoint-initdb.d/03-perf.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argus_user} -d ${POSTGRES_DB:-argus_pentest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+
+  # Redis 7 for Celery broker, caching, and rate limiting
+  redis:
+    image: redis:7-alpine@sha256:3b5425af5eb30e2753a40a3c2cf1e22a7b4a20335a80b0e24b05bfca01b290ef
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
+
+  # Next.js platform (frontend + API)
+  platform:
+    build:
+      context: ./argus-platform
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}"
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+  # Celery worker (distributed scan tasks)
+  worker:
+    build:
+      context: ./argus-workers
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-4}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  # Celery Beat (scheduled tasks)
+  celery-beat:
+    build:
+      context: ./argus-workers
+      dockerfile: Dockerfile
+    command: celery -A celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  postgres_data:
+  redis_data:

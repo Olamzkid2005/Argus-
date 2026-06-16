@@ -1,0 +1,16 @@
+{
+  "finding_type": "SQL_INJECTION",
+  "severity": "HIGH",
+  "confidence": 0.95,
+  "endpoint": "https://example.com/search?q=test",
+  "title": "SQL Injection in search parameter",
+  "description": "Time-based SQL injection detected in the 'q' parameter. Payload caused a 5-second delay.",
+  "evidence": {
+    "payload": "' OR SLEEP(5)--",
+    "response_time_ms": 5120,
+    "response_preview": "HTTP 200 OK (5120ms delay)"
+  },
+  "source_tool": "sqlmap",
+  "cwe": "CWE-89",
+  "remediation": "Use parameterized queries with prepared statements."
+}

@@ -1,0 +1,23 @@
+name: subfinder
+command: subfinder
+description: "Fast passive subdomain enumeration tool using multiple sources"
+args:
+  - "-silent"
+parameters:
+  - name: target
+    type: string
+    description: "Target domain to enumerate subdomains for"
+    required: true
+    flag: "-d"
+  - name: all
+    type: boolean
+    description: "Use all sources (including slower ones)"
+    required: false
+    flag: "-all"
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 70
+cost: low
+enabled: true
+timeout: 300

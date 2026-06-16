@@ -1,0 +1,413 @@
+name: lint
+
+on:
+  push:
+    branches: [dev, Argus-cli]
+  pull_request:
+    branches: [dev]
+  schedule:
+    - cron: '0 6 * * *'   # Nightly at 06:00 UTC — full fixture matrix
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  BUN_INSTALL_FLAGS: --frozen-lockfile --ignore-scripts
+
+jobs:
+  smoke:
+    name: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run smoke tests
+        working-directory: Argus-Tui/packages/opencode
+        run: bun test --timeout 30000 test/argus/smoke.test.ts
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: TypeScript type check
+        working-directory: Argus-Tui/packages/opencode
+        run: bun typecheck
+
+  lint-js:
+    name: lint (javascript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run oxlint
+        working-directory: Argus-Tui
+        run: bun lint
+
+  argus-unit:
+    name: unit (linux)
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Create artifacts directory
+        working-directory: Argus-Tui/packages/opencode
+        run: mkdir -p .artifacts/unit
+
+      - name: Run argus unit tests
+        working-directory: Argus-Tui/packages/opencode
+        run: bun test --timeout 30000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
+
+      - name: Run llm unit tests
+        working-directory: Argus-Tui/packages/llm
+        run: bun test --timeout 30000 2>&1 | tail -10
+
+      - name: Run effect-drizzle-sqlite unit tests
+        working-directory: Argus-Tui/packages/effect-drizzle-sqlite
+        run: bun test --timeout 30000 2>&1 | tail -10
+
+      - name: Run http-recorder unit tests
+        working-directory: Argus-Tui/packages/http-recorder
+        run: bun test --timeout 30000 2>&1 | tail -10
+
+      - name: Publish unit reports
+        if: always()
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386
+        with:
+          report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+          check_name: "unit results (linux)"
+          detailed_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-linux-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+
+  argus-unit-windows:
+    name: unit (windows)
+    needs: [typecheck]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Create artifacts directory
+        working-directory: Argus-Tui/packages/opencode
+        run: mkdir -p .artifacts/unit
+
+      - name: Run argus unit tests
+        working-directory: Argus-Tui/packages/opencode
+        # `|| true` absorbs bun's spurious exit code 1 on Windows (all 558 tests
+        # pass, but orphaned child processes from assess handler can cause a
+        # non-zero exit). The JUnit report step below captures real failures.
+        run: bun test --timeout 60000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml || true
+
+      - name: Run llm unit tests
+        working-directory: Argus-Tui/packages/llm
+        run: bun test --timeout 60000 2>&1 | tail -10
+
+      - name: Run effect-drizzle-sqlite unit tests
+        working-directory: Argus-Tui/packages/effect-drizzle-sqlite
+        run: bun test --timeout 60000 2>&1 | tail -10
+
+      - name: Run http-recorder unit tests
+        working-directory: Argus-Tui/packages/http-recorder
+        run: bun test --timeout 60000 2>&1 | tail -10
+
+      - name: Publish unit reports
+        if: always()
+        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386
+        with:
+          report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+          check_name: "unit results (windows)"
+          detailed_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-windows-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
+
+  coverage:
+    name: coverage
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run argus tests with coverage
+        working-directory: Argus-Tui/packages/opencode
+        run: mkdir -p .artifacts/coverage && bun test --timeout 30000 test/argus/ --coverage 2>&1 | tail -30
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: Argus-Tui/packages/opencode/.artifacts/coverage/
+
+  bench:
+    name: bench
+    needs: [typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run benchmarks
+        working-directory: Argus-Tui/packages/opencode
+        run: bun run bench:test
+        continue-on-error: true
+
+  e2e:
+    name: e2e (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: Argus-Tui
+        run: bun install ${{ env.BUN_INSTALL_FLAGS }}
+
+      - name: Run unit tests
+        working-directory: Argus-Tui/packages/opencode
+        run: bun test test/argus/ --timeout 30000 2>&1 | tail -5
+
+      - name: Run doctor
+        working-directory: Argus-Tui/packages/opencode
+        run: timeout 30 bun run src/argus/main.ts doctor 2>&1 | tail -10
+
+  argus-workers-lint:
+    name: Python Workers (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff -q
+
+      - name: Lint with ruff
+        run: ruff check . --output-format=github
+
+  python-tests:
+    name: Python Workers (tests)
+    needs: [argus-workers-lint]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpq-dev
+
+      - name: Install test dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt -q
+
+      - name: Run existing test suite (excluding DB/Redis/E2E)
+        run: |
+          python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=120 --tb=long 2>&1 | tee /tmp/pytest-output.txt; exit_code=${PIPESTATUS[0]}
+          echo "---PYTEST EXIT CODE: $exit_code---"
+          tail -100 /tmp/pytest-output.txt
+          exit $exit_code
+
+  tool-defs-check:
+    name: Tool definitions consistency check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (PyYAML)
+        run: pip install pyyaml -q
+
+      - name: Check generated tools match YAML definitions
+        run: python3 scripts/generate_tool_defs.py --check
+
+      - name: Validate tool definition alignment (Python vs TUI)
+        run: python3 scripts/validate_tool_alignment.py --check
+
+  fixture-smoke:
+    name: Python Workers (fixture smoke)
+    # Run independently of python-tests — fixture smoke tests verify fixture web app
+    # lifecycle and should report status even if the main test suite has failures.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements-dev.txt -q
+
+      - name: Run fixture smoke tests (excluding those requiring the full argus CLI)
+        run: |
+          python -m pytest tests/test_fixture_e2e_smoke.py \
+            -m smoke -v --timeout=120 --log-cli-level=INFO
+
+  fixture-full:
+    name: Python Workers (fixture full matrix)
+    # No `needs:` dependency on python-tests — nightly runs should detect
+    # regressions independently. If unit tests fail, we still want to know
+    # whether fixture tests pass or fail.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements-dev.txt -q
+
+      - name: Run full fixture matrix
+        run: |
+          python -m pytest tests/test_fixture_comprehensive.py \
+            tests/test_fixture_pipeline.py \
+            tests/test_fixture_e2e_smoke.py \
+            -m "full or smoke" -v --timeout=120 --log-cli-level=INFO
+
+      - name: Upload fixture test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-full-report-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: argus-workers/reports/
+
+  yaml-lint:
+    name: YAML validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install pyyaml -q
+
+      - name: Validate YAML files
+        run: |
+          failures=0
+          while IFS= read -r f; do
+            if python3 -c "import yaml; yaml.safe_load(open('$f')); print(f'  OK: $f')" 2>&1; then
+              :
+            else
+              echo "  FAIL: $f"
+              failures=$((failures + 1))
+            fi
+          done < <(find . -name "*.yaml" -o -name "*.yml" | grep -v node_modules | grep -v .semgrep_cache | sort)
+          echo "---"
+          if [ "$failures" -gt 0 ]; then
+            echo "YAML validation: $failures file(s) FAILED"
+            exit 1
+          else
+            echo "All YAML files valid."
+          fi

@@ -1,0 +1,26 @@
+name: gospider
+command: gospider
+description: "Web spider for endpoint and parameter discovery"
+args:
+  - "-q"
+  - "-j"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "-s"
+  - name: depth
+    type: integer
+    description: "Crawl depth"
+    required: false
+    flag: "-d"
+    default: 3
+capabilities:
+  - content_discovery
+  - web_recon
+signal_quality: CANDIDATE
+priority: 55
+cost: medium
+enabled: true
+timeout: 300

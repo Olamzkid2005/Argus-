@@ -1,0 +1,25 @@
+name: nmap
+command: nmap
+description: "Nmap port scanner for port discovery and service identification"
+args:
+  - "-Pn"
+  - "-T4"
+  - "--top-ports"
+  - "200"
+parameters:
+  - name: target
+    type: string
+    description: "Target hostname or IP address"
+    required: true
+  - name: ports
+    type: string
+    description: "Port range (e.g. 80,443 or 1-1000)"
+    required: false
+    flag: "-p"
+capabilities:
+  - port_scanning
+signal_quality: CONFIRMED
+priority: 85
+cost: medium
+enabled: true
+timeout: 300

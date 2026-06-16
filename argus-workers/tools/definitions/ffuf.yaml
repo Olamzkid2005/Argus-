@@ -1,0 +1,29 @@
+name: ffuf
+command: ffuf
+description: "Web fuzzing tool for directory and parameter discovery"
+args:
+  - "-json"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL with FUZZ keyword"
+    required: true
+    flag: "-u"
+  - name: wordlist
+    type: string
+    description: "Path to wordlist"
+    required: true
+    flag: "-w"
+  - name: threads
+    type: integer
+    description: "Thread count"
+    required: false
+    flag: "-t"
+    default: 40
+capabilities:
+  - content_discovery
+signal_quality: CANDIDATE
+priority: 70
+cost: medium
+enabled: true
+timeout: 300

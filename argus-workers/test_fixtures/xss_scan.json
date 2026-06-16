@@ -1,0 +1,15 @@
+{
+  "finding_type": "XSS",
+  "severity": "MEDIUM",
+  "confidence": 0.85,
+  "endpoint": "https://example.com/profile?name=test",
+  "title": "Reflected XSS in name parameter",
+  "description": "Reflected cross-site scripting detected. Payload '<script>alert(1)</script>' was reflected in the response without sanitization.",
+  "evidence": {
+    "payload": "<script>alert(1)</script>",
+    "response_preview": "<div class='welcome'><script>alert(1)</script>!</div>"
+  },
+  "source_tool": "dalfox",
+  "cwe": "CWE-79",
+  "remediation": "Encode all output contextually. Implement Content-Security-Policy headers."
+}

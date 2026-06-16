@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "argus-tool-core"
+version = "0.1.0"
+description = "Unified tool execution layer for Argus security scanner"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+# Dependencies are provided by the host project (argus-workers or argus-platform)
+# to avoid version conflicts. tool_core itself has no hard dependencies.
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tool_core*"]

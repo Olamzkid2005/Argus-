@@ -1,0 +1,35 @@
+#!/usr/bin/env bun
+/**
+ * Argus Security CLI — V5
+ *
+ * Runs the Argus TypeScript entry point directly via Bun.
+ * Usage: argus <command> [options]
+ *        argus doctor
+ *        argus assess https://example.com
+ *        argus --help
+ */
+import { fileURLToPath } from "url"
+import { dirname, join } from "path"
+
+process.chdir(dirname(fileURLToPath(import.meta.url)))
+const entry = join("..", "src", "argus", "index.ts")
+
+// Re-exec via bun with the argus entry point, preserving all args
+const { spawn } = await import("child_process")
+
+const binDir = dirname(fileURLToPath(import.meta.url))
+const child = spawn("bun", ["run", entry, ...process.argv.slice(2)], {
+  stdio: "inherit",
+  cwd: binDir,
+})
+
+child.on("exit", (code, signal) => {
+  // #region debug log
+  fetch('http://127.0.0.1:50797/ingest/argus-debug',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'argus-debug',location:'bin/argus',message:'child exit',data:{code,signal,entry,cwd:binDir,args:process.argv.slice(2)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  if (signal) {
+    process.kill(process.pid, signal)
+    return
+  }
+  process.exit(typeof code === "number" ? code : 0)
+})

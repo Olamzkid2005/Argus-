@@ -1,0 +1,19 @@
+name: uncover
+command: uncover
+description: "Search engine discovery tool for exposed assets"
+args:
+  - "-json"
+  - "-silent"
+parameters:
+  - name: target
+    type: string
+    description: "Search query"
+    required: true
+    flag: "-q"
+capabilities:
+  - web_recon
+signal_quality: CANDIDATE
+priority: 25
+cost: low
+enabled: true
+timeout: 120
