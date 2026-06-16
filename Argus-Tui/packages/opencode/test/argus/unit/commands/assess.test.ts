@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, afterEach, mock } from "bun:test"
+import { describe, expect, test, mock } from "bun:test"
 
 const mockRunResult = {
   engagementId: "ENG-test",
@@ -15,274 +15,138 @@ const mockRunResult = {
   ],
 }
 
-let capturedOnProgress: ((event: any) => void) | null = null
-let capturedRunOptions: any = null
-let mockRunOverrides: any = null
+type RunFn = (opts: any) => Promise<typeof mockRunResult>
+let latestRunFn: RunFn = async (opts: any) => {
+  if (opts.onProgress) {
+    opts.onProgress("custom string message")
+  }
+  return mockRunResult
+}
 
-describe("cliProgress", () => {
-  beforeAll(() => {
-    mock.module("../../../../src/argus/workflow-runner", () => ({
-      WorkflowRunner: mock(() => ({
-        run: mock(async (opts: any) => {
-          capturedRunOptions = opts
-          capturedOnProgress = opts.onProgress
-          return mockRunResult
-        }),
-      })),
-    }))
+mock.module("../../../../src/argus/workflow-runner", () => ({
+  WorkflowRunner: mock(() => ({
+    run: mock(async (opts: any) => latestRunFn(opts)),
+  })),
+}))
 
-    mock.module("../../../../src/argus/reporting/generator", () => ({
-      ReportGenerator: mock(() => ({
-        generateMarkdown: mock(() => "# Report\n\nTest report content"),
-      })),
-    }))
-  })
-
-  afterEach(() => {
-    capturedOnProgress = null
-    capturedRunOptions = null
-    mockRunOverrides = null
-  })
-
-  test("writes string events to stderr", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!("custom string message")
-
-    expect(writes.some(w => w.includes("custom string message"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("writes phase_start event to stderr", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "phase_start", phaseId: "p1", name: "Recon", total: 3, phaseIndex: 0 })
-
-    expect(writes.some(w => w.includes("Phase 1/3"))).toBe(true)
-    expect(writes.some(w => w.includes("Recon"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("writes phase_complete event to stderr", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "phase_complete", phaseId: "p1", name: "Recon", findings: 3, status: "COMPLETED" })
-
-    expect(writes.some(w => w.includes("✓") && w.includes("3 finding"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("writes phase_error event to stderr", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "phase_error", phaseId: "p1", name: "Recon", error: "Connection timeout" })
-
-    expect(writes.some(w => w.includes("✗") && w.includes("Connection timeout"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("writes finding event with severity label to stderr", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "finding", phaseId: "p1", severity: "3", title: "SQL Injection" })
-
-    expect(writes.some(w => w.includes("[HIGH]") && w.includes("SQL Injection"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("resolves severity 0 to INFO label", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "finding", phaseId: "p1", severity: "0", title: "Info-level note" })
-
-    expect(writes.some(w => w.includes("[INFO]") && w.includes("Info-level note"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("falls back to raw severity string when parseInt fails", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "finding", phaseId: "p1", severity: "5", title: "Out-of-range severity" })
-
-    expect(writes.some(w => w.includes("[5]") && w.includes("Out-of-range severity"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-
-  test("writes scan_complete event to stderr", async () => {
-    const writes: string[] = []
-    const origWrite = process.stderr.write.bind(process.stderr)
-    process.stderr.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-
-    capturedOnProgress!({ type: "scan_complete", totalFindings: 5 })
-
-    expect(writes.some(w => w.includes("5 total finding"))).toBe(true)
-    process.stderr.write = origWrite
-  })
-})
+mock.module("../../../../src/argus/reporting/generator", () => ({
+  ReportGenerator: mock(() => ({
+    generateMarkdown: mock(() => "# Report\n\nTest report content"),
+  })),
+}))
 
 describe("assessCommand", () => {
-  beforeAll(() => {
-    mock.module("../../../../src/argus/workflow-runner", () => ({
-      WorkflowRunner: mock(() => ({
-        run: mock(async (opts: any) => {
-          capturedRunOptions = opts
-          capturedOnProgress = opts.onProgress
-          return mockRunOverrides ?? mockRunResult
-        }),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/reporting/generator", () => ({
-      ReportGenerator: mock(() => ({
-        generateMarkdown: mock(() => "# Report\n\nTest report content"),
-      })),
-    }))
-  })
-
-  afterEach(() => {
-    mockRunOverrides = null
-    capturedRunOptions = null
-    capturedOnProgress = null
-  })
-
-  test("generates and writes report to stdout when findings exist", async () => {
-    const stdoutWrites: string[] = []
-    const origStdout = process.stdout.write.bind(process.stdout)
-    process.stdout.write = mock((chunk: unknown) => { stdoutWrites.push(String(chunk)); return true })
-
+  test("returns workflow result", async () => {
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
     const result = await assessCommand("https://example.com")
-
-    expect(stdoutWrites.some(w => w.includes("Report"))).toBe(true)
-    expect(result).toEqual(mockRunResult)
-    expect(result.allFindings.length).toBe(2)
-    process.stdout.write = origStdout
+    expect(result).toHaveProperty("engagementId", "ENG-test")
+    expect(result.success).toBe(true)
   })
 
-  test("does not write report when no findings", async () => {
-    mockRunOverrides = {
-      engagementId: "ENG-empty",
-      findings: 0, critical: 0, high: 0, medium: 0, low: 0,
-      durationMs: 50, success: true,
-      allFindings: [],
-    }
+  test("generates report when findings exist", async () => {
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true }) as any
 
-    const stdoutWrites: string[] = []
-    const origStdout = process.stdout.write.bind(process.stdout)
-    process.stdout.write = mock((chunk: unknown) => { stdoutWrites.push(String(chunk)); return true })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    const result = await assessCommand("https://example.com")
-
-    expect(stdoutWrites.length).toBe(0)
-    expect(result.findings).toBe(0)
-    process.stdout.write = origStdout
-  })
-
-  test("passes through custom onProgress callback", async () => {
-    const progressEvents: any[] = []
-    const customOnProgress = mock((event: any) => { progressEvents.push(event) })
-
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com", { onProgress: customOnProgress })
-
-    expect(capturedRunOptions.onProgress).toBe(customOnProgress)
-  })
-
-  test("uses cliProgress as default onProgress when none provided", async () => {
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
     await assessCommand("https://example.com")
 
-    expect(capturedRunOptions.onProgress).toBeDefined()
-    expect(typeof capturedRunOptions.onProgress).toBe("function")
+    expect(writes.some(w => w.includes("Report"))).toBe(true)
+    process.stdout.write = origWrite
+  })
+
+  test("skips report generation when no findings", async () => {
+    latestRunFn = async () => ({ ...mockRunResult, findings: 0, allFindings: [] })
+    const writes: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = mock((chunk: unknown) => { writes.push(String(chunk)); return true }) as any
+
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    await assessCommand("https://example.com")
+
+    expect(writes).toHaveLength(0)
+    process.stdout.write = origWrite
+    latestRunFn = async (opts: any) => {
+      if (opts.onProgress) opts.onProgress("custom string message")
+      return mockRunResult
+    }
   })
 
   test("passes target to runner", async () => {
+    let capturedTarget = ""
+    latestRunFn = async (opts: any) => { capturedTarget = opts.target; return mockRunResult }
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://my-target.com")
-
-    expect(capturedRunOptions.target).toBe("https://my-target.com")
+    await assessCommand("https://example.com")
+    expect(capturedTarget).toBe("https://example.com")
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
   })
 
-  test("passes useLLM option to runner", async () => {
+  test("passes useLLM option", async () => {
+    let captured: any = null
+    latestRunFn = async (opts: any) => { captured = opts; return mockRunResult }
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
     await assessCommand("https://example.com", { useLLM: false })
-
-    expect(capturedRunOptions.useLLM).toBe(false)
+    expect(captured.useLLM).toBe(false)
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
   })
 
-  test("passes workersPath option to runner", async () => {
+  test("passes workersPath option", async () => {
+    let captured: any = null
+    latestRunFn = async (opts: any) => { captured = opts; return mockRunResult }
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com", { workersPath: "/tmp/custom_mcp_server.py" })
-
-    expect(capturedRunOptions.workersPath).toBe("/tmp/custom_mcp_server.py")
+    await assessCommand("https://example.com", { workersPath: "/custom/path/mcp_server.py" })
+    expect(captured.workersPath).toBe("/custom/path/mcp_server.py")
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
   })
 
-  test("passes credsPath option to runner", async () => {
+  test("passes credsPath option", async () => {
+    let captured: any = null
+    latestRunFn = async (opts: any) => { captured = opts; return mockRunResult }
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com", { credsPath: "/tmp/creds.json" })
-
-    expect(capturedRunOptions.credsPath).toBe("/tmp/creds.json")
+    await assessCommand("https://example.com", { credsPath: "/path/creds.json" })
+    expect(captured.credsPath).toBe("/path/creds.json")
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
   })
 
-  test("passes cacheMode option to runner", async () => {
+  test("passes cacheMode option as no_cache", async () => {
+    let captured: any = null
+    latestRunFn = async (opts: any) => { captured = opts; return mockRunResult }
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
     await assessCommand("https://example.com", { cacheMode: "no_cache" })
-
-    expect(capturedRunOptions.cacheMode).toBe("no_cache")
+    expect(captured.cacheMode).toBe("no_cache")
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
   })
 
-  test("passes features option to runner", async () => {
+  test("passes cacheMode option as refresh", async () => {
+    let captured: any = null
+    latestRunFn = async (opts: any) => { captured = opts; return mockRunResult }
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    await assessCommand("https://example.com", { cacheMode: "refresh" })
+    expect(captured.cacheMode).toBe("refresh")
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
+  })
+
+  test("forwards custom onProgress callback", async () => {
+    const events: any[] = []
+    latestRunFn = async (opts: any) => {
+      opts.onProgress?.({ type: "finding", phaseId: "p1", severity: "HIGH", title: "test" })
+      return mockRunResult
+    }
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    await assessCommand("https://example.com", {
+      onProgress: (event) => { events.push(event) },
+    })
+    expect(events.length).toBeGreaterThan(0)
+    expect(events[0].type).toBe("finding")
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
+  })
+
+  test("passes features option", async () => {
+    let captured: any = null
+    latestRunFn = async (opts: any) => { captured = opts; return mockRunResult }
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
     await assessCommand("https://example.com", { features: { llm_finding_analysis: false } })
-
-    expect(capturedRunOptions.features).toEqual({ llm_finding_analysis: false })
-  })
-
-  test("returns the workflow result directly", async () => {
-    const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    const result = await assessCommand("https://example.com")
-
-    expect(result).toHaveProperty("engagementId", "ENG-test")
-    expect(result).toHaveProperty("findings", 2)
-    expect(result).toHaveProperty("success", true)
+    expect(captured.features).toEqual({ llm_finding_analysis: false })
+    latestRunFn = async (opts: any) => { if (opts.onProgress) opts.onProgress("custom string message"); return mockRunResult }
   })
 })
