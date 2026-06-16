@@ -14,9 +14,8 @@ function cliProgress(event: ProgressEvent | string): void {
   }
   switch (event.type) {
     case "phase_start": {
-      const idx = parseInt(event.phaseId.split("-")[1] || "0", 10) + 1
       process.stderr.write(`
-── Phase ${idx}/${event.total}: ${event.name} ──
+── Phase ${event.phaseIndex + 1}/${event.total}: ${event.name} ──
 `)
       break
     }

@@ -9,7 +9,7 @@ export interface ErrorHintData {
 }
 
 export type ProgressEvent =
-  | { type: "phase_start"; phaseId: string; name: string; total: number }
+  | { type: "phase_start"; phaseId: string; name: string; total: number; phaseIndex: number }
   | { type: "phase_complete"; phaseId: string; name: string; findings: number; status: string }
   | { type: "phase_error"; phaseId: string; name: string; error: string }
   | { type: "tool_start"; phaseId: string; tool: string }

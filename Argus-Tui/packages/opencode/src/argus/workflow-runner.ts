@@ -219,7 +219,7 @@ export class WorkflowRunner {
     const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({
       id: p.phaseId,
       engagementId,
-      name: p.phaseId.split("-")[2] ?? p.phaseId,
+      name: p.name,
       status: "PENDING" as const,
       capabilities: p.requiredCapabilities,
       executionMode: "sequential" as const,
@@ -247,9 +247,9 @@ export class WorkflowRunner {
       }
       for (let i = 0; i < plan.phases.length; i++) {
         const phase = plan.phases[i]
-        const phaseName = phase.phaseId.split("-").slice(2).join("-") || `phase-${i}`
+        const phaseName = phase.name
 
-        emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length })
+        emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length, phaseIndex: i })
         emit(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
 
         phaseRecords[i].status = "RUNNING"

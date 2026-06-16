@@ -43,6 +43,7 @@ export interface PhaseDefinition {
 
 export interface PhaseExecutionRequest {
   phaseId: string
+  name: string
   workflowName: string
   target: string
   requiredCapabilities: Capability[]

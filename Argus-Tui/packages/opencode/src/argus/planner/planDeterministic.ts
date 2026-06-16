@@ -45,6 +45,7 @@ function createPhase(
 ): PhaseExecutionRequest {
   return {
     phaseId: `phase-${phaseIndex}-${name}`,
+    name,
     workflowName: "deterministic",
     target,
     requiredCapabilities: capabilities,
@@ -60,7 +61,7 @@ export function planDeterministic(target: string): AssessmentPlan {
   const errorRecovery: Record<string, ErrorRecovery> = {}
 
   for (const phase of phases) {
-    errorRecovery[phase.phaseId] = PHASE_ERROR_POLICY[phase.phaseId.split("-").slice(2).join("-")] ?? "skip_and_continue"
+    errorRecovery[phase.phaseId] = PHASE_ERROR_POLICY[phase.name] ?? "skip_and_continue"
   }
 
   return {

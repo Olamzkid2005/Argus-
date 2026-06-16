@@ -77,7 +77,7 @@ export async function resumeCommand(
 
   // Find the first incomplete phase in the plan
   const startIndex = plan.phases.findIndex(
-    (p) => !completedPhaseNames.has(p.phaseId.split("-").slice(2).join("-")),
+    (p) => !completedPhaseNames.has(p.name),
   )
 
   if (startIndex === -1) {
@@ -97,7 +97,7 @@ export async function resumeCommand(
     return existing ?? {
       id: p.phaseId,
       engagementId,
-      name: p.phaseId.split("-").slice(2).join("-"),
+      name: p.name,
       status: "PENDING" as const,
       capabilities: p.requiredCapabilities,
       executionMode: "sequential",

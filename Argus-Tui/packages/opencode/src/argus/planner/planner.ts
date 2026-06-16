@@ -50,10 +50,9 @@ export class WorkflowPlanner {
       plan.phases = plan.phases.filter((p) => {
         const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
         if (tools.length > 0) return true
-        const name = p.phaseId.split("-").slice(2).join("-")
         const skip = plan.errorRecovery?.[p.phaseId] !== "fail_fast"
         if (skip) return false
-        process.stderr.write(`Warning: Adding fail_fast phase "${name}" with zero available tools\n`)
+        process.stderr.write(`Warning: Adding fail_fast phase "${p.name}" with zero available tools\n`)
         return true
       })
       return plan
@@ -103,6 +102,7 @@ export class WorkflowPlanner {
 
       phases.push({
         phaseId: `phase-${i}-${def.name}`,
+        name: def.name,
         workflowName: workflow.name,
         target,
         requiredCapabilities: def.required_capabilities,
@@ -140,6 +140,7 @@ export class WorkflowPlanner {
 
     return unhandled.map((cap) => ({
       phaseId: `replan-${nextReplanCount}-${cap}`,
+      name: `replan-${cap.toLowerCase()}`,
       workflowName: "replan",
       target: context.target,
       requiredCapabilities: [cap],
