@@ -342,9 +342,13 @@ export const ArgusToolsCommand = {
       return
     }
     const bridge = new WorkersBridge(wp)
-    await bridge.connect()
-    const toolDefs = await bridge.getTools()
-    await bridge.disconnect()
+    let toolDefs: Awaited<ReturnType<typeof bridge.getTools>> = []
+    try {
+      await bridge.connect()
+      toolDefs = await bridge.getTools()
+    } finally {
+      await bridge.disconnect()
+    }
 
     // Group tools by category based on capabilities
     const byCap: Record<string, typeof toolDefs> = {}

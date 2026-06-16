@@ -177,9 +177,13 @@ const commands: ArgusTuiCommand[] = [
       const wp = join(dir, "../../../../../argus-workers/mcp_server.py")
       if (!existsSync(wp)) return "MCP worker not found. Run `argus doctor` to check setup."
       const bridge = new WorkersBridge(wp)
-      await bridge.connect()
-      const toolDefs = await bridge.getTools()
-      await bridge.disconnect()
+      let toolDefs: Awaited<ReturnType<typeof bridge.getTools>> = []
+      try {
+        await bridge.connect()
+        toolDefs = await bridge.getTools()
+      } finally {
+        await bridge.disconnect()
+      }
       let output = `Registered MCP Tools (${toolDefs.length}):\n${"=".repeat(50)}\n`
       for (const t of toolDefs) {
         const caps = t.capabilities?.join(", ") ?? ""

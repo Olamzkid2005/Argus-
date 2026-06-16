@@ -130,13 +130,13 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
     }
   }
 
+  const py = pythonPath ?? (await resolvePython())
+  const bridge = new WorkersBridge(wp, py)
+  let connected = false
   try {
-    const py = pythonPath ?? (await resolvePython())
-    const bridge = new WorkersBridge(wp, py)
     await bridge.connect()
+    connected = true
     const healthy = await bridge.isHealthy()
-    await bridge.disconnect()
-
     return {
       name: "MCP Worker",
       status: healthy ? "PASS" : "FAIL",
@@ -148,6 +148,8 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
       status: "FAIL",
       message: `Worker error: ${(error as Error).message}`,
     }
+  } finally {
+    if (connected) await bridge.disconnect()
   }
 }
 

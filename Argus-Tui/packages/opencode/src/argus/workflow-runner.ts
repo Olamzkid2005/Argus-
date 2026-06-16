@@ -227,26 +227,24 @@ export class WorkflowRunner {
     })) as unknown as PhaseRecord[]
     store.savePhases(engagementId, phaseRecords)
 
-    // ── 5. Connect bridge ──
-    emit(`⠋ Connecting MCP workers...`)
-    const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
-    await bridge.connect()
-    emit(`✓ MCP workers connected`)
-
-    const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
-    const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
-    executor.setFeatureFlags(featureFlags)
-    executor.loadGates(plan.workflow)
-    executor.setOnProgress((event) => { if (typeof event !== "string") emit(event) })
-    if (options.cacheMode) {
-      executor.setExecutionOptions({ cacheMode: options.cacheMode })
-    }
-
-    // ── 6. Execute phases ──
+    // ── 5. Connect bridge & execute ──
     const allFindings: NormalizedFinding[] = []
     let executionError: Error | null = null
+    const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
 
     try {
+      emit(`⠋ Connecting MCP workers...`)
+      await bridge.connect()
+      emit(`✓ MCP workers connected`)
+
+      const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
+      const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
+      executor.setFeatureFlags(featureFlags)
+      executor.loadGates(plan.workflow)
+      executor.setOnProgress((event) => { if (typeof event !== "string") emit(event) })
+      if (options.cacheMode) {
+        executor.setExecutionOptions({ cacheMode: options.cacheMode })
+      }
       for (let i = 0; i < plan.phases.length; i++) {
         const phase = plan.phases[i]
         const phaseName = phase.phaseId.split("-").slice(2).join("-") || `phase-${i}`
