@@ -35,16 +35,19 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
 
   /** Check endpoint access without auth as a baseline */
   private async checkBaseline(endpointUrl: string): Promise<boolean> {
-    const page = await this.engine.navigate(endpointUrl)
-    await page.waitForLoadState("networkidle")
+    const context = await this.engine.createContext()
+    const page = await context.newPage()
     try {
+      const response = await page.goto(endpointUrl, { waitUntil: "networkidle" })
+      const httpStatus = response?.status() ?? 0
+      if (httpStatus === 401 || httpStatus === 403) return false
       const bodyText = await page.locator("body").innerText()
-      const httpStatus = 200
-      return !isAccessDenied(bodyText) && httpStatus !== 403 && httpStatus !== 401
+      return !isAccessDenied(bodyText)
     } catch {
       return false
     } finally {
       await page.close()
+      await context.close()
     }
   }
 
