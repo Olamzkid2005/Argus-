@@ -235,6 +235,7 @@ export class WorkflowRunner {
     const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
     executor.setFeatureFlags(featureFlags)
     executor.loadGates(plan.workflow)
+    executor.setOnProgress((event) => { if (typeof event !== "string") emit(event) })
     if (options.cacheMode) {
       executor.setExecutionOptions({ cacheMode: options.cacheMode })
     }

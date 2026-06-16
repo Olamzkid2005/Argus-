@@ -4,6 +4,7 @@ import { ToolRegistry } from "../workflows/tool-registry"
 import type { SignalQuality, CacheMode } from "../bridge/types"
 import { LLMUnavailableError } from "../bridge/types"
 import type { WorkersBridge } from "../bridge/mcp-client"
+import type { ProgressEvent, ErrorHintData } from "../shared/progress"
 import type { ToolDef } from "../workflows/tool-registry"
 import { Capability } from "../shared/capabilities"
 
@@ -99,6 +100,7 @@ export class InProcessExecutor implements PhaseExecutor {
   private toolHealth: ToolHealthMonitor
 
   private executionOptions: ExecutionOptions = {}
+  private emitProgress: ((event: ProgressEvent) => void) | null = null
 
   constructor(
     private toolRegistry: ToolRegistry,
@@ -108,6 +110,13 @@ export class InProcessExecutor implements PhaseExecutor {
   ) {
     this.approvalService = new ApprovalService()
     this.toolHealth = new ToolHealthMonitor()
+    this.toolHealth.onErrorHint = (hint: ErrorHintData) => {
+      this.emitProgress?.({ type: "error_hint", ...hint })
+    }
+  }
+
+  setOnProgress(handler: (event: ProgressEvent) => void): void {
+    this.emitProgress = handler
   }
 
   setExecutionOptions(options: ExecutionOptions): void {
