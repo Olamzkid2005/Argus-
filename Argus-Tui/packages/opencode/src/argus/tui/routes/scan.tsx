@@ -64,8 +64,9 @@ export function ScanDashboard() {
       for (let i = 0; i < engPhases.length; i++) {
         const p = engPhases[i]
         addPhase({ id: p.id, name: p.name || p.id, index: i, total: engPhases.length })
-        if (p.status === "COMPLETED" || p.status === "FAILED") {
-          completePhase(i, 0, p.error ? [p.error] : [])
+        if (p.status === "COMPLETED" || p.status === "FAILED" || p.status === "PARTIAL") {
+          const status = p.status === "PARTIAL" ? "partial" : p.status === "FAILED" ? "failed" : "completed"
+          completePhase(i, 0, p.error ? [p.error] : [], status)
         }
       }
 
