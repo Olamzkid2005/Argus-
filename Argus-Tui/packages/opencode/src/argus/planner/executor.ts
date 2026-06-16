@@ -503,9 +503,8 @@ export class InProcessExecutor implements PhaseExecutor {
         break
       } catch (error) {
         if (error instanceof LLMUnavailableError) {
-          errors.push(`Tool ${tool.name} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`)
           this.bridge.resetCircuitBreaker()
-          break
+          return { findings, errors: [`Tool ${tool.name} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`], failFast: false }
         }
         lastError = error as Error
         this.toolHealth.recordFailure(tool.name, lastError.message)
