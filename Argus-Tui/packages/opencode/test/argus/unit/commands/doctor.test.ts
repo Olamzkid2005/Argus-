@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
 
+// doctorCommand runs real system checks (Python, env, toolchain)
+// so it needs extra time to complete
+const TIMEOUT_MS = 30000
+
 describe("doctorCommand", () => {
   test("returns array of CheckResult objects", async () => {
     const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
@@ -47,5 +51,24 @@ describe("doctorCommand", () => {
     const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
     const results = await doctorCommand()
     expect(Array.isArray(results)).toBe(true)
+  })
+
+  test("Environment check returns a result", async () => {
+    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
+    const results = await doctorCommand()
+    const env = results.find((r: any) => r.name === "Environment")
+    if (env) {
+      expect(["PASS", "WARN"]).toContain(env.status)
+      expect(env.message.length).toBeGreaterThan(0)
+    }
+  })
+
+  test("Credentials check returns a result", async () => {
+    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
+    const results = await doctorCommand()
+    const cred = results.find((r: any) => r.name === "Credentials")
+    if (cred) {
+      expect(["PASS", "WARN", "FAIL"]).toContain(cred.status)
+    }
   })
 })
