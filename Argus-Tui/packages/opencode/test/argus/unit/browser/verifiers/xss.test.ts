@@ -17,6 +17,7 @@ function makePage(overrides: Record<string, unknown> = {}) {
       innerText: async () => "",
       count: async () => 0,
     }),
+    evaluate: async () => "",
     screenshot: async () => Buffer.from("screenshot"),
     ...overrides,
   }
@@ -46,7 +47,13 @@ function mockEngine() {
     close: async () => { closed = true },
     navigate: async (url: string) => {
       if (url.includes("victim")) {
-        return makePage({ content: async () => victimContent })
+        return makePage({
+          content: async () => victimContent,
+          evaluate: async () => {
+            const match = victimContent.match(/<body[^>]*>([\s\S]*)<\/body>/i)
+            return match ? match[1] : victimContent
+          },
+        })
       }
       return makePage({
         locator: (sel: string) => {

@@ -4,7 +4,7 @@ import { BOLAVerifier } from "../../../../../src/argus/browser/verifiers/bola"
 function makePage(overrides = {}) {
   return {
     content: async () => "<html><body>Dashboard — Welcome user</body></html>",
-    goto: async () => {},
+    goto: async () => ({ status: () => 403 } as any),
     locator: () => ({ innerText: async () => "Dashboard — Welcome user" }),
     url: () => "https://example.com/api/resource/123",
     close: async () => {},

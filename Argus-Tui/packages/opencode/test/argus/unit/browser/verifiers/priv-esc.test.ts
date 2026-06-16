@@ -5,7 +5,7 @@ function makePage(overrides: Record<string, unknown> = {}) {
   return {
     content: async () => "<html><body>Dashboard — Welcome</body></html>",
     url: () => "https://example.com/admin",
-    goto: async () => ({ status: () => 200 } as any),
+    goto: async () => ({ status: () => 403 } as any),
     close: async () => {},
     waitForLoadState: async () => {},
     locator: () => ({
@@ -29,7 +29,13 @@ function mockEngine() {
   return {
     launch: async () => { launched = true },
     close: async () => { closed = true },
-    createContext: async () => { contextCreated = true },
+    createContext: async () => {
+      contextCreated = true
+      return {
+        newPage: async () => makePage(),
+        close: async () => {},
+      }
+    },
     navigate: async () => makePage(),
     captureScreenshot: async () => Buffer.from("priv-esc-shot"),
     _launched: () => launched,
