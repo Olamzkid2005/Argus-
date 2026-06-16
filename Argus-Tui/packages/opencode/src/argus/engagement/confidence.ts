@@ -34,15 +34,18 @@ const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (fin
 
 export class ConfidenceEngine {
   promote(finding: NormalizedFinding): Confidence {
-    let current = finding.confidence
-
+    // Only promote one tier per call — prevents cascade from e.g.
+    // INFORMATIONAL to VERIFIED in a single pass based on metadata alone.
+    // The executor or workflow runner should call promote() again after
+    // independent re-verification (e.g. browser confirmation) to advance
+    // further tiers.
     for (const rule of PROMOTION_RULES) {
-      if (current === rule.from && rule.condition(finding)) {
-        current = rule.to
+      if (finding.confidence === rule.from && rule.condition(finding)) {
+        return rule.to
       }
     }
 
-    return current
+    return finding.confidence
   }
 
   shouldFinalize(finding: NormalizedFinding): boolean {
