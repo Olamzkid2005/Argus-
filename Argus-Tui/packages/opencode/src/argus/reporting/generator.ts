@@ -11,7 +11,10 @@ import { EngagementStore } from "../engagement/store"
 const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
 
 function escapeMarkdown(text: string): string {
-  return text.replace(/[-_*`\[\]()#+!|{}.~]/g, "\\$&")
+  // Only escape characters that are meaningful markdown syntax.
+  // Avoids mangling CVE IDs (CVE-2024-1234), IPs (192.168.1.1),
+  // version numbers, file paths, and other technical content.
+  return text.replace(/[_*`\[\]#~]/g, "\\$&")
 }
 
 function enumValue<T extends Record<string, number | string>>(e: T, v: unknown, fallback: T[keyof T]): T[keyof T] {
@@ -258,25 +261,30 @@ export class ReportGenerator {
   }
 
   generateSARIF(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): string {
-    // Build unique rules from findings
+    // Build rules from findings keyed by a stable category ID (subtype, CWE, or tool name)
+    // rather than per-finding unique ID — so SARIF consumers can group related results.
+    function ruleKey(f: NormalizedFinding): string {
+      return f.subtype ?? f.cwe ?? `argus-${f.tool}`
+    }
     const rulesMap = new Map<string, { id: string; shortDescription: { text: string }; fullDescription: { text: string }; helpUri?: string }>()
     for (const f of findings) {
-      if (!rulesMap.has(f.id)) {
+      const key = ruleKey(f)
+      if (!rulesMap.has(key)) {
         const rule = {
-          id: f.id,
-          shortDescription: { text: f.title },
+          id: key,
+          shortDescription: { text: f.subtype ?? f.tool },
           fullDescription: { text: f.description || f.title },
         } as { id: string; shortDescription: { text: string }; fullDescription: { text: string }; helpUri?: string }
         const helpUri = f.cwe ? `https://cwe.mitre.org/data/definitions/${f.cwe.replace("CWE-", "")}.html`
                      : f.cve ? `https://cve.mitre.org/cgi-bin/cvename.cgi?name=${f.cve}`
                      : undefined
         if (helpUri) rule.helpUri = helpUri
-        rulesMap.set(f.id, rule)
+        rulesMap.set(key, rule)
       }
     }
 
     const sarifResults = findings.map((f) => ({
-      ruleId: f.id,
+      ruleId: ruleKey(f),
       level: f.severity >= 3 ? "error" : f.severity >= 1 ? "warning" : "note",
       message: { text: f.title },
       locations: [{

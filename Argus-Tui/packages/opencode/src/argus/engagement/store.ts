@@ -243,7 +243,6 @@ export class EngagementStore {
         }).onConflictDoUpdate({
           target: phasesTable.id,
           set: {
-            engagement_id: id,
             name: record.name,
             status: record.status,
             capabilities: record.capabilities,
@@ -268,7 +267,6 @@ export class EngagementStore {
     }).onConflictDoUpdate({
       target: phasesTable.id,
       set: {
-        engagement_id: engagementId,
         name: record.name,
         status: record.status,
         capabilities: record.capabilities,
