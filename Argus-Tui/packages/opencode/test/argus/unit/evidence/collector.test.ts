@@ -1,5 +1,5 @@
 import { describe, expect, test, afterAll } from "bun:test"
-import { mkdtempSync, rmSync, readFileSync } from "fs"
+import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { createHash } from "crypto"
@@ -87,5 +87,85 @@ describe("EvidenceCollector", () => {
     const filePath = join(baseDir, "eng-1", "artifacts", "find-8", entry.path)
     const content = readFileSync(filePath, "utf-8")
     expect(content).toBe("disk check")
+  })
+
+  describe("pruneEngagement", () => {
+    test("returns 0 when engagement directory does not exist", async () => {
+      const collector = new EvidenceCollector(baseDir)
+      const pruned = await collector.pruneEngagement("nonexistent-eng")
+      expect(pruned).toBe(0)
+    })
+
+    test("prunes files older than retention days", async () => {
+      const engId = `eng-prune-${Date.now()}`
+      const collector = new EvidenceCollector(baseDir)
+      await collector.saveRequest(engId, "find-old", "old data")
+      // Save a new file
+      await collector.saveRequest(engId, "find-new", "new data")
+
+      // Verify files exist before pruning
+      const oldDir = join(baseDir, engId, "artifacts", "find-old", "requests")
+      expect(existsSync(oldDir)).toBe(true)
+
+      // Prune with 0 retention (everything should be deleted)
+      const pruned = await collector.pruneEngagement(engId, 0)
+      expect(pruned).toBeGreaterThanOrEqual(1)
+    })
+
+    test("prunes with custom retention days", async () => {
+      const engId = `eng-prune-custom-${Date.now()}`
+      const collector = new EvidenceCollector(baseDir, { retention_days: 1 })
+      await collector.saveRequest(engId, "find-custom", "data")
+      // Prune with 0 retention (override)
+      const pruned = await collector.pruneEngagement(engId, 0)
+      expect(pruned).toBeGreaterThanOrEqual(1)
+    })
+
+    test("does not prune recent files with standard retention", async () => {
+      const engId = `eng-prune-recent-${Date.now()}`
+      const collector = new EvidenceCollector(baseDir)
+      await collector.saveRequest(engId, "find-recent", "recent data")
+      const pruned = await collector.pruneEngagement(engId, 365)
+      expect(pruned).toBe(0)
+    })
+
+    test("rejects invalid engagement ID", async () => {
+      const collector = new EvidenceCollector(baseDir)
+      expect(collector.pruneEngagement("../evil")).rejects.toThrow("Invalid engagementId")
+    })
+  })
+
+  describe("checkStorageLimit", () => {
+    test("returns true when engagement directory does not exist", async () => {
+      const collector = new EvidenceCollector(baseDir)
+      const ok = await collector.checkStorageLimit("nonexistent-eng")
+      expect(ok).toBe(true)
+    })
+
+    test("returns true when storage is within limit", async () => {
+      const engId = `eng-limit-${Date.now()}`
+      const collector = new EvidenceCollector(baseDir)
+      await collector.saveRequest(engId, "find-limit", "small data")
+      const ok = await collector.checkStorageLimit(engId)
+      expect(ok).toBe(true)
+    })
+
+    test("rejects invalid engagement ID", async () => {
+      const collector = new EvidenceCollector(baseDir)
+      expect(collector.checkStorageLimit("../evil")).rejects.toThrow("Invalid engagementId")
+    })
+  })
+
+  describe("custom config", () => {
+    test("accepts custom retention_days", async () => {
+      const collector = new EvidenceCollector(baseDir, { retention_days: 60 })
+      // Config is private, but prune behavior would reflect it
+      expect(collector).toBeDefined()
+    })
+
+    test("accepts custom max_engagement_size_mb", async () => {
+      const collector = new EvidenceCollector(baseDir, { max_engagement_size_mb: 100 })
+      expect(collector).toBeDefined()
+    })
   })
 })
