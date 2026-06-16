@@ -355,7 +355,7 @@ describe("WorkerSupervisor edge cases", () => {
       connect: async () => { connectCount++ },
       isHealthy: async () => true,
     }
-    const supervisor = new WorkerSupervisor(bridge)
+    const supervisor = new WorkerSupervisor(bridge, 0)
     await supervisor.restartWorker()
     await supervisor.restartWorker()
     await supervisor.restartWorker()
