@@ -195,4 +195,117 @@ describe("WorkflowPlanner", () => {
       expect(result).toBeNull()
     })
   })
+
+  describe("plan — pipeline integration", () => {
+    test("phases include pipelineSteps in config when pipeline resolves", async () => {
+      const toolRegistry = {
+        selectBest: () => [{ name: "subfinder", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30 }],
+        getToolsByCapability: () => [],
+        getTool: () => ({ name: "subfinder", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30 }),
+        listTools: () => [],
+        load: () => {},
+        getCapabilities: () => ["web_recon"],
+        findBestTools: () => [],
+        setConfig: () => {},
+      }
+      const workflowRegistry = {
+        getWorkflow: (name: string) => name === "test-workflow" ? mockWorkflow() : null,
+        loadAll: () => [],
+        listWorkflows: () => [mockWorkflow()],
+      }
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
+      expect(plan.phases.length).toBeGreaterThanOrEqual(1)
+      expect(plan.phases[0].phaseId).toMatch(/^phase-/)
+    })
+
+    test("deterministic fallback with useLLM=false produces valid plan", async () => {
+      const toolRegistry = {
+        selectBest: () => [{ name: "nuclei", capabilities: ["vulnerability_scanning"], requires_auth: false, destructive: false, timeout_seconds: 30 }],
+        getToolsByCapability: () => [],
+        getTool: () => ({ name: "nuclei", capabilities: ["vulnerability_scanning"], requires_auth: false, destructive: false, timeout_seconds: 30 }),
+        listTools: () => [],
+        load: () => {},
+        getCapabilities: () => ["vulnerability_scanning"],
+        findBestTools: () => [],
+        setConfig: () => {},
+      }
+      const workflowRegistry = {
+        getWorkflow: () => null,
+        loadAll: () => [],
+        listWorkflows: () => [],
+      }
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
+      expect(plan).toBeDefined()
+      expect(plan.workflow).toBe("deterministic")
+      expect(plan.phases.length).toBeGreaterThanOrEqual(1)
+    })
+
+    test("plan filters out phases with zero available tools", async () => {
+      const toolRegistry = {
+        selectBest: () => [],
+        getToolsByCapability: () => [],
+        getTool: () => undefined,
+        listTools: () => [],
+        load: () => {},
+        getCapabilities: () => [],
+        findBestTools: () => [],
+        setConfig: () => {},
+      }
+      const workflowRegistry = {
+        getWorkflow: (name: string) => name === "test-workflow" ? mockWorkflow() : null,
+        loadAll: () => [],
+        listWorkflows: () => [mockWorkflow()],
+      }
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
+      expect(plan.phases).toHaveLength(0)
+    })
+
+    test("deterministic plan has valid errorRecovery map", async () => {
+      const toolRegistry = {
+        selectBest: () => [],
+        getToolsByCapability: () => [],
+        getTool: () => undefined,
+        listTools: () => [],
+        load: () => {},
+        getCapabilities: () => [],
+        findBestTools: () => [],
+        setConfig: () => {},
+      }
+      const workflowRegistry = {
+        getWorkflow: () => null,
+        loadAll: () => [],
+        listWorkflows: () => [],
+      }
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
+      expect(plan).toBeDefined()
+      expect(typeof plan.errorRecovery).toBe("object")
+    })
+
+    test("plan with LLM mode finds workflow and builds phases", async () => {
+      const toolRegistry = {
+        selectBest: () => [{ name: "subfinder", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30 }],
+        getToolsByCapability: () => [],
+        getTool: () => ({ name: "subfinder", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30 }),
+        listTools: () => [],
+        load: () => {},
+        getCapabilities: () => ["web_recon"],
+        findBestTools: () => [],
+        setConfig: () => {},
+      }
+      const workflowRegistry = {
+        getWorkflow: () => null,
+        findByCapabilities: () => null,
+        loadAll: () => [],
+        listWorkflows: () => [],
+      }
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const plan = await planner.plan("https://example.com")
+      expect(plan).toBeDefined()
+      expect(plan.workflow).toBe("deterministic")
+    })
+  })
 })

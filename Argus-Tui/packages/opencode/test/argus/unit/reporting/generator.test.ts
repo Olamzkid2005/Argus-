@@ -273,4 +273,82 @@ describe("ReportGenerator", () => {
     expect(markdown).not.toContain("OWASP:")
     expect(markdown).not.toContain("Remediation:")
   })
+
+  describe("generateHTML", () => {
+    test("returns valid HTML with findings", () => {
+      const generator = new ReportGenerator()
+      const findings = [
+        makeFinding({ severity: Severity.CRITICAL, title: "Critical Issue", description: "A critical finding" }),
+        makeFinding({ severity: Severity.HIGH, title: "High Issue" }),
+      ]
+      const html = generator.generateHTML(findings, "eng-1", "https://test.com", "assessment")
+      expect(html).toContain("<html")
+      expect(html).toContain("Critical Issue")
+      expect(html).toContain("High Issue")
+      expect(html).toContain("A critical finding")
+      expect(html).toContain("CRITICAL")
+      expect(html).toContain("HIGH")
+    })
+
+    test("handles empty findings array", () => {
+      const generator = new ReportGenerator()
+      const html = generator.generateHTML([], "eng-1", "https://test.com", "assessment")
+      expect(html).toContain("<html")
+      expect(html).toContain("Report:")
+    })
+
+    test("handles findings with special HTML characters", () => {
+      const generator = new ReportGenerator()
+      const findings = [makeFinding({ title: "XSS <script>alert(1)</script>", description: "Description with <b>bold</b>" })]
+      const html = generator.generateHTML(findings, "eng-1", "https://test.com", "assessment")
+      expect(html).toContain("&lt;")
+      expect(html).not.toContain("<script>")
+    })
+  })
+
+  describe("setAnalyses", () => {
+    test("analyses are included in markdown output", () => {
+      const generator = new ReportGenerator()
+      generator.setAnalyses([{
+        findingId: "test-1",
+        explanation: "This is a critical SQL injection vulnerability",
+        impact: ["Data exposure", "Authentication bypass"],
+        remediation: ["Use parameterized queries"],
+        model: "gpt-4",
+        generatedAt: Date.now(),
+      }])
+      const markdown = generator.generateMarkdown(
+        [makeFinding({ id: "test-1" })],
+        "eng-1",
+        "https://test.com",
+        "assessment",
+      )
+      expect(markdown).toContain("AI Analysis")
+      expect(markdown).toContain("SQL injection")
+      expect(markdown).toContain("parameterized queries")
+    })
+
+    test("analyses are included in HTML output", () => {
+      const generator = new ReportGenerator()
+      generator.setAnalyses([{
+        findingId: "test-1",
+        explanation: "Test analysis",
+        impact: ["Impact 1"],
+        remediation: ["Fix 1"],
+        model: "gpt-4",
+        generatedAt: Date.now(),
+      }])
+      const html = generator.generateHTML(
+        [makeFinding({ id: "test-1" })],
+        "eng-1",
+        "https://test.com",
+        "assessment",
+      )
+      expect(html).toContain("Test analysis")
+      expect(html).toContain("Impact 1")
+      expect(html).toContain("Fix 1")
+      expect(html).toContain("ai-analysis")
+      expect(html).toContain("gpt-4")
+    })
+  })
 })
