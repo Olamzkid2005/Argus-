@@ -100,17 +100,17 @@ describe("ConfidenceEngine", () => {
       expect(result).toBe(Confidence.VERIFIED)
     })
 
-    test("promotes through full chain: INFORMATIONAL -> LOW -> MEDIUM", () => {
+    test("promotes INFORMATIONAL to LOW (one tier per call)", () => {
       const engine = new ConfidenceEngine()
       const result = engine.promote(makeFinding({
         confidence: Confidence.INFORMATIONAL,
         severity: Severity.MEDIUM,
         tool: "nuclei",
       }))
-      expect(result).toBe(Confidence.MEDIUM)
+      expect(result).toBe(Confidence.LOW)
     })
 
-    test("promotes through three levels with conditions met", () => {
+    test("promotes LOW to MEDIUM with severity >= 2 (one tier per call)", () => {
       const engine = new ConfidenceEngine()
       const result = engine.promote(makeFinding({
         confidence: Confidence.LOW,
@@ -118,7 +118,7 @@ describe("ConfidenceEngine", () => {
         cwe: "CWE-89",
         evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
       }))
-      expect(result).toBe(Confidence.VERIFIED)
+      expect(result).toBe(Confidence.MEDIUM)
     })
   })
 

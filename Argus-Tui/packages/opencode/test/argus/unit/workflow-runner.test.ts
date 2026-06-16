@@ -151,6 +151,7 @@ describe("WorkflowRunner", () => {
       loadGates: mock(() => {}),
       setFeatureFlags: mock(() => {}),
       setExecutionOptions: mock(() => {}),
+      setOnProgress: mock(() => {}),
     }
 
     const mockBridge = {

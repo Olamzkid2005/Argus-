@@ -118,7 +118,7 @@ describe("ConfidenceEngine edge cases", () => {
     expect(engine.shouldFinalize(finding)).toBe(false)
   })
 
-  test("Multiple sequential promotions", () => {
+  test("Multiple sequential promotions (one tier per call)", () => {
     const engine2 = new ConfidenceEngine()
     const finding: NormalizedFinding = {
       id: "test", title: "Test", severity: Severity.HIGH, confidence: Confidence.LOW,
@@ -126,10 +126,10 @@ describe("ConfidenceEngine edge cases", () => {
       phase: "test", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }
     const first = engine2.promote(finding)
-    expect(first).toBe(Confidence.HIGH)
+    expect(first).toBe(Confidence.MEDIUM)
     const secondFinding = { ...finding, confidence: first, evidence: [{ packageId: "p1", findingId: "test", artifacts: [], packageHash: "hash", createdAt: "" }] }
     const second = engine2.promote(secondFinding)
-    expect(second).toBe(Confidence.VERIFIED)
+    expect(second).toBe(Confidence.HIGH)
     const thirdFinding = { ...secondFinding, confidence: second }
     const third = engine2.promote(thirdFinding)
     expect(third).toBe(Confidence.VERIFIED)

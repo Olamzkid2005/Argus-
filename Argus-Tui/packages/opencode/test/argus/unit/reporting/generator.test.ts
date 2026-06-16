@@ -231,11 +231,11 @@ describe("ReportGenerator", () => {
     )
     const parsed = JSON.parse(sarif)
     const results = parsed.runs[0].results
-    // ruleId now uses finding.id (stable) instead of cwe/array-index
-    expect(results[0].ruleId).toBe("1")
+    // ruleId uses subtype ?? cwe ?? tool for stable SARIF grouping
+    expect(results[0].ruleId).toBe("CWE-200")
     expect(results[0].level).toBe("error")
     expect(results[0].message.text).toBe("High Issue")
-    expect(results[1].ruleId).toBe("2")
+    expect(results[1].ruleId).toBe("argus-test-tool")
     expect(results[1].level).toBe("note")
     expect(results[1].message.text).toBe("Info Issue")
   })
