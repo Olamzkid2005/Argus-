@@ -2,7 +2,7 @@ name: lint
 
 on:
   push:
-    branches: [dev, Argus-cli]
+    branches: [dev, Argus-Tui]
   pull_request:
     branches: [dev]
   schedule:
