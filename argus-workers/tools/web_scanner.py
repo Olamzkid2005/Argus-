@@ -23,6 +23,7 @@ import contextlib
 import json
 import logging
 import os
+import queue
 import re
 import socket
 import threading
@@ -36,6 +37,7 @@ _ALLOWED_SCAN_SCHEMES = frozenset({"http", "https"})
 
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
 from config.constants import (
@@ -257,11 +259,19 @@ class WebScanner(AbstractTool):
         "is_admin", "admin", "role", "privilege", "is_superuser",
     }
 
+    # requests.Session is not thread-safe. We keep a pool of sessions
+    # (sized above the main worker count) so concurrent checks get
+    # exclusive session access while still sharing auth state.
+    # Main ThreadPoolExecutor uses 6 workers; check_race_conditions can
+    # spawn 5 additional concurrent requests, so 12 gives headroom.
+    SESSION_POOL_SIZE = 12
+
     def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
                  llm_payload_generator=None, session: requests.Session | None = None,
                  tech_stack: list[str] | None = None, verify: bool = True,
                  engagement_id: str = "", user_agent: str = "",
-                 emit_finding_callback=None, auth_manager=None):
+                 emit_finding_callback=None, auth_manager=None,
+                 pool_size: int | None = None):
         """
         Initialize web scanner.
 
@@ -279,6 +289,9 @@ class WebScanner(AbstractTool):
                                    If provided, findings are emitted as they're found rather than
                                    batched until scan() completes.
             auth_manager: Optional AuthManager instance for in-flight session re-authentication.
+            pool_size: Optional override for the number of pooled sessions.
+                     Defaults to SESSION_POOL_SIZE. Lower values reduce memory;
+                     higher values reduce contention for I/O-heavy scans.
         """
         self.timeout = timeout
         self.rate_limit = rate_limit
@@ -286,7 +299,17 @@ class WebScanner(AbstractTool):
         self.tech_stack = tech_stack or []
         self.verify = verify
         self.engagement_id = engagement_id
+        # Template session carries shared headers / cookies / auth config.
+        # The actual request pool is created lazily so it can inherit any
+        # cookies set by the single-threaded pre-flight request.
         self.session = session or requests.Session()
+        # Shared cookie jar keeps cookie state coherent across pooled sessions.
+        self._shared_cookie_jar = self.session.cookies
+        self._session_generation = 0  # Bumped on re-auth to refresh pooled sessions
+        self._session_pool: queue.Queue[requests.Session] | None = None
+        self._pool_size = pool_size if pool_size is not None else self.SESSION_POOL_SIZE
+        self._pool_lock = threading.Lock()  # Serializes lazy pool creation and close
+        self._checked_out = 0  # Approximate count for diagnostics
         self.emit_finding_callback = emit_finding_callback
         _default_ua = "Argus-Scanner/1.0 (security-automation)"
         _ua = user_agent or os.environ.get("WEB_SCANNER_USER_AGENT", _default_ua)
@@ -333,7 +356,12 @@ class WebScanner(AbstractTool):
 
         # Run the actual scan logic
         target_url = ctx.target
-        self._run_scan_impl(target_url)
+        try:
+            self._run_scan_impl(target_url)
+        finally:
+            # Close pooled sessions to release connections and sockets.
+            # The externally-provided template session is left to the caller.
+            self.close()
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
@@ -363,6 +391,86 @@ class WebScanner(AbstractTool):
         ctx = ToolContext(target=target_url)
         result = self.execute(ctx)
         return result.findings
+
+    def _ensure_pool(self) -> queue.Queue[requests.Session]:
+        """Create the thread-safe session pool from the template session.
+
+        The pool is created lazily so the pre-flight request has a chance to
+        populate the template session's cookie jar first. Sessions are copied
+        from the template so all workers start with the same headers, cookies,
+        auth, proxies, hooks, mounts, and SSL verification settings.
+        """
+        with self._pool_lock:
+            if self._session_pool is not None:
+                return self._session_pool
+
+            pool: queue.Queue[requests.Session] = queue.Queue()
+            template = self.session
+            for i in range(self._pool_size):
+                s = requests.Session()
+                s._argus_session_id = i  # type: ignore[attr-defined]
+                s._argus_generation = self._session_generation  # type: ignore[attr-defined]
+                s.headers.update(template.headers)
+                # All pooled sessions share the same cookie jar so cookie state
+                # stays coherent across concurrent checks.
+                s.cookies = self._shared_cookie_jar
+                s.verify = template.verify
+                s.trust_env = template.trust_env
+                s.auth = template.auth
+                s.proxies.update(template.proxies)
+                s.params.update(template.params)
+                # Hooks are a dict of event -> list[callable]. Shallow copy of
+                # the dict is enough; the callables themselves can be shared.
+                s.hooks.clear()
+                for event, hooks in template.hooks.items():
+                    s.hooks[event] = list(hooks)
+                # Mount adapters so custom transport/auth adapters are preserved.
+                # HTTPAdapters are cloned to avoid mutable state races; custom
+                # adapters are shared (with a warning) because we cannot safely
+                # clone arbitrary subclasses.
+                for prefix, adapter in template.adapters.items():
+                    if isinstance(adapter, HTTPAdapter):
+                        cloned = HTTPAdapter(
+                            pool_connections=getattr(adapter, "_pool_connections", 10),
+                            pool_maxsize=getattr(adapter, "_pool_maxsize", 10),
+                            max_retries=getattr(adapter, "max_retries", 0),
+                            pool_block=getattr(adapter, "_pool_block", False),
+                        )
+                        s.mount(prefix, cloned)
+                    else:
+                        logger.warning(
+                            "Sharing non-HTTPAdapter %r mounted at %s across pooled sessions; "
+                            "ensure it is thread-safe", adapter, prefix
+                        )
+                        s.mount(prefix, adapter)
+                pool.put(s)
+            self._session_pool = pool
+            logger.debug("Created WebScanner session pool with %s sessions", self._pool_size)
+            return pool
+
+    def close(self) -> None:
+        """Drain and close all sessions in the pool.
+
+        Safe to call multiple times. The template session supplied to
+        ``__init__`` is intentionally not closed here; the caller owns it.
+        """
+        with self._pool_lock:
+            pool = self._session_pool
+            self._session_pool = None
+            if pool is None:
+                return
+            closed = 0
+            while not pool.empty():
+                try:
+                    session = pool.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    session.close()
+                    closed += 1
+                except Exception:
+                    logger.debug("Error closing pooled session", exc_info=True)
+            logger.debug("Closed %s/%s pooled sessions", closed, self._pool_size)
 
     def _run_scan_impl(self, target_url: str) -> None:
         """
@@ -432,6 +540,17 @@ class WebScanner(AbstractTool):
             logger.error("Web scanner: failed to connect to %s: %s", self.target_url, e)
             return
 
+        # Build the session pool now so it inherits any cookies set by the
+        # pre-flight request. Each concurrent check will check out a session
+        # exclusively, avoiding requests.Session thread-safety races (C-06).
+        self._ensure_pool()
+
+        # Run parameter discovery sequentially before the concurrent phase.
+        # parameter_fuzzing() depends on self.discovered_parameters being
+        # populated; running both in the ThreadPoolExecutor created a race
+        # where fuzzing could see an empty dict and skip all tests (H-14).
+        self.parameter_discovery()
+
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         checks = [
@@ -439,7 +558,6 @@ class WebScanner(AbstractTool):
             self.check_csp,
             self.check_cookies,
             self.check_cors,
-            self.parameter_discovery,
             self.parameter_fuzzing,
             self.check_sensitive_files,
             self.check_js_secrets,
@@ -525,23 +643,64 @@ class WebScanner(AbstractTool):
     def _safe_request(self, method: str, url: str, session: requests.Session | None = None, **kwargs) -> requests.Response | None:
         """Make HTTP request with error handling. Thread-safe.
 
-        Uses self.session (which carries cookies/auth headers) by default.
-        Pass an explicit session only when a different auth context is needed.
+        By default checks out a session from the thread-safe pool (C-06).
+        Pass an explicit session only when a different auth context is needed
+        (e.g., the one-off unverified SSL retry session).
 
         Args:
-            session: Optional explicit session. Defaults to self.session (authenticated).
+            session: Optional explicit session. If provided, the pool is bypassed.
         """
+        pooled_session = None
         try:
             kwargs.setdefault("timeout", self.timeout)
             kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)  # Verify SSL certs by default
-            # Use the authenticated self.session by default (H-v4-04 fix)
-            req_session = session if session is not None else self.session
 
-            # In-flight re-authentication: periodically check session validity
-            # Uses a lock to protect the counter from concurrent access under
-            # ThreadPoolExecutor. Always re-auths when the counter trips because
-            # ensure_session() is cheap for valid sessions (single GET check).
+            if session is not None:
+                # Caller supplied a specific session; use it directly.
+                req_session = session
+                pooled_session = None
+                session_id = "explicit"
+            else:
+                # Check out an isolated session from the pool. Each worker in
+                # the ThreadPoolExecutor gets exclusive access for the duration
+                # of one request, eliminating Session-level race conditions.
+                pool = self._ensure_pool()
+                try:
+                    req_session = pool.get(timeout=30)
+                    pooled_session = req_session
+                    session_id = getattr(req_session, "_argus_session_id", "?")
+                    self._checked_out += 1
+                except queue.Empty:
+                    # Pool is unexpectedly exhausted. Fall back to an ad-hoc
+                    # session so the scan can continue, but log loudly so the
+                    # operator knows sizing may need adjustment.
+                    logger.warning(
+                        "WebScanner session pool exhausted (size=%s, checked_out≈%s); "
+                        "creating ad-hoc session for this request",
+                        self._pool_size,
+                        self._checked_out,
+                    )
+                    req_session = requests.Session()
+                    req_session.headers.update(self.session.headers)
+                    req_session.cookies = self._shared_cookie_jar
+                    pooled_session = None
+                    session_id = "adhoc"
+
+            # If the template session was refreshed while this pooled session
+            # was idle, update its headers and re-attach the shared cookie jar.
+            if (
+                pooled_session is not None
+                and getattr(req_session, "_argus_generation", None) != self._session_generation
+            ):
+                req_session.headers.update(self.session.headers)
+                req_session.cookies = self._shared_cookie_jar
+                req_session._argus_generation = self._session_generation  # type: ignore[attr-defined]
+
+            # In-flight re-authentication: periodically check session validity.
+            # The counter is protected by a lock; the actual session mutation
+            # happens on the checked-out pooled session so the refreshed state
+            # is returned to the pool and picked up by future borrowers.
             if self._auth_manager and hasattr(self, "target_url"):
                 should_reauth = False
                 with self._reauth_lock:
@@ -550,10 +709,20 @@ class WebScanner(AbstractTool):
                         self._reauth_request_counter = 0
                         should_reauth = True
                 if should_reauth:
-                    self.session = self._auth_manager.ensure_session(
-                        self.session, self.target_url
+                    refreshed = self._auth_manager.ensure_session(
+                        req_session, self.target_url
                     )
-                    req_session = self.session  # Use refreshed session for this request
+                    if refreshed is not req_session:
+                        # Replace template and bump generation so every pooled
+                        # session picks up the new headers/cookies on checkout.
+                        self.session = refreshed
+                        self._session_generation += 1
+                        self._shared_cookie_jar.update(refreshed.cookies)
+                        req_session.headers.update(refreshed.headers)
+                        req_session._argus_generation = self._session_generation  # type: ignore[attr-defined]
+                    else:
+                        # Session was mutated in place; keep template in sync.
+                        self.session.headers.update(req_session.headers)
 
             # Token-bucket rate limiting with thread-safe lock
             with self._rate_lock:
@@ -562,11 +731,19 @@ class WebScanner(AbstractTool):
                 if wait_time > 0:
                     time.sleep(wait_time)
                 self._last_request_time = time.time()
+            logger.debug(
+                "WebScanner session=%s %s %s", session_id, method, url
+            )
             resp = req_session.request(method, url, **kwargs)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
-            logger.debug(f"Request failed: {e}")
+            logger.debug("Request failed (session=%s): %s", session_id, e)
             return None
+        finally:
+            if pooled_session is not None and self._session_pool is not None:
+                self._session_pool.put(pooled_session)
+                self._checked_out -= 1
+                logger.debug("WebScanner session=%s returned to pool", session_id)
 
     def _add_finding(self, finding_type: str, severity: str, endpoint: str,
                      evidence: dict, confidence: float = 0.8):
@@ -1768,8 +1945,7 @@ class WebScanner(AbstractTool):
 
             # Test 1: Negative amount
             neg_resp = self._safe_request("POST", url,
-                json={**base_payload, "amount": -100},
-                session=self.session)
+                json={**base_payload, "amount": -100})
             if neg_resp and neg_resp.status_code in (200, 201):
                 self._add_finding(
                     finding_type="NEGATIVE_AMOUNT_ACCEPTED",
@@ -1782,8 +1958,7 @@ class WebScanner(AbstractTool):
 
             # Test 2: Zero amount
             zero_resp = self._safe_request("POST", url,
-                json={**base_payload, "amount": 0},
-                session=self.session)
+                json={**base_payload, "amount": 0})
             if zero_resp and zero_resp.status_code in (200, 201):
                 self._add_finding(
                     finding_type="ZERO_AMOUNT_ACCEPTED",
@@ -1796,8 +1971,7 @@ class WebScanner(AbstractTool):
 
             # Test 3: Extremely large amount
             large_resp = self._safe_request("POST", url,
-                json={**base_payload, "amount": 99999999999},
-                session=self.session)
+                json={**base_payload, "amount": 99999999999})
             if large_resp and large_resp.status_code in (200, 201):
                 self._add_finding(
                     finding_type="NO_TRANSACTION_LIMIT",
@@ -1812,7 +1986,7 @@ class WebScanner(AbstractTool):
             replay_responses = []
             replay_payload = {**base_payload, "amount": 1}
             for _ in range(3):
-                r = self._safe_request("POST", url, json=replay_payload, session=self.session)
+                r = self._safe_request("POST", url, json=replay_payload)
                 if r:
                     replay_responses.append(r.status_code)
             if replay_responses.count(200) + replay_responses.count(201) >= 2:
@@ -1845,8 +2019,7 @@ class WebScanner(AbstractTool):
             url = urljoin(self.target_url, path)
             for filename, content, mime in malicious_payloads:
                 resp = self._safe_request("POST", url,
-                    files={"file": (filename, content, mime)},
-                    session=self.session)
+                    files={"file": (filename, content, mime)})
                 if resp and resp.status_code in (200, 201):
                     if filename.endswith(".php") or filename.endswith(".phtml") or filename.endswith(".phar"):
                         self._add_finding(
@@ -2054,7 +2227,7 @@ class WebScanner(AbstractTool):
                     barrier.wait(timeout=5)
                 except threading.BrokenBarrierError:
                     barrier_broken[0] = True
-                return self._safe_request("POST", url, json=payload, session=self.session)
+                return self._safe_request("POST", url, json=payload)
 
             with _cf.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [executor.submit(_race_request) for _ in range(5)]
@@ -2086,7 +2259,7 @@ class WebScanner(AbstractTool):
 
         for path in api_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
-            resp = self._safe_request("GET", url, session=self.session,
+            resp = self._safe_request("GET", url,
                 headers={"Content-Type": "application/json"})
             if not resp or resp.status_code != 200:
                 continue

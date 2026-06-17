@@ -72,14 +72,20 @@ class ExecutionEngine:
                             tool_name, param, tgt, e,
                         )
                         return None  # Block execution
-            # Check positional args for target patterns
+            # Check positional args for target patterns.
+            # Only block when the arg clearly looks like a URL/hostname/IP
+            # to avoid false positives on file paths or flags.
             for arg in (args or []):
                 if isinstance(arg, str) and any(c in arg for c in (":", "/", ".")):
                     if len(arg) > 3 and not arg.startswith("-"):
                         try:
                             scope_validator.validate_target(arg)
                         except Exception:
-                            pass  # Not all positional args are targets
+                            logger.warning(
+                                "Scope validation blocked %s: positional arg=%s",
+                                tool_name, arg,
+                            )
+                            return None
             return (tool_name, args, kwargs)
         return _scope_check
 

@@ -34,7 +34,7 @@ SQLI_PAYLOADS = [
 
     # MySQL-specific (read-only)
     "' UNION SELECT @@version,@@hostname,@@port--",
-    "' UNION SELECT LOAD_FILE('/etc/passwd')--",
+    "' UNION SELECT 1,@@version,NULL--",
 
     # PostgreSQL-specific (read-only)
     "' UNION SELECT current_database(),current_user,version()--",

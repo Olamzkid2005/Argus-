@@ -2,6 +2,7 @@
 Security configuration checks: headers, CSP, cookies, CORS.
 """
 import logging
+from http.cookies import SimpleCookie
 
 from config.constants import RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
 
@@ -66,22 +67,29 @@ def _check_cookies(target_url, session, findings):
     resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
     if not resp:
         return
+    # Responses may contain multiple Set-Cookie headers; requests exposes them
+    # as a comma-separated string. SimpleCookie correctly handles commas inside
+    # the Expires attribute, which naive split(",") does not (H2-03).
     cookie_header = resp.headers.get("Set-Cookie")
     if not cookie_header:
         return
-    cookies = cookie_header.split(",") if "," in cookie_header else [cookie_header]
-    for cookie_str in cookies:
+    cookies = SimpleCookie()
+    try:
+        cookies.load(cookie_header)
+    except Exception:
+        logger.debug("Failed to parse Set-Cookie header", exc_info=True)
+        return
+    for name, morsel in cookies.items():
         issues = []
-        if "HttpOnly" not in cookie_str:
+        if not morsel.get("httponly"):
             issues.append("Missing HttpOnly")
-        if "Secure" not in cookie_str:
+        if not morsel.get("secure"):
             issues.append("Missing Secure")
-        if "SameSite" not in cookie_str:
+        if not morsel.get("samesite"):
             issues.append("Missing SameSite")
         if issues:
-            cookie_name = cookie_str.split("=")[0] if "=" in cookie_str else "unknown"
             findings.append(make_finding("INSECURE_COOKIE", "MEDIUM", target_url, {
-                "cookie": cookie_name,
+                "cookie": name,
                 "issues": issues,
             }, 0.9))
 

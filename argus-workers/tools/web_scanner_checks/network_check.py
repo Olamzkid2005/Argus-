@@ -53,9 +53,16 @@ def _check_cache_poisoning(target_url, session, findings):
                         headers=CACHE_POISONING_HEADERS)
     if not resp:
         return
-    cache_control = resp.headers.get("Cache-Control", "")
-    expires = resp.headers.get("Expires", "")
-    if not cache_control and not expires:
+    cache_control = resp.headers.get("Cache-Control", "").lower()
+    # A response is cacheable unless explicitly forbidden. Absence of both
+    # Cache-Control and Expires means default cacheability, so we should still
+    # check it (H2-06).
+    explicitly_uncacheable = (
+        "no-cache" in cache_control
+        or "no-store" in cache_control
+        or "private" in cache_control
+    )
+    if explicitly_uncacheable:
         return
     if "127.0.0.1" in resp.text:
         findings.append(make_finding("CACHE_POISONING", "MEDIUM", target_url, {

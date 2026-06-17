@@ -209,19 +209,17 @@ except Exception as e:
 Silently corrupts scan results (wrong auth context), causes hard-to-diagnose HTTP errors, and can lead to incorrect vulnerability findings or crashes.
 
 ### Fix
-Use thread-local sessions:
+Implemented a session pool in `tools/web_scanner.py`:
 
-```python
-# In __init__:
-self._thread_session = threading.local()
+- `SESSION_POOL_SIZE` (default 12) sessions are created lazily from a template session.
+- All pooled sessions share a single `RequestsCookieJar` so cookie state stays coherent.
+- A `_session_generation` counter is bumped on re-auth; pooled sessions refresh headers/cookies on next checkout.
+- `pool_size` is configurable via constructor argument.
+- Pool checkout uses a 30-second timeout with graceful fallback to an ad-hoc session.
+- `HTTPAdapter` instances are cloned per session; custom adapters are shared with a warning.
+- The pool is drained and closed in `execute()`'s `finally` block.
 
-# In _safe_request:
-req_session = getattr(self._thread_session, 'session', None)
-if req_session is None:
-    req_session = requests.Session()
-    req_session.headers.update(self.session.headers)
-    self._thread_session.session = req_session
-```
+This preserves parallelism while eliminating concurrent access to a single `requests.Session`.
 
 ---
 
@@ -1760,19 +1758,19 @@ Pass a shared connection/cursor to all internal methods within a single transact
 | C-03 | AgentSessionStore memory growth + no thread safety | ✅ Fixed | — | Added lock + TTL eviction + background eviction loop |
 | C-04 | Plaintext credentials in DB | ✅ Fixed | — | Encrypted with Fernet in auth_checkpoint |
 | C-05 | `return` before `yield` in context manager | ✅ Fixed | — | Replaced with `raise OperatorCanceled` |
-| C-06 | requests.Session shared across 6 threads | 🔴 Pending | — | Use thread-local sessions (complex — defer to P1) |
+| C-06 | requests.Session shared across 6 threads | ✅ Fixed | — | Implemented session pool with shared cookie jar, generation-based refresh, configurable pool size, and graceful fallback |
 | C-07 | Non-serialization exceptions swallowed in retry loop | ✅ Fixed | — | Non-serialization errors now re-raised immediately |
 | C-08 | Stale bound method on Redis reconnect | ✅ Fixed | — | Uses method_name string, re-binds on retry |
 | C-09 | DESC order wrong failure count in health monitor | ✅ Fixed | — | Break on first success (newest-first) |
 | C-10 | Race on global Redis singleton | ✅ Fixed | — | Added threading lock |
-| C-11 | Scope bypass via positional args | ✅ Fixed | — | Args inspected in scope middleware |
+| C-11 | Scope bypass via positional args | ✅ Fixed | — | positional args validated; `ScopeViolationError` now blocks execution instead of being silently swallowed |
 | C-12 | Kwargs silently dropped in execution engine | ✅ Fixed | — | kwargs forwarded to tool_runner.run() |
 | C-13 | Events discarded after partial DB commit | ✅ Fixed | — | Added `mark_committed()` + `_committed` flag |
 | C-14 | Unescaped quotes in generated Python code | ✅ Fixed | — | Uses json.dumps() for defaults |
 | C-15 | Stored XSS in HTML report remediation text | ✅ Fixed | — | Uses json.dumps() for JS-safe embedding |
-| C2-01 | Destructive SQLi payloads on target | ✅ Fixed | — | Replaced DROP/INSERT/OUTFILE with read-only |
-| C2-02 | Session fixation 100% false positives | ✅ Fixed | — | Now tries actual login with default creds |
-| C2-03 | Duplicate config_check.py / headers_check.py | ✅ Fixed | — | `headers_check` added to skip list |
+| C2-01 | Destructive SQLi payloads on target | ✅ Fixed | — | Removed remaining `LOAD_FILE('/etc/passwd')` payload; all SQLi payloads are now read-only |
+| C2-02 | Session fixation 100% false positives | ✅ Fixed | — | `_check_session_fixation()` now attempts actual login with default credentials and only reports when the cookie remains unchanged after a successful login |
+| C2-03 | Duplicate config_check.py / headers_check.py | ✅ Fixed | — | `headers_check` is in `_skip_modules`; only `ConfigCheck` is registered |
 | C2-04 | SHA256 hash reused across 3 different images | ✅ Fixed | — | Removed incorrect SHAs from pgvector/redis |
 | C2-05 | Path traversal check broken on Windows | ✅ Fixed | — | Normalizes path separators before comparison |
 | C2-06 | execSync command injection in doctor | ✅ Fixed | — | Uses execFileSync with args array |

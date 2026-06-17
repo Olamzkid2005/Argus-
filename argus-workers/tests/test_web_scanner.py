@@ -3,8 +3,15 @@ Tests for WebScanner (AbstractTool pattern).
 
 Uses mocked ``_safe_request`` to test scanner logic without live HTTP.
 Follows the same pattern as ``test_api_scanner.py``.
+
+Note on session mocking:
+    The scanner uses a pool of ``requests.Session`` objects for thread safety.
+    Patching ``scanner.session`` only affects the single-threaded pre-flight
+    request. To control requests made by the concurrent checks, patch
+    ``scanner._safe_request`` or use the ``_patch_safe_request`` helper below.
 """
 
+import threading
 from unittest.mock import Mock, patch
 
 import pytest
@@ -32,6 +39,21 @@ def _mock_response(
     resp.raw.headers = Mock()
     resp.raw.headers.getlist = Mock(return_value=[])
     return resp
+
+
+def _patch_safe_request(response_or_callable):
+    """Patch ``scanner._safe_request`` for the concurrent check phase.
+
+    Use this instead of patching ``scanner.session`` because the scanner
+    checks out pooled sessions during the ThreadPoolExecutor phase.
+
+    Args:
+        response_or_callable: A ``Mock`` response, or a callable taking
+            ``(method, url, **kwargs)`` and returning a response/None.
+    """
+    if callable(response_or_callable) and not isinstance(response_or_callable, Mock):
+        return patch.object(WebScanner, "_safe_request", side_effect=response_or_callable)
+    return patch.object(WebScanner, "_safe_request", return_value=response_or_callable)
 
 
 # ── Construction & State ────────────────────────────────────────────────
@@ -528,6 +550,164 @@ class TestExecute:
 
         assert result.status == ToolStatus.SUCCESS
         assert isinstance(result.findings, list)
+
+
+# ── Session pool concurrency (C-06) ─────────────────────────────────────
+
+
+class TestSessionPoolConcurrency:
+    """Pooled sessions are isolated across concurrent _safe_request calls."""
+
+    def test_concurrent_requests_use_distinct_pooled_sessions(self):
+        """Each concurrent request checks out a different session from the pool."""
+        scanner = WebScanner()
+        scanner.target_url = "https://example.com"
+        scanner._ensure_pool()
+
+        used_session_ids = []
+        lock = threading.Lock()
+
+        def _fake_request(session_self, method, url, **kwargs):
+            with lock:
+                used_session_ids.append(id(session_self))
+            return _mock_response(status_code=200, text="<html></html>")
+
+        with patch("requests.Session.request", _fake_request):
+            threads = [
+                threading.Thread(
+                    target=lambda: scanner._safe_request("GET", "https://example.com/")
+                )
+                for _ in range(scanner._pool_size)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        assert len(used_session_ids) == scanner._pool_size
+        assert len(set(used_session_ids)) == scanner._pool_size
+        assert scanner._session_pool.qsize() == scanner._pool_size
+
+    def test_close_drains_and_closes_pooled_sessions(self):
+        """close() closes every session in the pool and clears the pool."""
+        scanner = WebScanner()
+        scanner._ensure_pool()
+
+        closed_ids = set()
+
+        def _fake_close(session_self):
+            closed_ids.add(id(session_self))
+
+        with patch("requests.Session.close", _fake_close):
+            scanner.close()
+
+        assert len(closed_ids) == scanner._pool_size
+        assert scanner._session_pool is None
+
+    def test_pooled_sessions_share_cookie_jar(self):
+        """All pooled sessions use the same cookie jar for coherent state."""
+        scanner = WebScanner()
+        scanner._ensure_pool()
+
+        sessions = []
+        while not scanner._session_pool.empty():
+            sessions.append(scanner._session_pool.get())
+
+        assert sessions
+        first_jar = sessions[0].cookies
+        for s in sessions[1:]:
+            assert s.cookies is first_jar
+            assert s.cookies is scanner._shared_cookie_jar
+
+        # Return sessions so close() can clean up
+        for s in sessions:
+            scanner._session_pool.put(s)
+
+    def test_pool_size_is_configurable(self):
+        """pool_size constructor argument overrides the class default."""
+        scanner = WebScanner(pool_size=3)
+        scanner._ensure_pool()
+        assert scanner._pool_size == 3
+        assert scanner._session_pool.qsize() == 3
+
+    def test_generation_refresh_updates_pooled_session_headers(self):
+        """When the template generation changes, a checked-out session refreshes."""
+        scanner = WebScanner()
+        scanner.target_url = "https://example.com"
+        scanner._ensure_pool()
+
+        # Simulate a re-auth that changed template headers
+        scanner.session.headers["Authorization"] = "Bearer refreshed"
+        scanner._session_generation += 1
+
+        def _fake_request(session_self, method, url, **kwargs):
+            return _mock_response(status_code=200)
+
+        with patch("requests.Session.request", _fake_request):
+            scanner._safe_request("GET", "https://example.com/")
+
+        # The next checkout should see the refreshed header on the session object
+        captured_auth = []
+
+        def _capture_request(session_self, method, url, **kwargs):
+            captured_auth.append(session_self.headers.get("Authorization"))
+            return _mock_response(status_code=200)
+
+        with patch("requests.Session.request", _capture_request):
+            scanner._safe_request("GET", "https://example.com/")
+
+        assert captured_auth == ["Bearer refreshed"]
+
+    def test_exhausted_pool_falls_back_to_ad_hoc_session(self):
+        """If the pool is exhausted, an ad-hoc session is created instead of crashing."""
+        scanner = WebScanner(pool_size=1)
+        scanner.target_url = "https://example.com"
+        scanner._ensure_pool()
+
+        # Hold the only pooled session
+        held = scanner._session_pool.get()
+
+        def _fake_request(session_self, method, url, **kwargs):
+            return _mock_response(status_code=200)
+
+        try:
+            with patch("requests.Session.request", _fake_request):
+                resp = scanner._safe_request("GET", "https://example.com/")
+            assert resp is not None
+            assert resp.status_code == 200
+        finally:
+            scanner._session_pool.put(held)
+
+
+# ── Golden scan ─────────────────────────────────────────────────────────
+
+
+class TestGoldenScan:
+    """End-to-end scan against a mocked vulnerable baseline response."""
+
+    def test_scan_finds_expected_issues_on_baseline_response(self):
+        """A baseline response with common misconfigurations yields stable findings."""
+        scanner = WebScanner()
+        ctx = ToolContext(target="https://example.com")
+
+        baseline = _mock_response(
+            status_code=200,
+            headers={
+                "Content-Type": "text/html",
+                "Access-Control-Allow-Origin": "*",
+                "Set-Cookie": "sessionid=abc123; Path=/",
+            },
+            text="<html><body>csrfmiddlewaretoken</body></html>",
+        )
+
+        with patch.object(scanner, "_safe_request", return_value=baseline):
+            result = scanner.execute(ctx)
+
+        finding_types = {f["type"] for f in result.findings}
+        # These should be reliably detected from the baseline response above.
+        assert "MISSING_SECURITY_HEADERS" in finding_types
+        assert "WILDCARD_CORS" in finding_types
+        assert "INSECURE_COOKIE" in finding_types
 
 
 # ── Finding schema compliance ───────────────────────────────────────────
