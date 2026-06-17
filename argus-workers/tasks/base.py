@@ -203,7 +203,7 @@ def task_context(
                 except OperatorCanceled:
                     raise
                 except Exception:
-                    pass  # Redis unavailable — proceed normally
+                    logger.warning("Redis unavailable during cancel check — proceeding normally", exc_info=True)
 
                 yield ctx
         except SoftTimeLimitExceeded:

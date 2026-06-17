@@ -118,7 +118,7 @@ def run_due_scans(self):
                 try:
                     cursor.execute("ROLLBACK TO SAVEPOINT spawn_schedule")
                 except Exception:
-                    pass
+                    logger.warning("Failed to rollback to SAVEPOINT spawn_schedule for scheduled engagement %s", sched_id, exc_info=True)
                 logger.error("Failed to spawn scheduled engagement %s: %s", sched_id, e)
                 # Continue with next schedule — don't fail the batch
 
@@ -250,8 +250,9 @@ def _spawn_engagement(
             prev_engagement_id = None
 
         # Compute next run from cron expression
-        from croniter import croniter
         from datetime import UTC, datetime
+
+        from croniter import croniter
 
         now = datetime.now(UTC)
         next_run = croniter(cron_expression, now).get_next(datetime)

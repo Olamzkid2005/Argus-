@@ -243,7 +243,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 done = threading.Event()
                 result_container = {}
 
-                def _run_in_new_loop():
+                def _run_in_new_loop(finding=finding, payload=payload, response=response, result_container=result_container, done=done):
                     inner = asyncio.new_event_loop()
                     try:
                         res = inner.run_until_complete(detector.analyze_async(

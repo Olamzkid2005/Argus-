@@ -191,7 +191,8 @@ def test_jwt_rs256_hs256(
                 json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
             ).decode().rstrip("=")
             message = f"{header_b64}.{parts[1]}"
-            import hmac, hashlib
+            import hashlib
+            import hmac
             sig = base64.urlsafe_b64encode(
                 hmac.new(
                     secret.encode() if secret else b"",

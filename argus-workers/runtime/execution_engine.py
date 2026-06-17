@@ -76,8 +76,7 @@ class ExecutionEngine:
             # Only block when the arg clearly looks like a URL/hostname/IP
             # to avoid false positives on file paths or flags.
             for arg in (args or []):
-                if isinstance(arg, str) and any(c in arg for c in (":", "/", ".")):
-                    if len(arg) > 3 and not arg.startswith("-"):
+                if isinstance(arg, str) and any(c in arg for c in (":", "/", ".")) and len(arg) > 3 and not arg.startswith("-"):
                         try:
                             scope_validator.validate_target(arg)
                         except Exception:

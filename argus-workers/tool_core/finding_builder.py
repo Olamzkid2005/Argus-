@@ -14,8 +14,11 @@ Benefits:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class FindingBuilder:
@@ -116,7 +119,7 @@ class FindingBuilder:
             try:
                 self.emit_finding(self.engagement_id, finding, self.source_tool)
             except Exception:
-                pass
+                logger.warning("Failed to emit finding via callback for engagement %s", self.engagement_id, exc_info=True)
 
         return finding
 

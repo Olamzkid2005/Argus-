@@ -105,7 +105,7 @@ class InfrastructureSecurityAnalyzer(AbstractTool):
                 if "0.0.0.0/0" in content and "ingress" in content:
                     builder.vulnerability("TF_OPEN_SG", "HIGH", str(tf_file), {"description": "Security group allows 0.0.0.0/0"})
             except Exception:
-                pass
+                logger.warning("Failed to scan Terraform file %s", tf_file, exc_info=True)
 
     def _scan_kubernetes(self, path: Path, builder: FindingBuilder) -> None:
         for ext in ("*.yaml", "*.yml"):
@@ -119,7 +119,7 @@ class InfrastructureSecurityAnalyzer(AbstractTool):
                     if "hostnetwork: true" in content:
                         builder.vulnerability("K8S_HOST_NETWORK", "MEDIUM", str(k8s_file), {"description": "Pod uses host network namespace"})
                 except Exception:
-                    pass
+                    logger.warning("Failed to scan Kubernetes manifest %s", k8s_file, exc_info=True)
 
     def _scan_docker(self, path: Path, builder: FindingBuilder) -> None:
         for dockerfile in path.glob("**/Dockerfile*"):
@@ -131,4 +131,4 @@ class InfrastructureSecurityAnalyzer(AbstractTool):
                     if stripped.upper().startswith("ENV") and any(kw in stripped.upper() for kw in ("SECRET", "PASSWORD", "TOKEN")):
                         builder.vulnerability("DOCKER_SECRETS_IN_ENV", "HIGH", str(dockerfile), {"description": "Secrets in environment variables"})
             except Exception:
-                pass
+                logger.warning("Failed to scan Dockerfile %s", dockerfile, exc_info=True)

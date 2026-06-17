@@ -122,7 +122,7 @@ class ConfidenceScorer:
             context_score = 0.9
 
         # CVSS severity
-        cvss = finding.get("cvss_score", None)
+        cvss = finding.get("cvss_score")
         if cvss is None:
             cvss = 0
         cvss_score = min(1.0, cvss / 10.0) if isinstance(cvss, (int, float)) else 0.5

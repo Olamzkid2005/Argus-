@@ -105,7 +105,7 @@ class BolaWorkflow:
                     try:
                         session.close()
                     except Exception:
-                        pass
+                        logger.warning("Failed to close session %s in BOLA workflow cleanup", session_attr, exc_info=True)
 
         outcome = "partial" if len(self.ctx.state.obstacles) > 0 else "complete"
         return WorkflowResult(

@@ -61,7 +61,7 @@ class AIExplainabilityRepository:
         try:
             self.close()
         except Exception:
-            pass  # Swallow errors during interpreter shutdown
+            logger.warning("Failed to close AI explainability repository connection during shutdown", exc_info=True)
 
     def create_explanation(
         self,

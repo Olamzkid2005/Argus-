@@ -71,13 +71,13 @@ class FeedbackLearningLoop:
             self._update_finding(cursor, feedback)
             actions["finding_updated"] = True
 
+            if self._update_tool_accuracy(feedback):
+                actions["accuracy_adjusted"] = True
+
+            if self._update_confidence_model(feedback):
+                actions["weights_adjusted"] = True
+
             conn.commit()
-
-        if self._update_tool_accuracy(feedback):
-            actions["accuracy_adjusted"] = True
-
-        if self._update_confidence_model(feedback):
-            actions["weights_adjusted"] = True
         except Exception:
             if conn:
                 conn.rollback()

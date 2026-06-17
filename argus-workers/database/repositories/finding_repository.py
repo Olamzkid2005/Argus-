@@ -239,7 +239,7 @@ class FindingRepository(BaseRepository):
             try:
                 cache.invalidate_table("findings")
             except Exception:
-                pass  # Cache invalidation is best-effort
+                logger.warning("Failed to invalidate findings cache", exc_info=True)
             return finding_id
 
     def upsert_secret_finding(

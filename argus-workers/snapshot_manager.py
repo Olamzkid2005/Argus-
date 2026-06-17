@@ -46,14 +46,14 @@ class SnapshotManager:
             # Reset isolation level to default before returning to pool
             conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
         except Exception:
-            pass
+            logger.warning("Failed to reset isolation level on connection before returning to pool", exc_info=True)
         try:
             get_db().release_connection(conn)
         except Exception:
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.warning("Failed to close connection after failed release_connection", exc_info=True)
 
     def create_snapshot(self, engagement_id: str) -> dict:
         """

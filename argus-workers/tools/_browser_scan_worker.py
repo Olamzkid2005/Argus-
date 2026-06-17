@@ -85,7 +85,7 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
                 if not payload_url.startswith(("http://", "https://")):
                     continue
                 page.goto(payload_url, timeout=10000)
-                if any('alert' in e.lower() for e in payload_errors):
+                if any('alert' in e.lower() for e in current_errors):
                     findings.append({
                         'type': 'DOM_XSS',
                         'severity': 'HIGH',

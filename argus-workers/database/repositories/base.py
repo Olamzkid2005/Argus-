@@ -12,8 +12,8 @@ from contextlib import contextmanager, suppress
 from typing import Any
 
 import psycopg2
-from psycopg2.sql import Identifier, SQL
 from psycopg2.extras import RealDictCursor
+from psycopg2.sql import SQL, Identifier
 
 from database.connection import get_db
 

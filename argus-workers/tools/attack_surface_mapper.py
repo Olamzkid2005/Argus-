@@ -72,7 +72,7 @@ class AttackSurfaceMapper(AbstractTool):
                                 if "/api" in path.lower():
                                     graph.add_api_endpoint(url)
                             except Exception:
-                                pass
+                                logger.warning("Failed to parse URL path for API endpoint detection: %s", url, exc_info=True)
                 except Exception as e:
                     logger.warning("Attack surface %s failed: %s", task, e)
 

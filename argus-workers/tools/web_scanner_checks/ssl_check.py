@@ -2,13 +2,12 @@
 SSL/TLS certificate and configuration verification with HSTS preload checks.
 """
 import logging
+import socket as _socket
 import ssl
 import time
+from urllib.parse import urlparse
 
 from config.constants import RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
-
-import socket as _socket
-from urllib.parse import urlparse
 
 from ._helpers import make_finding, safe_request
 
