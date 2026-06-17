@@ -273,7 +273,14 @@ export class WorkersBridge {
           reject(new Error("Process not running"))
           return
         }
-        this.process.stdin!.write(JSON.stringify(request) + "\n")
+        try {
+          this.process.stdin!.write(JSON.stringify(request) + "\n")
+        } catch (err) {
+          clearTimeout(timer)
+          this.pending.delete(id)
+          reject(new Error(`Failed to write to process stdin: ${err}`))
+          return
+        }
       })
     } finally {
       this.pendingCount--

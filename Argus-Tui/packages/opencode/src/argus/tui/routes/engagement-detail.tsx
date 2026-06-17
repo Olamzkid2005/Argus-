@@ -87,7 +87,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
                 {(tab) => (
                   <box {...({ onClick: () => {
                     setActiveTab(tab.id)
-                    route.navigate({ type: "engagement-detail", engagementId: props.engagementId, tab: tab.id })
+                    route.navigate({ type: "engagement", engagementId: props.engagementId, tab: tab.id })
                   } } as any)}>
                     <text fg={activeTab() === tab.id ? theme.primary : theme.textMuted}>
                       {activeTab() === tab.id ? <b>{tab.label}</b> : tab.label}

@@ -293,7 +293,9 @@ def _findings_rows(findings: list[dict]) -> str:
             if remediation:
                 parts.append(f"<h4>Remediation</h4><p>{remediation}</p>")
             if remediation:
-                btn_click = "copyFix(" + chr(34) + _escape(remediation) + chr(34) + ", this)"
+                import json
+                safe_remediation = json.dumps(remediation)
+                btn_click = f"copyFix({safe_remediation}, this)"
                 parts.append(
                     '<button class="copy-btn" onclick="' + btn_click + '">Copy Fix</button>'
                 )

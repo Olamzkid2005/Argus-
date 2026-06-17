@@ -75,10 +75,8 @@ def _build_parameters(params: list[dict]) -> str:
         if flag:
             args += f', flag="{flag}"'
         if default is not None:
-            if isinstance(default, bool):
-                args += f", default={str(default)}"
-            else:
-                args += f', default="{default}"'
+            import json
+            args += f", default={json.dumps(default)}"
         if enum_vals:
             vals = ", ".join(f'"{v}"' for v in enum_vals)
             args += f", enum=[{vals}]"

@@ -47,6 +47,11 @@ except ImportError:
 SoftTimeLimitExceeded = _SoftTimeLimitExceeded
 
 
+class OperatorCanceled(Exception):
+    """Raised when an engagement is cancelled by the operator via Redis flag."""
+    pass
+
+
 def _is_soft_timeout(exc: BaseException) -> bool:
     """Check if *exc* is a soft time limit exceeded signal.
 
@@ -194,7 +199,9 @@ def task_context(
                         _r.delete(f"cancel:engagement:{engagement_id}")
                         slog.warning("Engagement %s was cancelled by operator — aborting", engagement_id)
                         state.transition("failed", "Cancelled by operator")
-                        return
+                        raise OperatorCanceled("Engagement cancelled by operator")
+                except OperatorCanceled:
+                    raise
                 except Exception:
                     pass  # Redis unavailable — proceed normally
 

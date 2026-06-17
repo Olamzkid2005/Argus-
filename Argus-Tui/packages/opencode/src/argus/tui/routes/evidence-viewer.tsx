@@ -100,12 +100,14 @@ export function EvidenceViewer(props: EvidenceViewerProps) {
     try {
       const { realpathSync, readFileSync, existsSync } = await import("fs")
       const { homedir } = await import("os")
-      const { join, resolve } = await import("path")
+      const { join, resolve, sep } = await import("path")
       const rawBaseDir = join(homedir(), ".argus", "artifacts")
       const baseDir = existsSync(rawBaseDir) ? realpathSync(rawBaseDir) : rawBaseDir
       const joinedPath = resolve(baseDir, artifact.path)
       const resolvedPath = existsSync(joinedPath) ? realpathSync(joinedPath) : joinedPath
-      if (!resolvedPath.startsWith(baseDir + "/")) {
+      const baseNorm = baseDir.replace(/\\/g, '/') + '/'
+      const resolvedNorm = resolvedPath.replace(/\\/g, '/')
+      if (!resolvedNorm.startsWith(baseNorm)) {
         setContents((prev) => ({ ...prev, [artifact.id]: "[Security: Invalid artifact path]" }))
       } else if (existsSync(resolvedPath)) {
         const content = readFileSync(resolvedPath, "utf-8")

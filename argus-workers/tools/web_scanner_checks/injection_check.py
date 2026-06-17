@@ -22,7 +22,6 @@ SQLI_PAYLOADS = [
     "' OR '1'='1",
     "' OR '1'='1' --",
     "' UNION SELECT 1,2,3--",
-    "'; DROP TABLE users--",
     "' OR SLEEP(5)--",
     "1' AND '1'='1",
     "1' AND '1'='2",

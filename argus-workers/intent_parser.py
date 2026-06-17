@@ -107,32 +107,23 @@ def sanitize_input(text: str) -> str:
             "Prompt injection pattern detected in input (%d chars): %s...",
             len(sanitized), sanitized[:80],
         )
-        # Apply redaction to both normalized (leet-decoded) and original text
+        # Redact injection patterns from both original and normalized text
         # to catch leetspeak-obfuscated prompt injections.
-        sanitized = re.sub(
-            r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
-            r"system\s+prompt|you\s+are\s+now|"
-            r"new\s+instructions|override|"
-            r"disregard\s+.*previous|bypass\s+.*restrictions|"
-            r"act\s+as|pretend\s+you\s+are|"
-            r"from\s+now\s+on\s+you\s+are)",
-            "[REDACTED]",
-            sanitized,
-        )
-        # Also apply redaction to the original text's leetspeak-normalized form
-        # to ensure leetspeak-obfuscated injections are caught
-        sanitized_normalized = re.sub(
-            r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
-            r"system\s+prompt|you\s+are\s+now|"
-            r"new\s+instructions|override|"
-            r"disregard\s+.*previous|bypass\s+.*restrictions|"
-            r"act\s+as|pretend\s+you\s+are|"
-            r"from\s+now\s+on\s+you\s+are)",
-            "[REDACTED]",
-            normalized,
-        )
+        def _redact_injection(text: str) -> str:
+            return re.sub(
+                r"(?i)(ignore\s+.*instructions|forget\s+.*prompt|"
+                r"system\s+prompt|you\s+are\s+now|"
+                r"new\s+instructions|override|"
+                r"disregard\s+.*previous|bypass\s+.*restrictions|"
+                r"act\s+as|pretend\s+you\s+are|"
+                r"from\s+now\s+on\s+you\s+are)",
+                "",
+                text,
+            )
+        sanitized = _redact_injection(sanitized)
+        sanitized_normalized = _redact_injection(normalized)
         if sanitized_normalized != normalized:
-            sanitized = "[REDACTED] " + sanitized
+            sanitized = _redact_injection(sanitized)
     return sanitized[:2000]
 
 

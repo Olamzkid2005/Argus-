@@ -165,7 +165,7 @@ class SnapshotManager:
             except Exception as e:
                 if conn:
                     conn.rollback()
-                # Retry on serialization failures (40001) — concurrent modification
+                # Check for serialization failure first
                 if conn:
                     try:
                         from psycopg2.errorcodes import SERIALIZATION_FAILURE
@@ -177,8 +177,11 @@ class SnapshotManager:
                             continue
                     except Exception:
                         logger.debug("Failed to inspect pgcode for snapshot retry", exc_info=True)
+                # Re-raise all non-serialization exceptions immediately
                 if attempt == max_retries - 1:
                     raise Exception(f"Failed to create snapshot after {max_retries} attempts: {e}") from e
+                else:
+                    raise  # Non-serialization failures: don't retry silently
             finally:
                 if cursor:
                     cursor.close()

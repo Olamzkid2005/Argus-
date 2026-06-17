@@ -838,7 +838,14 @@ class ReActAgent:
             except Exception:
                 logger.warning("Agent: failed to emit decision event (non-fatal)", exc_info=True)
 
-            # Execute tool
+            # Execute tool with scope validation
+            if not self._validate_arguments(action):
+                logger.warning("Blocked tool %s due to scope validation failure", action.tool)
+                result = AgentResult(tool=action.tool, success=False,
+                                     error=f"Blocked by scope validation: {action.tool}")
+                tried_tools.add(action.tool)
+                results.append(result)
+                continue
             result = self.registry.call(action.tool, **action.arguments)
             tried_tools.add(action.tool)
             results.append(result)

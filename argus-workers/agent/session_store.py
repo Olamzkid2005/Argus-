@@ -9,6 +9,7 @@ optimization, not a durability requirement.
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from uuid import uuid4
@@ -53,6 +54,10 @@ class AgentSessionStore:
 
     def __init__(self) -> None:
         self._sessions: dict[str, AgentSession] = {}
+        self._lock = threading.Lock()
+        self._eviction_ttl = 3600  # 1 hour
+        self._last_eviction = time.time()
+        self._start_eviction_loop()
 
     def create(
         self,
@@ -70,15 +75,38 @@ class AgentSessionStore:
         Returns:
             A unique session identifier (uuid4 hex string).
         """
+        self._evict_expired()
         session_id = uuid4().hex
-        self._sessions[session_id] = AgentSession(
-            session_id=session_id,
-            target=target,
-            phase=phase,
-            created_at=int(time.time()),
-            tech_stack=tech_stack or [],
-        )
+        with self._lock:
+            self._sessions[session_id] = AgentSession(
+                session_id=session_id,
+                target=target,
+                phase=phase,
+                created_at=int(time.time()),
+                tech_stack=tech_stack or [],
+            )
         return session_id
+
+    def _evict_expired(self) -> None:
+        """Remove sessions that have exceeded the TTL."""
+        now = time.time()
+        if now - self._last_eviction < 300:  # only evict every 5 mins
+            return
+        self._last_eviction = now
+        with self._lock:
+            expired = [sid for sid, s in self._sessions.items()
+                       if now - s.created_at > self._eviction_ttl]
+            for sid in expired:
+                del self._sessions[sid]
+
+    def _start_eviction_loop(self) -> None:
+        """Background thread for periodic eviction."""
+        def _loop():
+            while True:
+                time.sleep(300)
+                self._evict_expired()
+        t = threading.Thread(target=_loop, daemon=True)
+        t.start()
 
     def get(self, session_id: str) -> AgentSession:
         """Retrieve a session by ID.
@@ -92,9 +120,10 @@ class AgentSessionStore:
         Raises:
             ValueError: If the session does not exist.
         """
-        if session_id not in self._sessions:
-            raise ValueError(f"Session {session_id} not found")
-        return self._sessions[session_id]
+        with self._lock:
+            if session_id not in self._sessions:
+                raise ValueError(f"Session {session_id} not found")
+            return self._sessions[session_id]
 
     def add_execution(self, session_id: str, execution: ToolExecution) -> None:
         """Record a tool execution in the session history.
@@ -106,8 +135,11 @@ class AgentSessionStore:
         Raises:
             ValueError: If the session does not exist.
         """
-        session = self.get(session_id)
-        session.tool_history.append(execution)
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
+            session.tool_history.append(execution)
 
     def add_observation(self, session_id: str, observation: str) -> None:
         """Add an LLM-readable observation summary to the session.
@@ -119,8 +151,11 @@ class AgentSessionStore:
         Raises:
             ValueError: If the session does not exist.
         """
-        session = self.get(session_id)
-        session.observations.append(observation)
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
+            session.observations.append(observation)
 
     def set_plan(self, session_id: str, plan: list[str]) -> None:
         """Set the current hybrid plan for the session and reset step counter.
@@ -132,9 +167,12 @@ class AgentSessionStore:
         Raises:
             ValueError: If the session does not exist.
         """
-        session = self.get(session_id)
-        session.current_plan = plan
-        session.plan_step = 0
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
+            session.current_plan = plan
+            session.plan_step = 0
 
     def advance_plan(self, session_id: str) -> str | None:
         """Return the next tool name in the plan, or None if complete.
@@ -151,11 +189,14 @@ class AgentSessionStore:
         Raises:
             ValueError: If the session does not exist.
         """
-        session = self.get(session_id)
-        if session.current_plan is not None and session.plan_step < len(session.current_plan):
-            tool = session.current_plan[session.plan_step]
-            session.plan_step += 1
-            return tool
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
+            if session.current_plan is not None and session.plan_step < len(session.current_plan):
+                tool = session.current_plan[session.plan_step]
+                session.plan_step += 1
+                return tool
         return None
 
     def add_finding(self, session_id: str, finding: dict) -> None:
@@ -168,5 +209,8 @@ class AgentSessionStore:
         Raises:
             ValueError: If the session does not exist.
         """
-        session = self.get(session_id)
-        session.findings.append(finding)
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
+            session.findings.append(finding)

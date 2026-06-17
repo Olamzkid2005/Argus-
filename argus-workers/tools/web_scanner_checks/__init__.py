@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 _check_registry: dict[str, type] = {}
 
 _this_dir = Path(__file__).parent
-_skip_modules = {"__init__", "_helpers", "base"}
+_skip_modules = {"__init__", "_helpers", "base", "headers_check"}
 
 for module_info in pkgutil.iter_modules([str(_this_dir)]):
     module_name = module_info.name

@@ -15,10 +15,10 @@ _DEFAULT_TIMEOUT = SSL_TIMEOUT
 _DEFAULT_RATE_LIMIT = RATE_LIMIT_DELAY_MS / 1000.0
 
 WAF_TRIGGER_PAYLOADS = [
-    "' OR 1=1--",
-    "<script>alert(1)</script>",
+    "' OR 'test'='test",
+    "<script>alert('xss')</script>",
     "../../etc/passwd",
-    " UNION SELECT * FROM users--",
+    "' UNION SELECT NULL--",
 ]
 
 WAF_SIGNATURES = {

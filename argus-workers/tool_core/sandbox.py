@@ -190,7 +190,7 @@ class AsyncToolRunner:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
                     proc.communicate(), timeout=timeout
                 )
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 proc.kill()
                 await proc.wait()
                 result.status = ToolStatus.TIMEOUT
@@ -395,7 +395,7 @@ class AsyncToolRunner:
 
             try:
                 await asyncio.wait_for(_read_stdout(), timeout=timeout)
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 timed_out = True
                 proc.kill()
 

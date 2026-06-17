@@ -60,19 +60,24 @@ class DistributedLock:
     def redis_client(self, client: redis.Redis) -> None:
         self._redis_client = client
 
-    def _with_reconnect(self, operation, *args, **kwargs):
+    def _with_reconnect(self, method_name: str, *args, **kwargs):
         """Execute a Redis operation with auto-reconnect on failure (M6).
+
+        Accepts a method name string rather than a bound method so the
+        retry uses a fresh client instance after reconnect.
 
         Attempts the operation once. If it fails with a connection error,
         discards the stale client and retries once. If both attempts fail,
         propagates the exception.
         """
         try:
+            operation = getattr(self.redis_client, method_name)
             return operation(*args, **kwargs)
         except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
             logger.warning("Redis connection lost, attempting reconnect: %s", e)
             self._redis_client = None  # Discard stale client
             try:
+                operation = getattr(self.redis_client, method_name)
                 return operation(*args, **kwargs)
             except (redis.ConnectionError, redis.TimeoutError, OSError) as e2:
                 logger.error("Redis reconnect failed: %s", e2)

@@ -28,12 +28,14 @@ CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL", f"{_BASE_REDIS_URL}/{CACHE_DB}")
 # Lazy Redis client with auto-reconnect on failure (not module-level)
 _redis_client_instance = None
 _redis_available = False
+_redis_lock = threading.Lock()
 
 
 def _get_redis():
     """Lazy-init Redis client with automatic reconnect on failure."""
     global _redis_client_instance, _redis_available
-    if _redis_client_instance is not None:
+    with _redis_lock:
+        if _redis_client_instance is not None:
         try:
             _redis_client_instance.ping()
             return _redis_client_instance
@@ -43,19 +45,19 @@ def _get_redis():
                 _redis_client_instance.close()
             _redis_client_instance = None
             _redis_available = False
-    try:
-        import redis as redis_lib
-        _redis_client_instance = redis_lib.from_url(CACHE_REDIS_URL, socket_connect_timeout=3, socket_timeout=3)
-        _redis_client_instance.ping()
-        _redis_available = True
-        return _redis_client_instance
-    except Exception as e:
-        if not _redis_available:
-            logger.debug("Redis still unavailable for caching: %s", e)
-        else:
-            logger.warning(f"Redis became unavailable for caching: {e}")
-        _redis_available = False
-        return None
+        try:
+            import redis as redis_lib
+            _redis_client_instance = redis_lib.from_url(CACHE_REDIS_URL, socket_connect_timeout=3, socket_timeout=3)
+            _redis_client_instance.ping()
+            _redis_available = True
+            return _redis_client_instance
+        except Exception as e:
+            if not _redis_available:
+                logger.debug("Redis still unavailable for caching: %s", e)
+            else:
+                logger.warning(f"Redis became unavailable for caching: {e}")
+            _redis_available = False
+            return None
 
 
 class CacheMode(Enum):

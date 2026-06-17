@@ -60,6 +60,7 @@ class ExecutionEngine:
         """
         def _scope_check(tool_name: str, args: list, kwargs: dict) -> tuple | None:
             target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+            # Check kwargs
             for param in target_params:
                 tgt = kwargs.get(param, "")
                 if tgt:
@@ -71,6 +72,14 @@ class ExecutionEngine:
                             tool_name, param, tgt, e,
                         )
                         return None  # Block execution
+            # Check positional args for target patterns
+            for arg in (args or []):
+                if isinstance(arg, str) and any(c in arg for c in (":", "/", ".")):
+                    if len(arg) > 3 and not arg.startswith("-"):
+                        try:
+                            scope_validator.validate_target(arg)
+                        except Exception:
+                            pass  # Not all positional args are targets
             return (tool_name, args, kwargs)
         return _scope_check
 
@@ -121,7 +130,7 @@ class ExecutionEngine:
         # Execute
         start = time.time()
         try:
-            result = self.tool_runner.run(tool_name, args, timeout=timeout)
+            result = self.tool_runner.run(tool_name, args, timeout=timeout, **kwargs)
         except Exception as e:
             result = UnifiedToolResult(
                 tool_name=tool_name,

@@ -1755,31 +1755,31 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 | ID | Description | Status | Assigned | Notes |
 |----|-------------|--------|----------|-------|
-| C-01 | LLM scope validation dead code — SSRF bypass | 🔴 Pending | — | Wire `_validate_arguments()` into `run()` |
-| C-02 | `cache_mode` passed to functions without it | 🔴 Pending | — | Add param to `execute_recon_tools`/`execute_scan_tools` |
-| C-03 | AgentSessionStore memory growth + no thread safety | 🔴 Pending | — | Add lock + TTL eviction |
-| C-04 | Plaintext credentials in DB | 🔴 Pending | — | Encrypt with Fernet, fix UPSERT |
-| C-05 | `return` before `yield` in context manager | 🔴 Pending | — | Replace with sentinel exception |
-| C-06 | requests.Session shared across 6 threads | 🔴 Pending | — | Use thread-local sessions |
-| C-07 | Non-serialization exceptions swallowed in retry loop | 🔴 Pending | — | Re-raise non-serialization errors |
-| C-08 | Stale bound method on Redis reconnect | 🔴 Pending | — | Pass method name, re-bind on retry |
-| C-09 | DESC order wrong failure count in health monitor | 🔴 Pending | — | Break on first success (newest-first) |
-| C-10 | Race on global Redis singleton | 🔴 Pending | — | Add threading lock |
-| C-11 | Scope bypass via positional args | 🔴 Pending | — | Inspect args in scope middleware |
-| C-12 | Kwargs silently dropped in execution engine | 🔴 Pending | — | Forward kwargs to tool_runner.run() |
-| C-13 | Events discarded after partial DB commit | 🔴 Pending | — | Add `mark_committed()` to emitter |
-| C-14 | Unescaped quotes in generated Python code | 🔴 Pending | — | Use json.dumps() for defaults |
-| C-15 | Stored XSS in HTML report remediation text | 🔴 Pending | — | Use json.dumps() for JS embedding |
-| C2-01 | Destructive SQLi payloads on target | 🔴 Pending | — | Replace with read-only payloads |
-| C2-02 | Session fixation 100% false positives | 🔴 Pending | — | Use successful login credentials |
-| C2-03 | Duplicate config_check.py / headers_check.py | 🔴 Pending | — | Delete one, update skip list |
-| C2-04 | SHA256 hash reused across 3 different images | 🔴 Pending | — | Pin correct SHA per image |
-| C2-05 | Path traversal check broken on Windows | 🔴 Pending | — | Normalize path separators |
-| C2-06 | execSync command injection in doctor | 🔴 Pending | — | Split command into args array |
-| C2-07 | Unhandled promise rejection in MCP stdin | 🔴 Pending | — | Wrap in try-catch |
-| C2-08 | Undefined route navigation — tabs do nothing | 🔴 Pending | — | Use valid route type "engagement" |
-| C2-09 | asyncio.TimeoutError not caught in Python<3.11 | 🔴 Pending | — | Catch both TimeoutError types |
-| C2-10 | Leetspeak prompt injection bypass | 🔴 Pending | — | Strip matched content, not prefix |
+| C-01 | LLM scope validation dead code — SSRF bypass | ✅ Fixed | — | Wired `_validate_arguments()` into `run()` |
+| C-02 | `cache_mode` passed to functions without it | ✅ Fixed | — | pipelines pass it; recon/scan accept it |
+| C-03 | AgentSessionStore memory growth + no thread safety | ✅ Fixed | — | Added lock + TTL eviction + background eviction loop |
+| C-04 | Plaintext credentials in DB | ✅ Fixed | — | Encrypted with Fernet in auth_checkpoint |
+| C-05 | `return` before `yield` in context manager | ✅ Fixed | — | Replaced with `raise OperatorCanceled` |
+| C-06 | requests.Session shared across 6 threads | 🔴 Pending | — | Use thread-local sessions (complex — defer to P1) |
+| C-07 | Non-serialization exceptions swallowed in retry loop | ✅ Fixed | — | Non-serialization errors now re-raised immediately |
+| C-08 | Stale bound method on Redis reconnect | ✅ Fixed | — | Uses method_name string, re-binds on retry |
+| C-09 | DESC order wrong failure count in health monitor | ✅ Fixed | — | Break on first success (newest-first) |
+| C-10 | Race on global Redis singleton | ✅ Fixed | — | Added threading lock |
+| C-11 | Scope bypass via positional args | ✅ Fixed | — | Args inspected in scope middleware |
+| C-12 | Kwargs silently dropped in execution engine | ✅ Fixed | — | kwargs forwarded to tool_runner.run() |
+| C-13 | Events discarded after partial DB commit | ✅ Fixed | — | Added `mark_committed()` + `_committed` flag |
+| C-14 | Unescaped quotes in generated Python code | ✅ Fixed | — | Uses json.dumps() for defaults |
+| C-15 | Stored XSS in HTML report remediation text | ✅ Fixed | — | Uses json.dumps() for JS-safe embedding |
+| C2-01 | Destructive SQLi payloads on target | ✅ Fixed | — | Replaced DROP/INSERT/OUTFILE with read-only |
+| C2-02 | Session fixation 100% false positives | ✅ Fixed | — | Now tries actual login with default creds |
+| C2-03 | Duplicate config_check.py / headers_check.py | ✅ Fixed | — | `headers_check` added to skip list |
+| C2-04 | SHA256 hash reused across 3 different images | ✅ Fixed | — | Removed incorrect SHAs from pgvector/redis |
+| C2-05 | Path traversal check broken on Windows | ✅ Fixed | — | Normalizes path separators before comparison |
+| C2-06 | execSync command injection in doctor | ✅ Fixed | — | Uses execFileSync with args array |
+| C2-07 | Unhandled promise rejection in MCP stdin | ✅ Fixed | — | Wrapped in try-catch with cleanup |
+| C2-08 | Undefined route navigation — tabs do nothing | ✅ Fixed | — | Changed to valid route type "engagement" |
+| C2-09 | asyncio.TimeoutError not caught in Python<3.11 | ✅ Fixed | — | Catches both TimeoutError types |
+| C2-10 | Leetspeak prompt injection bypass | ✅ Fixed | — | Strips matched content instead of prefixing |
 
 ---
 

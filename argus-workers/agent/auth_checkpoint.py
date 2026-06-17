@@ -39,6 +39,16 @@ def save_auth_checkpoint(engagement_id: str, ctx: AuthContext) -> bool:
 
     data = ctx.to_dict()
     data["_checkpoint_type"] = "auth_context"
+    # Encrypt sensitive fields before storage
+    import os
+    enc_key = os.environ.get("AUTH_CHECKPOINT_KEY")
+    if enc_key and data.get("password"):
+        try:
+            from cryptography.fernet import Fernet
+            cipher = Fernet(enc_key.encode())
+            data["password"] = cipher.encrypt(data["password"].encode()).decode()
+        except Exception:
+            logger.warning("Failed to encrypt auth checkpoint password")
 
     try:
         from database.connection import db_cursor
@@ -108,6 +118,16 @@ def load_auth_checkpoint(engagement_id: str) -> AuthContext | None:
             if data.get("_checkpoint_type") != "auth_context":
                 return None
 
+            # Decrypt password if encrypted
+            import os
+            enc_key = os.environ.get("AUTH_CHECKPOINT_KEY")
+            if enc_key and data.get("password", "").startswith("gAAAAA"):
+                try:
+                    from cryptography.fernet import Fernet
+                    cipher = Fernet(enc_key.encode())
+                    data["password"] = cipher.decrypt(data["password"].encode()).decode()
+                except Exception:
+                    logger.warning("Failed to decrypt auth checkpoint password")
             ctx = AuthContext.from_dict(data)
             logger.info(
                 "Auth checkpoint loaded for engagement %s (email=%s)",

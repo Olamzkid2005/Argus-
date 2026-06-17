@@ -41,6 +41,15 @@ class SafeEventEmitter:
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
         self._queue: list[dict] = []
+        self._committed = False
+
+    def mark_committed(self):
+        """Mark that the DB commit has succeeded for this transaction.
+
+        When called, events will be flushed even if an exception occurs
+        after the commit point, preventing phantom data with no event trail.
+        """
+        self._committed = True
 
     def emit_thinking(self, message: str, details: dict | None = None):
         """Queue a thinking event."""
@@ -230,7 +239,10 @@ def transactional_event_context(engagement_id: str) -> Iterator[SafeEventEmitter
     try:
         yield emitter
     except Exception:
-        emitter.discard()
+        if emitter._committed:
+            emitter.flush()
+        else:
+            emitter.discard()
         raise
     else:
         emitter.flush()

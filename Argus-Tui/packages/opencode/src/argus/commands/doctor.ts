@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs"
 import { join, resolve } from "path"
 import { homedir } from "os"
-import { spawn, execFile, execFileSync, execSync } from "child_process"
+import { spawn, execFile, execFileSync } from "child_process"
 import { xdgData } from "xdg-basedir"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
@@ -389,7 +389,8 @@ function toolchainCheck(): CheckResult {
       const versionDef = versionCheckMap.get(tool)
       if (versionDef?.version_cmd && versionDef?.min_version) {
         try {
-          const output = execSync(versionDef.version_cmd + " 2>&1", {
+          const parts = versionDef.version_cmd.split(/\s+/)
+          const output = execFileSync(parts[0]!, parts.slice(1), {
             encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"],
           })
           const regex = versionDef.version_regex
