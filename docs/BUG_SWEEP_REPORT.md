@@ -1823,8 +1823,8 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 | Count | Status | Notes |
 |-------|--------|-------|
-| 19 | 🟡 Pending | Remaining medium items from both sweeps |
-| 21 | ✅ Fixed | All M-01 through M-15 and M2-01 through M2-23 items fixed and verified |
+| 0 | 🟡 Pending | — |
+| 38 | ✅ Fixed | All 15 first-sweep (M-01..M-15) and 23 second-sweep (M2-01..M2-23) items fixed and verified |
 
 ---
 
@@ -1850,4 +1850,4 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 ---
 
-*Report generated 2026-06-17 by automated codebase audit. Last updated: 2026-06-17 — all CRITICAL, HIGH, 21 MEDIUM, and 10 LOW/INFO items fixed and verified.*
+*Report generated 2026-06-17 by automated codebase audit. Last updated: 2026-06-17 — all CRITICAL, HIGH, MEDIUM, and 10 LOW/INFO items fixed and verified.*
