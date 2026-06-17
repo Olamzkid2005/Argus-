@@ -1,3 +1,5 @@
+import type { ExecutionMode } from "../shared/types"
+
 export type EngagementStatus = "CREATED" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED"
 export type PhaseStatus = "PENDING" | "RUNNING" | "COMPLETED" | "PARTIAL" | "FAILED" | "SKIPPED"
 export type FindingStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "FINALIZED"
@@ -19,7 +21,7 @@ export interface PhaseRecord {
   name: string
   status: PhaseStatus
   capabilities: string[]
-  executionMode: string
+  executionMode: ExecutionMode
   startedAt?: string
   completedAt?: string
   error?: string

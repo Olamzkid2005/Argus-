@@ -21,6 +21,7 @@ import {
   finding_analysis,
 } from "./schema.sql"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus } from "./types"
+import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
 function defaultDbPath(): string {
@@ -110,7 +111,7 @@ function toPhaseRecord(row: typeof phasesTable.$inferSelect): PhaseRecord {
     status: row.status as PhaseStatus,
     // NOTE: null coalesces to [] — original null vs empty distinction is lost
     capabilities: row.capabilities ?? [],
-    executionMode: row.execution_mode ?? "",
+    executionMode: (row.execution_mode ?? "sequential") as ExecutionMode,
     startedAt: row.started_at ? new Date(row.started_at).toISOString() : undefined,
     completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : undefined,
     error: row.error ?? undefined,
