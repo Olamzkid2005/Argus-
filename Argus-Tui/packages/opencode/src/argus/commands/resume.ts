@@ -12,6 +12,7 @@ import { detectTargetType, detectAuthState } from "../planner/strategy"
 import { Capability } from "../planner/capabilities"
 import type { PhaseRecord } from "../engagement/types"
 import type { NormalizedFinding } from "../shared/types"
+import type { ProgressEvent } from "../shared/progress"
 import type { PlannerContext } from "../planner/types"
 import { homedir } from "os"
 import { join, resolve } from "path"
@@ -25,10 +26,12 @@ export async function resumeCommand(
     workersPath?: string
     workflowsPath?: string
     useLLM?: boolean
+    onProgress?: (event: ProgressEvent | string) => void
   },
 ): Promise<string> {
   const store = new EngagementStore()
   const engagement = store.getEngagement(engagementId)
+  const emit = options?.onProgress ?? (() => {})
 
   if (!engagement) {
     return `Engagement not found: ${engagementId}`
@@ -66,6 +69,7 @@ export async function resumeCommand(
   const confidenceEngine = new ConfidenceEngine()
   const executor = new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
   executor.loadGates(plan.workflow)
+  executor.setOnProgress((event) => { emit(event) })
 
   const credStore = new CredentialStore()
   credStore.load()
@@ -144,6 +148,7 @@ export async function resumeCommand(
         continue
       }
 
+      emit({ type: "phase_start", phaseId: phase.phaseId, name: phase.name, total: plan.phases.length, phaseIndex: i })
       phaseRecord.status = "RUNNING"
       phaseRecord.startedAt = new Date().toISOString()
       store.savePhase(engagementId, phaseRecord)
@@ -162,6 +167,12 @@ export async function resumeCommand(
       store.savePhase(engagementId, phaseRecord)
       store.appendAuditLog(engagementId, "PHASE_COMPLETE",
         `Phase ${phaseRecord.name}: ${phaseRecord.status}`)
+
+      if (phaseRecord.status === "FAILED") {
+        emit({ type: "phase_error", phaseId: phase.phaseId, name: phase.name, error: result.errors.join("; ") })
+      } else {
+        emit({ type: "phase_complete", phaseId: phase.phaseId, name: phase.name, findings: result.findings.length, status: phaseRecord.status })
+      }
 
       for (const cap of phase.requiredCapabilities) {
         executedCapabilities.add(cap)
@@ -183,6 +194,7 @@ export async function resumeCommand(
         replanCount = replanCtx.replanCount
 
         if (replanPhases && replanPhases.length > 0) {
+          emit({ type: "phase_replan", count: replanPhases.length })
           store.appendAuditLog(engagementId, "REPLAN_INSERT",
             `Inserting ${replanPhases.length} replan phase(s) at position ${i + 1}`)
 
@@ -220,6 +232,7 @@ export async function resumeCommand(
       executionError
         ? `Resume failed: ${executionError.message}`
         : `Resume completed — ${allFindings.length - existingFindings.length} new finding(s)`)
+    emit({ type: "scan_complete", totalFindings: allFindings.length })
     await bridge.disconnect()
   }
 
