@@ -29,6 +29,7 @@ export const findings = sqliteTable("findings", {
   created_at: integer().notNull().$default(() => Date.now()),
   updated_at: integer().notNull().$onUpdate(() => Date.now()),
   finalized_at: integer(),
+  negative: integer({ mode: "boolean" }).notNull().default(false),
 }, (table) => [
   index("idx_findings_engagement").on(table.engagement_id),
   index("idx_findings_status").on(table.status),

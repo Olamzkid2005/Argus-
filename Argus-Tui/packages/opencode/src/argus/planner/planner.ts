@@ -3,7 +3,7 @@ import { Capability } from "./capabilities"
 import { WorkflowRegistry } from "../workflows/registry"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { detectTargetType, detectAuthState, determineRequiredCapabilities } from "./strategy"
-import { determineNewCapabilities } from "./replan-rules"
+import { determineNewCapabilities, REPLAN_INSERTABLE } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 
@@ -127,13 +127,25 @@ export class WorkflowPlanner {
   }
 
   replan(context: PlannerContext): PhaseExecutionRequest[] | null {
+    // Negative findings are exempt from MAX_REPLANS on first consideration
+    const hasNegativeFindings = context.findings.some((f) => f.negative)
     const maxReplans = context.maxReplans ?? MAX_REPLANS
-    if (context.replanCount >= maxReplans) {
+    const effectiveMax = hasNegativeFindings ? maxReplans + 1 : maxReplans
+    if (context.replanCount >= effectiveMax) {
       return null
     }
 
     const newCapabilities = determineNewCapabilities(context)
-    const unhandled = Array.from(newCapabilities).filter((c) => !context.executedCapabilities.has(c))
+    // Capabilities derived from negative findings are kept even if already
+    // executed — the absence of evidence suggests a different approach is needed
+    const unhandled = Array.from(newCapabilities).filter((c) => {
+      if (context.executedCapabilities.has(c)) {
+        return context.findings.some(
+          (f) => f.negative && f.subtype && REPLAN_INSERTABLE[f.subtype] === c,
+        )
+      }
+      return true
+    })
 
     if (unhandled.length === 0) return null
 

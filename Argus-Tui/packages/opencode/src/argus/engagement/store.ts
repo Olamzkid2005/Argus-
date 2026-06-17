@@ -39,7 +39,7 @@ const TABLE_SQL = [
     title TEXT NOT NULL, severity INTEGER NOT NULL, confidence INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING', description TEXT, subtype TEXT, cve TEXT, cwe TEXT,
     owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL, finalized_at INTEGER
+    updated_at INTEGER NOT NULL, finalized_at INTEGER, negative INTEGER NOT NULL DEFAULT 0
   )`,
   sql`CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)`,
   sql`CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)`,
@@ -136,6 +136,7 @@ function toFindingRow(finding: NormalizedFinding, engagementId: string): typeof 
     remediation: finding.remediation,
     tool: finding.tool,
     phase: finding.phase,
+    negative: finding.negative ? 1 : 0,
     created_at: finding.created_at ? new Date(finding.created_at).getTime() : Date.now(),
     updated_at: finding.updated_at ? new Date(finding.updated_at).getTime() : Date.now(),
     finalized_at: finding.finalized_at ? new Date(finding.finalized_at).getTime() : null,
@@ -157,6 +158,7 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
     remediation: row.remediation ?? undefined,
     tool: row.tool ?? "unknown",
     phase: row.phase ?? "unknown",
+    negative: row.negative ? true : undefined,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
     finalized_at: row.finalized_at ? new Date(row.finalized_at).toISOString() : undefined,
@@ -184,6 +186,10 @@ export class EngagementStore {
     for (const stmt of TABLE_SQL) {
       this.db.run(stmt)
     }
+    // Migration: add negative column to findings for existing databases
+    try {
+      this.db.run(sql`ALTER TABLE findings ADD COLUMN negative INTEGER NOT NULL DEFAULT 0`)
+    } catch { /* column already exists — ignore */ }
   }
 
   createEngagement(target: string, workflow: string): EngagementState {

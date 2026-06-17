@@ -1,7 +1,7 @@
 import type { PlannerContext, NormalizedFinding } from "./types"
 import { Capability } from "./capabilities"
 
-const REPLAN_INSERTABLE: Record<string, Capability> = {
+export const REPLAN_INSERTABLE: Record<string, Capability> = {
   graphql: Capability.GRAPHQL_ASSESSMENT,
   expressjs: Capability.EXPRESS_CVE_SCAN,
   swagger: Capability.API_DOCS_ANALYSIS,
@@ -20,7 +20,12 @@ export function determineNewCapabilities(context: PlannerContext): Set<Capabilit
     if (subtype) {
       if (REPLAN_INSERTABLE[subtype]) {
         const cap = REPLAN_INSERTABLE[subtype]
-        if (!context.executedCapabilities.has(cap)) {
+        if (finding.negative) {
+          // Negative findings trigger capability insertion even if the
+          // capability was already executed — the absence of a finding
+          // suggests a different tool/approach is needed.
+          result.add(cap)
+        } else if (!context.executedCapabilities.has(cap)) {
           result.add(cap)
         }
       } else {
