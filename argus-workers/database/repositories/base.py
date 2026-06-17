@@ -246,7 +246,11 @@ class BaseRepository:
                 rows = cursor.fetchall()
         """
         conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=cursor_factory)
+        try:
+            cursor = conn.cursor(cursor_factory=cursor_factory)
+        except Exception:
+            self._release_connection(conn)
+            raise
         # We should commit on both pooled connections (external_conn=None)
         # AND string-initiated connections (external_conn is a URL string).
         # Only skip auto-commit when an actual connection OBJECT is passed in.

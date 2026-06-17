@@ -73,11 +73,14 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
             # Use a fresh list per payload to avoid TOCTOU race between
             # collecting errors and checking them (M7 fix)
             page.goto(target_url, timeout=30000, wait_until='networkidle')
+            # Register listener once — rebind the collector list per payload (H-18)
+            current_errors = []
+            def on_console(msg):
+                if msg.type == 'error':
+                    current_errors.append(msg.text)
+            page.on('console', on_console)
             for payload in ['<img src=x onerror=alert(1)>', 'javascript:alert(1)']:
-                # Create a fresh error collector for each payload navigation
-                # to isolate errors from previous navigations (M7)
-                payload_errors = []
-                page.on('console', lambda msg: payload_errors.append(msg.text) if msg.type == 'error' else None)
+                current_errors = []
                 payload_url = f'{target_url}?q={payload}'
                 if not payload_url.startswith(("http://", "https://")):
                     continue

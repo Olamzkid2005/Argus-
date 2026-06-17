@@ -69,11 +69,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to reset tenant context
+-- Function to reset tenant context (uses sentinel UUID instead of empty string — H-17)
 CREATE OR REPLACE FUNCTION reset_tenant_context()
 RETURNS void AS $$
 BEGIN
-    PERFORM set_config('app.current_org_id', '', false);
+    PERFORM set_config('app.current_org_id', '00000000-0000-0000-0000-000000000000', false);
 END;
 $$ LANGUAGE plpgsql;
 

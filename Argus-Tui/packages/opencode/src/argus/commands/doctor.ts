@@ -382,7 +382,8 @@ function toolchainCheck(): CheckResult {
   // ── Check each tool ────────────────────────────────────────────────
   for (const tool of allToolNames) {
     try {
-      execFileSync("which", [tool], { stdio: "ignore" })
+      const whichCmd = process.platform === "win32" ? "where" : "which"
+      execFileSync(whichCmd, [tool], { stdio: "ignore" })
       found.push(tool)
 
       // Version check — only for tools that have a version check defined

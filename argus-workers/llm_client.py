@@ -123,8 +123,8 @@ class LLMClient:
         # threshold must be <= max_retries + 1 to actually prevent retries (H-v4-09)
         self._circuit_failures = 0
         self._circuit_open_until = 0.0
-        self._circuit_threshold = 1  # Open after 1 failure — prevents wasted retries
-        self._circuit_cooldown = 60.0
+        self._circuit_threshold = 5  # Require 5 consecutive failures to open circuit
+        self._circuit_cooldown = 30.0
         self._circuit_lock = threading.Lock()
         self._rate_lock = threading.Lock()
 

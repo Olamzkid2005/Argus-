@@ -266,7 +266,7 @@ class ConnectionManager:
             if org_id:
                 try:
                     with conn.cursor() as cursor:
-                        cursor.execute("SELECT reset_tenant_context()")
+                        cursor.execute("SELECT set_tenant_context('00000000-0000-0000-0000-000000000000')")
                 except Exception as ctx_e:
                     logger.debug("Failed to reset tenant context: %s", ctx_e)
             self.release_connection(conn)
