@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { eq, desc, sql } from "drizzle-orm"
+import { eq, desc, asc, sql } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync, readFileSync } from "fs"
@@ -281,7 +281,10 @@ export class EngagementStore {
   }
 
   getPhases(id: string): PhaseRecord[] {
-    const rows = this.db.select().from(phasesTable).where(eq(phasesTable.engagement_id, id)).all()
+    const rows = this.db.select().from(phasesTable)
+      .where(eq(phasesTable.engagement_id, id))
+      .orderBy(asc(phasesTable.id))
+      .all()
     return rows.map(toPhaseRecord)
   }
 
