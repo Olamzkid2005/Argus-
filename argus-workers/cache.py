@@ -36,15 +36,15 @@ def _get_redis():
     global _redis_client_instance, _redis_available
     with _redis_lock:
         if _redis_client_instance is not None:
-        try:
-            _redis_client_instance.ping()
-            return _redis_client_instance
-        except Exception:
-            logger.warning("Redis connection lost — reconnecting")
-            with contextlib.suppress(Exception):
-                _redis_client_instance.close()
-            _redis_client_instance = None
-            _redis_available = False
+            try:
+                _redis_client_instance.ping()
+                return _redis_client_instance
+            except Exception:
+                logger.warning("Redis connection lost — reconnecting")
+                with contextlib.suppress(Exception):
+                    _redis_client_instance.close()
+                _redis_client_instance = None
+                _redis_available = False
         try:
             import redis as redis_lib
             _redis_client_instance = redis_lib.from_url(CACHE_REDIS_URL, socket_connect_timeout=3, socket_timeout=3)

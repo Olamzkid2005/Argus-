@@ -128,7 +128,9 @@ def _check_session_fixation(target_url, session, findings):
                 continue
             pre_value = pre_cookies[session_cookie_name]
             # Try actual login with default credentials to test cookie rotation
+            login_occurred = False
             cookie_rotated = False
+            post_value = None
             for username, password in DEFAULT_CREDS[:3]:
                 login_resp = safe_request(
                     "POST", url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,
@@ -136,12 +138,13 @@ def _check_session_fixation(target_url, session, findings):
                     allow_redirects=False,
                 )
                 if login_resp and login_resp.status_code in (200, 302):
+                    login_occurred = True
                     post_cookies = {c.name: c.value for c in session.cookies}
                     post_value = post_cookies.get(session_cookie_name)
                     if post_value and post_value != pre_value:
                         cookie_rotated = True
                     break
-            if not cookie_rotated and post_value and post_value == pre_value:
+            if login_occurred and not cookie_rotated and post_value and post_value == pre_value:
                 findings.append(make_finding(
                     "SESSION_FIXATION", "HIGH", url, {
                         "session_cookie": session_cookie_name,
