@@ -1785,37 +1785,37 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 | ID | Description | Status | Assigned | Notes |
 |----|-------------|--------|----------|-------|
-| H-01 | Prompt injection via tool output | 🟡 Pending | — | Base64-encode tool output |
-| H-02 | Circuit breaker threshold = 1 | 🟡 Pending | — | Change to 5+ |
-| H-03 | `memory_context` unsanitized | 🟡 Pending | — | Add sanitize_for_llm() |
-| H-04 | WebSocket Redis connection not thread-safe | 🟡 Pending | — | Add lock + reconnect logic |
-| H-05 | `_rt_emitted_fingerprints` memory growth | 🟡 Pending | — | Use LRU cache |
-| H-06 | Fingerprint dedup TOCTOU race | 🟡 Pending | — | Atomic check-and-add |
-| H-07 | Silent data loss when all saves fail | 🟡 Pending | — | Raise if all fails |
-| H-08 | Variable shadowing loses findings on fallback | 🟡 Pending | — | Change `=` to `.extend()` |
-| H-09 | DLQ error_message not redacted | 🟡 Pending | — | Apply redaction patterns |
-| H-10 | SIGALRM leaks TCP connections | 🟡 Pending | — | Replace with HTTP timeouts |
-| H-11 | Unvalidated vulnerability type strings | 🟡 Pending | — | Add KnownVulnType enum |
-| H-12 | REDIS_URL logged with credentials | 🟡 Pending | — | Move to lazy init |
-| H-13 | CWE list crashes normalizer | 🟡 Pending | — | Handle list type for cwe |
-| H-14 | Parameter discovery/fuzzing race | 🟡 Pending | — | Run discovery first, then fuzzing |
-| H-15 | Connection leak on cursor() failure | 🟡 Pending | — | Move cursor() into try block |
-| H-16 | Evidence sanitization silent fallback | 🟡 Pending | — | Remove bare except |
-| H-17 | reset_tenant_context() returns NULL | 🟡 Pending | — | Use sentinel UUID |
-| H-18 | Event listener leak in Playwright scan | 🟡 Pending | — | Remove listeners between iterations |
+| H-01 | Prompt injection via tool output | ✅ Fixed | — | Base64-encode tool output |
+| H-02 | Circuit breaker threshold = 1 | ✅ Fixed | — | Changed to 5, cooldown to 30s |
+| H-03 | `memory_context` unsanitized | ✅ Fixed | — | Wrapped with _sanitize_for_llm() |
+| H-04 | WebSocket Redis connection not thread-safe | ✅ Fixed | — | Added lock + reconnect logic |
+| H-05 | `_rt_emitted_fingerprints` memory growth | ✅ Fixed | — | Max-size eviction (50k per engagement) |
+| H-06 | Fingerprint dedup TOCTOU race | ✅ Fixed | — | Atomic check-and-add via _dedup_fingerprint() |
+| H-07 | Silent data loss when all saves fail | ✅ Fixed | — | Raises RuntimeError if all saves fail |
+| H-08 | Variable shadowing loses findings on fallback | ✅ Fixed | — | Already used .extend() — verified no reassignment |
+| H-09 | DLQ error_message not redacted | ✅ Fixed | — | Applied SECRET_VALUE_PATTERNS to error_message |
+| H-10 | SIGALRM leaks TCP connections | ✅ Fixed | — | Replaced with HTTPAdapter + request timeouts |
+| H-11 | Unvalidated vulnerability type strings | ✅ Fixed | — | Added KNOWN_VULN_TYPES frozenset validation |
+| H-12 | REDIS_URL logged with credentials | ✅ Fixed | — | Lazy init via get_redis_url() |
+| H-13 | CWE list crashes normalizer | ✅ Fixed | — | Handle list type for cwe field |
+| H-14 | Parameter discovery/fuzzing race | ✅ Fixed | — | Already fixed: sequential discovery before pool |
+| H-15 | Connection leak on cursor() failure | ✅ Fixed | — | cursor() wrapped in try/except with conn release |
+| H-16 | Evidence sanitization silent fallback | ✅ Fixed | — | ImportError raises RuntimeError (mandatory) |
+| H-17 | reset_tenant_context() returns NULL | ✅ Fixed | — | Uses sentinel UUID 0000...0000 |
+| H-18 | Event listener leak in Playwright scan | ✅ Fixed | — | Single listener registered, list rebound per payload |
 | H-19 | Duplicate risk check (already fixed) | ✅ Fixed | — | Duplicate block removed |
-| H-20 | Swarm agents lack scope validation | 🟡 Pending | — | Add validate_target_scope() |
-| H2-01 | Hardcoded import path breaks on packaging | 🟡 Pending | — | Use relative import |
-| H2-02 | Unconditional redirect following → SSRF | 🟡 Pending | — | Set allow_redirects=False |
-| H2-03 | Cookie parsing broken on Expires commas | 🟡 Pending | — | Use SimpleCookie |
-| H2-04 | Injection tests miss headless APIs | 🟡 Pending | — | Add common params fallback |
-| H2-05 | Boolean SQLi compares wrong baselines | 🟡 Pending | — | Compare true vs false responses |
-| H2-06 | Cache poisoning check logic inverted | 🟡 Pending | — | Check cacheability correctly |
-| H2-07 | `which` fails on Windows | 🟡 Pending | — | Use `where` on Windows |
-| H2-08 | pip --require-hashes silent fallback | 🟡 Pending | — | Remove broken fallback |
-| H2-09 | Pre-commit ruff hooks never match | 🟡 Pending | — | Fix regex pattern |
-| H2-10 | `verified = TRUE` always for false positives | 🟡 Pending | — | Use is_true_positive field |
-| H2-11 | No transactional boundary in feedback | 🟡 Pending | — | Share connection across operations |
+| H-20 | Swarm agents lack scope validation | ✅ Fixed | — | _get_targets() filters via validate_target_scope() |
+| H2-01 | Hardcoded import path breaks on packaging | ✅ Fixed | — | Uses relative import with __package__ |
+| H2-02 | Unconditional redirect following → SSRF | ✅ Fixed | — | allow_redirects defaults to False |
+| H2-03 | Cookie parsing broken on Expires commas | ✅ Fixed | — | config_check.py uses SimpleCookie (already fixed) |
+| H2-04 | Injection tests miss headless APIs | ✅ Fixed | — | Added COMMON_PARAMS fallback set |
+| H2-05 | Boolean SQLi compares wrong baselines | ✅ Fixed | — | Compares true vs false responses directly |
+| H2-06 | Cache poisoning check logic inverted | ✅ Fixed | — | Already fixed: checks explicit uncacheable then poisons |
+| H2-07 | `which` fails on Windows | ✅ Fixed | — | Uses `where` on Win32, `which` on Unix |
+| H2-08 | pip --require-hashes silent fallback | ✅ Fixed | — | Removed broken fallback, uses plain pip install |
+| H2-09 | Pre-commit ruff hooks never match | ✅ Fixed | — | Changed regex to `\.py$` |
+| H2-10 | `verified = TRUE` always for false positives | ✅ Fixed | — | SET verified = is_true_positive value |
+| H2-11 | No transactional boundary in feedback | ✅ Fixed | — | Shared connection + commit/rollback across operations |
 
 ---
 
@@ -1824,7 +1824,7 @@ Pass a shared connection/cursor to all internal methods within a single transact
 | Count | Status | Notes |
 |-------|--------|-------|
 | 40 | 🟡 Pending | See body of report for individual fixes |
-| 0 | ✅ Fixed | No MEDIUM bugs marked fixed yet |
+| 0 | ✅ Fixed | — |
 
 ---
 
@@ -1833,7 +1833,7 @@ Pass a shared connection/cursor to all internal methods within a single transact
 | Count | Status | Notes |
 |-------|--------|-------|
 | 75 | ⚪ Pending | Hardening and best-practice improvements |
-| 0 | ✅ Fixed | No LOW/INFO items marked fixed yet |
+| 0 | ✅ Fixed | — |
 
 ---
 
