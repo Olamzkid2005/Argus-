@@ -136,13 +136,20 @@ class FeatureFlags:
         try:
             from database.connection import get_db
             db = get_db()
-            with db.cursor() as cursor:
+            conn = db.get_connection()
+            cursor = None
+            try:
+                cursor = conn.cursor()
                 cursor.execute(
                     "SELECT enabled FROM feature_flags WHERE flag_name = %s",
                     (flag_name,)
                 )
                 row = cursor.fetchone()
                 return row[0] if row else None
+            finally:
+                if cursor:
+                    cursor.close()
+                db.release_connection(conn)
         except Exception as e:
             logger.debug("Failed to load feature flag '%s' from DB: %s", flag_name, e)
             return None

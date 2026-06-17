@@ -268,7 +268,7 @@ class DistributedLock:
         for engagement_id in list(self.held_locks.keys()):
             self.release(engagement_id)
 
-    def heartbeat_loop(self, engagement_id: str, stop_callback, interval_seconds: int | None = None):
+    def heartbeat_loop(self, engagement_id: str, is_done_callback, interval_seconds: int | None = None):
         """
         Run heartbeat loop to extend lock while processing
 
@@ -277,13 +277,13 @@ class DistributedLock:
 
         Args:
             engagement_id: Engagement ID
-            stop_callback: Function that returns True when processing is done
+            is_done_callback: Function that returns True when processing is done
             interval_seconds: Heartbeat interval (defaults to HEARTBEAT_INTERVAL_SECONDS)
         """
         interval = interval_seconds or self.HEARTBEAT_INTERVAL_SECONDS
         consecutive_failures = 0
 
-        while not stop_callback():
+        while not is_done_callback():
             time.sleep(interval)
 
             if not self.extend(engagement_id):

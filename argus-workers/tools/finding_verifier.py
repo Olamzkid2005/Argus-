@@ -194,10 +194,11 @@ async def verify_xss(endpoint: str, payload: str, param: str | None = None, enga
 
             # Test each payload
             for test_payload in [payload] + XSS_TEST_PAYLOADS:
+                encoded_payload = urllib.parse.quote(test_payload)
                 if "?" in endpoint:
-                    test_url = f"{endpoint}&{test_param}={test_payload}"
+                    test_url = f"{endpoint}&{test_param}={encoded_payload}"
                 else:
-                    test_url = f"{endpoint}?{test_param}={test_payload}"
+                    test_url = f"{endpoint}?{test_param}={encoded_payload}"
 
                 try:
                     resp = await client.get(test_url)

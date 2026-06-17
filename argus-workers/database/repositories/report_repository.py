@@ -90,7 +90,7 @@ class ReportRepository:
                         medium,
                         low,
                         model_used,
-                        json.dumps(sbom_json) if sbom_json else None,
+                        json.dumps(sbom_json, default=str) if sbom_json else None,
                     ),
                 )
                 row = cursor.fetchone()

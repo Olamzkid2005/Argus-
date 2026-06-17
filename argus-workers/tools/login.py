@@ -20,17 +20,17 @@ class LoginTool(AbstractTool):
     tool_name: str = "login"
 
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
-        http_session = requests.Session()
         email = getattr(ctx, "_email", None)
         password = getattr(ctx, "_password", None)
         login_url = getattr(ctx, "_login_url", None)
-        result, _auth_ctx = run_login(
-            target=ctx.target,
-            http_session=http_session,
-            auth_context=None,
-            email=email,
-            password=password,
-            recon_crawled_paths=getattr(ctx, "_recon_paths", None),
-            login_url=login_url,
-        )
+        with requests.Session() as http_session:
+            result, _auth_ctx = run_login(
+                target=ctx.target,
+                http_session=http_session,
+                auth_context=None,
+                email=email,
+                password=password,
+                recon_crawled_paths=getattr(ctx, "_recon_paths", None),
+                login_url=login_url,
+            )
         return result

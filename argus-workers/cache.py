@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from collections.abc import Callable
 from enum import Enum
@@ -121,8 +122,6 @@ class WorkerCache:
         Returns:
             Sanitized key component
         """
-        import re
-        # Remove control characters
         safe = re.sub(r'[\x00-\x1f\x7f]', '', str(component))
         # Replace emtpy string after sanitization
         return safe or "_"

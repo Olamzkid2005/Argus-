@@ -91,6 +91,9 @@ class GracefulShutdownHandler:
 
     def restore(self):
         """Restore original signal handlers"""
+        import threading
+        if threading.current_thread() is not threading.main_thread():
+            return
         if self.original_sigterm_handler:
             signal.signal(signal.SIGTERM, self.original_sigterm_handler)
         if self.original_sigint_handler:

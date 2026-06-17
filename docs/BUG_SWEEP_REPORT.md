@@ -1832,8 +1832,8 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 | Count | Status | Notes |
 |-------|--------|-------|
-| 75 | ⚪ Pending | Hardening and best-practice improvements |
-| 0 | ✅ Fixed | — |
+| 65 | ⚪ Pending | Hardening and best-practice improvements |
+| 10 | ✅ Fixed | L-01 through L-10 all applied and verified |
 
 ---
 
@@ -1850,4 +1850,4 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 ---
 
-*Report generated 2026-06-17 by automated codebase audit. Last updated: 2026-06-17 — all CRITICAL, HIGH, and 21 MEDIUM items fixed and verified.*
+*Report generated 2026-06-17 by automated codebase audit. Last updated: 2026-06-17 — all CRITICAL, HIGH, 21 MEDIUM, and 10 LOW/INFO items fixed and verified.*

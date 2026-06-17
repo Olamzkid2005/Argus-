@@ -92,7 +92,7 @@ class JwtToolParser(BaseParser):
                 finding = {
                     "type": "JWT_VULNERABILITY",
                     "severity": "HIGH",
-                    "endpoint": f"jwt://{hashlib.md5(stripped.encode()).hexdigest()[:8]}",
+                    "endpoint": f"jwt://{hashlib.sha256(stripped.encode()).hexdigest()[:8]}",
                     "evidence": {
                         "finding": stripped,
                     },
@@ -104,7 +104,7 @@ class JwtToolParser(BaseParser):
                 finding = {
                     "type": "JWT_VULNERABILITY",
                     "severity": "MEDIUM",
-                    "endpoint": f"jwt://{hashlib.md5(stripped.encode()).hexdigest()[:8]}",
+                    "endpoint": f"jwt://{hashlib.sha256(stripped.encode()).hexdigest()[:8]}",
                     "evidence": {
                         "finding": stripped,
                     },
