@@ -328,6 +328,7 @@ export class WorkflowRunner {
                 executedCapabilities.add(cap)
               }
               plan.phases.push(rp)
+              plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
               phaseRecords.push({
                 id: rp.phaseId,
                 engagementId,

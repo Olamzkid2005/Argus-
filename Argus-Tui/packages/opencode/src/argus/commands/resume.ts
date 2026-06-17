@@ -191,6 +191,7 @@ export async function resumeCommand(
               executedCapabilities.add(cap)
             }
             plan.phases.push(rp)
+            plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
             allPhaseRecords.push({
               id: rp.phaseId,
               engagementId,
