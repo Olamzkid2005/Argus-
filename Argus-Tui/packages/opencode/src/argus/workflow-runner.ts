@@ -179,17 +179,19 @@ export class WorkflowRunner {
       emit(`✓ Engagement created: \`${engagementId}\``)
     }
 
-    // ── 2. Load credentials & feature flags ──
+    // ── 2. Load credentials, feature flags & replan config ──
     const featureFlags = new FeatureFlags(options.features)
+    let configMaxReplans: number | undefined
     try {
       const { readFileSync } = await import("fs")
       const { parse: YAML } = await import("yaml")
       const configPath = join(process.cwd(), "argus.config.yaml")
       const raw = readFileSync(configPath, "utf-8")
-      const parsed = YAML(raw) as { features?: Record<string, boolean> } | undefined
+      const parsed = YAML(raw) as { features?: Record<string, boolean>; replan?: { max_cycles?: number } } | undefined
       if (parsed?.features) {
         featureFlags.loadFromConfig(parsed.features)
       }
+      configMaxReplans = parsed?.replan?.max_cycles
     } catch { /* config file missing or invalid — use defaults */ }
     featureFlags.loadFromEnv()
 
@@ -308,6 +310,7 @@ export class WorkflowRunner {
             executedCapabilities,
             insertedPhases: insertedPhaseIds,
             replanCount,
+            maxReplans: configMaxReplans,
           }
           const replanPhases = planner.replan(replanCtx)
           replanCount = replanCtx.replanCount
