@@ -17,10 +17,14 @@ export function determineNewCapabilities(context: PlannerContext): Set<Capabilit
 
   for (const finding of context.findings) {
     const subtype = finding.subtype
-    if (subtype && REPLAN_INSERTABLE[subtype]) {
-      const cap = REPLAN_INSERTABLE[subtype]
-      if (!context.executedCapabilities.has(cap)) {
-        result.add(cap)
+    if (subtype) {
+      if (REPLAN_INSERTABLE[subtype]) {
+        const cap = REPLAN_INSERTABLE[subtype]
+        if (!context.executedCapabilities.has(cap)) {
+          result.add(cap)
+        }
+      } else {
+        process.stderr.write(`[replan-rules] Unknown subtype "${subtype}" — no capability mapping (add to REPLAN_INSERTABLE if needed)\n`)
       }
     }
   }
