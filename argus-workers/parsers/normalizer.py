@@ -369,11 +369,13 @@ class FindingNormalizer:
         if raw_finding:
             evidence = raw_finding.get("evidence") or {}
 
-            # Extract CWE from evidence (Semgrep puts it here)
-            cwe = evidence.get("cwe", "")
+            # Extract CWE from evidence (Semgrep puts it here, possibly as a list)
+            cwe_raw = evidence.get("cwe", "")
+            if isinstance(cwe_raw, list):
+                cwe_raw = cwe_raw[0] if cwe_raw else ""
+            cwe = str(cwe_raw).upper()
             if cwe:
                 # Handle formats like "CWE-78", "CWE:78", "78"
-                cwe = cwe.upper()
                 if not cwe.startswith("CWE-"):
                     cwe = f"CWE-{cwe}"
 

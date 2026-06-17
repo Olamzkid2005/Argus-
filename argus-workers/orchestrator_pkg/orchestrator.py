@@ -240,6 +240,10 @@ class Orchestrator:
         failed_saves = self._save_findings(findings)
         if failed_saves > 0:
             slog.warning(f"{failed_saves}/{findings_count} recon findings failed to save")
+            if failed_saves == findings_count:
+                raise RuntimeError(
+                    f"All {findings_count} recon findings failed to save — aborting phase"
+                )
 
         if recon_context:
             try:
@@ -463,6 +467,10 @@ class Orchestrator:
         failed_saves = self._save_findings(findings)
         if failed_saves > 0:
             slog.warning(f"{failed_saves}/{findings_count} scan findings failed to save")
+            if failed_saves == findings_count:
+                raise RuntimeError(
+                    f"All {findings_count} scan findings failed to save — aborting phase"
+                )
 
         slog.tool_complete("orchestrator.run_scan", success=True, findings=findings_count)
         return {"phase": "scan", "status": "completed", "findings_count": findings_count,

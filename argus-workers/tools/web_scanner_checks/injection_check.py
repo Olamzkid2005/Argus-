@@ -103,13 +103,14 @@ IGNORE_PARAMS = [
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
     return InjectionCheck().check(target_url, session, findings)
+COMMON_PARAMS = ["id", "page", "file", "name", "user", "search", "q", "url", "redirect", "path"]
+
 def _find_params(target_url: str, session) -> set:
     resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
     if not resp:
-        return set()
+        return set(COMMON_PARAMS)
     params = set(re.findall(r'[?&](\w+)=', resp.text))
-    if not params:
-        return set()
+    params.update(COMMON_PARAMS)
     return {p for p in params if p.lower() not in IGNORE_PARAMS}
 
 
@@ -138,8 +139,8 @@ def _check_boolean_sqli(baseline: str, test_url: str, session, param: str, findi
     false_resp = safe_request("GET", false_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
     if not true_resp or not false_resp:
         return
-    # Check for consistent behavioural difference
-    if true_resp.text != false_resp.text and false_resp.text != baseline:
+    # Check for consistent behavioural difference between true and false conditions
+    if true_resp.text != false_resp.text:
         findings.append(make_finding("SQL_INJECTION", "MEDIUM", test_url, {
             "parameter": param,
             "detection": "boolean_based",

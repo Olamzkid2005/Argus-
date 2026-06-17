@@ -21,9 +21,7 @@ import json
 import logging
 import random
 import secrets
-import signal
 import string
-import threading
 import time
 import uuid
 from typing import Any
@@ -102,33 +100,13 @@ def run_register(
     Returns:
         Tuple of (UnifiedToolResult, updated AuthContext or None).
     """
-    # Hard deadline: raise TimeoutError if not done within 150s
-    _TIMEOUT_SECONDS = 150
-    _timeout_occurred = False
-
-    # ── Platform-aware deadline ──
-    # Unix: use SIGALRM (alertable from any blocking syscall)
-    # Windows / non-main-thread: use a threading.Timer that sets a flag;
-    #   the inner loop checks the flag between requests.
-    _use_alarm = hasattr(signal, "SIGALRM")
-    _timeout_flag: list[bool] = [False]  # mutable container for thread closure
-
-    if _use_alarm:
-        def _timeout_handler(_signum, _frame):
-            raise TimeoutError(f"Register tool timed out after {_TIMEOUT_SECONDS}s")
-        try:
-            signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(_TIMEOUT_SECONDS)
-        except (ValueError, AttributeError):
-            _use_alarm = False
-
-    if not _use_alarm:
-        # Threading fallback for Windows / non-main-thread
-        def _thread_timeout():
-            _timeout_flag[0] = True
-        _timer = threading.Timer(_TIMEOUT_SECONDS, _thread_timeout)
-        _timer.daemon = True
-        _timer.start()
+    # Hard deadline using requests connection-level timeouts (H-10)
+    # Replaces SIGALRM + threading.Timer which leak TCP connections.
+    _CONNECT_TIMEOUT = 5
+    _READ_TIMEOUT = 30
+    http_session.mount('https://', requests.adapters.HTTPAdapter(
+        max_retries=0, pool_connections=1, pool_maxsize=1,
+    ))
 
     try:
         # ── Start of inner logic ──
@@ -171,9 +149,6 @@ def run_register(
 
         # Step 2: Attempt registration (with retries)
         for attempt in range(MAX_RETRIES):
-            # Check threading-based deadline flag (Windows fallback)
-            if _timeout_flag[0]:
-                raise TimeoutError(f"Register tool timed out after {_TIMEOUT_SECONDS}s")
             email, password = generate_credentials()
             result_data["attempts"] = attempt + 1
 
@@ -316,15 +291,7 @@ def run_register(
             auth_context or AuthContext(),
         )
     finally:
-        try:
-            signal.alarm(0)  # Cancel pending alarm (Unix)
-        except (ValueError, AttributeError):
-            pass
-        if not _use_alarm:
-            try:
-                _timer.cancel()  # Cancel threading timer (Windows)
-            except (NameError, AttributeError):
-                pass
+        pass
 
 
 # ── Internal helpers ──

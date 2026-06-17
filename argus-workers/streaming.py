@@ -688,9 +688,11 @@ class StreamingFindingEmitter:
 
 # In-memory dedup for emit_finding_rt to prevent duplicate findings
 # from being emitted via SSE/WebSocket. Keyed by engagement_id so sets
-# are naturally scoped to a single scan and don't grow unbounded.
+# are naturally scoped to a single scan. Uses max-size eviction to
+# prevent unbounded memory growth (H-05).
 _rt_emitted_fingerprints: dict[str, set[str]] = {}
 _rt_fingerprints_lock = threading.Lock()
+_RT_FINGERPRINTS_MAX_PER_ENGAGEMENT = 50000
 
 
 def _rt_fingerprint(finding_type: str, endpoint: str, source_tool: str = "") -> str:
@@ -748,6 +750,9 @@ def emit_finding_rt(
         if fp in engagement_fps:
             logger.log(5, "Dedup emit_finding_rt: %s", fp)
             return
+        # Evict oldest entries when set exceeds max (H-05)
+        if len(engagement_fps) >= _RT_FINGERPRINTS_MAX_PER_ENGAGEMENT:
+            engagement_fps.clear()
         engagement_fps.add(fp)
 
     # 1. SSE emission (in-process stream manager)
