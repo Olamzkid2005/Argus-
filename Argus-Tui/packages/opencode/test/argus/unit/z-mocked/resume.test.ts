@@ -3,6 +3,16 @@ import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../../src/argus/engagement/store"
+// Real module references for mock restoration in afterAll
+import * as _realBridge from "../../../../src/argus/bridge/mcp-client"
+import * as _realRegistry from "../../../../src/argus/workflows/registry"
+import * as _realToolRegistry from "../../../../src/argus/workflows/tool-registry"
+import * as _realPlanner from "../../../../src/argus/planner/planner"
+import * as _realExecutor from "../../../../src/argus/planner/executor"
+import * as _realConfidence from "../../../../src/argus/engagement/confidence"
+import * as _realCredentials from "../../../../src/argus/engagement/credentials"
+import * as _realGenerator from "../../../../src/argus/reporting/generator"
+import * as _realEngagementStore from "../../../../src/argus/engagement/store"
 
 let dbDir: string
 
@@ -214,6 +224,12 @@ describe("resumeCommand", () => {
     mock.module("../../../../src/argus/reporting/generator", () => ({
       ReportGenerator: mock(() => ({
         generateMarkdown: mock(() => "# Report\n\nFindings: 1"),
+        generate: mock(() => ({ engagementId: "eng-1", target: "", workflow: "", createdAt: new Date().toISOString(), findings: [], summary: { totalFindings: 0, bySeverity: {}, byConfidence: {}, byStatus: {} } })),
+        generateJSON: mock(() => "{}"),
+        generateHTML: mock(() => "<html></html>"),
+        generateSARIF: mock(() => JSON.stringify({ version: "2.1.0", runs: [] })),
+        setAnalyses: mock(() => {}),
+        generateFromEngagement: mock(() => ""),
       })),
     }))
 
@@ -221,6 +237,18 @@ describe("resumeCommand", () => {
     mock.module("../../../../src/argus/engagement/store", () => ({
       EngagementStore: mock(() => resumeStore),
     }))
+  })
+
+  afterAll(() => {
+    mock.module("../../../../src/argus/bridge/mcp-client", () => _realBridge)
+    mock.module("../../../../src/argus/workflows/registry", () => _realRegistry)
+    mock.module("../../../../src/argus/workflows/tool-registry", () => _realToolRegistry)
+    mock.module("../../../../src/argus/planner/planner", () => _realPlanner)
+    mock.module("../../../../src/argus/planner/executor", () => _realExecutor)
+    mock.module("../../../../src/argus/engagement/confidence", () => _realConfidence)
+    mock.module("../../../../src/argus/engagement/credentials", () => _realCredentials)
+    mock.module("../../../../src/argus/reporting/generator", () => _realGenerator)
+    mock.module("../../../../src/argus/engagement/store", () => _realEngagementStore)
   })
 
   test("returns not-found message for non-existent engagement", async () => {

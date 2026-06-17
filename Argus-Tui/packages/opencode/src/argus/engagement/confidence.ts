@@ -49,6 +49,7 @@ export class ConfidenceEngine {
   }
 
   shouldFinalize(finding: NormalizedFinding): boolean {
+    if (finding.status === "REJECTED") return false
     return finding.status === "CONFIRMED" || finding.confidence >= Confidence.VERIFIED
   }
 }
