@@ -136,7 +136,7 @@ function toFindingRow(finding: NormalizedFinding, engagementId: string): typeof 
     remediation: finding.remediation,
     tool: finding.tool,
     phase: finding.phase,
-    negative: finding.negative ? 1 : 0,
+    negative: finding.negative ?? false,
     created_at: finding.created_at ? new Date(finding.created_at).getTime() : Date.now(),
     updated_at: finding.updated_at ? new Date(finding.updated_at).getTime() : Date.now(),
     finalized_at: finding.finalized_at ? new Date(finding.finalized_at).getTime() : null,

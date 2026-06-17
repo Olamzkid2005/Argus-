@@ -69,8 +69,8 @@ describe("Assess Flow", () => {
     const store = new EngagementStore(join(dbDir, `planner-persist-${Date.now()}.db`))
     const eng = store.createEngagement("https://planner-persist.com", "assessment")
     const phases = [
-      { id: `pp-${Date.now()}-0-recon`, engagementId: eng.id, name: "recon", status: "PENDING" as const, capabilities: ["web_recon", "port_scanning"], executionMode: "parallel", replanCycle: false },
-      { id: `pp-${Date.now()}-1-vuln`, engagementId: eng.id, name: "vuln_scan", status: "PENDING" as const, capabilities: ["vulnerability_scanning"], executionMode: "parallel", replanCycle: false },
+      { id: `pp-${Date.now()}-0-recon`, engagementId: eng.id, name: "recon", status: "PENDING" as const, capabilities: ["web_recon", "port_scanning"], executionMode: "parallel" as const, replanCycle: false },
+      { id: `pp-${Date.now()}-1-vuln`, engagementId: eng.id, name: "vuln_scan", status: "PENDING" as const, capabilities: ["vulnerability_scanning"], executionMode: "parallel" as const, replanCycle: false },
     ]
     store.savePhases(eng.id, phases)
     const saved = store.getPhases(eng.id)

@@ -69,8 +69,8 @@ describe("resume validation", () => {
     const store = makeStore("phases")
     const eng = store.createEngagement("https://example.com", "assessment")
     const phases = [
-      { id: `p1-${Date.now()}`, engagementId: eng.id, name: "recon", status: "COMPLETED" as const, capabilities: ["web_recon"], executionMode: "parallel", replanCycle: false },
-      { id: `p2-${Date.now()}`, engagementId: eng.id, name: "vuln_scan", status: "PENDING" as const, capabilities: ["vulnerability_scanning"], executionMode: "parallel", replanCycle: false },
+      { id: `p1-${Date.now()}`, engagementId: eng.id, name: "recon", status: "COMPLETED" as const, capabilities: ["web_recon"], executionMode: "parallel" as const, replanCycle: false },
+      { id: `p2-${Date.now()}`, engagementId: eng.id, name: "vuln_scan", status: "PENDING" as const, capabilities: ["vulnerability_scanning"], executionMode: "parallel" as const, replanCycle: false },
     ]
     store.savePhases(eng.id, phases)
     const saved = store.getPhases(eng.id)
@@ -286,7 +286,7 @@ describe("resumeCommand", () => {
     resumeStore.updateStatus(eng.id, "PAUSED")
     resumeStore.savePhases(eng.id, [{
       id: `${tag}-recon`, engagementId: eng.id, name: "recon", status: "COMPLETED",
-      capabilities: ["web_recon"], executionMode: "sequential", replanCycle: false,
+      capabilities: ["web_recon"], executionMode: "sequential" as const, replanCycle: false,
     }])
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
     const result = await resumeCommand(eng.id)
@@ -299,7 +299,7 @@ describe("resumeCommand", () => {
     resumeStore.updateStatus(eng.id, "RUNNING")
     resumeStore.savePhases(eng.id, [{
       id: `${tag}-recon`, engagementId: eng.id, name: "recon", status: "COMPLETED",
-      capabilities: ["web_recon"], executionMode: "sequential", replanCycle: false,
+      capabilities: ["web_recon"], executionMode: "sequential" as const, replanCycle: false,
     }])
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
     const result = await resumeCommand(eng.id)
