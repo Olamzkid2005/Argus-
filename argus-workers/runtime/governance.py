@@ -222,7 +222,10 @@ class Governance:
         )
 
     def _estimate_token_usage(self, tool_name: str) -> int:
-        """Estimate token usage per tool invocation."""
+        """Estimate token usage per tool invocation.
+        NOTE: These are rough estimates, not actual token counts.
+        Actual LLM token usage may differ significantly.
+        """
         # Rough estimates based on tool complexity
         estimates = {
             "nuclei": 200,

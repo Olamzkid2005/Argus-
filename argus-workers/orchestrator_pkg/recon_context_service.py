@@ -29,7 +29,7 @@ _LANG_EXTENSIONS: dict[str, str] = {
 
 # Substrings for framework detection in file paths
 _FRAMEWORK_PATTERNS: list[tuple[str, str]] = [
-    ("flask", "Django"),
+    ("flask", "Flask"),
     ("django", "Django"),
     ("express", "Express"),
     ("nestjs", "Express"),

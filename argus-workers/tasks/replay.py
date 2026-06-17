@@ -35,7 +35,7 @@ def replay_dlq_task(self, task_id: str) -> bool:
             task_data["task_name"],
             args=task_data["args"],
             kwargs=task_data["kwargs"],
-            task_id=task_id + ".replay",
+            task_id=task_id,
         )
         logger.info(f"Replayed task {task_id}")
         return True

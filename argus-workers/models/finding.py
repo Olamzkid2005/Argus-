@@ -18,6 +18,7 @@ class Severity(StrEnum):
 
 class EvidenceStrength(StrEnum):
     """Evidence strength levels"""
+    NONE = "NONE"  # 0.0
     VERIFIED = "VERIFIED"  # 1.0
     REQUEST_RESPONSE = "REQUEST_RESPONSE"  # 0.9
     PAYLOAD = "PAYLOAD"  # 0.8

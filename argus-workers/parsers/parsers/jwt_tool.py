@@ -51,7 +51,7 @@ class JwtToolParser(BaseParser):
     def _parse_json_lines(self, raw_output: str) -> list[dict]:
         """Parse JSON lines like {"vulnerability":"...","severity":"high","parameter":"..."}."""
         findings = []
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
@@ -84,7 +84,7 @@ class JwtToolParser(BaseParser):
     def _parse_text_lines(self, raw_output: str) -> list[dict]:
         """Parse text indicators: [+], [!], [WARNING]."""
         findings = []
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue

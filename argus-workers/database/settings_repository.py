@@ -5,10 +5,42 @@ Uses the shared ConnectionManager pool instead of creating one-off
 connections to prevent connection exhaustion (H-29).
 """
 import logging
+import os
+
+from cryptography.fernet import Fernet
 
 from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
+
+_SETTINGS_ENCRYPTION_KEY = None
+
+
+def _get_cipher():
+    global _SETTINGS_ENCRYPTION_KEY
+    if _SETTINGS_ENCRYPTION_KEY is None:
+        key = os.environ.get("SETTINGS_ENCRYPTION_KEY")
+        if not key:
+            key = Fernet.generate_key()
+            os.environ["SETTINGS_ENCRYPTION_KEY"] = key.decode()
+        if isinstance(key, str):
+            key = key.encode()
+        _SETTINGS_ENCRYPTION_KEY = key
+    return Fernet(_SETTINGS_ENCRYPTION_KEY)
+
+
+def _encrypt(value: str) -> str:
+    try:
+        return _get_cipher().encrypt(value.encode()).decode()
+    except Exception:
+        return value
+
+
+def _decrypt(value: str) -> str:
+    try:
+        return _get_cipher().decrypt(value.encode()).decode()
+    except Exception:
+        return value
 
 
 class SettingsRepository:
@@ -36,7 +68,8 @@ class SettingsRepository:
                     (user_email, key)
                 )
                 row = cursor.fetchone()
-                return row[0] if row else None
+                value = row[0] if row else None
+                return _decrypt(value) if value else None
         except Exception as e:
             logger.error("Failed to get user setting: %s", e)
             return None
@@ -58,7 +91,7 @@ class SettingsRepository:
                     (user_email,)
                 )
                 rows = cursor.fetchall()
-                return {row[0]: row[1] for row in rows if row[1]}
+                return {row[0]: _decrypt(row[1]) for row in rows if row[1]}
         except Exception as e:
             logger.error("Failed to get user settings: %s", e)
             return {}
@@ -82,7 +115,7 @@ class SettingsRepository:
                     VALUES (%s, %s, %s)
                     ON CONFLICT (user_email, key)
                     DO UPDATE SET value = %s, updated_at = CURRENT_TIMESTAMP
-                """, (user_email, key, value, value))
+                """, (user_email, key, _encrypt(value), _encrypt(value)))
                 return True
         except Exception as e:
             logger.error("Failed to set user setting: %s", e)

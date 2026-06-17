@@ -12,7 +12,7 @@ from contextlib import contextmanager, suppress
 from typing import Any
 
 import psycopg2
-import psycopg2.sql
+from psycopg2.sql import Identifier, SQL
 from psycopg2.extras import RealDictCursor
 
 from database.connection import get_db
@@ -397,19 +397,17 @@ class BaseRepository:
                 raise
 
         # Don't force updated_at if caller provides it
+        set_parts = [SQL("{} = %s").format(Identifier(key)) for key in updates]
         if "updated_at" not in updates:
-            set_clauses = [f"{key} = %s" for key in updates] + ["updated_at = NOW()"]
-        else:
-            set_clauses = [f"{key} = %s" for key in updates]
+            set_parts.append(SQL("updated_at = NOW()"))
         values = list(updates.values()) + [id]
 
         with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
-            query = f"""
-                UPDATE {self.table_name}
-                SET {", ".join(set_clauses)}
-                WHERE {self.id_column} = %s
-                RETURNING *
-            """
+            query = SQL("UPDATE {} SET {} WHERE {} = %s RETURNING *").format(
+                Identifier(self.table_name),
+                SQL(", ").join(set_parts),
+                Identifier(self.id_column),
+            )
             cursor.execute(query, values)
             row = cursor.fetchone()
             return dict(row) if row else None

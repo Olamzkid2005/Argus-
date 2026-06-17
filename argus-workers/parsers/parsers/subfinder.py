@@ -4,7 +4,7 @@ from parsers.parsers.base import BaseParser
 class SubfinderParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
         findings = []
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             line = line.strip()
             if not line:
                 continue

@@ -327,6 +327,7 @@ class EngagementStateMachine:
             List of transition records
         """
         conn = self._get_connection()
+        cursor = None
 
         try:
             cursor = conn.cursor()

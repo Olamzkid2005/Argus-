@@ -164,28 +164,6 @@ class LLMClient:
                     if row and row[1] and len(str(row[1])) > 10:
                         logger.info("Loaded API key from database for user %s (redacted)", self._user_email)
                         return row[1]
-            else:
-                # Unscoped fallback — cross-tenant risk (M-v5-01)
-                logger.warning(
-                    "No user_email set for LLMClient — loading API key from any tenant. "
-                    "Set user_email to prevent cross-tenant key leakage."
-                )
-                with db_cursor() as cursor:
-                    cursor.execute(
-                        """
-                        SELECT DISTINCT ON (key) key, value
-                        FROM user_settings
-                        WHERE key = ANY(%s)
-                          AND value IS NOT NULL
-                          AND value != ''
-                        ORDER BY key, updated_at DESC
-                        """,
-                        (list(key_names),),
-                    )
-                    for _key, value in cursor.fetchall():
-                        if value and len(str(value)) > 10:
-                            logger.info("Loaded API key from database settings (%s)", "redacted")
-                            return value
             return None
         except Exception as e:
             logger.debug("Could not load API key from database settings: %s", e)
@@ -226,25 +204,6 @@ class LLMClient:
                         api_key = value.decode() if isinstance(value, bytes) else value
                         logger.info("Loaded API key from Redis for user %s (redacted)", self._user_email)
                         return api_key
-            else:
-                # Unscoped fallback — cross-tenant risk (M-v5-01)
-                logger.warning(
-                    "No user_email set for LLMClient — scanning all Redis keys for API key. "
-                    "Set user_email to prevent cross-tenant key leakage."
-                )
-                for pattern in key_patterns:
-                    cursor = 0
-                    while True:
-                        cursor, keys = r.scan(cursor=cursor, match=f"settings:*:{pattern}", count=20)
-                        for key in keys:
-                            value = r.get(key)
-                            if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
-                                api_key = value.decode() if isinstance(value, bytes) else value
-                                logger.info("Loaded API key from Redis (key redacted)")
-                                return api_key
-                        if cursor == 0:
-                            break
-
             logger.debug("No API key found in Redis settings")
             return None
 
@@ -333,16 +292,16 @@ class LLMClient:
             try:
                 import uuid
 
-                import redis as redis_module
+                import redis.asyncio as aioredis
 
-                r = redis_module.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)
+                r = await aioredis.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)
                 rate_key = f"llm_rate:{self.provider}"
 
-                r.zremrangebyscore(rate_key, 0, window_start)
-                count = r.zcount(rate_key, window_start, now)
+                await r.zremrangebyscore(rate_key, 0, window_start)
+                count = await r.zcount(rate_key, window_start, now)
 
                 if count >= self._rate_limit_max:
-                    earliest = r.zrange(rate_key, 0, 0, withscores=True)
+                    earliest = await r.zrange(rate_key, 0, 0, withscores=True)
                     if earliest:
                         sleep_time = earliest[0][1] + self._rate_limit_window - now
                         if sleep_time > 0:
@@ -350,8 +309,9 @@ class LLMClient:
                             await asyncio.sleep(sleep_time)
 
                 member = f"{uuid.uuid4()}:{now}"
-                r.zadd(rate_key, {member: now})
-                r.expire(rate_key, int(self._rate_limit_window) + 10)
+                await r.zadd(rate_key, {member: now})
+                await r.expire(rate_key, int(self._rate_limit_window) + 10)
+                await r.aclose()
                 return
             except (ConnectionError, OSError, ValueError) as e:
                 logger.debug("Redis rate limiter unavailable — falling back to in-process: %s", e)

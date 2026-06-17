@@ -97,8 +97,10 @@ class SecretsManager:
         if vault and vault.is_authenticated():
             try:
                 path = os.getenv("VAULT_SECRET_PATH", "secret/argus")
+                import re
+                safe_key = re.sub(r'[^a-zA-Z0-9_\-]', '', key)
                 response = vault.secrets.kv.v2.read_secret_version(
-                    path=f"{path}/{key}"
+                    path=f"{path}/{safe_key}"
                 )
                 data = response.get("data", {}).get("data", {})
                 value = data.get(key) or data.get("value") or ""

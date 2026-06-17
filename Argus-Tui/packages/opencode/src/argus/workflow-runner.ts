@@ -68,6 +68,7 @@ export interface WorkflowRunResult {
   high: number
   medium: number
   low: number
+  info: number
   durationMs: number
   success: boolean
   error?: string
@@ -370,7 +371,8 @@ export class WorkflowRunner {
       critical: allFindings.filter((f) => f.severity >= 4).length,
       high: allFindings.filter((f) => f.severity === 3).length,
       medium: allFindings.filter((f) => f.severity === 2).length,
-      low: allFindings.filter((f) => f.severity <= 1).length,
+      low: allFindings.filter((f) => f.severity === 1).length,
+      info: allFindings.filter((f) => f.severity === 0).length,
       durationMs: Date.now() - startTime,
       success: !executionError,
       error: executionError?.message,

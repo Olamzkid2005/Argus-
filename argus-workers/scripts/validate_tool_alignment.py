@@ -29,9 +29,10 @@ except ImportError:
     yaml = None  # type: ignore[assignment]
 
 
-# Paths relative to argus-workers/
-PYTHON_DEFS_DIR = Path("tools/definitions")
-TUI_DEFS_PATH = Path("../Argus-Tui/packages/opencode/src/argus/workflows/tool-definitions.yaml")
+_SCRIPT_DIR = Path(__file__).resolve().parent.parent
+
+PYTHON_DEFS_DIR = _SCRIPT_DIR / "tools" / "definitions"
+TUI_DEFS_PATH = _SCRIPT_DIR / ".." / "Argus-Tui" / "packages" / "opencode" / "src" / "argus" / "workflows" / "tool-definitions.yaml"
 
 
 def load_python_definitions() -> dict:

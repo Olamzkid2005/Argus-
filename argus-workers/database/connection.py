@@ -215,7 +215,7 @@ class ConnectionManager:
                 self._pool.putconn(conn)
                 # Notify any thread waiting on the condition variable (B.03 fix)
                 with self._pool_cond:
-                    self._pool_cond.notify()
+                    self._pool_cond.notify_all()
             except Exception as e:
                 logger.error("Failed to release connection back to pool: %s", e)
             with self._metrics_lock:

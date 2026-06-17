@@ -6,7 +6,7 @@ from parsers.parsers.base import BaseParser
 class AmassParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
         findings = []
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             if not line.strip():
                 continue
             try:

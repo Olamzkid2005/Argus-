@@ -6,6 +6,7 @@ non-UUID values are passed to UUID-typed columns.
 """
 
 import re
+import urllib.parse
 import uuid
 
 # Pre-compiled regex for Redis key sanitization
@@ -20,7 +21,8 @@ def sanitize_redis_key(component: str) -> str:
     such as newlines, carriage returns, null bytes, and colons
     that could alter the intended key hierarchy.
 
-    Only allows alphanumeric characters, hyphens, underscores, and dots.
+    Uses percent-encoding for special characters to preserve
+    uniqueness while preventing key injection.
 
     Args:
         component: Raw key component string
@@ -28,7 +30,7 @@ def sanitize_redis_key(component: str) -> str:
     Returns:
         Sanitized key component safe for Redis key construction
     """
-    return _REDIS_KEY_CLEAN.sub("_", component)
+    return urllib.parse.quote(component, safe='')
 
 
 def validate_uuid(value: str, field_name: str = "engagement_id") -> str:

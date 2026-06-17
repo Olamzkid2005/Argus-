@@ -34,6 +34,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Thread-safe counter for tracking consecutive successes
+# NOTE: threading.Lock() does NOT synchronize across Celery worker processes.
+# In multi-worker deployments, these counters are per-process only.
+# For cross-process synchronization, use Redis or DB-backed counters.
 _counter_lock = threading.Lock()
 _consecutive_successes: dict[str, int] = {}
 _total_mismatches: dict[str, int] = {}

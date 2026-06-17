@@ -362,7 +362,7 @@ def emit_thinking(engagement_id: str, message: str, details: dict = None):
     get_stream_manager().publish(Event(
         type=EventType.THINKING,
         engagement_id=engagement_id,
-        data={"message": message, **(details or {})},
+        data={"message": message, "details": details or {}},
     ))
 
 
@@ -541,7 +541,7 @@ def emit_agent_decision(
 ):
     """Emit an agent decision event for the frontend reasoning feed."""
     get_stream_manager().publish(Event(
-        type=EventType.THINKING,
+        type=EventType.AGENT_DECISION,
         engagement_id=engagement_id,
         data={
             "type": "agent_decision",

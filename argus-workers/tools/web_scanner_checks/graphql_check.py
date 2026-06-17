@@ -39,9 +39,8 @@ class GraphqlCheck:
     def check(self, target_url: str, session, findings: list) -> list[dict]:
         from ._helpers import safe_request as _safe
 
-        target_url = target_url.rstrip("/")
         for path in GRAPHQL_ENDPOINTS:
-            url = urljoin(target_url + "/", path.lstrip("/"))
+            url = urljoin(target_url.rstrip("/") + "/", path.lstrip("/"))
             resp = _safe("POST", url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,
                          json=INTROSPECTION_QUERY,
                          headers={"Content-Type": "application/json"})

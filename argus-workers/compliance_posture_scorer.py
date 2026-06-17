@@ -138,6 +138,7 @@ class CompliancePostureScorer:
         high = 0
         medium = 0
         total_penalty = 0.0
+        mapped_count = 0
 
         # Count findings per compliance ref for dampening
         ref_counts: dict[str, int] = {}
@@ -147,6 +148,11 @@ class CompliancePostureScorer:
             if ftype not in type_ref_map:
                 type_ref_map[ftype] = mapper_fn(ftype)
             ref = type_ref_map[ftype]
+
+            if ref is None:
+                continue
+
+            mapped_count += 1
 
             if ref not in breakdown:
                 breakdown[ref] = []
@@ -173,7 +179,7 @@ class CompliancePostureScorer:
         return FrameworkPosture(
             framework=self._framework_name(mapper_fn),
             score=round(score, 1),
-            total_findings=len(findings),
+            total_findings=mapped_count,
             critical_count=critical,
             high_count=high,
             medium_count=medium,

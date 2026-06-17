@@ -13,7 +13,7 @@ class GovulncheckParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
         findings = []
         try:
-            for line in raw_output.strip().split("\n"):
+            for line in raw_output.strip().splitlines():
                 if not line.strip():
                     continue
                 try:

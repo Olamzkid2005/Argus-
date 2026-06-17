@@ -348,22 +348,21 @@ def cached(key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | N
         ttl: Cache TTL in seconds
         invalidate_on: List of table names that should invalidate this cache
     """
+    _MISS = object()
+
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Generate cache key
             key = f"{key_prefix}:{':'.join(map(str, args))}"
 
-            # Try cache first
             cached_value = cache.get(key)
             if cached_value is not None:
                 return cached_value
 
-            # Execute function
             result = func(*args, **kwargs)
 
-            # Store in cache
-            cache.set(key, result, ttl)
+            if result is not None:
+                cache.set(key, result, ttl)
 
             return result
 

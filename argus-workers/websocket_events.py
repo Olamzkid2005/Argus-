@@ -607,7 +607,7 @@ class WebSocketEventPublisher:
                     (engagement_id, tool_name, activity, status, target, details, items_found, duration_ms)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (engagement_id, tool_name, activity, status, target, details, items_found, duration_ms),
+                (engagement_id, tool_name, activity, status, target, details, items_found or 0, duration_ms or 0),
             )
             conn.commit()
         except Exception as e:

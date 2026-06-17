@@ -12,7 +12,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 import urllib3
@@ -331,6 +331,12 @@ class DualAuthScanner(AbstractTool):
 
     # --- Private helpers ---
 
+    def _is_in_scope(self, url: str) -> bool:
+        parsed_url = urlparse(url)
+        parsed_target = urlparse(self.target_url)
+        return (parsed_url.hostname == parsed_target.hostname or
+                parsed_url.hostname.endswith("." + parsed_target.hostname))
+
     def _safe_request(
         self,
         method: str,
@@ -404,7 +410,7 @@ class DualAuthScanner(AbstractTool):
             links = re.findall(link_pattern, text)
             for link in links[:5]:
                 absolute = urljoin(self.target_url, link)
-                if absolute.startswith(self.target_url) and absolute not in seen_urls:
+                if self._is_in_scope(absolute) and absolute not in seen_urls:
                     seen_urls.add(absolute)
                     r = self._safe_request("GET", absolute, session=session)
                     if r and r.status_code == 200:

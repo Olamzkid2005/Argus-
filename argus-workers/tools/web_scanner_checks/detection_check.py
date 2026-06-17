@@ -147,7 +147,7 @@ def _check_sensitive_files(target_url, session, findings):
 
 
 def _check_verb_tampering(target_url, session, findings):
-    for method in ("TRACE", "DELETE", "PUT", "PATCH", "OPTIONS"):
+    for method in ("TRACE", "DELETE", "PUT", "PATCH"):
         resp = safe_request(method, target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
         if resp and resp.status_code not in (405, 404, 403, 501):
             severity = "HIGH" if method == "TRACE" else "MEDIUM"

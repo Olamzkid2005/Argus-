@@ -117,12 +117,17 @@ export class ToolRegistry {
    * Tools with unmet requires gates are filtered out. Remaining tools are
    * ranked by scoring (confidence + coverage), then by priority.
    */
-  selectBest(capabilities: Capability[], _targetType?: string, gateContext?: GateContext): ToolDef[] {
+  selectBest(capabilities: Capability[], targetType?: string, gateContext?: GateContext): ToolDef[] {
     const candidates = new Map<string, { tool: ToolDef; score: number }>()
 
     for (const cap of capabilities) {
       const tools = this.getToolsByCapability(cap)
       for (const tool of tools) {
+        // Filter by target type (web vs non-web)
+        if (targetType === "web" && tool.supports_web === false) {
+          continue
+        }
+
         // Apply requires gates if context is available
         if (gateContext && !this.passesGates(tool, gateContext)) {
           continue

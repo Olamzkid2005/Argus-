@@ -51,7 +51,10 @@ export class WorkflowPlanner {
         const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
         if (tools.length > 0) return true
         const skip = plan.errorRecovery?.[p.phaseId] !== "fail_fast"
-        if (skip) return false
+        if (skip) {
+          process.stderr.write(`Warning: Skipping phase "${p.name}" — zero available tools\n`)
+          return false
+        }
         process.stderr.write(`Warning: Adding fail_fast phase "${p.name}" with zero available tools\n`)
         return true
       })
@@ -76,6 +79,7 @@ export class WorkflowPlanner {
 
       if (tools.length === 0) {
         if (def.error_recovery !== "fail_fast") {
+          process.stderr.write(`Warning: Skipping phase "${def.name}" — zero available tools\n`)
           continue
         }
         process.stderr.write(`Warning: Adding fail_fast phase "${def.name}" with zero available tools\n`)

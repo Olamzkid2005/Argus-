@@ -86,7 +86,7 @@ ERROR_PATTERNS = {
 
 # Permanent error indicators (should not retry)
 PERMANENT_INDICATORS = [
-    "not found", "does not exist", "invalid", "unsupported",
+    "not found", "does not exist", "unsupported",
     "not implemented", "deprecated", "bad request", "unauthorized",
     "forbidden", "payment required",
 ]

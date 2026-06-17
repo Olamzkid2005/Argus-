@@ -7,6 +7,9 @@ import time
 
 from config.constants import RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
 
+import socket as _socket
+from urllib.parse import urlparse
+
 from ._helpers import make_finding, safe_request
 
 logger = logging.getLogger(__name__)
@@ -178,7 +181,6 @@ class SslCheck:
         self.name = "ssl"
 
     def check(self, target_url: str, session, findings: list) -> list[dict]:
-        from urllib.parse import urlparse
         parsed = urlparse(target_url)
         hostname = parsed.hostname or ""
         port = 443
@@ -193,9 +195,7 @@ class SslCheck:
 
         # Fetch cert for deeper checks
         try:
-            import socket as _socket
-            import ssl as _ssl
-            ctx = _ssl.create_default_context()
+            ctx = ssl.create_default_context()
             with _socket.create_connection((hostname, port), timeout=10) as sock:
                 with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
                     cert = ssock.getpeercert()

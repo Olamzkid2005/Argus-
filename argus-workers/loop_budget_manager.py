@@ -120,10 +120,10 @@ class LoopBudgetManager:
                     ON CONFLICT (engagement_id) DO UPDATE SET
                         max_cycles = EXCLUDED.max_cycles,
                         max_depth = EXCLUDED.max_depth,
-                        current_cycles = EXCLUDED.current_cycles,
-                        current_depth = EXCLUDED.current_depth,
+                        current_cycles = loop_budgets.current_cycles + EXCLUDED.current_cycles,
+                        current_depth = loop_budgets.current_depth + EXCLUDED.current_depth,
                         max_llm_reviews = EXCLUDED.max_llm_reviews,
-                        current_llm_reviews = EXCLUDED.current_llm_reviews,
+                        current_llm_reviews = loop_budgets.current_llm_reviews + EXCLUDED.current_llm_reviews,
                         updated_at = NOW()
                     """,
                     (

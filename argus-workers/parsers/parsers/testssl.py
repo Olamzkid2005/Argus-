@@ -41,7 +41,7 @@ class TestsslParser(BaseParser):
 
         # Fall back: parse as NDJSON (one JSON object per line)
         findings = []
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue

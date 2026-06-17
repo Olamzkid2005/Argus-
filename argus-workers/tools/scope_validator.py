@@ -129,8 +129,10 @@ class ScopeValidator:
             if domain.startswith("*."):
                 # Wildcard: match exactly one DNS label
                 suffix = domain[1:]  # ".example.com"
-                if hostname.endswith(suffix) and hostname.count(".") == domain.count("."):
-                    return True
+                if hostname.endswith(suffix):
+                    prefix = hostname[:-len(suffix)]
+                    if prefix and "." not in prefix:
+                        return True
         return False
 
     def _matches_ip_range(self, hostname: str) -> bool:

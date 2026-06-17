@@ -18,7 +18,7 @@ class KatanaParser(BaseParser):
         """
         findings = []
 
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             if not line.strip():
                 continue
 

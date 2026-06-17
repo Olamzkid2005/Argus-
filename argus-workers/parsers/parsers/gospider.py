@@ -19,7 +19,7 @@ class GospiderParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
         findings = []
         seen = set()
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             line = line.strip()
             if not line:
                 continue

@@ -5,7 +5,7 @@ class CommixParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
         findings = []
         confirmed = False
-        for line in raw_output.split("\n"):
+        for line in raw_output.splitlines():
             if "[*] Setting the OS shell" in line or "[*] Setting the pseudo" in line:
                 confirmed = True
                 break

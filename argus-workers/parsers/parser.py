@@ -240,10 +240,8 @@ class Parser:
                 )
 
             except Exception as e:
-                # Calculate duration
                 duration_ms = int((time.time() - start_time) * 1000)
 
-                # Log parser failure
                 self.logger.log(
                     "parser_failed",
                     f"Stream parser failed for {tool_name}: {str(e)}",
@@ -253,6 +251,16 @@ class Parser:
                         "parse_time_ms": duration_ms,
                     },
                 )
+
+                try:
+                    from llm_parser_fallback import LLMParserFallback
+                    fallback = LLMParserFallback()
+                    llm_findings = fallback.extract_findings(tool_name, raw_output)
+                    for i in range(0, len(llm_findings), batch_size):
+                        yield llm_findings[i:i + batch_size]
+                    return
+                except Exception as llm_err:
+                    logger.warning("LLM fallback also failed for %s: %s", tool_name, llm_err)
 
                 raise ParserError(
                     f"Failed to stream parse {tool_name} output: {e}"
