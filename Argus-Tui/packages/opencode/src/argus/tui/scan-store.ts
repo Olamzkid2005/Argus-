@@ -201,6 +201,9 @@ export function handleProgressEvent(event: ProgressEvent, engagementId?: string)
       setScanState("status", "completed")
       setScanState("durationMs", Date.now() - scanState.startTime)
       break
+    case "phase_replan":
+      appendLog(`Replan: ${event.count} new phase(s) inserted`)
+      break
     case "error_hint":
       addErrorHint({
         tool: event.tool,
@@ -212,6 +215,8 @@ export function handleProgressEvent(event: ProgressEvent, engagementId?: string)
         errorId: event.errorId,
       })
       appendLog(`[!] ${event.summary}`)
+      break
+    default:
       break
   }
   if (engagementId && engagementId !== prevActive) {

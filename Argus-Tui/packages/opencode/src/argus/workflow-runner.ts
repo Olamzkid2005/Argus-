@@ -17,10 +17,13 @@ import { EngagementStore } from "./engagement/store"
 import { CredentialStore } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
 import { FeatureFlags, Feature } from "./config/feature-flags"
+import { detectTargetType, detectAuthState } from "./planner/strategy"
 import { join } from "path"
+import { Capability } from "./planner/capabilities"
 import type { NormalizedFinding } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
 import type { ProgressEvent } from "./shared/progress"
+import type { PlannerContext } from "./planner/types"
 import { handleProgressEvent } from "./tui/scan-store"
 import type { CacheMode } from "./bridge/types"
 
@@ -222,8 +225,8 @@ export class WorkflowRunner {
       name: p.name,
       status: "PENDING" as const,
       capabilities: p.requiredCapabilities,
-      executionMode: "sequential" as const,
-      replanCycle: p.phaseId.startsWith("replan"),
+      executionMode: p.toolExecution ?? "sequential",
+      replanCycle: p.replanCycle ?? false,
     })) as unknown as PhaseRecord[]
     store.savePhases(engagementId, phaseRecords)
 
@@ -245,7 +248,14 @@ export class WorkflowRunner {
       if (options.cacheMode) {
         executor.setExecutionOptions({ cacheMode: options.cacheMode })
       }
-      for (let i = 0; i < plan.phases.length; i++) {
+      const executedCapabilities = new Set<Capability>()
+      const insertedPhaseIds = new Set<string>()
+      let replanCount = 0
+      const targetType = detectTargetType(target)
+      const authState = detectAuthState(target)
+
+      let i = 0
+      while (i < plan.phases.length) {
         const phase = plan.phases[i]
         const phaseName = phase.name
 
@@ -283,6 +293,54 @@ export class WorkflowRunner {
           emit({ type: "phase_complete", phaseId: phase.phaseId, name: phaseName, findings: findingCount, status: phaseStatus })
           emit(`✓ Phase ${phaseName}: ${findingCount} finding(s)`)
         }
+
+        for (const cap of phase.requiredCapabilities) {
+          executedCapabilities.add(cap)
+        }
+        insertedPhaseIds.add(phase.phaseId)
+
+        if (!phase.replanCycle) {
+          const replanCtx: PlannerContext = {
+            target,
+            targetType,
+            authState,
+            findings: allFindings,
+            executedCapabilities,
+            insertedPhases: insertedPhaseIds,
+            replanCount,
+          }
+          const replanPhases = planner.replan(replanCtx)
+          replanCount = replanCtx.replanCount
+
+          if (replanPhases && replanPhases.length > 0) {
+            emit(`⠋ Replanning: ${replanPhases.length} new phase(s) from accumulated findings`)
+            store.appendAuditLog(engagementId, "REPLAN_INSERT",
+              `Inserting ${replanPhases.length} replan phase(s) at position ${i + 1}`)
+
+            for (const rp of replanPhases) {
+              if (defaultCreds) {
+                rp.config.credentials = defaultCreds
+              }
+              for (const cap of rp.requiredCapabilities) {
+                executedCapabilities.add(cap)
+              }
+              plan.phases.push(rp)
+              phaseRecords.push({
+                id: rp.phaseId,
+                engagementId,
+                name: rp.name,
+                status: "PENDING" as const,
+                capabilities: rp.requiredCapabilities,
+                executionMode: rp.toolExecution ?? "sequential",
+                replanCycle: true,
+              })
+            }
+            store.savePhases(engagementId, phaseRecords)
+            emit({ type: "phase_replan", count: replanPhases.length })
+          }
+        }
+
+        i++
       }
     } catch (error) {
       executionError = error as Error

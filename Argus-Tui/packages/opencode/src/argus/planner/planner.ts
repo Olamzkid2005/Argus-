@@ -7,7 +7,7 @@ import { determineNewCapabilities } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 
-const MAX_REPLANS = 10
+export const MAX_REPLANS = 10
 
 interface PlanOptions {
   useLLM?: boolean
@@ -127,7 +127,8 @@ export class WorkflowPlanner {
   }
 
   replan(context: PlannerContext): PhaseExecutionRequest[] | null {
-    if (context.replanCount >= MAX_REPLANS) {
+    const maxReplans = context.maxReplans ?? MAX_REPLANS
+    if (context.replanCount >= maxReplans) {
       return null
     }
 
@@ -137,6 +138,7 @@ export class WorkflowPlanner {
     if (unhandled.length === 0) return null
 
     const nextReplanCount = context.replanCount + 1
+    context.replanCount = nextReplanCount
 
     return unhandled.map((cap) => ({
       phaseId: `replan-${nextReplanCount}-${cap}`,
@@ -146,6 +148,8 @@ export class WorkflowPlanner {
       requiredCapabilities: [cap],
       config: {},
       previousPhaseResults: [],
+      toolExecution: "sequential",
+      replanCycle: true,
     }))
   }
 }

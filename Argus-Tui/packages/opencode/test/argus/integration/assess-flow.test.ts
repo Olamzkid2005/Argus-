@@ -100,7 +100,7 @@ describe("Assess Flow", () => {
       status: "PENDING" as const,
       capabilities: p.requiredCapabilities,
       executionMode: "sequential" as const,
-      replanCycle: p.phaseId.startsWith("replan"),
+      replanCycle: p.replanCycle ?? false,
     }))
     store.savePhases(eng.id, phaseRecords)
     const savedPhases = store.getPhases(eng.id)

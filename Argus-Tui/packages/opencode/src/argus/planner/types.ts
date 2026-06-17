@@ -55,6 +55,7 @@ export interface PhaseExecutionRequest {
   /** Whether tools in this phase execute in parallel or sequentially.
    *  Drawn from the workflow YAML `execution` property. */
   toolExecution?: "parallel" | "sequential"
+  replanCycle?: boolean
 }
 
 export interface PhaseExecutionResult {
@@ -82,4 +83,5 @@ export interface PlannerContext {
   executedCapabilities: Set<Capability>
   insertedPhases: Set<string>
   replanCount: number
+  maxReplans?: number
 }

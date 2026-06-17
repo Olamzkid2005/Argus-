@@ -212,6 +212,7 @@ describe("WorkflowRunner", () => {
     expect(mockWorkflowRegistry.loadAll).toHaveBeenCalled()
     expect(mockToolRegistry.load).toHaveBeenCalled()
     expect(mockPlanner.plan).toHaveBeenCalledWith("https://example.com", undefined, { useLLM: true })
+    expect(mockPlanner.replan).toHaveBeenCalled()
     expect(mockEngagementStore.savePhases).toHaveBeenCalled()
     expect(mockBridge.connect).toHaveBeenCalled()
     expect(mockExecutor.loadGates).toHaveBeenCalledWith("test-workflow")
@@ -327,6 +328,217 @@ describe("WorkflowRunner", () => {
 
     expect(deps.store.saveFindings).toHaveBeenCalled()
     expect(result.findings).toBe(1)
+  })
+
+  test("calls replan after phase execution and appends new phases", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    const replanPhase = {
+      phaseId: "replan-1-JWT_ANALYSIS",
+      name: "replan-jwt_analysis",
+      workflowName: "replan",
+      target: "https://example.com",
+      requiredCapabilities: ["jwt_analysis"],
+      config: {},
+      previousPhaseResults: [],
+      toolExecution: "sequential",
+      replanCycle: true,
+    }
+    deps.planner.replan = mock(() => [replanPhase])
+    deps.executor.execute = mock(() => ({
+      phaseId: "phase-0-recon",
+      status: "completed",
+      findings: [],
+      artifacts: [],
+      errors: [],
+      durationMs: 10,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({ target: "https://example.com" })
+
+    expect(deps.planner.replan).toHaveBeenCalled()
+    expect(deps.store.savePhases).toHaveBeenCalledTimes(2)
+    expect(deps.store.appendAuditLog).toHaveBeenCalledWith(
+      "ENG-test-001", "REPLAN_INSERT", expect.stringContaining("1 replan phase(s)")
+    )
+    expect(result.engagementId).toBe("ENG-test-001")
+  })
+
+  test("executes appended replan phases in same run", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    const replanPhase = {
+      phaseId: "replan-1-JWT_ANALYSIS",
+      name: "replan-jwt_analysis",
+      workflowName: "replan",
+      target: "https://example.com",
+      requiredCapabilities: ["jwt_analysis"],
+      config: {},
+      previousPhaseResults: [],
+      toolExecution: "sequential",
+      replanCycle: true,
+    }
+    let replanCallCount = 0
+    deps.planner.replan = mock(() => {
+      if (replanCallCount++ === 0) return [replanPhase]
+      return null
+    })
+    let executeCallCount = 0
+    deps.executor.execute = mock(() => ({
+      phaseId: executeCallCount++ === 0 ? "phase-0-recon" : "replan-1-JWT_ANALYSIS",
+      status: "completed",
+      findings: [],
+      artifacts: [],
+      errors: [],
+      durationMs: 10,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({ target: "https://example.com" })
+
+    expect(deps.executor.execute).toHaveBeenCalledTimes(2)
+    expect(result.engagementId).toBe("ENG-test-001")
+  })
+
+  test("tracks replanCount progression across calls", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    const capturedCounts: number[] = []
+    deps.planner.replan = mock((ctx: any) => {
+      capturedCounts.push(ctx.replanCount)
+      return null
+    })
+    deps.executor.execute = mock(() => ({
+      phaseId: "phase-0-recon",
+      status: "completed",
+      findings: [],
+      artifacts: [],
+      errors: [],
+      durationMs: 10,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    await runner.run({ target: "https://example.com" })
+
+    expect(capturedCounts.length).toBeGreaterThanOrEqual(1)
+    expect(capturedCounts[0]).toBe(0)
+  })
+
+  test("does not call replan after replan phases", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    const replanPhase = {
+      phaseId: "replan-1-JWT_ANALYSIS",
+      name: "replan-jwt_analysis",
+      workflowName: "replan",
+      target: "https://example.com",
+      requiredCapabilities: ["jwt_analysis"],
+      config: {},
+      previousPhaseResults: [],
+      toolExecution: "sequential",
+      replanCycle: true,
+    }
+    let replanCallCount = 0
+    deps.planner.replan = mock(() => {
+      replanCallCount++
+      if (replanCallCount === 1) return [replanPhase]
+      return null
+    })
+    let executeCallCount = 0
+    deps.executor.execute = mock(() => ({
+      phaseId: executeCallCount++ === 0 ? "phase-0-recon" : "replan-1-JWT_ANALYSIS",
+      status: "completed",
+      findings: [],
+      artifacts: [],
+      errors: [],
+      durationMs: 10,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    await runner.run({ target: "https://example.com" })
+
+    expect(replanCallCount).toBe(1)
+    expect(executeCallCount).toBe(2)
+  })
+
+  test("supports multiple replan cycles across original phases", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { deps } = makeDeps()
+    let replanCallIdx = 0
+    deps.planner.plan = mock(() => ({
+      workflow: "test-workflow",
+      phases: [
+        {
+          phaseId: "phase-0-recon",
+          name: "recon",
+          workflowName: "test-workflow",
+          target: "https://example.com",
+          requiredCapabilities: ["web_recon"],
+          config: {},
+          previousPhaseResults: [],
+        },
+        {
+          phaseId: "phase-1-scan",
+          name: "scan",
+          workflowName: "test-workflow",
+          target: "https://example.com",
+          requiredCapabilities: ["vulnerability_scanning"],
+          config: {},
+          previousPhaseResults: [],
+        },
+      ],
+      errorRecovery: { "phase-0-recon": "skip_and_continue", "phase-1-scan": "skip_and_continue" },
+      planCreatedAt: new Date().toISOString(),
+    }))
+    const replanPhase1 = {
+      phaseId: "replan-1-JWT_ANALYSIS",
+      name: "replan-jwt_analysis",
+      workflowName: "replan",
+      target: "https://example.com",
+      requiredCapabilities: ["jwt_analysis"],
+      config: {},
+      previousPhaseResults: [],
+      toolExecution: "sequential",
+      replanCycle: true,
+    }
+    const replanPhase2 = {
+      phaseId: "replan-2-SQLI",
+      name: "replan-sqli_detection",
+      workflowName: "replan",
+      target: "https://example.com",
+      requiredCapabilities: ["sqli_detection"],
+      config: {},
+      previousPhaseResults: [],
+      toolExecution: "sequential",
+      replanCycle: true,
+    }
+    deps.planner.replan = mock(() => {
+      const result = replanCallIdx === 0 ? [replanPhase1] : replanCallIdx === 1 ? [replanPhase2] : null
+      replanCallIdx++
+      return result
+    })
+    let executeCallCount = 0
+    deps.executor.execute = mock(() => ({
+      phaseId: [
+        "phase-0-recon",
+        "replan-1-JWT_ANALYSIS",
+        "phase-1-scan",
+        "replan-2-SQLI",
+      ][executeCallCount] ?? "phase-0-recon",
+      status: "completed",
+      findings: [],
+      artifacts: [],
+      errors: [],
+      durationMs: 10,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({ target: "https://example.com" })
+
+    expect(deps.planner.replan).toHaveBeenCalledTimes(2)
+    expect(deps.executor.execute).toHaveBeenCalledTimes(4)
+    expect(result.engagementId).toBe("ENG-test-001")
   })
 
   test("disconnects bridge in finally block despite error", async () => {

@@ -30,9 +30,14 @@ function cliProgress(event: ProgressEvent | string): void {
       process.stderr.write(`  • [${sevLabel}] ${event.title}\n`)
       break
     }
+    case "phase_replan":
+      process.stderr.write(`  ⤵ Replanning: ${event.count} new phase(s) inserted\n`)
+      break
     case "scan_complete":
       process.stderr.write(`
 ✓ Assessment complete — ${event.totalFindings} total finding(s)\n`)
+      break
+    default:
       break
   }
 }

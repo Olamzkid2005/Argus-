@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { WorkflowPlanner } from "@argus/planner/planner"
+import { WorkflowPlanner, MAX_REPLANS } from "@argus/planner/planner"
 import { Capability } from "@argus/planner/capabilities"
 import type { PlannerContext } from "@argus/planner/types"
 import type { WorkflowDefinition } from "@argus/workflows/types"
-
-const MAX_REPLANS = 10
 
 function mockWorkflow(overrides?: Partial<WorkflowDefinition>): WorkflowDefinition {
   return {
@@ -101,9 +99,51 @@ describe("WorkflowPlanner", () => {
   })
 
   describe("replan()", () => {
-    test("returns null when replanCount >= MAX_REPLANS", () => {
+    test("returns null when replanCount equals MAX_REPLANS", () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
-      const ctx = makeContext({ replanCount: MAX_REPLANS })
+      const ctx = makeContext({
+        replanCount: MAX_REPLANS,
+        findings: [
+          {
+            id: "f-1",
+            title: "GraphQL Endpoint",
+            severity: 2 as any,
+            confidence: 1 as any,
+            status: "PENDING",
+            description: "graphql endpoint found",
+            subtype: "graphql",
+            tool: "scanner",
+            phase: "recon",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      })
+      const result = planner.replan(ctx)
+
+      expect(result).toBeNull()
+    })
+
+    test("returns null when replanCount exceeds MAX_REPLANS", () => {
+      const planner = new WorkflowPlanner({} as any, {} as any)
+      const ctx = makeContext({
+        replanCount: MAX_REPLANS + 1,
+        findings: [
+          {
+            id: "f-1",
+            title: "GraphQL Endpoint",
+            severity: 2 as any,
+            confidence: 1 as any,
+            status: "PENDING",
+            description: "graphql endpoint found",
+            subtype: "graphql",
+            tool: "scanner",
+            phase: "recon",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      })
       const result = planner.replan(ctx)
 
       expect(result).toBeNull()
@@ -142,9 +182,13 @@ describe("WorkflowPlanner", () => {
       expect(result).not.toBeNull()
       expect(result).toHaveLength(1)
       expect(result![0].requiredCapabilities).toContain(Capability.GRAPHQL_ASSESSMENT)
+      expect(result![0].replanCycle).toBe(true)
+      expect(result![0].toolExecution).toBe("sequential")
+      expect(result![0].workflowName).toBe("replan")
+      expect(result![0].phaseId).toMatch(/^replan-\d+-/)
     })
 
-    test("increments replanCount", () => {
+    test("writes back incremented replanCount to context", () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         findings: [
@@ -164,10 +208,59 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      planner.replan(ctx)
+      const result = planner.replan(ctx)
 
-      // replan no longer mutates context.replanCount — uses local counter
-      expect(ctx.replanCount).toBe(0)
+      expect(result).not.toBeNull()
+      expect(ctx.replanCount).toBe(1)
+    })
+
+    test("uses maxReplans from context when provided", () => {
+      const planner = new WorkflowPlanner({} as any, {} as any)
+      const ctx = makeContext({
+        replanCount: 1,
+        maxReplans: 1,
+        findings: [
+          {
+            id: "f-1",
+            title: "GraphQL Endpoint",
+            severity: 2 as any,
+            confidence: 1 as any,
+            status: "PENDING",
+            description: "graphql endpoint found",
+            subtype: "graphql",
+            tool: "scanner",
+            phase: "recon",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        executedCapabilities: new Set([Capability.WEB_RECON]),
+      })
+      expect(planner.replan(ctx)).toBeNull()
+
+      const ctx2 = makeContext({
+        replanCount: 0,
+        maxReplans: 1,
+        findings: [
+          {
+            id: "f-2",
+            title: "GraphQL Endpoint",
+            severity: 2 as any,
+            confidence: 1 as any,
+            status: "PENDING",
+            description: "graphql endpoint found",
+            subtype: "graphql",
+            tool: "scanner",
+            phase: "recon",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        executedCapabilities: new Set([Capability.WEB_RECON]),
+      })
+      const result = planner.replan(ctx2)
+      expect(result).not.toBeNull()
+      expect(result).toHaveLength(1)
     })
 
     test("returns null when all new capabilities are already executed", () => {
