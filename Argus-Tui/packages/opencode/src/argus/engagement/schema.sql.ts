@@ -80,6 +80,7 @@ export const phases = sqliteTable("phases", {
   replan_cycle: integer().notNull().default(0),
 }, (table) => [
   index("idx_phases_engagement").on(table.engagement_id),
+  index("idx_phases_engagement_replan").on(table.engagement_id, table.replan_cycle),
 ])
 
 /**

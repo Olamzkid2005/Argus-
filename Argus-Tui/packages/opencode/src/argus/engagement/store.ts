@@ -51,6 +51,7 @@ const TABLE_SQL = [
     replan_cycle INTEGER NOT NULL DEFAULT 0
   )`,
   sql`CREATE INDEX IF NOT EXISTS idx_phases_engagement ON phases(engagement_id)`,
+  sql`CREATE INDEX IF NOT EXISTS idx_phases_engagement_replan ON phases(engagement_id, replan_cycle)`,
   sql`CREATE TABLE IF NOT EXISTS audit_log (
     id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
     event_type TEXT NOT NULL, message TEXT NOT NULL, metadata TEXT DEFAULT '{}',
