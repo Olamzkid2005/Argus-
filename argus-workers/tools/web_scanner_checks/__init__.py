@@ -22,7 +22,7 @@ for module_info in pkgutil.iter_modules([str(_this_dir)]):
     if module_name in _skip_modules:
         continue
     try:
-        module = importlib.import_module(f"tools.web_scanner_checks.{module_name}")
+        module = importlib.import_module(f".{module_name}", package=__package__)
         # Look for a class ending in "Check" in the module
         for attr_name in dir(module):
             attr = getattr(module, attr_name)

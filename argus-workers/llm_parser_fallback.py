@@ -166,11 +166,13 @@ class LLMParserFallback:
         # Sanitize the truncated output to prevent prompt injection from
         # attacker-controlled data that may appear in tool output (H-v4-08).
         sanitized_output = _sanitize_parser_input(truncated)
+        import base64
+        encoded_output = base64.b64encode(sanitized_output.encode()).decode()
         user_prompt = (
             f"Tool: {tool_name}\n\n"
-            f"Raw output:\n```\n{sanitized_output}\n```\n\n"
-            f"Does this output contain any security findings? "
-            f"If yes, extract them as a JSON array."
+            f"Raw output (base64): {encoded_output}\n\n"
+            f"Decode the base64 output and extract any security findings "
+            f"as a JSON array."
         )
 
         try:

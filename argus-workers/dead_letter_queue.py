@@ -176,12 +176,17 @@ class DeadLetterQueue:
             safe_kwargs = self._redact_sensitive_fields(kwargs)
             safe_args = self._redact_sensitive_fields(args)
 
+            # Redact secret patterns in error_message (H-09)
+            safe_error = error_message
+            for pattern in self._SECRET_VALUE_PATTERNS:
+                safe_error = pattern.sub("__REDACTED__", safe_error)
+
             failed_task = FailedTask(
                 task_id=task_id,
                 task_name=task_name,
                 args=safe_args,
                 kwargs=safe_kwargs,
-                error_message=error_message,
+                error_message=safe_error,
                 error_class=error_class,
                 worker_id=worker_id,
                 retry_count=retry_count,

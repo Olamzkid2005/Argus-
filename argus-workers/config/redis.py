@@ -10,11 +10,21 @@ import os
 
 logger = logging.getLogger(__name__)
 
-REDIS_URL = os.getenv("REDIS_URL")
-if not REDIS_URL:
-    REDIS_URL = "redis://localhost:6379"
+_REDIS_URL: str | None = None
+
+def get_redis_url() -> str:
+    global _REDIS_URL
+    if _REDIS_URL is not None:
+        return _REDIS_URL
+    url = os.getenv("REDIS_URL")
+    if url:
+        _REDIS_URL = url
+        return _REDIS_URL
+    _REDIS_URL = "redis://localhost:6379"
     logger.warning(
-        "REDIS_URL not set — defaulting to %s. "
-        "Set REDIS_URL environment variable for production use.",
-        REDIS_URL,
+        "REDIS_URL not set — defaulting to redis://localhost:6379. "
+        "Set REDIS_URL environment variable for production use."
     )
+    return _REDIS_URL
+
+REDIS_URL = get_redis_url()

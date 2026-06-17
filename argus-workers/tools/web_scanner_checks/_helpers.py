@@ -20,7 +20,7 @@ def safe_request(
 ) -> requests.Response | None:
     try:
         kwargs.setdefault("timeout", timeout)
-        kwargs.setdefault("allow_redirects", True)
+        kwargs.setdefault("allow_redirects", False)
         kwargs.setdefault("verify", True)
         resp = session.request(method, url, **kwargs)
         time.sleep(rate_limit)

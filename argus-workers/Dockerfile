@@ -37,8 +37,7 @@ RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.0 && \
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --require-hashes 2>/dev/null -r requirements.txt || \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Install sqlmap (pinned version)
 RUN pip install --no-cache-dir sqlmap==1.8

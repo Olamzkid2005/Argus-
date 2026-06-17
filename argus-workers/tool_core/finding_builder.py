@@ -37,6 +37,21 @@ class FindingBuilder:
     # Severity → allowed values
     SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
 
+    KNOWN_VULN_TYPES = frozenset({
+        "XSS", "SQL_INJECTION", "COMMAND_INJECTION", "SSTI", "LFI", "XXE",
+        "SSRF", "IDOR", "CSRF", "OPEN_REDIRECT", "HOST_HEADER_INJECTION",
+        "CACHE_POISONING", "HTTP_REQUEST_SMUGGLING", "PROTOTYPE_POLLUTION",
+        "JWT_ALGORITHM_CONFUSION", "INSECURE_COOKIE", "MISSING_SECURITY_HEADERS",
+        "MISSING_CSP", "WEAK_CSP", "WILDCARD_CORS", "REFLECTED_ORIGIN_CORS",
+        "REFLECTED_XSS", "DOM_BASED_XSS", "CORS_MISCONFIGURATION",
+        "AUTH_BYPASS", "SESSION_FIXATION", "RATE_LIMIT_BYPASS",
+        "INFO_LEAKAGE", "DIRECTORY_LISTING", "WEAK_TLS", "DEPRECATED_TLS",
+        "MISSING_HSTS", "PARAMETER_DISCOVERY", "HIDDEN_ENDPOINT",
+        "OPEN_PORT", "UNENCRYPTED_SERVICE", "DEFAULT_CREDENTIALS",
+        "MISSING_AUTH", "MASS_ASSIGNMENT", "NOSQL_INJECTION",
+        "LDAP_INJECTION", "XPATH_INJECTION", "UNVALIDATED_REDIRECT",
+    })
+
     def __init__(
         self,
         source_tool: str,
@@ -75,6 +90,12 @@ class FindingBuilder:
         if severity_upper not in self.SEVERITIES:
             raise ValueError(
                 f"Invalid severity: {severity!r}. Must be one of {self.SEVERITIES}"
+            )
+
+        if finding_type not in self.KNOWN_VULN_TYPES:
+            raise ValueError(
+                f"Unknown finding type: {finding_type!r}. "
+                f"Must be one of known vulnerability types."
             )
 
         finding: dict[str, Any] = {
@@ -157,7 +178,7 @@ class FindingBuilder:
         """Sanitize evidence before storing (redact secrets, trim size)."""
         try:
             from utils.sanitization import sanitize_evidence
-
-            return sanitize_evidence(evidence)
         except ImportError:
-            return evidence
+            raise RuntimeError("Sanitization module required but not available")
+
+        return sanitize_evidence(evidence)

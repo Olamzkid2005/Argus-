@@ -760,7 +760,8 @@ def build_tool_selection_prompt(
 
     # ── Section 0.1: Retrieved Memory Context (Phase 5) ────────────
     if memory_context:
-        prompt_parts.append(f"=== MEMORY CONTEXT ===\n{memory_context}")
+        sanitized_memory = _sanitize_for_llm(str(memory_context))
+        prompt_parts.append(f"=== MEMORY CONTEXT ===\n{sanitized_memory}")
 
     # ── Section 0.5: Scan Candidates (structured, from Idea 6) ──────
     if candidate_list and hasattr(candidate_list, "to_llm_summary"):

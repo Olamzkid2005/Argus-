@@ -132,7 +132,7 @@ class SpecialistAgent(ABC):
         return findings
 
     def _get_targets(self) -> list[str]:
-        """Extract target URLs from recon context."""
+        """Extract target URLs from recon context, filtered to authorized scope."""
         if not self.recon_context:
             return []
         rc = self.recon_context
@@ -151,7 +151,9 @@ class SpecialistAgent(ABC):
                     targets.append(f"{base}{path}" if path.startswith("/") else f"{base}/{path}")
         if not targets and hasattr(rc, "target_url") and rc.target_url:
             targets = [rc.target_url]
-        return targets
+        # Filter to authorized scope
+        from tools.scope_validator import validate_target_scope
+        return [t for t in targets if validate_target_scope(t, self.engagement_id)]
 
     @staticmethod
     def _has_dynamic_surface(rc) -> bool:
