@@ -50,7 +50,7 @@ _register(ToolDefinition(
     default_args=["-m", "GET"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="-u"),
-    ToolParameter(name="threads", description="Thread count", flag="-t", default="10"),
+    ToolParameter(name="threads", description="Thread count", flag="-t", default=10),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,
@@ -363,7 +363,7 @@ _register(ToolDefinition(
     parameters=[
     ToolParameter(name="target", description="Target URL with FUZZ keyword", required=True, flag="-u"),
     ToolParameter(name="wordlist", description="Path to wordlist", required=True, flag="-w"),
-    ToolParameter(name="threads", description="Thread count", flag="-t", default="40"),
+    ToolParameter(name="threads", description="Thread count", flag="-t", default=40),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,
@@ -464,7 +464,7 @@ _register(ToolDefinition(
     default_args=["-q", "-j"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="-s"),
-    ToolParameter(name="depth", description="Crawl depth", flag="-d", default="3"),
+    ToolParameter(name="depth", description="Crawl depth", flag="-d", default=3),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,
@@ -549,7 +549,7 @@ _register(ToolDefinition(
     default_args=["-jsonl", "-silent"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="-u"),
-    ToolParameter(name="depth", description="Crawl depth", flag="-d", default="3"),
+    ToolParameter(name="depth", description="Crawl depth", flag="-d", default=3),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,
@@ -915,8 +915,8 @@ _register(ToolDefinition(
     default_args=["--batch"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="-u"),
-    ToolParameter(name="level", description="Test level (1-5)", flag="--level", default="1"),
-    ToolParameter(name="risk", description="Risk level (1-3)", flag="--risk", default="1"),
+    ToolParameter(name="level", description="Test level (1-5)", flag="--level", default=1),
+    ToolParameter(name="risk", description="Risk level (1-3)", flag="--risk", default=1),
 ],
     timeout=600,
     signal_quality=SignalQuality.CONFIRMED,
