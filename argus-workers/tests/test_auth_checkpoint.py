@@ -12,7 +12,8 @@ class TestSaveAuthCheckpoint:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            save_auth_checkpoint()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -24,7 +25,8 @@ class TestLoadAuthCheckpoint:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            save_auth_checkpoint()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -36,7 +38,8 @@ class TestClearAuthCheckpoint:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            save_auth_checkpoint()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

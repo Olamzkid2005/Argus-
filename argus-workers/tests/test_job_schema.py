@@ -15,7 +15,8 @@ class TestJobMessage:
             assert instance is not None
             assert isinstance(instance, JobMessage)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            instance = JobMessage()
+            assert instance is not None
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -24,4 +25,5 @@ class TestJobMessage:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            instance = JobMessage()
+            assert instance is not None

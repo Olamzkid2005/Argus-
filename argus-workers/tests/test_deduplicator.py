@@ -14,7 +14,8 @@ class TestNormalize:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            deduplicate()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -26,7 +27,8 @@ class TestTokenSet:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            deduplicate()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -38,7 +40,8 @@ class TestJaccard:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            deduplicate()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -50,7 +53,8 @@ class TestFindingFingerprint:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            deduplicate()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -62,7 +66,8 @@ class TestDeduplicate:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            deduplicate()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

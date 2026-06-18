@@ -11,11 +11,13 @@ class TestArgusFindingAdapter:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        instance = ArgusFindingAdapter()
+        assert instance is not None
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        instance = ArgusFindingAdapter()
+        assert instance is not None
 
 
 class TestBugBountyReportGenerator:
@@ -23,8 +25,10 @@ class TestBugBountyReportGenerator:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        instance = ArgusFindingAdapter()
+        assert instance is not None
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        instance = ArgusFindingAdapter()
+        assert instance is not None

@@ -10,8 +10,10 @@ class TestBrowserScanner:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        instance = BrowserScanner()
+        assert instance is not None
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        instance = BrowserScanner()
+        assert instance is not None

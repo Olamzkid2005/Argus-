@@ -21,7 +21,8 @@ class TestEvent:
             assert instance is not None
             assert isinstance(instance, Event)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                Event()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -30,7 +31,8 @@ class TestEvent:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                Event()
 
 
 class TestEventType:
@@ -38,11 +40,13 @@ class TestEventType:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        with pytest.raises(TypeError):
+            Event()
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        with pytest.raises(TypeError):
+            Event()
 
 
 class TestEventBus:
@@ -55,7 +59,8 @@ class TestEventBus:
             assert instance is not None
             assert isinstance(instance, EventBus)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                Event()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -64,4 +69,5 @@ class TestEventBus:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                Event()

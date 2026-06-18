@@ -19,7 +19,8 @@ class TestWorkflowContext:
             assert instance is not None
             assert isinstance(instance, WorkflowContext)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                WorkflowContext()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -28,7 +29,8 @@ class TestWorkflowContext:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                WorkflowContext()
 
 
 class TestStepResult:
@@ -41,7 +43,8 @@ class TestStepResult:
             assert instance is not None
             assert isinstance(instance, StepResult)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                WorkflowContext()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -50,7 +53,8 @@ class TestStepResult:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                WorkflowContext()
 
 
 class TestWorkflowResult:
@@ -63,7 +67,8 @@ class TestWorkflowResult:
             assert instance is not None
             assert isinstance(instance, WorkflowResult)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                WorkflowContext()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -72,4 +77,5 @@ class TestWorkflowResult:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            pytest.skip("Requires constructor args")
+            with pytest.raises(TypeError):
+                WorkflowContext()

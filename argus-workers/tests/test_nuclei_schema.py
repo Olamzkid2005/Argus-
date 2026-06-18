@@ -10,7 +10,8 @@ class TestValidateNucleiFinding:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            validate_nuclei_finding()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

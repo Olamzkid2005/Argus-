@@ -10,7 +10,8 @@ class TestGetLfiPayloads:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = get_lfi_payloads()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

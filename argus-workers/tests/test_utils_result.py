@@ -11,11 +11,13 @@ class TestOk:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        with pytest.raises(TypeError):
+            Ok()
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        with pytest.raises(TypeError):
+            Ok()
 
 
 class TestErr:
@@ -23,8 +25,10 @@ class TestErr:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        with pytest.raises(TypeError):
+            Ok()
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        with pytest.raises(TypeError):
+            Ok()

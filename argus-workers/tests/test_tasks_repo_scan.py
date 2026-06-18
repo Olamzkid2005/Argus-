@@ -28,7 +28,8 @@ class TestLoadLicensePolicy:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -40,7 +41,8 @@ class TestRunRepoScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -52,7 +54,8 @@ class TestExpandRepoScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -64,7 +67,8 @@ class TestGetBlameForFinding:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -76,7 +80,8 @@ class TestEnrichFindingsWithBlame:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -88,7 +93,8 @@ class TestGenerateCyclonedxSbom:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -100,7 +106,8 @@ class TestGenerateSpdxSbom:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -112,7 +119,8 @@ class TestSaveSbom:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -124,7 +132,8 @@ class TestScanGitHistoryForSecrets:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -136,7 +145,8 @@ class TestCheckPatchForSecrets:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -148,7 +158,8 @@ class TestExtractFilePath:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -160,7 +171,8 @@ class TestDetectLicense:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -172,7 +184,8 @@ class TestMatchLicense:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -184,7 +197,8 @@ class TestCheckLicenseCompliance:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -196,7 +210,8 @@ class TestRunBandit:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -208,7 +223,8 @@ class TestMapBanditSeverity:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -220,7 +236,8 @@ class TestRunEslintSecurity:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -232,7 +249,8 @@ class TestMapEslintSeverity:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -244,7 +262,8 @@ class TestRunGosec:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            check_license_compliance()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

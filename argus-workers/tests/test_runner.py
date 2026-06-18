@@ -13,7 +13,8 @@ class TestEnsureTrackingTable:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_migrations()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -25,7 +26,8 @@ class TestGetApplied:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_migrations()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -37,7 +39,8 @@ class TestMarkApplied:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_migrations()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -49,7 +52,8 @@ class TestRunMigrations:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_migrations()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

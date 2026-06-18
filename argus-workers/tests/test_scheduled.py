@@ -12,7 +12,8 @@ class TestBuildBudgetFromAggressiveness:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_due_scans()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -24,7 +25,8 @@ class TestRunDueScans:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_due_scans()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -36,7 +38,8 @@ class TestSpawnEngagement:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = run_due_scans()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

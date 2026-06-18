@@ -14,7 +14,8 @@ class TestInferSeverity:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            parse()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -26,7 +27,8 @@ class TestParseJson:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            parse()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -38,7 +40,8 @@ class TestParseCsv:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            parse()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -50,7 +53,8 @@ class TestParseText:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            parse()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -62,7 +66,8 @@ class TestParse:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            parse()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

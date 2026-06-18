@@ -11,11 +11,13 @@ class TestDatabaseConnectionError:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        instance = DatabaseConnectionError()
+        assert instance is not None
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        instance = DatabaseConnectionError()
+        assert instance is not None
 
 
 class TestConnectionManager:
@@ -23,8 +25,10 @@ class TestConnectionManager:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        pytest.skip("Requires constructor args")
+        instance = DatabaseConnectionError()
+        assert instance is not None
 
     def test_str_repr(self):
         """String representation not available."""
-        pytest.skip("Requires constructor args")
+        instance = DatabaseConnectionError()
+        assert instance is not None

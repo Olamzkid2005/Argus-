@@ -14,7 +14,8 @@ class TestSafeRequest:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            safe_request()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -26,7 +27,8 @@ class TestMakeFinding:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            safe_request()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -38,7 +40,8 @@ class TestDetectFramework:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            safe_request()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -50,7 +53,8 @@ class TestTestJwtAlgNone:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            safe_request()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -62,7 +66,8 @@ class TestTestJwtRs256Hs256:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            safe_request()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

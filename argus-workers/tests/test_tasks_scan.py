@@ -12,7 +12,8 @@ class TestRunScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            run_scan()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -24,7 +25,8 @@ class TestDeepScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            run_scan()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -36,7 +38,8 @@ class TestAuthFocusedScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            run_scan()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

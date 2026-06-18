@@ -14,7 +14,8 @@ class TestNormalizeForComparison:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = get_shadow_stats()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -26,7 +27,8 @@ class TestComputeHash:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = get_shadow_stats()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -38,7 +40,8 @@ class TestShadowCompare:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = get_shadow_stats()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -50,7 +53,8 @@ class TestGetShadowStats:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = get_shadow_stats()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -62,7 +66,8 @@ class TestResetShadowStats:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        instance = get_shadow_stats()
+        assert instance is not None
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

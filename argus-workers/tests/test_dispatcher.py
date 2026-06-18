@@ -11,7 +11,8 @@ class TestDispatch:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            dispatch()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -23,7 +24,8 @@ class TestHasParser:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            dispatch()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

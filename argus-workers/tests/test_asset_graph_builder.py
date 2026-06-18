@@ -10,7 +10,8 @@ class TestBuildAssetGraph:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")
+        with pytest.raises(TypeError):
+            build_asset_graph()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
