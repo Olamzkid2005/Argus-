@@ -1,6 +1,5 @@
 """Tests for tools.attack_surface.subdomain_discovery — Category: class"""
 
-import pytest
 
 from tools.attack_surface.subdomain_discovery import SubdomainDiscovery
 

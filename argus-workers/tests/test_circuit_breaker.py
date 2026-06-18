@@ -1,9 +1,7 @@
 """Tests for tools.circuit_breaker — Category: enum"""
 
-import pytest
 
-from tools.circuit_breaker import CircuitOpenError
-from tools.circuit_breaker import CircuitState
+from tools.circuit_breaker import CircuitOpenError, CircuitState
 
 
 class TestCircuitState:

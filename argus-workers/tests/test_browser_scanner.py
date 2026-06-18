@@ -1,6 +1,5 @@
 """Tests for tools.browser_scanner — Category: class"""
 
-import pytest
 
 from tools.browser_scanner import BrowserScanner
 

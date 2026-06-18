@@ -89,6 +89,10 @@ class FindingBuilder:
             "NULL_ORIGIN_CORS",
             "HTTP_VERB_TAMPERING",
             "EXPOSED_SENSITIVE_FILE",
+            "CORRELATION_SUMMARY",
+            "CORRELATION_GROUP",
+            "TREND_ANALYSIS",
+            "PATTERN_DETECTION",
         }
     )
 

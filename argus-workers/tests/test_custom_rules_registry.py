@@ -1,6 +1,5 @@
 """Tests for custom_rules.registry — Category: class"""
 
-import pytest
 
 from custom_rules.registry import RuleRegistry
 

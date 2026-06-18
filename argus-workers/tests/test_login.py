@@ -1,6 +1,5 @@
 """Tests for tools.login — Category: class"""
 
-import pytest
 
 from tools.login import LoginTool
 

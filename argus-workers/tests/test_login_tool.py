@@ -2,13 +2,15 @@
 
 import pytest
 
-from agent.tools.login_tool import _build_login_payload
-from agent.tools.login_tool import _detect_2fa
-from agent.tools.login_tool import _extract_cookie_string
-from agent.tools.login_tool import _extract_jwt
-from agent.tools.login_tool import _fail_result
-from agent.tools.login_tool import _rate_limit_backoff
-from agent.tools.login_tool import run_login
+from agent.tools.login_tool import (
+    _build_login_payload,
+    _detect_2fa,
+    _extract_cookie_string,
+    _extract_jwt,
+    _fail_result,
+    _rate_limit_backoff,
+    run_login,
+)
 
 
 class TestRunLogin:

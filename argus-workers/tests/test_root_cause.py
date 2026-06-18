@@ -2,9 +2,11 @@
 
 import pytest
 
-from tools.correlation.root_cause import _root_cause_key
-from tools.correlation.root_cause import find_root_causes
-from tools.correlation.root_cause import group_by_root_cause
+from tools.correlation.root_cause import (
+    _root_cause_key,
+    find_root_causes,
+    group_by_root_cause,
+)
 
 
 class TestRootCauseKey:

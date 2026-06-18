@@ -1,6 +1,5 @@
 """Tests for tools.verification.evidence_collector — Category: class"""
 
-import pytest
 
 from tools.verification.evidence_collector import VerificationEvidenceCollector
 

@@ -2,9 +2,7 @@
 
 import pytest
 
-from tasks.llm_review import _get_llm_client
-from tasks.llm_review import _get_llm_detector
-from tasks.llm_review import run_llm_review
+from tasks.llm_review import _get_llm_client, _get_llm_detector, run_llm_review
 
 
 class TestGetLlmClient:

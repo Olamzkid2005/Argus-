@@ -1,6 +1,5 @@
 """Tests for database.repositories.base — Category: class"""
 
-import pytest
 
 from database.repositories.base import BaseRepository
 

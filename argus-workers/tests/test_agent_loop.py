@@ -1,6 +1,5 @@
 """Tests for agent_loop — Category: module"""
 
-import pytest
 
 
 class TestModule:

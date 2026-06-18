@@ -1,6 +1,5 @@
 """Tests for tools.browser_security_operator — Category: class"""
 
-import pytest
 
 from tools.browser_security_operator import BrowserSecurityOperator
 

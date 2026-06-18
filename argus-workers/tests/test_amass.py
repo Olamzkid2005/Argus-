@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.amass — Category: parser"""
 
-import pytest
 
 from parsers.parsers.amass import AmassParser
 

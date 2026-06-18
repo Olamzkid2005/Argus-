@@ -1,6 +1,5 @@
 """Tests for scan_diff_engine — Category: class"""
 
-import pytest
 
 from scan_diff_engine import ScanDiffEngine
 

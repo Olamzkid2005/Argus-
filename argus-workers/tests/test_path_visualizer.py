@@ -2,9 +2,11 @@
 
 import pytest
 
-from tools.attack_paths.path_visualizer import render_all_paths
-from tools.attack_paths.path_visualizer import render_mermaid
-from tools.attack_paths.path_visualizer import render_text_path
+from tools.attack_paths.path_visualizer import (
+    render_all_paths,
+    render_mermaid,
+    render_text_path,
+)
 
 
 class TestRenderTextPath:

@@ -1,10 +1,7 @@
 """Tests for tools.auth_manager — Category: dataclass"""
 
-import pytest
 
-from tools.auth_manager import AuthConfig
-from tools.auth_manager import AuthError
-from tools.auth_manager import AuthManager
+from tools.auth_manager import AuthConfig, AuthError, AuthManager
 
 
 class TestAuthError:

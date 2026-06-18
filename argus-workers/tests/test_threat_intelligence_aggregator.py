@@ -1,6 +1,5 @@
 """Tests for tools.threat_intelligence_aggregator — Category: class"""
 
-import pytest
 
 from tools.threat_intelligence_aggregator import ThreatIntelligenceAggregator
 

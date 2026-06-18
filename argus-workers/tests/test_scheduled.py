@@ -2,9 +2,11 @@
 
 import pytest
 
-from tasks.scheduled import _build_budget_from_aggressiveness
-from tasks.scheduled import _spawn_engagement
-from tasks.scheduled import run_due_scans
+from tasks.scheduled import (
+    _build_budget_from_aggressiveness,
+    _spawn_engagement,
+    run_due_scans,
+)
 
 
 class TestBuildBudgetFromAggressiveness:

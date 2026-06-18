@@ -1,10 +1,10 @@
 """Tests for tools._browser_scan_worker — Category: function"""
 
 import pytest
+
 pytest.importorskip("playwright")
 
-from tools._browser_scan_worker import _validate_url
-from tools._browser_scan_worker import scan
+from tools._browser_scan_worker import _validate_url, scan
 
 
 class TestValidateUrl:

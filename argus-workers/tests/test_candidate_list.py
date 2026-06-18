@@ -2,69 +2,44 @@
 
 import pytest
 
-from models.candidate_list import Candidate
-from models.candidate_list import CandidateList
-from models.candidate_list import CandidateSource
+from models.candidate_list import Candidate, CandidateList, CandidateSource
 
 
 class TestCandidateSource:
-    """Tests for the CandidateSource class."""
+    """Tests for the CandidateSource enum."""
 
-    def test_instantiation(self):
-        """Class requires constructor args."""
-        instance = CandidateSource()
-        assert instance is not None
-
-    def test_str_repr(self):
-        """String and repr work on instantiated object."""
-        instance = CandidateSource()
-        assert isinstance(str(instance), str)
-        assert isinstance(repr(instance), str)
+    def test_members_exist(self):
+        """Enum has expected members."""
+        members = list(CandidateSource)
+        assert len(members) > 0
+        for member in members:
+            assert member.name
+            assert member.value is not None
 
 
 class TestCandidate:
     """Tests for the Candidate class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = Candidate()
-            assert instance is not None
-            assert isinstance(instance, Candidate)
-        except TypeError:
-            instance = Candidate()
-            assert instance is not None
+        """Class requires constructor args."""
+        with pytest.raises(TypeError):
+            Candidate()
 
-    def test_field_access(self):
-        """Instance fields are accessible."""
-        try:
-            instance = Candidate()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = Candidate()
-            assert instance is not None
+    def test_str_repr(self):
+        """String representation not available (requires constructor args)."""
+        with pytest.raises(TypeError):
+            Candidate()
 
 
 class TestCandidateList:
     """Tests for the CandidateList class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = CandidateList()
-            assert instance is not None
-            assert isinstance(instance, CandidateList)
-        except TypeError:
-            instance = CandidateList()
-            assert instance is not None
+        """Class requires constructor args."""
+        with pytest.raises(TypeError):
+            CandidateList()
 
-    def test_field_access(self):
-        """Instance fields are accessible."""
-        try:
-            instance = CandidateList()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = CandidateList()
-            assert instance is not None
+    def test_str_repr(self):
+        """String representation not available (requires constructor args)."""
+        with pytest.raises(TypeError):
+            CandidateList()

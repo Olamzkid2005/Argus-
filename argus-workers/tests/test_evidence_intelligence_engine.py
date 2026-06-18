@@ -1,6 +1,5 @@
 """Tests for tools.evidence_intelligence_engine — Category: class"""
 
-import pytest
 
 from tools.evidence_intelligence_engine import EvidenceIntelligenceEngine
 

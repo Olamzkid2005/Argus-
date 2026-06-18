@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.ffuf — Category: parser"""
 
-import pytest
 
 from parsers.parsers.ffuf import FfufParser
 

@@ -1,6 +1,5 @@
 """Tests for tools.finding_correlation_engine — Category: class"""
 
-import pytest
 
 from tools.finding_correlation_engine import FindingCorrelationEngine
 

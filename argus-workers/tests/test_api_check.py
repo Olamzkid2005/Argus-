@@ -1,6 +1,5 @@
 """Tests for tools.web_scanner_checks.api_check — Category: class"""
 
-import pytest
 
 from tools.web_scanner_checks.api_check import ApiCheck
 

@@ -1,6 +1,5 @@
 """Tests for tool_core.sandbox — Category: class"""
 
-import pytest
 
 from tool_core.sandbox import AsyncToolRunner
 

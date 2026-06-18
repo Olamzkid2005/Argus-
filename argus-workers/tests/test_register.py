@@ -1,6 +1,5 @@
 """Tests for tools.register — Category: class"""
 
-import pytest
 
 from tools.register import RegisterTool
 

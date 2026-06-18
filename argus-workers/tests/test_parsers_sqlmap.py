@@ -2,10 +2,12 @@
 
 import pytest
 
-from tool_core.parser.parsers.sqlmap import _classify_technique
-from tool_core.parser.parsers.sqlmap import _parse_json
-from tool_core.parser.parsers.sqlmap import _parse_text
-from tool_core.parser.parsers.sqlmap import parse
+from tool_core.parser.parsers.sqlmap import (
+    _classify_technique,
+    _parse_json,
+    _parse_text,
+    parse,
+)
 
 
 class TestClassifyTechnique:

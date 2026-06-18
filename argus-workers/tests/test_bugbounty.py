@@ -2,9 +2,11 @@
 
 import pytest
 
-from tasks.bugbounty import _fetch_engagement
-from tasks.bugbounty import _fetch_findings
-from tasks.bugbounty import generate_bugbounty_report
+from tasks.bugbounty import (
+    _fetch_engagement,
+    _fetch_findings,
+    generate_bugbounty_report,
+)
 
 
 class TestGenerateBugbountyReport:

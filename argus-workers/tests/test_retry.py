@@ -1,6 +1,5 @@
 """Tests for utils.retry — Category: class"""
 
-import pytest
 
 from utils.retry import RetryExhaustedError
 

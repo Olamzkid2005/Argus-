@@ -2,15 +2,17 @@
 
 import pytest
 
-from tasks.report import _calculate_next_run
-from tasks.report import _generate_report_data
-from tasks.report import _send_report_email
-from tasks.report import generate_compliance_report
-from tasks.report import generate_full_report
-from tasks.report import generate_report
-from tasks.report import generate_scheduled_reports
-from tasks.report import get_compliance_reports
-from tasks.report import get_findings_summary
+from tasks.report import (
+    _calculate_next_run,
+    _generate_report_data,
+    _send_report_email,
+    generate_compliance_report,
+    generate_full_report,
+    generate_report,
+    generate_scheduled_reports,
+    get_compliance_reports,
+    get_findings_summary,
+)
 
 
 class TestGenerateReport:

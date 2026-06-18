@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.commix — Category: parser"""
 
-import pytest
 
 from parsers.parsers.commix import CommixParser
 

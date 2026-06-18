@@ -1,6 +1,5 @@
 """Tests for tools.tool_cache — Category: class"""
 
-import pytest
 
 from tools.tool_cache import ToolCache
 

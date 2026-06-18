@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.npm_audit — Category: parser"""
 
-import pytest
 
 from parsers.parsers.npm_audit import NpmAuditParser
 

@@ -1,6 +1,5 @@
 """Tests for tool_core.registry — Category: class"""
 
-import pytest
 
 from tool_core.registry import ToolRegistry
 

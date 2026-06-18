@@ -2,11 +2,13 @@
 
 import pytest
 
-from tools.web_scanner_checks._helpers import detect_framework
-from tools.web_scanner_checks._helpers import make_finding
-from tools.web_scanner_checks._helpers import safe_request
-from tools.web_scanner_checks._helpers import test_jwt_alg_none
-from tools.web_scanner_checks._helpers import test_jwt_rs256_hs256
+from tools.web_scanner_checks._helpers import (
+    detect_framework,
+    make_finding,
+    safe_request,
+)
+from tools.web_scanner_checks._helpers import test_jwt_alg_none as _jwt_alg_none
+from tools.web_scanner_checks._helpers import test_jwt_rs256_hs256 as _jwt_rs256_hs256
 
 
 class TestSafeRequest:
@@ -57,12 +59,12 @@ class TestTestJwtAlgNone:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            test_jwt_alg_none()
+            _jwt_alg_none()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            test_jwt_alg_none()
+            _jwt_alg_none()
 
 
 class TestTestJwtRs256Hs256:
@@ -71,9 +73,9 @@ class TestTestJwtRs256Hs256:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            test_jwt_rs256_hs256()
+            _jwt_rs256_hs256()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            test_jwt_rs256_hs256()
+            _jwt_rs256_hs256()

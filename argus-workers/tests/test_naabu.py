@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.naabu — Category: parser"""
 
-import pytest
 
 from parsers.parsers.naabu import NaabuParser
 

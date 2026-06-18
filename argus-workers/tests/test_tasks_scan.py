@@ -2,9 +2,7 @@
 
 import pytest
 
-from tasks.scan import auth_focused_scan
-from tasks.scan import deep_scan
-from tasks.scan import run_scan
+from tasks.scan import auth_focused_scan, deep_scan, run_scan
 
 
 class TestRunScan:

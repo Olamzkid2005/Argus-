@@ -1,6 +1,5 @@
 """Tests for runtime.memory — Category: class"""
 
-import pytest
 
 from runtime.memory import MemoryRetriever
 

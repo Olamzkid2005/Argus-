@@ -1,6 +1,5 @@
 """Tests for models.confidence_scorer — Category: class"""
 
-import pytest
 
 from models.confidence_scorer import ConfidenceScorer
 

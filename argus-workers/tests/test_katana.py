@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.katana — Category: parser"""
 
-import pytest
 
 from parsers.parsers.katana import KatanaParser
 

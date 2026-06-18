@@ -1,6 +1,5 @@
 """Tests for agent.tool_registry — Category: class"""
 
-import pytest
 
 from agent.tool_registry import ToolRegistry
 

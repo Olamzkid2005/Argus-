@@ -1,6 +1,5 @@
 """Tests for tools.context — Category: parser"""
 
-import pytest
 
 from tools.context import ParserProtocol
 

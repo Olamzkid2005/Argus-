@@ -1,6 +1,5 @@
 """Tests for tools.workflow_intelligence_engine — Category: class"""
 
-import pytest
 
 from tools.workflow_intelligence_engine import WorkflowIntelligenceEngine
 

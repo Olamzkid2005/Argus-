@@ -1,6 +1,5 @@
 """Tests for tools.web_scanner_checks.network_check — Category: class"""
 
-import pytest
 
 from tools.web_scanner_checks.network_check import NetworkCheck
 

@@ -2,8 +2,7 @@
 
 import pytest
 
-from tool_core.parser.dispatcher import dispatch
-from tool_core.parser.dispatcher import has_parser
+from tool_core.parser.dispatcher import dispatch, has_parser
 
 
 class TestDispatch:

@@ -1,9 +1,7 @@
 """Tests for database.connection — Category: class"""
 
-import pytest
 
 from database.connection import ConnectionManager
-from database.connection import DatabaseConnectionError
 
 
 class TestDatabaseConnectionError:

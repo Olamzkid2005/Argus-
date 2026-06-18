@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.waybackurls — Category: parser"""
 
-import pytest
 
 from parsers.parsers.waybackurls import WaybackurlsParser
 

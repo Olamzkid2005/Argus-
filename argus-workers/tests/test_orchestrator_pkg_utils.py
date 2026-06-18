@@ -2,9 +2,11 @@
 
 import pytest
 
-from orchestrator_pkg.utils import get_nuclei_templates_path
-from orchestrator_pkg.utils import get_wordlist_path
-from orchestrator_pkg.utils import tool_timeout
+from orchestrator_pkg.utils import (
+    get_nuclei_templates_path,
+    get_wordlist_path,
+    tool_timeout,
+)
 
 
 class TestGetWordlistPath:

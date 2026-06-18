@@ -1,6 +1,5 @@
 """Tests for tools.attack_surface_mapper — Category: class"""
 
-import pytest
 
 from tools.attack_surface_mapper import AttackSurfaceMapper
 

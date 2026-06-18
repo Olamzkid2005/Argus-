@@ -2,25 +2,27 @@
 
 import pytest
 
-from tasks.repo_scan import _check_patch_for_secrets
-from tasks.repo_scan import _extract_file_path
-from tasks.repo_scan import _load_license_policy
-from tasks.repo_scan import _map_bandit_severity
-from tasks.repo_scan import _map_eslint_severity
-from tasks.repo_scan import _match_license
-from tasks.repo_scan import check_license_compliance
-from tasks.repo_scan import detect_license
-from tasks.repo_scan import enrich_findings_with_blame
-from tasks.repo_scan import expand_repo_scan
-from tasks.repo_scan import generate_cyclonedx_sbom
-from tasks.repo_scan import generate_spdx_sbom
-from tasks.repo_scan import get_blame_for_finding
-from tasks.repo_scan import run_bandit
-from tasks.repo_scan import run_eslint_security
-from tasks.repo_scan import run_gosec
-from tasks.repo_scan import run_repo_scan
-from tasks.repo_scan import save_sbom
-from tasks.repo_scan import scan_git_history_for_secrets
+from tasks.repo_scan import (
+    _check_patch_for_secrets,
+    _extract_file_path,
+    _load_license_policy,
+    _map_bandit_severity,
+    _map_eslint_severity,
+    _match_license,
+    check_license_compliance,
+    detect_license,
+    enrich_findings_with_blame,
+    expand_repo_scan,
+    generate_cyclonedx_sbom,
+    generate_spdx_sbom,
+    get_blame_for_finding,
+    run_bandit,
+    run_eslint_security,
+    run_gosec,
+    run_repo_scan,
+    save_sbom,
+    scan_git_history_for_secrets,
+)
 
 
 class TestLoadLicensePolicy:

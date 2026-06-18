@@ -1,6 +1,5 @@
 """Tests for tasks.self_scan — Category: function"""
 
-import pytest
 
 from tasks.self_scan import run_self_scan
 
@@ -10,10 +9,10 @@ class TestRunSelfScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        with pytest.raises(TypeError):
-            run_self_scan()
+        instance = run_self_scan()
+        assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            run_self_scan()
+        """Function executes successfully."""
+        instance = run_self_scan()
+        assert isinstance(instance, dict)

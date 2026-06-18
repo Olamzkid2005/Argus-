@@ -2,78 +2,47 @@
 
 import pytest
 
-from tool_core.base import AbstractTool
-from tool_core.base import AsyncTool
-from tool_core.base import ToolContext
+from tool_core.base import AbstractTool, AsyncTool, ToolContext
 
 
 class TestToolContext:
     """Tests for the ToolContext class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = ToolContext()
-            assert instance is not None
-            assert isinstance(instance, ToolContext)
-        except TypeError:
-            instance = ToolContext()
-            assert instance is not None
+        """Default instantiation succeeds."""
+        instance = ToolContext()
+        assert instance is not None
 
     def test_field_access(self):
         """Instance fields are accessible."""
-        try:
-            instance = ToolContext()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = ToolContext()
-            assert instance is not None
+        instance = ToolContext()
+        fields = vars(instance) if hasattr(instance, '__dict__') else {}
+        assert isinstance(fields, dict)
 
 
 class TestAbstractTool:
-    """Tests for the AbstractTool class."""
+    """Tests for the AbstractTool abstract class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = AbstractTool()
-            assert instance is not None
-            assert isinstance(instance, AbstractTool)
-        except TypeError:
-            instance = AbstractTool()
-            assert instance is not None
+        """Cannot instantiate abstract class."""
+        with pytest.raises(TypeError):
+            AbstractTool()
 
     def test_field_access(self):
-        """Instance fields are accessible."""
-        try:
-            instance = AbstractTool()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = AbstractTool()
-            assert instance is not None
+        """Cannot instantiate abstract class."""
+        with pytest.raises(TypeError):
+            AbstractTool()
 
 
 class TestAsyncTool:
-    """Tests for the AsyncTool class."""
+    """Tests for the AsyncTool abstract class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = AsyncTool()
-            assert instance is not None
-            assert isinstance(instance, AsyncTool)
-        except TypeError:
-            instance = AsyncTool()
-            assert instance is not None
+        """Cannot instantiate abstract class."""
+        with pytest.raises(TypeError):
+            AsyncTool()
 
     def test_field_access(self):
-        """Instance fields are accessible."""
-        try:
-            instance = AsyncTool()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = AsyncTool()
-            assert instance is not None
+        """Cannot instantiate abstract class."""
+        with pytest.raises(TypeError):
+            AsyncTool()

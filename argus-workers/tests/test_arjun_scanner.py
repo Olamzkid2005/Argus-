@@ -1,6 +1,5 @@
 """Tests for tools.arjun_scanner — Category: class"""
 
-import pytest
 
 from tools.arjun_scanner import ArjunScanner
 

@@ -2,8 +2,7 @@
 
 import pytest
 
-from tasks.recon import expand_recon
-from tasks.recon import run_recon
+from tasks.recon import expand_recon, run_recon
 
 
 class TestRunRecon:

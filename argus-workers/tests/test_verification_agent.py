@@ -1,6 +1,5 @@
 """Tests for tools.verification_agent — Category: class"""
 
-import pytest
 
 from tools.verification_agent import VerificationAgent
 

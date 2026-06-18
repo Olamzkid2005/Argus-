@@ -1,6 +1,5 @@
 """Tests for tools.web_scanner_checks.response_check — Category: class"""
 
-import pytest
 
 from tools.web_scanner_checks.response_check import ResponseCheck
 

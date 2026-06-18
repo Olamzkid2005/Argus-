@@ -1,6 +1,5 @@
 """Tests for tools.web_scanner_checks.config_check — Category: class"""
 
-import pytest
 
 from tools.web_scanner_checks.config_check import ConfigCheck
 

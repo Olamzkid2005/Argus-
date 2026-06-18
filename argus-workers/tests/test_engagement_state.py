@@ -2,8 +2,7 @@
 
 import pytest
 
-from runtime.engagement_state import EngagementState
-from runtime.engagement_state import ToolExecutionRecord
+from runtime.engagement_state import EngagementState, ToolExecutionRecord
 
 
 class TestToolExecutionRecord:

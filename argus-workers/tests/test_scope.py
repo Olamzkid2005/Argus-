@@ -1,6 +1,5 @@
 """Tests for tool_core.validators.scope — Category: module"""
 
-import pytest
 
 
 class TestModule:

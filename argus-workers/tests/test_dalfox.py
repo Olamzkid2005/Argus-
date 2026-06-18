@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.dalfox — Category: parser"""
 
-import pytest
 
 from parsers.parsers.dalfox import DalfoxParser
 

@@ -2,8 +2,7 @@
 
 import pytest
 
-from tools.attack_paths.path_scorer import rank_paths
-from tools.attack_paths.path_scorer import score_path
+from tools.attack_paths.path_scorer import rank_paths, score_path
 
 
 class TestScorePath:

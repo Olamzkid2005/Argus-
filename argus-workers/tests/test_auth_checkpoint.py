@@ -2,9 +2,11 @@
 
 import pytest
 
-from agent.auth_checkpoint import clear_auth_checkpoint
-from agent.auth_checkpoint import load_auth_checkpoint
-from agent.auth_checkpoint import save_auth_checkpoint
+from agent.auth_checkpoint import (
+    clear_auth_checkpoint,
+    load_auth_checkpoint,
+    save_auth_checkpoint,
+)
 
 
 class TestSaveAuthCheckpoint:

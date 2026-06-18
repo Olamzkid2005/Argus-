@@ -1,6 +1,5 @@
 """Tests for tools.attack_path_generator — Category: class"""
 
-import pytest
 
 from tools.attack_path_generator import AttackPathGenerator
 

@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.wpscan — Category: parser"""
 
-import pytest
 
 from parsers.parsers.wpscan import WpscanParser
 

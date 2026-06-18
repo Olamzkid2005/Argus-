@@ -1,6 +1,5 @@
 """Tests for tools.executive_report_generator — Category: class"""
 
-import pytest
 
 from tools.executive_report_generator import ExecutiveReportGenerator
 

@@ -1,6 +1,5 @@
 """Tests for tools.ffuf_scanner — Category: class"""
 
-import pytest
 
 from tools.ffuf_scanner import FfufScanner
 

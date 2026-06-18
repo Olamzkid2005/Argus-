@@ -1,11 +1,11 @@
 """Tests for runtime.workflows.steps — Category: class"""
 
-import pytest
 
-from runtime.workflows.steps import AuthenticateStep
-from runtime.workflows.steps import DiscoverOwnedResourcesStep
-from runtime.workflows.steps import TestBolaStep
-from runtime.workflows.steps import TestBoplaStep
+from runtime.workflows.steps import (
+    AuthenticateStep,
+    DiscoverOwnedResourcesStep,
+    TestBolaStep,
+)
 
 
 class TestAuthenticateStep:

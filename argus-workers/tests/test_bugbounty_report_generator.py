@@ -1,8 +1,6 @@
 """Tests for tools.bugbounty_report_generator — Category: class"""
 
-import pytest
 
-from tools.bugbounty_report_generator import ArgusFindingAdapter
 from tools.bugbounty_report_generator import BugBountyReportGenerator
 
 

@@ -2,9 +2,11 @@
 
 import pytest
 
-from orchestrator_pkg.recon import _probe_login_pages
-from orchestrator_pkg.recon import execute_recon_tools
-from orchestrator_pkg.recon import summarize_recon_findings
+from orchestrator_pkg.recon import (
+    _probe_login_pages,
+    execute_recon_tools,
+    summarize_recon_findings,
+)
 
 
 class TestExecuteReconTools:

@@ -2,10 +2,12 @@
 
 import pytest
 
-from tasks.maintenance import cleanup_checkpoints
-from tasks.maintenance import cleanup_failed_engagements
-from tasks.maintenance import cleanup_old_results
-from tasks.maintenance import worker_health_check
+from tasks.maintenance import (
+    cleanup_checkpoints,
+    cleanup_failed_engagements,
+    cleanup_old_results,
+    worker_health_check,
+)
 
 
 class TestCleanupOldResults:

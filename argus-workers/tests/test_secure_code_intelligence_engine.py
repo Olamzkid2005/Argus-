@@ -1,6 +1,5 @@
 """Tests for tools.secure_code_intelligence_engine — Category: class"""
 
-import pytest
 
 from tools.secure_code_intelligence_engine import SecureCodeIntelligenceEngine
 

@@ -1,6 +1,5 @@
 """Tests for tools.assessment_orchestrator — Category: class"""
 
-import pytest
 
 from tools.assessment_orchestrator import AssessmentOrchestrator
 

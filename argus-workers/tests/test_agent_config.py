@@ -1,6 +1,5 @@
 """Tests for agent.agent_config — Category: module"""
 
-import pytest
 
 
 class TestModule:

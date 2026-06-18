@@ -2,9 +2,7 @@
 
 import pytest
 
-from tools.tool_utils import get_augmented_path
-from tools.tool_utils import is_tool_available
-from tools.tool_utils import resolve_tool_binary
+from tools.tool_utils import get_augmented_path, is_tool_available, resolve_tool_binary
 
 
 class TestGetAugmentedPath:

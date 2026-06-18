@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.arjun — Category: parser"""
 
-import pytest
 
 from parsers.parsers.arjun import ArjunParser
 

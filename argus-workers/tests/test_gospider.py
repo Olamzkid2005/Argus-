@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.gospider — Category: parser"""
 
-import pytest
 
 from parsers.parsers.gospider import GospiderParser
 

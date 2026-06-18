@@ -1,6 +1,5 @@
 """Tests for tools.infrastructure_security_analyzer — Category: class"""
 
-import pytest
 
 from tools.infrastructure_security_analyzer import InfrastructureSecurityAnalyzer
 

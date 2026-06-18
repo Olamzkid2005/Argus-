@@ -2,10 +2,12 @@
 
 import pytest
 
-from utils.sanitization import check_for_dangerous_content
-from utils.sanitization import sanitize_evidence
-from utils.sanitization import sanitize_string
-from utils.sanitization import strip_dangerous_tags
+from utils.sanitization import (
+    check_for_dangerous_content,
+    sanitize_evidence,
+    sanitize_string,
+    strip_dangerous_tags,
+)
 
 
 class TestSanitizeString:

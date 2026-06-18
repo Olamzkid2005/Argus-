@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.gau — Category: parser"""
 
-import pytest
 
 from parsers.parsers.gau import GauParser
 

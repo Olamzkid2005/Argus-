@@ -2,10 +2,12 @@
 
 import pytest
 
-from database.migrations.runner import _ensure_tracking_table
-from database.migrations.runner import _get_applied
-from database.migrations.runner import _mark_applied
-from database.migrations.runner import run_migrations
+from database.migrations.runner import (
+    _ensure_tracking_table,
+    _get_applied,
+    _mark_applied,
+    run_migrations,
+)
 
 
 class TestEnsureTrackingTable:

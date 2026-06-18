@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.testssl — Category: parser"""
 
-import pytest
 
 from parsers.parsers.testssl import TestsslParser
 

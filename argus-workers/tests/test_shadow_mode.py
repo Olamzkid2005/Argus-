@@ -2,11 +2,13 @@
 
 import pytest
 
-from runtime.shadow_mode import _compute_hash
-from runtime.shadow_mode import _normalize_for_comparison
-from runtime.shadow_mode import get_shadow_stats
-from runtime.shadow_mode import reset_shadow_stats
-from runtime.shadow_mode import shadow_compare
+from runtime.shadow_mode import (
+    _compute_hash,
+    _normalize_for_comparison,
+    get_shadow_stats,
+    reset_shadow_stats,
+    shadow_compare,
+)
 
 
 class TestNormalizeForComparison:

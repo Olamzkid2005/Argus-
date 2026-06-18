@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.trufflehog — Category: parser"""
 
-import pytest
 
 from parsers.parsers.trufflehog import TrufflehogParser
 

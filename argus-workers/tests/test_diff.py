@@ -2,9 +2,7 @@
 
 import pytest
 
-from tasks.diff import _get_engagement_target
-from tasks.diff import _update_fixed_fingerprints
-from tasks.diff import run_scan_diff
+from tasks.diff import _get_engagement_target, _update_fixed_fingerprints, run_scan_diff
 
 
 class TestRunScanDiff:

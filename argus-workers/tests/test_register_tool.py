@@ -2,13 +2,15 @@
 
 import pytest
 
-from agent.tools.register_tool import _build_register_payload
-from agent.tools.register_tool import _extract_cookie_string
-from agent.tools.register_tool import _generate_password
-from agent.tools.register_tool import _rate_limit_backoff
-from agent.tools.register_tool import _try_login
-from agent.tools.register_tool import generate_credentials
-from agent.tools.register_tool import run_register
+from agent.tools.register_tool import (
+    _build_register_payload,
+    _extract_cookie_string,
+    _generate_password,
+    _rate_limit_backoff,
+    _try_login,
+    generate_credentials,
+    run_register,
+)
 
 
 class TestGenerateCredentials:

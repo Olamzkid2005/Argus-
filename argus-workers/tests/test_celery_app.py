@@ -1,6 +1,5 @@
 """Tests for celery_app — Category: class"""
 
-import pytest
 
 from celery_app import BaseTask
 

@@ -2,8 +2,7 @@
 
 import pytest
 
-from tasks.posture import _check_compliance_alerts
-from tasks.posture import recompute_posture
+from tasks.posture import _check_compliance_alerts, recompute_posture
 
 
 class TestRecomputePosture:

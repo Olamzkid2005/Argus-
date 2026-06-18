@@ -1,6 +1,5 @@
 """Tests for tools.engagement_analytics_engine — Category: class"""
 
-import pytest
 
 from tools.engagement_analytics_engine import EngagementAnalyticsEngine
 

@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.subfinder — Category: parser"""
 
-import pytest
 
 from parsers.parsers.subfinder import SubfinderParser
 

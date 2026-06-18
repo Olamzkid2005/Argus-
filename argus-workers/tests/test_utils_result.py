@@ -3,7 +3,6 @@
 import pytest
 
 from utils.result import Err
-from utils.result import Ok
 
 
 class TestOk:

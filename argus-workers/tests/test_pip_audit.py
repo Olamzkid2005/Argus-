@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.pip_audit — Category: parser"""
 
-import pytest
 
 from parsers.parsers.pip_audit import PipAuditParser
 

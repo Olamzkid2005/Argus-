@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.trivy — Category: parser"""
 
-import pytest
 
 from parsers.parsers.trivy import TrivyParser
 

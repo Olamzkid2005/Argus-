@@ -2,8 +2,7 @@
 
 import pytest
 
-from tools.update_nuclei_templates import get_template_count
-from tools.update_nuclei_templates import update_nuclei_templates
+from tools.update_nuclei_templates import get_template_count, update_nuclei_templates
 
 
 class TestUpdateNucleiTemplates:

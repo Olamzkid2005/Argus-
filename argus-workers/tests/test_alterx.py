@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.alterx — Category: parser"""
 
-import pytest
 
 from parsers.parsers.alterx import AlterxParser
 

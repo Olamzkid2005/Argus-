@@ -1,6 +1,5 @@
 """Tests for tools.websocket_scanner — Category: class"""
 
-import pytest
 
 from tools.websocket_scanner import WebSocketScanner
 

@@ -1,9 +1,7 @@
 """Tests for custom_rules.engine — Category: class"""
 
-import pytest
 
 from custom_rules.engine import CustomRuleEngine
-from custom_rules.engine import CustomRuleError
 
 
 class TestCustomRuleError:

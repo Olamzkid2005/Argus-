@@ -2,11 +2,13 @@
 
 import pytest
 
-from tool_core.parser.parsers.nikto import _infer_severity
-from tool_core.parser.parsers.nikto import _parse_csv
-from tool_core.parser.parsers.nikto import _parse_json
-from tool_core.parser.parsers.nikto import _parse_text
-from tool_core.parser.parsers.nikto import parse
+from tool_core.parser.parsers.nikto import (
+    _infer_severity,
+    _parse_csv,
+    _parse_json,
+    _parse_text,
+    parse,
+)
 
 
 class TestInferSeverity:

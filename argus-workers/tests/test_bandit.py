@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.bandit — Category: parser"""
 
-import pytest
 
 from parsers.parsers.bandit import BanditParser
 

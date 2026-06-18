@@ -1,8 +1,6 @@
 """Tests for custom_rules.validator — Category: class"""
 
-import pytest
 
-from custom_rules.validator import RuleValidationError
 from custom_rules.validator import RuleValidator
 
 

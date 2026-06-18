@@ -1,6 +1,5 @@
 """Tests for tools.verification.reproduction_engine — Category: class"""
 
-import pytest
 
 from tools.verification.reproduction_engine import ReproductionEngine
 

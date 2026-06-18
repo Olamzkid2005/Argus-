@@ -2,13 +2,15 @@
 
 import pytest
 
-from orchestrator_pkg.repo_scan import _is_private_ip
-from orchestrator_pkg.repo_scan import check_maven_dependencies
-from orchestrator_pkg.repo_scan import execute_repo_scan
-from orchestrator_pkg.repo_scan import run_govulncheck
-from orchestrator_pkg.repo_scan import run_npm_audit
-from orchestrator_pkg.repo_scan import run_pip_audit
-from orchestrator_pkg.repo_scan import validate_repo_url
+from orchestrator_pkg.repo_scan import (
+    _is_private_ip,
+    check_maven_dependencies,
+    execute_repo_scan,
+    run_govulncheck,
+    run_npm_audit,
+    run_pip_audit,
+    validate_repo_url,
+)
 
 
 class TestValidateRepoUrl:

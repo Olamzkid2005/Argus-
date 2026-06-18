@@ -1,6 +1,5 @@
 """Tests for tools.web_scanner_checks.headers_check — Category: class"""
 
-import pytest
 
 from tools.web_scanner_checks.headers_check import HeadersCheck
 

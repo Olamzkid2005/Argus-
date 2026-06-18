@@ -2,9 +2,7 @@
 
 import pytest
 
-from tool_core.parser.parsers.generic import _regex_extract
-from tool_core.parser.parsers.generic import _try_json
-from tool_core.parser.parsers.generic import parse
+from tool_core.parser.parsers.generic import _regex_extract, _try_json, parse
 
 
 class TestTryJson:

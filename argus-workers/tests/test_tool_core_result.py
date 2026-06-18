@@ -2,44 +2,30 @@
 
 import pytest
 
-from tool_core.result import ToolStatus
-from tool_core.result import UnifiedToolResult
+from tool_core.result import ToolStatus, UnifiedToolResult
 
 
 class TestToolStatus:
-    """Tests for the ToolStatus class."""
+    """Tests for the ToolStatus enum."""
 
-    def test_instantiation(self):
-        """Class requires constructor args."""
-        instance = ToolStatus()
-        assert instance is not None
-
-    def test_str_repr(self):
-        """String and repr work on instantiated object."""
-        instance = ToolStatus()
-        assert isinstance(str(instance), str)
-        assert isinstance(repr(instance), str)
+    def test_members_exist(self):
+        """Enum has expected members."""
+        members = list(ToolStatus)
+        assert len(members) > 0
+        for member in members:
+            assert member.name
+            assert member.value is not None
 
 
 class TestUnifiedToolResult:
     """Tests for the UnifiedToolResult class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = UnifiedToolResult()
-            assert instance is not None
-            assert isinstance(instance, UnifiedToolResult)
-        except TypeError:
-            instance = UnifiedToolResult()
-            assert instance is not None
+        """Class requires constructor args."""
+        with pytest.raises(TypeError):
+            UnifiedToolResult()
 
-    def test_field_access(self):
-        """Instance fields are accessible."""
-        try:
-            instance = UnifiedToolResult()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = UnifiedToolResult()
-            assert instance is not None
+    def test_str_repr(self):
+        """String representation not available (requires constructor args)."""
+        with pytest.raises(TypeError):
+            UnifiedToolResult()

@@ -2,11 +2,13 @@
 
 import pytest
 
-from tools.correlation.deduplicator import _finding_fingerprint
-from tools.correlation.deduplicator import _jaccard
-from tools.correlation.deduplicator import _normalize
-from tools.correlation.deduplicator import _token_set
-from tools.correlation.deduplicator import deduplicate
+from tools.correlation.deduplicator import (
+    _finding_fingerprint,
+    _jaccard,
+    _normalize,
+    _token_set,
+    deduplicate,
+)
 
 
 class TestNormalize:

@@ -1,6 +1,5 @@
 """Tests for tools.tool_result — Category: module"""
 
-import pytest
 
 
 class TestModule:

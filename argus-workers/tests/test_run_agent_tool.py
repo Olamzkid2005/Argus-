@@ -2,8 +2,7 @@
 
 import pytest
 
-from tools.run_agent_tool import main
-from tools.run_agent_tool import resolve_tool_class
+from tools.run_agent_tool import main, resolve_tool_class
 
 
 class TestResolveToolClass:

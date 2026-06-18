@@ -1,6 +1,5 @@
 """Tests for tools.attack_surface.port_discovery — Category: class"""
 
-import pytest
 
 from tools.attack_surface.port_discovery import PortDiscovery
 

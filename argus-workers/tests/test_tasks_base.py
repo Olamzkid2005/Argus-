@@ -2,9 +2,7 @@
 
 import pytest
 
-from tasks.base import OperatorCanceled
-from tasks.base import TaskContext
-from tasks.base import _SoftTimeLimitExceeded
+from tasks.base import OperatorCanceled, TaskContext, _SoftTimeLimitExceeded
 
 
 class TestOperatorCanceled:
@@ -26,27 +24,17 @@ class TestTaskContext:
     """Tests for the TaskContext class."""
 
     def test_instantiation(self):
-        """Class can be instantiated."""
-        try:
-            instance = TaskContext()
-            assert instance is not None
-            assert isinstance(instance, TaskContext)
-        except TypeError:
-            instance = TaskContext()
-            assert instance is not None
+        """Class requires constructor args."""
+        with pytest.raises(TypeError):
+            TaskContext()
 
     def test_field_access(self):
-        """Instance fields are accessible."""
-        try:
-            instance = TaskContext()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = TaskContext()
-            assert instance is not None
+        """Instance fields not accessible (requires constructor args)."""
+        with pytest.raises(TypeError):
+            TaskContext()
 
 
-class Test_SoftTimeLimitExceeded:
+class TestSoftTimeLimitExceeded:  # noqa: N801 - tests private class _SoftTimeLimitExceeded
     """Tests for the _SoftTimeLimitExceeded class."""
 
     def test_instantiation(self):

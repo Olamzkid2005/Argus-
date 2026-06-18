@@ -2,11 +2,11 @@
 
 import pytest
 
-from runtime.workflows.base import StepResult
-from runtime.workflows.base import Workflow
-from runtime.workflows.base import WorkflowContext
-from runtime.workflows.base import WorkflowResult
-from runtime.workflows.base import WorkflowStep
+from runtime.workflows.base import (
+    StepResult,
+    WorkflowContext,
+    WorkflowResult,
+)
 
 
 class TestWorkflowContext:

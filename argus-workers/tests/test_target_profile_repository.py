@@ -1,6 +1,5 @@
 """Tests for database.repositories.target_profile_repository — Category: class"""
 
-import pytest
 
 from database.repositories.target_profile_repository import TargetProfileRepository
 

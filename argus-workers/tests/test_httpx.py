@@ -1,6 +1,5 @@
 """Tests for parsers.parsers.httpx — Category: parser"""
 
-import pytest
 
 from parsers.parsers.httpx import HttpxParser
 

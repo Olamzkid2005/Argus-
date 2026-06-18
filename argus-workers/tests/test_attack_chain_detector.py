@@ -1,10 +1,11 @@
 """Tests for tools.correlation.attack_chain_detector — Category: function"""
 
-import pytest
 
-from tools.correlation.attack_chain_detector import _endpoint_host
-from tools.correlation.attack_chain_detector import _build_dependency_graph
-from tools.correlation.attack_chain_detector import detect_attack_chains
+from tools.correlation.attack_chain_detector import (
+    _build_dependency_graph,
+    _endpoint_host,
+    detect_attack_chains,
+)
 
 
 class TestEndpointHost:

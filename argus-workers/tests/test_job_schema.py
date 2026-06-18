@@ -1,6 +1,5 @@
 """Tests for job_schema — Category: dataclass"""
 
-import pytest
 
 from job_schema import JobMessage
 
