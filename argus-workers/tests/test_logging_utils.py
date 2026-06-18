@@ -16,9 +16,10 @@ class TestSecretsRedactionFilter:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = SecretsRedactionFilter()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestRedactedLogger:
@@ -30,9 +31,10 @@ class TestRedactedLogger:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = SecretsRedactionFilter()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestScanLogger:
@@ -44,6 +46,7 @@ class TestScanLogger:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = SecretsRedactionFilter()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)

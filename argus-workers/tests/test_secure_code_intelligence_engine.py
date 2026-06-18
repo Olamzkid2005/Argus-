@@ -14,6 +14,7 @@ class TestSecureCodeIntelligenceEngine:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = SecureCodeIntelligenceEngine()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)

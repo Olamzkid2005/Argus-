@@ -15,9 +15,10 @@ class Test_DoneSentinel:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = _DoneSentinel()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestReActAgent:
@@ -29,6 +30,7 @@ class TestReActAgent:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = _DoneSentinel()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)

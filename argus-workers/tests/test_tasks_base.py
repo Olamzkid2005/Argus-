@@ -16,9 +16,10 @@ class TestOperatorCanceled:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = OperatorCanceled()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestTaskContext:
@@ -54,6 +55,7 @@ class Test_SoftTimeLimitExceeded:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = OperatorCanceled()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)

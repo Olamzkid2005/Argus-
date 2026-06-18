@@ -15,9 +15,10 @@ class TestRuleValidationError:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = RuleValidationError()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestRuleValidator:
@@ -29,6 +30,7 @@ class TestRuleValidator:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = RuleValidationError()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)

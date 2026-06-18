@@ -15,9 +15,10 @@ class TestOk:
             Ok()
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             Ok()
+            str(Ok())
 
 
 class TestErr:
@@ -29,6 +30,7 @@ class TestErr:
             Ok()
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             Ok()
+            str(Ok())

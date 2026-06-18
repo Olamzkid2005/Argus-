@@ -15,9 +15,10 @@ class TestToolExecutionRecord:
             ToolExecutionRecord()
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             ToolExecutionRecord()
+            str(ToolExecutionRecord())
 
 
 class TestEngagementState:
@@ -29,6 +30,7 @@ class TestEngagementState:
             ToolExecutionRecord()
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             ToolExecutionRecord()
+            str(ToolExecutionRecord())

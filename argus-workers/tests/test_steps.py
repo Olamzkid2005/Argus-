@@ -17,9 +17,10 @@ class TestAuthenticateStep:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = AuthenticateStep()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestDiscoverOwnedResourcesStep:
@@ -31,9 +32,10 @@ class TestDiscoverOwnedResourcesStep:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = AuthenticateStep()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)
 
 
 class TestTestBolaStep:
@@ -45,6 +47,7 @@ class TestTestBolaStep:
         assert instance is not None
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String and repr work on instantiated object."""
         instance = AuthenticateStep()
-        assert instance is not None
+        assert isinstance(str(instance), str)
+        assert isinstance(repr(instance), str)

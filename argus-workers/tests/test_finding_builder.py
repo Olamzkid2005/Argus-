@@ -14,6 +14,7 @@ class TestFindingBuilder:
             FindingBuilder()
 
     def test_str_repr(self):
-        """String representation not available."""
+        """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             FindingBuilder()
+            str(FindingBuilder())
